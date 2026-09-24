@@ -4,7 +4,7 @@ export DATABASE_URL ?= postgresql://doom:doom@localhost:5432/doom
 UV := uv run --frozen
 MILESTONES := m0 m1 m2 m3 m4 m5 m6 m7 m8 m9
 
-.PHONY: setup test lint type guard protected migrate-dev fixtures universe thesis-validate $(addprefix verify-,$(MILESTONES))
+.PHONY: setup test lint type guard protected migrate-dev seed-dev size-guard fixtures universe thesis-validate $(addprefix verify-,$(MILESTONES))
 
 setup:            ## install Python 3.12 + locked deps (and web deps once web/ exists)
 	uv python install 3.12
@@ -34,6 +34,12 @@ migrate-dev:
 universe:         ## M0: fetch universe snapshots (network) and resolve the capex seed
 	$(UV) python scripts/fetch_fixtures.py universe
 	$(UV) python scripts/resolve_capex_seed.py --write
+
+seed-dev:         ## M1: companies from the universe snapshots, initial weights version, source_health rows
+	$(UV) python -m pipeline.db.seed
+
+size-guard:       ## BRIEF §2.8: prune signal_values > 3 years, fail above 400 MB (PROJECT=1 prints the projection)
+	$(UV) python -m pipeline.db.size_guard $(if $(PROJECT),--project,)
 
 fixtures:         ## one-time network fetch of test fixtures (BRIEF §9)
 	$(UV) python scripts/fetch_fixtures.py universe
