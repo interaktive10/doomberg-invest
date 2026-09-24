@@ -1,0 +1,79 @@
+[project]
+name = "doomberg-invest"
+version = "0.1.0"
+description = "Private long-term investing research app (US + India). Research only; not financial advice."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "polars",
+  "duckdb",
+  "pyarrow",
+  "httpx",
+  "tenacity",
+  "pydantic>=2",
+  "psycopg[binary]>=3",
+  "edgartools",
+  "selectolax",
+  "lxml",
+  "pypdfium2",
+  "rapidfuzz",
+  "python-dateutil",
+  "feedparser",
+  "scipy",
+  "statsmodels",
+  "jinja2",
+  "pyyaml",
+  "google-genai",
+  "groq",
+  "openai",
+]
+
+[dependency-groups]
+dev = [
+  "vcrpy",
+  "pytest",
+  "ruff",
+  "mypy",
+  "types-pyyaml",
+  "types-python-dateutil",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pipeline"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers -m \"not snapshots and not oldrepo\""
+markers = [
+  "snapshots: needs data/universe snapshots (network fetch); run by verify M0-05",
+  "oldrepo: needs the old doomberg checkout (DOOMBERG_REPO); run by verify M0-04",
+]
+norecursedirs = ["tests/guard/cases"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["tests/guard/cases", "fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE"]
+ignore = ["S101", "S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "BLE"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["pipeline", "scripts"]
+exclude = ["tests/guard/cases"]
+
+[[tool.mypy.overrides]]
+module = ["edgar.*", "feedparser.*", "statsmodels.*", "scipy.*", "vcr.*"]
+ignore_missing_imports = true

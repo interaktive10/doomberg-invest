@@ -1,0 +1,12 @@
+# Protected paths (BRIEF Appendix D): changes need Manzoor's review and the `human-approved` label.
+/config/guards.yaml          @interaktive10
+/config/signals.yaml         @interaktive10
+/config/weights.yaml         @interaktive10
+/config/context.yaml         @interaktive10
+/config/redflags.yaml        @interaktive10
+/scripts/guard.py            @interaktive10
+/tests/guard/                @interaktive10
+/pipeline/llm/privacy.py     @interaktive10
+/pipeline/db/pit.py          @interaktive10
+/.claude/agents/reviewer.md  @interaktive10
+/docs/BRIEF.md               @interaktive10

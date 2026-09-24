@@ -1,0 +1,3 @@
+# Holding-company structures for S10 (BRIEF §4.6). Manual list; empty until Manzoor adds entries.
+# Format: - {market: in|us, symbol: XYZ, note: "why it is a holdco"}
+holdcos: []

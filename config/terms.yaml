@@ -1,0 +1,9 @@
+# Appendix F.4 prefilter keywords (score >= 3 goes to P-01) and BRIEF §4.9 hype words (card rejected).
+prefilter:
+  min_score: 3
+  keywords: ["data center", "data centre", "AI", "artificial intelligence", "capacity", "backlog", "order book",
+    "capital expenditures", "capital expenditure", "capex", "lead time", "MW", "GW", "megawatt", "gigawatt",
+    "lease", "purchase obligation", "power purchase", "interconnection", "transformer", "turbine", "cooling",
+    "accelerator", "GPU", "networking", "optical", "large load", "remaining performance obligation",
+    "order win", "order inflow", "switchgear", "cable", "substation", "export"]
+hype: ["multibagger", "can't lose", "guaranteed", "sure shot", "rocket", "to the moon"]

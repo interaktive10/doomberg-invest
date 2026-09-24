@@ -1,0 +1,13 @@
+# US universe rules (BRIEF §1.3). Rebuilt monthly by the quarterly/weekly pipeline.
+source: sec_company_tickers_exchange       # https://www.sec.gov/files/company_tickers_exchange.json
+exchanges: [NYSE, Nasdaq]
+forms_required: [10-K, 10-Q]
+exclude:
+  sic: ["6770"]                            # SPACs
+  sic_prefix_funds: ["6722", "6726"]       # funds / investment offices
+  sic_trusts: ["6792"]                     # royalty/grantor trusts; REITs (6798) kept, see docs/DECISIONS.log
+  filer_forms: [20-F, 40-F]                # ADRs / foreign private issuers (v1)
+min_ttm_revenue_usd: 50000000
+candidate_min_mcap_usd: 300000000
+snapshot: data/universe/us_tickers_exchange.json
+min_count_check: 3000                      # BRIEF §8 M0-05

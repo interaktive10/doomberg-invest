@@ -1,0 +1,13 @@
+# PROTECTED (BRIEF Appendix D). Verbatim from BRIEF Appendix E; enforced by scripts/guard.py.
+scan_paths: [pipeline, web/app, web/components, web/lib, db, config, scripts, .github]
+exclude_paths: [config/guards.yaml, tests/guard/cases, fixtures]
+banned_python_packages:        # execution/broker SDKs (out of scope) and paid-only runtime SDKs
+  [alpaca-py, alpaca-trade-api, ib_insync, ib-async, ibapi, ccxt, kiteconnect, smartapi-python,
+   upstox-python-sdk, fyers-apiv3, dhanhq, breeze-connect, robin_stocks, schwab-py, tda-api, anthropic]
+banned_npm_packages: ["@alpacahq/alpaca-trade-api", ccxt, kiteconnect, "@anthropic-ai/sdk", openai]
+banned_runtime_domains: [api.anthropic.com, api.openai.com, api.kite.trade, api.upstox.com, api.alpaca.markets,
+  paper-api.alpaca.markets, api.dhan.co]
+banned_code_identifiers: [place_order, placeOrder, submit_order, submitOrder, market_order, limit_order, stop_loss_order]
+openai_client_rule: "OpenAI(...) constructors must set base_url from config/quotas.yaml openrouter.base_url"
+pit_rule: "direct SQL/ORM reads of fundamentals_q, ownership_q, insider_events, corp_events outside pipeline/db/pit.py are violations"
+privacy_rule: "modules under pipeline/llm/ and pipeline/thesis/evidence_pack.py must not import or reference journal, postmortems, portfolio_pct"

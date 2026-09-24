@@ -1,0 +1,171 @@
+# PROTECTED (BRIEF Appendix D). All signal thresholds and score/bucket math defaults (BRIEF §4.6, §4.8, §1.7).
+# Changing any value needs a PR with the `human-approved` label. tests/test_config_matches_brief.py pins these.
+version: 1
+
+shared:                         # BRIEF §4.6 shared definitions
+  tax_rate_clip: [0.10, 0.35]
+  tax_rate_default: {us: 0.21, in: 0.25}   # used when TTM pretax <= 0
+  ic_floor_pct_assets: 0.05                # IC floored at 0.05 x total_assets
+  roic_ic_mean_quarters: 4
+
+s1_orderbook:
+  min_growth_gap: 0.10          # g(ob) - g(TTM revenue) >= 0.10 ...
+  consecutive_quarters: 2       # ... in each of the last 2 quarters
+  coverage_must_rise_yoy: true  # ob/TTM(revenue) above its year-ago value
+  strength_divisor: 0.30        # clip((g(ob) - g(rev))/0.30, 0, 1)
+
+s2_incremental_roic:
+  lookback_quarters: 12
+  min_delta_ic_pct: 0.05        # only if dIC_12q > 0.05 x IC 12q ago
+  min_inc_roic: 0.15
+  roic_band: [0.03, 0.12]
+  roic_rise_min: 0.03
+  roic_rise_lookback_quarters: 8
+  strength_base: 0.5
+  strength_scale: 0.5
+  strength_divisor: 0.25        # 0.5 + 0.5 x clip((IncROIC - 0.15)/0.25, 0, 1)
+
+s3_operating_leverage:
+  growth_rising_quarters: 2
+  min_opm_rise: 0.01
+  opm_lookback_quarters: 4
+  strength_divisor: 0.05        # clip(dOPM/0.05, 0, 1)
+
+s4_earnings_quality:
+  min_ccr: 1.0
+  min_ccr_rise_yoy: 0.2
+  max_sloan: 0.05               # (TTM NI - TTM CFO)/mean(total_assets 4q) < 0.05 and falling YoY
+  strength_divisor: 0.5         # clip((CCR - 1)/0.5, 0, 1)
+
+s5_capital_discipline:
+  a_max_share_change: -0.02     # diluted shares YoY <= -2%
+  a_max_nd_rise: 0.10           # ND not up > 10% YoY
+  a_strength_divisor: 0.06      # clip(-dshares/0.06, 0, 1)
+  b_min_prior_dilution: 0.05    # share growth >= +5% in each of the 2 prior years
+  b_prior_years: 2
+  b_max_latest_change: 0.0      # and <= 0% in the latest year
+  b_strength: 0.6
+
+s6_derisking:
+  window_quarters: [8, 4]       # max ND/TTM(EBITDA) over q-8 ... q-4
+  min_past_leverage: 3.0
+  max_current_leverage: 1.5
+  min_interest_coverage: 5.0
+  strength: 0.8
+
+s7_insider:
+  us_min_insiders: 2
+  us_min_buy_usd: 25000
+  us_window_days: 60
+  us_min_total_usd: 250000
+  in_min_promoter_buy_inr: 20000000   # Rs 2 crore
+  in_window_days: 90
+  in_pledge_drop_pp: 5.0
+  in_pledge_strength: 0.6
+  strength_base: 0.5
+  strength_per_extra_insider: 0.1
+  strength_log2_scale: 0.1      # min(1, 0.5 + 0.1(n-2) + 0.1 log2(total/threshold))
+
+s8_discovery:
+  us_max_holder_pct_in_size_decile: 40
+  us_min_holder_growth_qoq: 0.15
+  us_consecutive_quarters: 2
+  us_strength_divisor: 0.5      # clip(growth/0.5, 0, 1)
+  in_max_fii_dii_pct: 15.0
+  in_min_rise_pp: 2.0
+  in_rise_quarters: 2
+  in_strength_divisor_pp: 6.0   # clip(dpp/6, 0, 1)
+
+s9_text:
+  lookback_quarters: 2
+  fact_types: [order_win, customer_win, capacity_addition, price_increase, lead_time, new_segment, governance_flag]
+  strength_per_fact: 0.4        # min(1, 0.4 x count)
+
+s10_special:
+  spinoff_demerger_months: 18
+  reorganization_months: 24
+  rights_issue_months: 6
+  holdco_list: config/holdcos.yaml
+  strength: 0.6
+
+s11_capex:                      # BRIEF §4.11
+  min_lag_pp: 10.0
+  second_order_distance: 2
+  strength_base: 0.5
+  strength_india_export_bonus: 0.25
+  strength_s1_bonus: 0.25
+
+s12_cycle:
+  max_capex_to_da: 1.0
+  underinvest_years: 3
+  demand_turn_quarters: 2
+  min_tightness_facts: 2
+  tightness_lookback_quarters: 2
+  requires_any_of: [S2, S6]
+  strength: 0.6
+
+scores:                         # BRIEF §4.8 and §1.7
+  families:
+    fundamentals: [S1, S2, S3, S4, S5, S6]
+    behavior: [S7, S8]
+    text: [S9]
+    structural: [S10]
+    capex: [S11]
+    cycle: [S12]
+  max_signals_per_family: 2
+  evidence_divisor: 2.0         # Evidence = 100 x min(1, raw/2.0)
+  single_family_cap: 55         # fewer than 2 families -> min(Evidence, 55)
+  min_families: 2
+  soft_flag_penalty: 10
+  gap_min_metrics: 2
+  buckets:
+    candidate: {min_evidence: 60, min_gap: 50}
+    priced_in: {min_evidence: 60, max_gap_exclusive: 50}
+    early: {min_evidence: 40, max_evidence: 59, min_families: 2, min_gap: 50}
+  weekly_new_candidates: 10
+  novelty_weeks: 12
+  us_price_candidate_min_evidence: 40   # BRIEF §4.4 candidate set for US prices
+
+# BRIEF §4.1: us-gaap concept -> fundamentals_q column, ordered fallbacks (first present wins).
+xbrl_map:
+  revenue: [Revenues, RevenueFromContractWithCustomerExcludingAssessedTax, SalesRevenueNet]
+  op_income: [OperatingIncomeLoss]
+  net_income: [NetIncomeLoss, ProfitLoss]
+  pretax_income:
+    - IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest
+    - IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments
+  tax_expense: [IncomeTaxExpenseBenefit]
+  cfo: [NetCashProvidedByUsedInOperatingActivities]
+  capex: [PaymentsToAcquirePropertyPlantAndEquipment]
+  da: [DepreciationDepletionAndAmortization, DepreciationAndAmortization]
+  interest_expense: [InterestExpense, InterestExpenseNonoperating]
+  total_assets: [Assets]
+  cash: [CashAndCashEquivalentsAtCarryingValue, CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents]
+  total_debt: [LongTermDebt, LongTermDebtNoncurrent, DebtCurrent]
+  equity: [StockholdersEquity, StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest]
+  receivables: [AccountsReceivableNetCurrent]
+  inventory: [InventoryNet]
+  deferred_revenue: [ContractWithCustomerLiability, DeferredRevenue]
+  rpo: [RevenueRemainingPerformanceObligation]
+  diluted_shares: [WeightedAverageNumberOfDilutedSharesOutstanding]
+  shares_outstanding: ["dei:EntityCommonStockSharesOutstanding"]
+
+# BRIEF §4.3: Ind AS results XBRL element -> fundamentals_q column (NSE/BSE results taxonomy).
+ind_as_map:
+  revenue: [RevenueFromOperations]
+  pretax_income: [ProfitBeforeTax]
+  tax_expense: [TaxExpense]
+  net_income: [ProfitLossForPeriod, ProfitLossForPeriodFromContinuingOperations]
+  interest_expense: [FinanceCosts]
+  da: [DepreciationDepletionAndAmortisationExpense]
+  op_income_derived: "pretax_income + interest_expense - other_income"
+  other_income: [OtherIncome]
+  total_assets: [Assets]
+  cash: [CashAndCashEquivalents]
+  equity: [EquityAttributableToOwnersOfParent, Equity]
+  cfo: [CashFlowsFromUsedInOperatingActivities]
+  capex: [PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities]
+  receivables: [TradeReceivablesCurrent]
+  inventory: [Inventories]
+  total_debt_parts: [BorrowingsNoncurrent, BorrowingsCurrent]
+  half_yearly_items: [total_assets, cash, equity, cfo, capex, receivables, inventory, total_debt]

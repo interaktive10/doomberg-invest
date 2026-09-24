@@ -1,0 +1,2 @@
+# Manual CUSIP -> CIK overrides for 13F mapping (BRIEF §4.2). Format: "037833100": "0000320193"
+overrides: {}
