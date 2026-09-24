@@ -75,6 +75,19 @@ def test_resolve_with_snapshots() -> None:
     assert [x[1] for x in r.in_unresolved] == ["NOPE"]
 
 
+def test_resolve_explains_non_eq_listing() -> None:
+    seed = {"us": {}, "india": [{"name": "HFCL", "nse": "HFCL"}]}
+    r = resolve_capex_seed.resolve(seed, set(), {"ABB": "ABB India Limited"}, {"HFCL": "BE"})
+    assert r.in_unresolved == [
+        ("HFCL", "HFCL", "listed on NSE in series BE, not EQ; outside the BRIEF §1.3 India universe")
+    ]
+
+
+def test_nse_parser_all_series() -> None:
+    rows = parse_equity_list(NSE_SAMPLE, series=None)
+    assert [(r.symbol, r.series) for r in rows] == [("ABB", "EQ"), ("LT", "EQ"), ("SOMEBE", "BE")]
+
+
 def test_mark_verified_only_flips_resolved() -> None:
     text = "  - {name: A, group: g, nse: ABB, verified: false}\n  - {name: B, group: g, nse: GVT&D, verified: false}\n"
     out = resolve_capex_seed.mark_verified(text, {"GVT&D"})

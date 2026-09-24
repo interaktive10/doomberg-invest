@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from pipeline.india.securities import load_snapshot as load_nse  # noqa: E402
+from pipeline.india.securities import parse_equity_list  # noqa: E402
 from pipeline.us.universe import load_snapshot as load_sec  # noqa: E402
 
 SEED = ROOT / "config" / "capex_seed.yaml"
@@ -44,7 +45,13 @@ class Resolution:
         return len(self.us_unresolved) + len(self.in_unresolved)
 
 
-def resolve(seed: dict[str, Any], us_tickers: set[str] | None, nse_symbols: dict[str, str] | None) -> Resolution:
+def resolve(
+    seed: dict[str, Any],
+    us_tickers: set[str] | None,
+    nse_symbols: dict[str, str] | None,
+    nse_other_series: dict[str, str] | None = None,
+) -> Resolution:
+    """nse_symbols: EQ symbol -> name. nse_other_series: symbol -> series for listings outside EQ (e.g. BE)."""
     r = Resolution(us_snapshot=us_tickers is not None, in_snapshot=nse_symbols is not None)
     for group in seed["us"].values():
         for t in group:
@@ -60,6 +67,14 @@ def resolve(seed: dict[str, Any], us_tickers: set[str] | None, nse_symbols: dict
             r.in_unresolved.append((e["name"], sym, "no NSE snapshot yet; symbol proposed from knowledge, unverified"))
         elif sym in nse_symbols:
             r.in_resolved.append(sym)
+        elif nse_other_series and sym in nse_other_series:
+            r.in_unresolved.append(
+                (
+                    e["name"],
+                    sym,
+                    f"listed on NSE in series {nse_other_series[sym]}, not EQ; outside the BRIEF §1.3 India universe",
+                )
+            )
         else:
             r.in_unresolved.append((e["name"], sym, "proposed symbol not in NSE EQ list"))
     return r
@@ -80,9 +95,9 @@ def render_issues(r: Resolution) -> str:
     ]
     if not (r.us_snapshot and r.in_snapshot):
         lines += [
-            "**Why unresolved:** the snapshots could not be downloaded from this build environment (its network policy "
-            "blocks sec.gov and nseindia.com). Fix: run the build in the `doomberg-invest` cloud environment "
-            "(BRIEF §0.2 allowlist), then `make universe` — it fetches both snapshots and re-runs this script.",
+            "**Why unresolved:** a snapshot is missing from `data/universe/`. Fix: run the `universe` GitHub Actions "
+            "workflow (it fetches on a runner and commits the files; SEC throttles the shared IP of cloud sessions), "
+            "or `make universe` where sec.gov and nseindia.com are reachable.",
             "",
         ]
     if r.us_unresolved:
@@ -109,7 +124,12 @@ def main(argv: list[str] | None = None) -> int:
     seed: dict[str, Any] = yaml.safe_load(SEED.read_text(encoding="utf-8"))
     us = {t for f in load_sec(US_SNAP) for t in f.tickers} if US_SNAP.exists() else None
     nse = {s.symbol: s.name for s in load_nse(IN_SNAP)} if IN_SNAP.exists() else None
-    r = resolve(seed, us, nse)
+    other = (
+        {s.symbol: s.series for s in parse_equity_list(IN_SNAP.read_bytes(), series=None) if s.series != "EQ"}
+        if IN_SNAP.exists()
+        else None
+    )
+    r = resolve(seed, us, nse, other)
     ISSUES.write_text(render_issues(r), encoding="utf-8")
     if a.write and r.in_resolved:
         SEED.write_text(mark_verified(SEED.read_text(encoding="utf-8"), set(r.in_resolved)), encoding="utf-8")

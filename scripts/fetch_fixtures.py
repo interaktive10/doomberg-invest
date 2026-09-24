@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The only script allowed to use the network in tests/builds (BRIEF §9). Run once; results are committed.
 
-  fetch_fixtures.py universe     # M0: SEC company_tickers_exchange.json + NSE EQUITY_L.csv -> data/universe/
+  fetch_fixtures.py universe                # M0: SEC company_tickers_exchange.json + NSE EQUITY_L.csv -> data/universe/
+  fetch_fixtures.py universe --source sec   # one source only (NSE often blocks cloud runners; SEC throttles shared IPs)
 
 Later milestones add their fixture sets (F-US, F-F4, F-13F, F-IN, F-PX) as further subcommands.
 Needs SEC_USER_AGENT and a network policy that allows the BRIEF §0.2 domains. MOCK_EXTERNALS is ignored here.
@@ -25,13 +26,16 @@ from pipeline.us.universe import SEC_TICKERS_EXCHANGE_URL  # noqa: E402
 UNIVERSE_DIR = ROOT / "data" / "universe"
 
 
-def fetch_universe(client: HttpClient) -> list[str]:
+UNIVERSE_SOURCES = {
+    "sec": (SEC_TICKERS_EXCHANGE_URL, "us_tickers_exchange.json"),
+    "nse": (NSE_EQUITY_LIST_URL, "nse_equity_list.csv"),
+}
+
+
+def fetch_universe(client: HttpClient, sources: tuple[str, ...] = ("sec", "nse")) -> list[str]:
     UNIVERSE_DIR.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
-    for url, name in (
-        (SEC_TICKERS_EXCHANGE_URL, "us_tickers_exchange.json"),
-        (NSE_EQUITY_LIST_URL, "nse_equity_list.csv"),
-    ):
+    for url, name in (UNIVERSE_SOURCES[s] for s in sources):
         try:
             (UNIVERSE_DIR / name).write_bytes(client.get_bytes(url))
             print(f"fetched {url} -> data/universe/{name}")
@@ -43,10 +47,12 @@ def fetch_universe(client: HttpClient) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("what", choices=["universe"])
+    ap.add_argument("--source", choices=["all", *UNIVERSE_SOURCES], default="all")
     a = ap.parse_args(argv)
     settings = dataclasses.replace(Settings.from_env(), mock_externals=False)
     client = HttpClient(settings)
-    errors = fetch_universe(client) if a.what == "universe" else []
+    sources = tuple(UNIVERSE_SOURCES) if a.source == "all" else (a.source,)
+    errors = fetch_universe(client, sources) if a.what == "universe" else []
     for e in errors:
         print(f"FAILED {e}", file=sys.stderr)
     return 1 if errors else 0

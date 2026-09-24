@@ -15,44 +15,44 @@ us:
   data_center_reits: [EQIX, DLR, IRM]
   power_producers_utilities: [CEG, VST, TLN, NRG, D, SO, AEP, ETR, XEL, NEE, DUK]
 india:
-  - {name: ABB India, group: power_grid_equipment, nse: ABB, verified: false}
-  - {name: Siemens, group: power_grid_equipment, nse: SIEMENS, verified: false}
-  - {name: Siemens Energy India, group: power_grid_equipment, nse: ENRIN, verified: false}
-  - {name: Hitachi Energy India, group: power_grid_equipment, nse: POWERINDIA, verified: false}
-  - {name: GE Vernova T&D India, group: power_grid_equipment, nse: GVT&D, verified: false}
-  - {name: CG Power and Industrial Solutions, group: power_grid_equipment, nse: CGPOWER, verified: false}
-  - {name: Bharat Heavy Electricals, group: power_grid_equipment, nse: BHEL, verified: false}
-  - {name: Transformers and Rectifiers (India), group: power_grid_equipment, nse: TARIL, verified: false}
-  - {name: Voltamp Transformers, group: power_grid_equipment, nse: VOLTAMP, verified: false}
-  - {name: Schneider Electric Infrastructure, group: power_grid_equipment, nse: SCHNEIDER, verified: false}
-  - {name: Apar Industries, group: power_grid_equipment, nse: APARINDS, verified: false}
-  - {name: Polycab India, group: power_grid_equipment, nse: POLYCAB, verified: false}
-  - {name: KEI Industries, group: power_grid_equipment, nse: KEI, verified: false}
-  - {name: Havells India, group: power_grid_equipment, nse: HAVELLS, verified: false}
-  - {name: KEC International, group: power_grid_equipment, nse: KEC, verified: false}
-  - {name: Kalpataru Projects International, group: power_grid_equipment, nse: KPIL, verified: false}
-  - {name: Larsen & Toubro, group: power_grid_equipment, nse: LT, verified: false}
-  - {name: Thermax, group: power_grid_equipment, nse: THERMAX, verified: false}
-  - {name: Cummins India, group: power_grid_equipment, nse: CUMMINSIND, verified: false}
-  - {name: Kirloskar Oil Engines, group: power_grid_equipment, nse: KIRLOSENG, verified: false}
-  - {name: NTPC, group: power_producers_grid, nse: NTPC, verified: false}
-  - {name: Power Grid Corporation of India, group: power_producers_grid, nse: POWERGRID, verified: false}
-  - {name: Tata Power, group: power_producers_grid, nse: TATAPOWER, verified: false}
-  - {name: JSW Energy, group: power_producers_grid, nse: JSWENERGY, verified: false}
-  - {name: Adani Energy Solutions, group: power_producers_grid, nse: ADANIENSOL, verified: false}
-  - {name: Waaree Energies, group: renewables_manufacturing, nse: WAAREEENER, verified: false}
-  - {name: Premier Energies, group: renewables_manufacturing, nse: PREMIERENE, verified: false}
-  - {name: Suzlon Energy, group: renewables_manufacturing, nse: SUZLON, verified: false}
-  - {name: Inox Wind, group: renewables_manufacturing, nse: INOXWIND, verified: false}
-  - {name: Dixon Technologies, group: electronics_ai_compute, nse: DIXON, verified: false}
-  - {name: Kaynes Technology India, group: electronics_ai_compute, nse: KAYNES, verified: false}
-  - {name: Syrma SGS Technology, group: electronics_ai_compute, nse: SYRMA, verified: false}
-  - {name: Netweb Technologies India, group: electronics_ai_compute, nse: NETWEB, verified: false}
+  - {name: ABB India, group: power_grid_equipment, nse: ABB, verified: true}
+  - {name: Siemens, group: power_grid_equipment, nse: SIEMENS, verified: true}
+  - {name: Siemens Energy India, group: power_grid_equipment, nse: ENRIN, verified: true}
+  - {name: Hitachi Energy India, group: power_grid_equipment, nse: POWERINDIA, verified: true}
+  - {name: GE Vernova T&D India, group: power_grid_equipment, nse: GVT&D, verified: true}
+  - {name: CG Power and Industrial Solutions, group: power_grid_equipment, nse: CGPOWER, verified: true}
+  - {name: Bharat Heavy Electricals, group: power_grid_equipment, nse: BHEL, verified: true}
+  - {name: Transformers and Rectifiers (India), group: power_grid_equipment, nse: TARIL, verified: true}
+  - {name: Voltamp Transformers, group: power_grid_equipment, nse: VOLTAMP, verified: true}
+  - {name: Schneider Electric Infrastructure, group: power_grid_equipment, nse: SCHNEIDER, verified: true}
+  - {name: Apar Industries, group: power_grid_equipment, nse: APARINDS, verified: true}
+  - {name: Polycab India, group: power_grid_equipment, nse: POLYCAB, verified: true}
+  - {name: KEI Industries, group: power_grid_equipment, nse: KEI, verified: true}
+  - {name: Havells India, group: power_grid_equipment, nse: HAVELLS, verified: true}
+  - {name: KEC International, group: power_grid_equipment, nse: KEC, verified: true}
+  - {name: Kalpataru Projects International, group: power_grid_equipment, nse: KPIL, verified: true}
+  - {name: Larsen & Toubro, group: power_grid_equipment, nse: LT, verified: true}
+  - {name: Thermax, group: power_grid_equipment, nse: THERMAX, verified: true}
+  - {name: Cummins India, group: power_grid_equipment, nse: CUMMINSIND, verified: true}
+  - {name: Kirloskar Oil Engines, group: power_grid_equipment, nse: KIRLOSENG, verified: true}
+  - {name: NTPC, group: power_producers_grid, nse: NTPC, verified: true}
+  - {name: Power Grid Corporation of India, group: power_producers_grid, nse: POWERGRID, verified: true}
+  - {name: Tata Power, group: power_producers_grid, nse: TATAPOWER, verified: true}
+  - {name: JSW Energy, group: power_producers_grid, nse: JSWENERGY, verified: true}
+  - {name: Adani Energy Solutions, group: power_producers_grid, nse: ADANIENSOL, verified: true}
+  - {name: Waaree Energies, group: renewables_manufacturing, nse: WAAREEENER, verified: true}
+  - {name: Premier Energies, group: renewables_manufacturing, nse: PREMIERENE, verified: true}
+  - {name: Suzlon Energy, group: renewables_manufacturing, nse: SUZLON, verified: true}
+  - {name: Inox Wind, group: renewables_manufacturing, nse: INOXWIND, verified: true}
+  - {name: Dixon Technologies, group: electronics_ai_compute, nse: DIXON, verified: true}
+  - {name: Kaynes Technology India, group: electronics_ai_compute, nse: KAYNES, verified: true}
+  - {name: Syrma SGS Technology, group: electronics_ai_compute, nse: SYRMA, verified: true}
+  - {name: Netweb Technologies India, group: electronics_ai_compute, nse: NETWEB, verified: true}
   - {name: E2E Networks, group: electronics_ai_compute, nse: E2E, verified: false}
-  - {name: Anant Raj, group: data_centers_connectivity, nse: ANANTRAJ, verified: false}
-  - {name: Techno Electric & Engineering, group: data_centers_connectivity, nse: TECHNOE, verified: false}
-  - {name: Tata Communications, group: data_centers_connectivity, nse: TATACOMM, verified: false}
-  - {name: Bharti Airtel, group: data_centers_connectivity, nse: BHARTIARTL, verified: false}
+  - {name: Anant Raj, group: data_centers_connectivity, nse: ANANTRAJ, verified: true}
+  - {name: Techno Electric & Engineering, group: data_centers_connectivity, nse: TECHNOE, verified: true}
+  - {name: Tata Communications, group: data_centers_connectivity, nse: TATACOMM, verified: true}
+  - {name: Bharti Airtel, group: data_centers_connectivity, nse: BHARTIARTL, verified: true}
   - {name: Sterlite Technologies, group: data_centers_connectivity, nse: STLTECH, verified: false}
   - {name: HFCL, group: data_centers_connectivity, nse: HFCL, verified: false}
-  - {name: Blue Star, group: cooling, nse: BLUESTARCO, verified: false}
+  - {name: Blue Star, group: cooling, nse: BLUESTARCO, verified: true}
