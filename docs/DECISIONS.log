@@ -1,0 +1,11 @@
+2026-09-24 M0 docs/BRIEF.md §0.2: domain list stored as plain hostnames (the pasted brief had markdown-link artifacts like "[www.sec.gov](https://www.sec.gov)"); no content change.
+2026-09-24 M0 config/signals.yaml xbrl_map: columns the brief leaves as "and so on" use the most common us-gaap concepts (NetIncomeLoss, IncomeTaxExpenseBenefit, Assets, LongTermDebt, …); M2 validates them on F-US.
+2026-09-24 M0 config/signals.yaml ind_as_map: element names follow the NSE Ind AS results taxonomy as best known; M3 confirms them against 3 real XBRL files (M3-02) and edits via a labelled PR.
+2026-09-24 M0 config/universe_us.yaml: "trusts" = royalty/grantor trusts (SIC 6792); REITs (6798) are kept because EQIX/DLR/IRM are in the capex seed.
+2026-09-24 M0 config/quotas.yaml: model ids are defaults for the free tiers (gemini-2.5-flash-lite / gemini-2.5-flash, llama-3.3-70b); limits left null until Manzoor copies them (BRIEF §2.6 says never hard-code).
+2026-09-24 M0 pytest markers: `snapshots` (needs network-fetched universe files) and `oldrepo` (needs the old doomberg checkout) are excluded from `make test` and run by verify M0-05 / M0-04, so the default suite never skips.
+2026-09-24 M0 config/holdcos.yaml and config/cusip_overrides.yaml: created empty; BRIEF §4.2/§4.6 reference them but §2.3 does not list them.
+2026-09-24 M0 guard: root manifests (pyproject.toml, uv.lock, web/package.json) are always checked for banned packages even though they are outside scan_paths; otherwise a banned dependency could be added without an import.
+2026-09-24 M0 guard pit_rule: a "read" is SQL `from|join <table>` or ORM `.from('<table>')`/`.table('<table>')` in code files; db/migrations are exempt (DDL).
+2026-09-24 M0 Makefile: migrate-dev and thesis-validate exit 1 with "arrives in M1/M6" until their modules exist, rather than pretending to succeed.
+2026-09-24 M0 legacy Lab signals: L1-L6 defined in docs/DOOMBERG_AUDIT.md §5; weights 0 in config/weights.yaml pending Manzoor's confirmation (BRIEF §11.2).

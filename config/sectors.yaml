@@ -1,0 +1,24 @@
+# Sector map for S12 cycle position (BRIEF §4.6). US from SIC 2-digit ranges; India from NSE industry.
+# Coarse by design; refine through the Lab.
+us_sic_ranges:
+  energy: [[1300, 1399], [2900, 2999]]
+  materials: [[1000, 1099], [1400, 1499], [2600, 2699], [2800, 2829], [3300, 3399]]
+  industrials: [[1500, 1799], [3400, 3599], [3700, 3799], [4000, 4799]]
+  technology: [[3570, 3579], [3600, 3699], [3810, 3829], [7370, 7379]]
+  utilities: [[4900, 4999]]
+  healthcare: [[2830, 2839], [3840, 3851], [8000, 8099]]
+  consumer: [[2000, 2399], [5000, 5999], [7000, 7299]]
+  financials: [[6000, 6799]]
+  real_estate: [[6500, 6553]]
+  communication: [[4800, 4899]]
+in_industry_keywords:
+  energy: [oil, gas, petroleum, coal]
+  materials: [steel, cement, chemical, metal, mining, paper]
+  industrials: [capital goods, engineering, construction, electrical equipment, cables, transformers]
+  technology: [software, it services, electronics, semiconductor]
+  utilities: [power, utilities, electricity]
+  healthcare: [pharma, healthcare, hospital]
+  consumer: [fmcg, consumer, retail, auto]
+  financials: [bank, finance, insurance, nbfc]
+  real_estate: [realty, real estate]
+  communication: [telecom, media]

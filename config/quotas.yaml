@@ -1,0 +1,30 @@
+# LLM free-tier quotas (BRIEF §2.6). Values are PER PROJECT and CHANGE: copy them from each provider's console
+# (see docs/QUOTAS.md). null = not filled in yet -> the router treats that provider as unavailable.
+providers:
+  gemini:
+    models: {extract: gemini-2.5-flash-lite, card: gemini-2.5-flash}
+    requests_per_day: null
+    requests_per_minute: null
+    tokens_per_day: null
+  groq:
+    models: {extract: llama-3.3-70b-versatile}
+    requests_per_day: null
+    requests_per_minute: null
+    tokens_per_day: null
+  openrouter:
+    base_url: https://openrouter.ai/api/v1       # the ONLY base_url an OpenAI(...) client may use (guard)
+    models: {extract: "meta-llama/llama-3.3-70b-instruct:free"}
+    requests_per_day: null
+    requests_per_minute: null
+    tokens_per_day: null
+routing:
+  P-01: [gemini, groq, openrouter]
+  P-02: [gemini, groq, openrouter]
+  P-03: [gemini, groq, openrouter]
+  P-05: [gemini, groq]
+  P-06: [gemini, groq, openrouter]
+  P-07: [gemini, groq, openrouter]
+  P-04-fallback: [gemini]
+work_order: [capex_desk, candidate_shortlist, other]
+text_daily_limits:
+  documents_per_day: null

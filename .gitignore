@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+raw/
+imports/*
+!imports/.gitkeep
+web/node_modules/
+web/.next/
+*.parquet

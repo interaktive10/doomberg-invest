@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(pip install anthropic:*)",
+      "Bash(uv add anthropic:*)",
+      "Bash(uv add kiteconnect:*)",
+      "Bash(uv add alpaca-py:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume",
+        "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/session_start.sh" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|MultiEdit",
+        "hooks": [ { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/scripts/guard_hook.py" } ] }
+    ]
+  }
+}

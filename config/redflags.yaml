@@ -1,0 +1,10 @@
+# PROTECTED (BRIEF Appendix D). Red flags, BRIEF §1.5. Missing inputs never fire a flag (recorded as unknown).
+R1: {type: soft, sloan_min: 0.10, cfo_ni_max: 0.5}
+R2: {type: soft, receivables_minus_revenue_growth_pp: 20.0}
+R3: {type: hard, auditor_change_months: 12, late_filing: true, text_types: [going_concern, material_weakness]}
+R4: {type: soft, share_growth_min: 0.10, unless_acquisition: true}
+R5:
+  pledge: {type: hard, min_pledged_pct_of_promoter: 20.0}
+  surveillance: {type: hard, lists: [ASM, GSM]}
+  related_party: {type: soft, min_rpt_revenue_pct: 10.0}
+R6: {type: soft, consecutive_quarters: 4, unless_signal: S1}

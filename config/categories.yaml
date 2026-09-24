@@ -1,0 +1,13 @@
+# Capex Desk demand categories (BRIEF §1.10, §4.11). Direction thresholds in sigma.
+direction: {rising_min_sigma: 0.5, falling_max_sigma: -0.5}
+categories:
+  compute: {inputs: [hyperscaler_capex_guidance]}
+  networking: {inputs: [hyperscaler_capex_guidance]}
+  optical: {inputs: [hyperscaler_capex_guidance]}
+  power_equipment: {inputs: [utility_large_load_gw, eia_planned_additions_mw, lead_time_transformers, lead_time_turbines, lead_time_switchgear]}
+  grid: {inputs: [utility_large_load_gw, lead_time_transformers, lead_time_switchgear]}
+  cooling: {inputs: [hyperscaler_capex_guidance, utility_large_load_gw]}
+  construction: {inputs: [hyperscaler_capex_guidance, utility_large_load_gw]}
+  on_site_power: {inputs: [eia_planned_additions_mw, lead_time_turbines, utility_large_load_gw]}
+  electronics_manufacturing: {inputs: [hyperscaler_capex_guidance]}
+anchors: [MSFT, GOOGL, AMZN, META, ORCL, CRWV]   # hyperscaler guidance anchors (graph distance 0)

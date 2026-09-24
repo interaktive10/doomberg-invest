@@ -1,0 +1,41 @@
+# PROTECTED (BRIEF Appendix D). Changes only through a PR with the `human-approved` label (BRIEF §4.10.5).
+# Initial weights are equal (BRIEF §1.7, §4.8). Legacy Doomberg signals L* start at 0 (BRIEF §4.10.4).
+version: w0-equal
+families:            # W_f
+  fundamentals: 1.0
+  behavior: 1.0
+  text: 1.0
+  structural: 1.0
+  capex: 1.0
+  cycle: 1.0
+signals:             # weight_s
+  S1: 1.0
+  S2: 1.0
+  S3: 1.0
+  S4: 1.0
+  S5: 1.0
+  S6: 1.0
+  S7: 1.0
+  S8: 1.0
+  S9: 1.0
+  S10: 1.0
+  S11: 1.0
+  S12: 1.0
+context:             # Gap = mean of available C1-C4 (equal weights, BRIEF §1.7)
+  C1: 1.0
+  C2: 1.0
+  C3: 1.0
+  C4: 1.0
+legacy:              # docs/DOOMBERG_AUDIT.md §5; Lab-only until proven (BRIEF §4.10.5)
+  L1: 0.0
+  L2: 0.0
+  L3: 0.0
+  L4: 0.0
+  L5: 0.0
+  L6: 0.0
+lab_rules:           # BRIEF §4.10.5 weight proposals
+  promote_weight: 1.5
+  promote_min_t_nw: 2.0
+  neutral_weight: 1.0
+  demote_weight: 0.0
+  demote_max_t_nw: -2.0
