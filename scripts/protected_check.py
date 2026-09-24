@@ -54,8 +54,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--labels", default="", help="comma-separated PR labels")
     a = ap.parse_args(argv)
     if a.base:
+        # --no-renames: a rename must show as delete + add, or moving a protected file away would list only its
+        # new, unprotected path and slip past the check.
         diff = subprocess.run(
-            ["git", "diff", "--name-only", f"{a.base}...HEAD"], capture_output=True, text=True, check=True
+            ["git", "diff", "--name-only", "--no-renames", f"{a.base}...HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
         )
         files = [ln for ln in diff.stdout.splitlines() if ln.strip()]
     else:

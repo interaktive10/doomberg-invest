@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -64,20 +65,59 @@ def test_cli_synthetic_diff_exit_codes() -> None:
     assert good.returncode == 0
 
 
-def test_cli_git_diff_mode(tmp_path: Path) -> None:
+def _git_repo(tmp_path: Path) -> Callable[..., None]:
+    """A repo whose `main` holds two protected files, checked out on a `feature` branch."""
+
     def git(*args: str) -> None:
         subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
 
     git("init", "-q", "-b", "main")
     git("config", "user.email", "t@example.com")
     git("config", "user.name", "t")
-    (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "weights.yaml").write_text("a: 1\n")
+    for rel, body in (
+        ("config/weights.yaml", "a: 1\n"),
+        ("tests/guard/test_guard.py", "def test_x() -> None:\n    assert True\n"),
+    ):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(body)
     git("add", "-A")
     git("commit", "-qm", "base")
     git("checkout", "-qb", "feature")
+    return git
+
+
+def _check(tmp_path: Path, labels: str = "") -> subprocess.CompletedProcess[str]:
+    script = str(ROOT / "scripts" / "protected_check.py")
+    return subprocess.run(
+        [sys.executable, script, "--base", "main", "--labels", labels], cwd=tmp_path, capture_output=True, text=True
+    )
+
+
+def test_cli_git_diff_mode(tmp_path: Path) -> None:
+    git = _git_repo(tmp_path)
     (tmp_path / "config" / "weights.yaml").write_text("a: 2\n")
     git("commit", "-qam", "change weights")
-    script = str(ROOT / "scripts" / "protected_check.py")
-    p = subprocess.run([sys.executable, script, "--base", "main"], cwd=tmp_path, capture_output=True, text=True)
+    p = _check(tmp_path)
+    assert p.returncode == 1 and "config/weights.yaml" in p.stderr
+    assert _check(tmp_path, "human-approved").returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("src", "dest"),
+    [("tests/guard/test_guard.py", "tests/test_guard_moved.py"), ("config/weights.yaml", "config/weights_old.yaml")],
+)
+def test_cli_git_diff_rename_away_is_caught(tmp_path: Path, src: str, dest: str) -> None:
+    """Regression: plain `git diff --name-only` lists only a rename's new path, which let this slip through."""
+    git = _git_repo(tmp_path)
+    git("mv", src, dest)
+    git("commit", "-qm", "move a protected file away")
+    p = _check(tmp_path)
+    assert p.returncode == 1 and src in p.stderr
+
+
+def test_cli_git_diff_delete_is_caught(tmp_path: Path) -> None:
+    git = _git_repo(tmp_path)
+    git("rm", "-q", "config/weights.yaml")
+    git("commit", "-qm", "delete weights")
+    p = _check(tmp_path)
     assert p.returncode == 1 and "config/weights.yaml" in p.stderr

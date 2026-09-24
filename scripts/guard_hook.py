@@ -16,6 +16,17 @@ import sys
 from pathlib import Path
 
 
+def guard_command(root: Path, file_path: str) -> list[str]:
+    """The guard invocation. `--frozen` matters: a plain `uv run` right after an edit to pyproject.toml would
+    re-lock uv.lock and install the new dependency (even a banned one) before the guard gets to flag it."""
+    py = (
+        ["uv", "run", "--frozen", "--quiet", "python"]
+        if shutil.which("uv") and (root / "pyproject.toml").exists()
+        else [sys.executable]
+    )
+    return [*py, str(root / "scripts" / "guard.py"), "--root", str(root), "--paths", file_path]
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -23,14 +34,8 @@ def main() -> int:
         if not file_path:
             return 0
         root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path(__file__).resolve().parent.parent)
-        guard = root / "scripts" / "guard.py"
-        py = (
-            ["uv", "run", "--quiet", "python"]
-            if shutil.which("uv") and (root / "pyproject.toml").exists()
-            else [sys.executable]
-        )
         proc = subprocess.run(
-            [*py, str(guard), "--root", str(root), "--paths", str(file_path)],
+            guard_command(root, str(file_path)),
             capture_output=True,
             text=True,
             timeout=60,

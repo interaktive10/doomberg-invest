@@ -7,7 +7,9 @@
       "Bash(pip install anthropic:*)",
       "Bash(uv add anthropic:*)",
       "Bash(uv add kiteconnect:*)",
-      "Bash(uv add alpaca-py:*)"
+      "Bash(uv add alpaca-py:*)",
+      "mcp__github__merge_pull_request",
+      "mcp__github__enable_pr_auto_merge"
     ]
   },
   "hooks": {
