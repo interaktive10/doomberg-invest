@@ -53,3 +53,13 @@ def test_enforce_fails_above_limit(conn: psycopg.Connection[Any]) -> None:
     assert size_guard.enforce(conn, date(2026, 9, 26)).ok
     tiny = size_guard.enforce(conn, date(2026, 9, 26), limit_mb=1)
     assert not tiny.ok and tiny.database_mb > 1
+
+
+def test_probe_sql_has_no_bare_percent() -> None:
+    """Regression: `q % 4` in a probe query is read by psycopg as a broken placeholder once params are bound."""
+    import re
+
+    bare = re.compile(r"%(?!\([a-z_]+\)s|%)")
+    assert {t: bool(bare.search(sql)) for t, sql in size_guard._SAMPLES.items()} == dict.fromkeys(
+        size_guard._SAMPLES, False
+    )

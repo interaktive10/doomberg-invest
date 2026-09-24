@@ -96,7 +96,7 @@ _SAMPLES: dict[str, str] = {
         + ", ".join(FUNDAMENTAL_COLUMNS)
         + ", currency, source) "
         "select c.id, (date '2011-03-31' + q * interval '3 months')::date, "
-        "'FY' || (2011 + q / 4) || 'Q' || (q % 4 + 1), "
+        "'FY' || (2011 + q / 4) || 'Q' || (mod(q, 4) + 1), "
         "timestamptz '2011-05-01 21:05:00+00' + q * interval '3 months', "
         + ", ".join(_MONEY for _ in FUNDAMENTAL_COLUMNS)
         + ", 'USD', 'sec_xbrl' "
@@ -118,7 +118,7 @@ _SAMPLES: dict[str, str] = {
     ),
     "signal_values": (
         "(company_id, week_end, signal_id, fired, strength, inputs) "
-        "select gen_random_uuid(), date '2025-01-03' + (i % 52) * 7, 'S' || (i % 12 + 1), false, 0, "
+        "select gen_random_uuid(), date '2025-01-03' + mod(i, 52) * 7, 'S' || (mod(i, 12) + 1), false, 0, "
         "jsonb_build_object('q', '2025Q3', 'g_ob', 0.1834, 'g_rev', 0.0712, 'ob_cov', 1.42, 'ob_cov_ya', 1.31, "
         "'periods', jsonb_build_array('2024Q3', '2025Q3')) "
         "from generate_series(1, %(n)s) i"
