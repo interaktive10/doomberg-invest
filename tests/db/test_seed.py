@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+from pathlib import Path
 from typing import Any
 
 import psycopg
+import pytest
 
 from pipeline.db import seed
+from pipeline.settings import REPO_ROOT
 
 
 def test_seed_from_snapshots_is_idempotent(conn: psycopg.Connection[Any]) -> None:
@@ -29,3 +34,19 @@ def test_company_missing_from_snapshot_leaves_universe(conn: psycopg.Connection[
         False,
         "not in the SEC NYSE/Nasdaq snapshot",
     )
+
+
+def test_seed_refuses_truncated_snapshot(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """Regression: a half-downloaded snapshot seeded as-is would move thousands of companies out of the universe."""
+    (tmp_path / "config").mkdir()
+    for f in ("capex_seed.yaml", "weights.yaml", "universe_us.yaml", "universe_in.yaml"):
+        shutil.copy(REPO_ROOT / "config" / f, tmp_path / "config" / f)
+    (tmp_path / "data" / "universe").mkdir(parents=True)
+    shutil.copy(seed.IN_SNAPSHOT, tmp_path / "data" / "universe" / "nse_equity_list.csv")
+    truncated = {"fields": ["cik", "name", "ticker", "exchange"], "data": [[320193, "Apple Inc.", "AAPL", "Nasdaq"]]}
+    (tmp_path / "data" / "universe" / "us_tickers_exchange.json").write_text(json.dumps(truncated), encoding="utf-8")
+    seed.seed(conn)  # a good seed first, so there is a universe to lose
+    before = conn.execute("select count(*) from companies where in_universe").fetchone()
+    with pytest.raises(seed.SnapshotTooSmall, match="us snapshot has 1 companies"):
+        seed.seed(conn, tmp_path)
+    assert conn.execute("select count(*) from companies where in_universe").fetchone() == before

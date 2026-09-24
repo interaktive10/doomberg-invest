@@ -107,8 +107,11 @@ def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
 
 
 def mark_missing_out_of_universe(conn: Conn, market: str, present_keys: Sequence[str], reason: str) -> int:
-    """Companies of `market` whose key (cik for US, nse_symbol for India) isn't in the snapshot leave the universe."""
+    """Companies of `market` whose key (cik for US, nse_symbol for India) isn't in the snapshot leave the universe.
+    An empty key list would move every company out, so it's refused (a truncated download, not a real universe)."""
     key = {"us": "cik", "in": "nse_symbol"}[market]
+    if not present_keys:
+        raise ValueError(f"empty {market} snapshot: refusing to move every company out of the universe")
     cur = conn.execute(
         _q(
             f"update companies set in_universe = false, excluded_reason = %(reason)s, updated_at = now() "  # noqa: S608
@@ -200,7 +203,8 @@ _INSIDER_COLS = (
 
 
 def insert_insider_events(conn: Conn, rows: Sequence[InsiderEvent]) -> None:
-    """Rows already stored (same company, person, date, kind, shares, source) are skipped by a unique index."""
+    """Rows already stored (same company, person, date, kind, shares, value, source) are skipped by a unique
+    index."""
     with conn.cursor() as cur:
         cur.executemany(
             _insert("insider_events", _INSIDER_COLS, "on conflict do nothing"),

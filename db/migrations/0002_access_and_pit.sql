@@ -26,8 +26,9 @@ alter table corp_events add column filed_at timestamptz not null;
 
 create index insider_events_pit on insider_events (company_id, filed_at);
 -- Natural keys so re-running a daily/weekly job inserts nothing twice (writers use `on conflict do nothing`).
-create unique index insider_events_natural on insider_events (company_id, person, event_date, kind, shares, source_url)
-  nulls not distinct;
+-- value is part of the insider key: one Form 4 can carry two same-day lots of equal size at different prices.
+create unique index insider_events_natural
+  on insider_events (company_id, person, event_date, kind, shares, value, source_url) nulls not distinct;
 create unique index corp_events_natural on corp_events (company_id, kind, event_date, source_url);
 create index corp_events_pit on corp_events (company_id, filed_at);
 create index ownership_q_pit on ownership_q (company_id, filed_at);
@@ -55,3 +56,5 @@ alter default privileges in schema public revoke all on functions from anon, aut
 
 grant usage on schema public to service_role;
 grant select, insert, update, delete on all tables in schema public to service_role;
+-- Supabase grants new tables to service_role by default; mirror that so later migrations behave the same locally.
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;

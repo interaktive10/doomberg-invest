@@ -154,3 +154,33 @@ def new_uuid() -> Any:
     import uuid
 
     return uuid.uuid4()
+
+
+def test_equal_lots_at_different_prices_are_both_kept(conn: psycopg.Connection[Any]) -> None:
+    """Regression: the dedupe key once ignored value, so two same-day lots of equal size at different prices in
+    one Form 4 collapsed into one and S7's dollar total came out short."""
+    cid = new_company(conn)
+    lot = dict(
+        company_id=cid,
+        event_date=date(2025, 1, 10),
+        filed_at=FILED,
+        person="X",
+        kind="open_market_buy",
+        shares=Decimal(1000),
+        source_url="https://www.sec.gov/f4",
+    )
+    repo.insert_insider_events(
+        conn,
+        [InsiderEvent(**lot, value=Decimal(50000)), InsiderEvent(**lot, value=Decimal(51000))],  # type: ignore[arg-type]
+    )
+    repo.insert_insider_events(conn, [InsiderEvent(**lot, value=Decimal(50000))])  # type: ignore[arg-type]
+    values = sorted(e.value for e in as_of(date(2025, 2, 7)).insider_events(conn, [cid]) if e.value is not None)
+    assert values == [Decimal(50000), Decimal(51000)]
+
+
+def test_empty_snapshot_never_empties_the_universe(conn: psycopg.Connection[Any]) -> None:
+    """Regression: `not (cik = any('{}'))` is true for every row, so an empty key list moved all companies out."""
+    cid = new_company(conn)
+    with pytest.raises(ValueError, match="empty us snapshot"):
+        repo.mark_missing_out_of_universe(conn, "us", [], "x")
+    assert conn.execute("select in_universe from companies where id = %s", (cid,)).fetchone() == (True,)

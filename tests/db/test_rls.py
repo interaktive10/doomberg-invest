@@ -65,3 +65,16 @@ def test_service_role_reads_views(conn: psycopg.Connection[Any]) -> None:
         conn.execute("set local role service_role")
         for v in relations(conn, ("v",)):
             conn.execute(f"select * from {v} limit 1".encode())
+
+
+def test_tables_added_later_stay_closed_to_api_roles(conn: psycopg.Connection[Any]) -> None:
+    """Default privileges: a table a later migration creates is readable by service_role (as on Supabase) and not
+    by anon/authenticated, even before that migration remembers to enable RLS."""
+    conn.execute("create table t_added_later (id int)")
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        conn.execute("select * from t_added_later")
+    for role in API_ROLES:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+            conn.execute(f"set local role {role}".encode())
+            conn.execute("select * from t_added_later")

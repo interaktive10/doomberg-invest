@@ -61,7 +61,10 @@ def _needs_database() -> str | None:
     probe = ["uv", "run", "--frozen", "python", "-c", "import psycopg, sys; psycopg.connect(sys.argv[1]).close()", url]
     p = subprocess.run(probe, cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
-        return "human:PostgreSQL not reachable at DATABASE_URL (start it: `bash scripts/session_start.sh`)"
+        return (
+            "human:PostgreSQL not reachable at DATABASE_URL, or psycopg not installed "
+            "(`make setup`, then `bash scripts/session_start.sh`)"
+        )
     return None
 
 

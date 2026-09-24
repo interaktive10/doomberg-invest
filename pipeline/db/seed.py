@@ -3,6 +3,7 @@
 - companies: US from data/universe/us_tickers_exchange.json (NYSE/Nasdaq), India from nse_equity_list.csv (EQ);
   `capex_desk` from config/capex_seed.yaml (India: verified symbols only). Companies that left a snapshot are
   marked out of the universe, never deleted. M2/M3 apply the remaining universe rules (§1.3) on top.
+  A snapshot below its M0-05 floor (config/universe_*.yaml) is refused before anything is written.
 - weights_versions: the version in config/weights.yaml (immutable once written).
 - source_health: one row per external source, so staleness is visible from the first run (§2.7).
 Idempotent: re-running changes nothing.
@@ -32,6 +33,10 @@ IN_SNAPSHOT = REPO_ROOT / "data" / "universe" / "nse_equity_list.csv"
 CAPEX_SEED = REPO_ROOT / "config" / "capex_seed.yaml"
 WEIGHTS = REPO_ROOT / "config" / "weights.yaml"
 SOURCES = ("sec", "sec_13f", "nse", "bse", "stooq", "gdelt", "fred", "eia")
+
+
+class SnapshotTooSmall(ValueError):
+    """A snapshot below the universe floor (config/universe_*.yaml min_count_check) is treated as a bad download."""
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,13 @@ def seed(conn: psycopg.Connection[Any], root: Path = REPO_ROOT) -> SeedReport:
     capex_us, capex_in = capex_sets(yaml.safe_load((root / "config" / "capex_seed.yaml").read_text(encoding="utf-8")))
     us = us_companies(load_sec(root / "data" / "universe" / "us_tickers_exchange.json"), capex_us)
     india = in_companies(load_nse(root / "data" / "universe" / "nse_equity_list.csv"), capex_in)
+    for market, rows in (("us", us), ("in", india)):
+        cfg = yaml.safe_load((root / "config" / f"universe_{market}.yaml").read_text(encoding="utf-8"))
+        if len(rows) < int(cfg["min_count_check"]):
+            raise SnapshotTooSmall(
+                f"{market} snapshot has {len(rows)} companies, below the floor of {cfg['min_count_check']}; "
+                "refusing to seed from it (re-fetch with `make universe`)"
+            )
     with conn.transaction():
         repo.upsert_us_companies(conn, us)
         repo.upsert_in_companies(conn, india)
