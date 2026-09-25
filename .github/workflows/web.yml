@@ -2,20 +2,21 @@ name: web
 # BRIEF §8 M7: the web app's checks. Type check, unit tests (Vitest), a production build, then Playwright (M7-01 the
 # flow, M7-02 no LLM calls, M7-03 axe at 390 px) against a local Supabase stack with the repo's migrations and
 # scripts/seed_e2e.py. Runs when the web app, the schema or the seed change, or a file its tests pin it to (the
-# staleness SLAs, the screener spec, the §4.6 series, next_filing, the guard lists, BRIEF §7; M7 review R1-F14).
+# staleness SLAs, the screener spec, the §4.6 series and S1's order book, next_filing, the guard lists, BRIEF §7; M7
+# review R1-F14, R3).
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: ["web/**", "db/migrations/**", "scripts/seed_e2e.py", "scripts/e2e_report.py", "scripts/verify.py",
             "supabase/**", ".github/workflows/web.yml", "config/staleness.yaml", "config/signals.yaml",
             "config/guards.yaml", "pipeline/screener.py", "pipeline/signals/weekly.py", "pipeline/signals/series.py",
-            "pipeline/thesis/evidence_pack.py", "docs/BRIEF.md"]
+            "pipeline/signals/s01_orderbook.py", "pipeline/thesis/evidence_pack.py", "docs/BRIEF.md"]
   push:
     branches: [main]
     paths: ["web/**", "db/migrations/**", "scripts/seed_e2e.py", "scripts/e2e_report.py", "scripts/verify.py",
             "supabase/**", ".github/workflows/web.yml", "config/staleness.yaml", "config/signals.yaml",
             "config/guards.yaml", "pipeline/screener.py", "pipeline/signals/weekly.py", "pipeline/signals/series.py",
-            "pipeline/thesis/evidence_pack.py", "docs/BRIEF.md"]
+            "pipeline/signals/s01_orderbook.py", "pipeline/thesis/evidence_pack.py", "docs/BRIEF.md"]
 
 concurrency:
   group: web-${{ github.ref }}

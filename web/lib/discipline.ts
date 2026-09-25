@@ -31,15 +31,26 @@ export function checkStartPosition(
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const IST = 330 * 60 * 1000; // Manzoor's calendar: IST, UTC+05:30 (BRIEF §4.9: his routine runs at 06:00 IST)
 
-/** Today's date in Manzoor's calendar: the journal form's default and the latest date an entry takes (M7 review
- * round 2: in the UTC date, today's IST date was refused between 00:00 and 05:30 IST). */
-export function localToday(now: Date): string {
-  return new Date(now.getTime() + IST).toISOString().slice(0, 10);
+/** An instant's date in Manzoor's calendar (IST). */
+export function istDate(at: Date): string {
+  return new Date(at.getTime() + IST).toISOString().slice(0, 10);
 }
 
-/** A start_position entry's date: not before the thesis started (acceptance, else the card's week) and not after
- * today; the §11.9 age is measured at the end of that date (M7 review R1-F8), or now if that is sooner, so a date
- * never adds age the thesis doesn't have yet. Returns the time to measure at, or why the date is refused. */
+/** Today's date in Manzoor's calendar: the journal forms' default and the latest date an entry takes (M7 review
+ * round 2: in the UTC date, today's IST date was refused between 00:00 and 05:30 IST). */
+export function localToday(now: Date): string {
+  return istDate(now);
+}
+
+/** The last second of an IST date (23:59:59 IST, which is 18:29:59Z). */
+export function endOfIstDay(date: string): Date {
+  return new Date(new Date(`${date}T23:59:59Z`).getTime() - IST);
+}
+
+/** A start_position entry's date, an IST date like every journal date: not before the thesis started (the IST date of
+ * its acceptance, else the card's week) and not after today; the §11.9 age is measured at the end of that IST date
+ * (M7 review R1-F8, R3-F2), or now if that is sooner, so a date never adds age the thesis doesn't have yet. Returns the
+ * time to measure at, or why the date is refused. */
 export function entryDateCheck(
   entryDate: string,
   acceptedAt: string | null,
@@ -47,8 +58,8 @@ export function entryDateCheck(
   now: Date,
 ): { ok: true; at: Date } | { ok: false; message: string } {
   if (!ISO.test(entryDate)) return { ok: false, message: "The entry needs a date." };
-  const start = (acceptedAt ?? `${createdWeek}T00:00:00Z`).slice(0, 10);
+  const start = acceptedAt === null ? createdWeek : istDate(new Date(acceptedAt));
   if (entryDate > localToday(now)) return { ok: false, message: "A position can't start in the future." };
   if (entryDate < start) return { ok: false, message: `A position can't start before the thesis did (${start}).` };
-  return { ok: true, at: new Date(Math.min(new Date(`${entryDate}T23:59:59Z`).getTime(), now.getTime())) };
+  return { ok: true, at: new Date(Math.min(endOfIstDay(entryDate).getTime(), now.getTime())) };
 }

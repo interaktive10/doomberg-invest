@@ -7,6 +7,7 @@ import {
   packQuarter,
   packSnapshot,
   quarterReviews,
+  reviewedQuarter,
   reviewedThrough,
   scoredWeek,
   stateDiff,
@@ -14,6 +15,7 @@ import {
   type NewItems,
   type Snapshot,
 } from "@/lib/reviews";
+import { nextFiling } from "@/lib/filing";
 
 const q = (period_end: string, filed_at: string, revenue: number): FilingRow => ({
   period_end,
@@ -159,6 +161,19 @@ describe("reviews (BRIEF §4.9: a review after each new quarterly filing, with t
     });
     expect(d.facts.map((f) => f.id)).toEqual(["10-Q about 2026-06-30, published after the card"]);
     expect([dayAfter("2026-09-18"), dayAfter("2026-12-31"), dayAfter("2028-02-28")]).toEqual(["2026-09-19", "2027-01-01", "2028-02-29"]);
+  });
+
+  it("next review after a batch: the window after the latest reviewed quarter, in either order (M7 review R3-F1)", () => {
+    // reviews for 2026-03-31 and 2026-06-30 made together; on 2026-08-10 Manzoor decides them in either order
+    const q1 = (verdict: string | null) => ({ period_end: "2026-03-31", verdict });
+    const q2 = (verdict: string | null) => ({ period_end: "2026-06-30", verdict });
+    for (const batch of [[q1(null), q2("intact")], [q1("intact"), q2(null)], [q2("intact"), q1("intact")]]) {
+      expect(nextFiling("us", "1231", reviewedQuarter(batch, null), "2026-08-10")?.closes).toBe("2026-11-14");
+    }
+    // the decided quarter's own window, as before: 2026-08-14, the 2026-06-30 10-Q already filed and reviewed
+    expect(nextFiling("us", "1231", "2026-03-31", "2026-08-10")?.closes).toBe("2026-08-14");
+    expect(reviewedQuarter([{ period_end: null }], "2026-06-30")).toBe("2026-06-30"); // only a kill-criteria review
+    expect(reviewedQuarter([], null)).toBeNull();
   });
 
   it("compares with the snapshot stored with the last review when there is one", () => {

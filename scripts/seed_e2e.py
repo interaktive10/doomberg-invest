@@ -171,14 +171,15 @@ def seed(conn: psycopg.Connection[Any]) -> None:
           "(%s, %s, %s, true, %s, '{}')", (cid, W, sid, strength))  # fmt: skip
         x("insert into signal_values (company_id, week_end, signal_id, fired, strength, inputs) values "
           "(%s, %s, %s, true, %s, '{}')", (cid, W - timedelta(days=7), sid, strength))  # fmt: skip
+    # §1.5: R3 (an auditor change) is hard, so SIGMA is excluded; R4 (share count +10% YoY) is soft
     x("insert into redflag_values (company_id, week_end, flag_id, hard, inputs) values "
-      "(%s, %s, 'R1', true, '{\"status\": \"fired\"}'), (%s, %s, 'R5', false, '{\"status\": \"fired\"}')",
+      "(%s, %s, 'R3', true, '{\"status\": \"fired\"}'), (%s, %s, 'R4', false, '{\"status\": \"fired\"}')",
       (SIGMA, W, OMEGA, W))  # fmt: skip
-    # R1 fired for ECHO two and one week before and is clear in the scored week (no row): its review shows no red
-    # flag starting (M7 review R2-F1)
+    # R1 (soft) fired for ECHO two and one week before and is clear in the scored week (no row): its review shows no
+    # red flag starting (M7 review R2-F1)
     for weeks in (2, 1):
         x("insert into redflag_values (company_id, week_end, flag_id, hard, inputs) values "
-          "(%s, %s, 'R1', true, '{\"status\": \"fired\"}')", (ECHO, W - timedelta(days=7 * weeks)))  # fmt: skip
+          "(%s, %s, 'R1', false, '{\"status\": \"fired\"}')", (ECHO, W - timedelta(days=7 * weeks)))  # fmt: skip
     for k in range(5):
         week = W - timedelta(days=7 * (4 - k))
         x(

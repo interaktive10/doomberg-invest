@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { journal, postmortems, theses } from "@/lib/data";
+import { localToday } from "@/lib/discipline";
 import { code, num } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
 import { addNote } from "./actions";
@@ -52,7 +53,7 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
         <form action={addNote} className="mt-4 grid gap-3 rounded-md border border-gray-300 p-3 md:max-w-xl">
           <h3 className="font-semibold">Add a note</h3>
           <Label htmlFor="n-date">Date</Label>
-          <Input id="n-date" name="entry_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+          <Input id="n-date" name="entry_date" type="date" defaultValue={localToday(new Date())} required />
           <Label htmlFor="n-text">Note</Label>
           <Textarea id="n-text" name="reason" required />
           <div>

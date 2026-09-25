@@ -322,7 +322,8 @@ export async function killCriteria(thesisId: string): Promise<KillCriterion[]> {
 
 export async function reviews(thesisId: string): Promise<Review[]> {
   return rows(await db().from("reviews").select("id, thesis_id, period_end, pack_diff, verdict, note, created_at, decided_at")
-    .eq("thesis_id", thesisId).order("created_at", { ascending: false }));
+    .eq("thesis_id", thesisId).order("created_at", { ascending: false })
+    .order("period_end", { ascending: false, nullsFirst: false })); // a batch shares created_at: newest quarter first
 }
 
 export async function journal(thesisId?: string): Promise<JournalEntry[]> {

@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { journal as journalOf, setting, thesis as getThesis, type JournalEntry } from "@/lib/data";
 import { checkStartPosition, entryDateCheck, localToday, thesisWeeks } from "@/lib/discipline";
 import { nextFiling } from "@/lib/filing";
+import { reviewedQuarter } from "@/lib/reviews";
 import { field, ISO_DATE, UUID, withMessage } from "@/lib/forms";
 import { db } from "@/lib/supabase/admin";
 import { acceptable, afterVerdict, canMove, positionOpen, verdicts } from "@/lib/theses";
@@ -131,13 +132,15 @@ export async function decideReview(form: FormData): Promise<void> {
   }
   // a thesis leaves Review only when no other review waits for a verdict (M7 review R1-F9) and none says broken
   // (M7 review R2-F3)
-  const all = await db().from("reviews").select("verdict").eq("thesis_id", t.id);
+  const all = await db().from("reviews").select("verdict, period_end").eq("thesis_id", t.id);
   if (all.error) fail(t.id, all.error.message);
-  const { pending, broken } = verdicts((all.data ?? []) as { verdict: string | null }[]);
+  const reviewed = (all.data ?? []) as { verdict: string | null; period_end: string | null }[];
+  const { pending, broken } = verdicts(reviewed);
   const next = afterVerdict(t.state, verdict, positionOpen(await journalOf(t.id)), pending, broken);
-  // the next review date: the filing window after the reviewed quarter, or after the latest quarter on file for a
-  // kill-criteria review (§1.8 review dates; M7 review R1-F3)
-  let quarter = decided.period_end;
+  // the next review date: the filing window after the latest reviewed quarter, whatever order the verdicts come in,
+  // or after the latest quarter on file when the only review is a kill-criteria one (§1.8 review dates; M7 review
+  // R1-F3, R3-F1)
+  let quarter = reviewedQuarter(reviewed, null);
   if (quarter === null) {
     const last = await db().from("fundamentals_display_v").select("period_end").eq("company_id", t.company_id)
       .order("period_end", { ascending: false }).limit(1).maybeSingle();

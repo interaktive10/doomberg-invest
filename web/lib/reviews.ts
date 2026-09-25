@@ -248,6 +248,15 @@ export function needsKillReview(state: string, reviews: readonly { verdict: stri
   return state === "review" && !reviews.some((r) => r.verdict === null || r.verdict === "broken");
 }
 
+/** The quarter a thesis's next review follows (§1.8 review dates; M7 review R1-F3): the latest quarter among its
+ * reviews, decided or not, else the latest quarter on file (a thesis whose only review is a kill-criteria one). Not
+ * the quarter of the verdict just recorded: a batch's verdicts come in any order, and deciding the older quarter last
+ * would move the date back to a window already filed (M7 review R3-F1). */
+export function reviewedQuarter(reviews: readonly { period_end: string | null }[], latestOnFile: string | null): string | null {
+  const quarters = reviews.map((r) => r.period_end).filter((p): p is string => p !== null).sort();
+  return quarters.pop() ?? latestOnFile;
+}
+
 /** The review for a thesis a kill criterion moved to Review: no new quarter, the criteria as they stand, and what
  * changed since `before`. */
 export function killReview(
