@@ -217,3 +217,70 @@ def test_grounding_keeps_percent_signs() -> None:
 
     assert ground("Exports were 35% of revenue", "Exports were 35 of revenue") is None
     assert ground("Exports were 35 % of revenue", "Exports were 35% of revenue") == (0, 27)
+
+
+MORE_PRICE = "Our common stock is up 23% this year.\n\nTotal shareholder return was 23% for the year."
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"fact_type": "price_increase", "subject": "price increase", "subject_key": "price_increase:quarter",
+         "value": D(23), "unit": "percent", "currency": None, "scale_word": None, "period_label": None,
+         "quote": "rose 23% during the quarter"},
+        {"fact_type": "price_increase", "subject": "increase", "subject_key": "price_increase:year",
+         "value": D(14), "unit": "percent", "currency": None, "scale_word": None, "period_label": None,
+         "quote": "up 14% from a year ago"},
+        {"fact_type": "commitment_purchase", "subject": "purchase commitment",
+         "subject_key": "purchase_obligations:total", "value": D("2.0"), "unit": "usd", "currency": "USD",
+         "scale_word": "billion", "period_label": None, "quote": "up to $2.0 billion"},
+    ],
+    ids=["stock-price-part", "eps-part", "buyback-part"],
+)  # fmt: skip
+def test_a_partial_quote_is_read_in_its_sentence(change: dict[str, Any]) -> None:
+    """M5 review R2-F1: the quote's span is the model's choice too, so V1-TYPE reads the whole sentence around it in
+    the canonical text."""
+    doc = DocContext("10-Q", date(2026, 10, 28), "0630", DISTRACTORS)
+    r = verify(prop(**change), Chunk(DISTRACTORS, 0, "mdna"), doc)
+    assert isinstance(r, Rejected) and r.check == "V1-TYPE", r
+
+
+@pytest.mark.parametrize("quote", ["Our common stock is up 23% this year.",
+                                   "Total shareholder return was 23% for the year."])  # fmt: skip
+def test_other_share_price_phrasings_are_rejected(quote: str) -> None:
+    doc = DocContext("10-Q", date(2026, 10, 28), "0630", MORE_PRICE)
+    r = verify(prop(fact_type="price_increase", subject="price increase", subject_key="price_increase:year",
+                    value=D(23), unit="percent", currency=None, scale_word=None, period_label=None, quote=quote),
+               Chunk(MORE_PRICE, 0, "mdna"), doc)  # fmt: skip
+    assert isinstance(r, Rejected) and r.check == "V1-TYPE", r
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"fact_type": "capacity_addition", "subject": "transformer capacity", "subject_key": "capacity_addition:mw",
+         "value": D(500), "unit": "mw", "currency": None, "scale_word": None, "period_label": None,
+         "quote": "We upgraded our Chennai plant, adding 500 MW of transformer capacity."},
+        {"quote": "In fiscal 2027 we expect capital expenditures of about $80 billion, while continuing to pay "
+                  "dividends."},
+        {"fact_type": "backlog", "subject": "backlog", "subject_key": "backlog:total", "value": D("13.2"),
+         "period_label": None, "quote": "Backlog was $13.2 billion, ahead of what analysts had modeled."},
+    ],
+    ids=["upgraded-plant", "dividends-later", "analysts-modeled"],
+)  # fmt: skip
+def test_business_facts_near_price_words_are_kept(change: dict[str, Any]) -> None:
+    """M5 review R2-F2: a capex, capacity or backlog figure is stored though its sentence mentions an upgrade,
+    dividends or analysts elsewhere."""
+    text = str(change["quote"])
+    doc = DocContext("10-Q", date(2026, 10, 28), "0630", text)
+    r = verify(prop(**change), Chunk(text, 0, "mdna"), doc)
+    assert isinstance(r, Candidate), r
+
+
+@pytest.mark.parametrize("label", ["fiscal 2026-2028", "FY2026-2030", "CY2026-27"])
+def test_a_multi_year_range_is_no_single_period(label: str) -> None:
+    """M5 review R2-F5: a multi-year plan's label resolves to no period (the fact goes to review), while an Indian
+    fiscal year written as a range still resolves."""
+    assert resolve(label, "1231") is None
+    fy = resolve("FY2025-26", "0331")
+    assert fy is not None and (fy.start, fy.end) == (date(2025, 4, 1), date(2026, 3, 31))

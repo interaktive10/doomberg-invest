@@ -80,7 +80,7 @@ def filings_by_status(conn: Conn, statuses: Sequence[str], limit: int = 1000) ->
     return _rows(
         conn,
         "select f.id, f.company_id, f.accession_no, f.form_type, f.items, f.filed_at, f.period_of_report, "
-        "f.primary_doc_url, f.index_url, f.status from filings f where f.status = any(%s) "
+        "f.primary_doc_url, f.index_url, f.status, f.created_at from filings f where f.status = any(%s) "
         "order by f.filed_at limit %s",
         (list(statuses), limit),
     )
@@ -130,6 +130,11 @@ def set_document_status(conn: Conn, document_id: UUID, status: str) -> None:
 def document_status(conn: Conn, urls: Sequence[str]) -> dict[str, tuple[UUID, str]]:
     rows = _rows(conn, "select id, url, status from documents where url = any(%s)", (list(urls),))
     return {r["url"]: (r["id"], r["status"]) for r in rows}
+
+
+def document_has_facts(conn: Conn, document_id: UUID) -> bool:
+    row = conn.execute(_q("select exists (select 1 from facts where document_id = %s)"), (document_id,)).fetchone()
+    return bool(row and row[0])
 
 
 def deferred_documents(conn: Conn, limit: int = 1000) -> list[dict[str, Any]]:
@@ -262,6 +267,13 @@ def insert_risk_changes(conn: Conn, rows: Sequence[Mapping[str, Any]]) -> None:
 
 
 # ---------------------------------------------------------------- India announcement triage (P-07)
+
+
+def triaged_pdf(conn: Conn, event_ids: Sequence[UUID]) -> set[UUID]:
+    """Announcements already triaged as read_pdf (their PDF is fetched again while it hasn't been read)."""
+    rows = _rows(conn, "select event_id from announcement_triage where read_pdf and event_id = any(%s)",
+                 (list(event_ids),))  # fmt: skip
+    return {r["event_id"] for r in rows}
 
 
 def triaged(conn: Conn, event_ids: Sequence[UUID]) -> set[UUID]:
@@ -440,32 +452,34 @@ def export_quotes(conn: Conn, company_ids: Sequence[UUID], cutoff: datetime) -> 
     return out
 
 
-def new_diffs(conn: Conn, since: datetime) -> list[dict[str, Any]]:
+def new_diffs(conn: Conn, since: datetime, until: datetime) -> list[dict[str, Any]]:
+    """Diffs made in [since, until): one week's, so a diff lands in one brief (M5 review R2-F6)."""
     return _rows(
         conn,
         "select c.name as company, f.fact_type, x.subject_key, x.computed_note, x.change_kind, x.delta_pct, "
         "f.value_num, f.quote, d.url from diffs x join facts f on f.id = x.new_fact_id "
         "join documents d on d.id = f.document_id join companies c on c.id = x.company_id "
-        "where x.created_at >= %s and x.change_kind <> 'reaffirmed' order by x.created_at",
-        (since,),
+        "where x.created_at >= %s and x.created_at < %s and x.change_kind <> 'reaffirmed' order by x.created_at",
+        (since, until),
     )
 
 
-def new_links(conn: Conn, since: datetime) -> list[dict[str, Any]]:
+def new_links(conn: Conn, since: datetime, until: datetime) -> list[dict[str, Any]]:
     return _rows(
         conn,
         "select c.name as company, e.name as entity, l.relation from links l join companies c on c.id = "
-        "l.from_company_id join entities e on e.id = l.to_entity_id where l.first_seen_at >= %s order by c.name",
-        (since,),
+        "l.from_company_id join entities e on e.id = l.to_entity_id where l.first_seen_at >= %s and "
+        "l.first_seen_at < %s order by c.name",
+        (since, until),
     )
 
 
-def new_memberships(conn: Conn, since: datetime, source: str) -> list[dict[str, Any]]:
+def new_memberships(conn: Conn, since: datetime, until: datetime, source: str) -> list[dict[str, Any]]:
     return _rows(
         conn,
         "select c.name as company, m.category, m.quote from capex_memberships m join companies c on c.id = "
-        "m.company_id where m.source = %s and m.proposed_at >= %s order by c.name, m.category",
-        (source, since),
+        "m.company_id where m.source = %s and m.proposed_at >= %s and m.proposed_at < %s order by c.name, m.category",
+        (source, since, until),
     )
 
 

@@ -253,6 +253,7 @@ def test_p06_quotes_are_grounded_in_the_canonical_text(conn: psycopg.Connection[
 def test_the_weekly_brief(conn: psycopg.Connection[Any]) -> None:
     cid = company(conn, "in", "Aravalli Cables Limited", "ARVL")
     facts_repo.propose_membership(conn, cid, "grid", "p06", "{}", "EHV cables and substation equipment")
+    conn.execute("update capex_memberships set proposed_at = %s", (datetime(2026, 9, 23, 2, tzinfo=UTC),))
     facts_repo.upsert_capex_index(conn, WEEK - timedelta(days=7), [{"category": "grid", "value": D("0.2"),
                                   "direction": "flat", "input_growth": D("0.1"), "inputs": {}}])  # fmt: skip
     facts_repo.upsert_capex_index(conn, WEEK, [{"category": "grid", "value": D("0.7"), "direction": "rising",
@@ -270,7 +271,26 @@ def test_the_brief_names_each_change_once(conn: psycopg.Connection[Any]) -> None
     doc = document(conn, cid, "https://www.sec.gov/v2.htm", datetime(2026, 9, 22, tzinfo=UTC))
     fact(conn, cid, doc, "backlog", "backlog:total", D(80) * 10**9, "usd", date(2026, 9, 22))
     (fid,) = conn.execute("select id from facts where document_id = %s", (doc,)).fetchone() or (None,)
-    conn.execute("insert into diffs (company_id, subject_key, new_fact_id, change_kind, computed_note) "
-                 "values (%s, 'backlog:total', %s, 'new', 'new: $80.0B')", (cid, fid))  # fmt: skip
+    conn.execute(
+        "insert into diffs (company_id, subject_key, new_fact_id, change_kind, computed_note, created_at) "
+        "values (%s, 'backlog:total', %s, 'new', 'new: $80.0B', '2026-09-22 02:00+00')",
+        (cid, fid),
+    )
     text = capex.brief(conn, WEEK)
     assert "new: new:" not in text and "backlog `backlog:total` · new: $80.0B —" in text
+
+
+def test_an_item_is_in_one_weeks_brief(conn: psycopg.Connection[Any]) -> None:
+    """M5 review R2-F6: a diff made by Saturday's daily run (01:35 UTC, after week 2026-09-25's cutoff) is in the
+    next week's brief only."""
+    cid = company(conn, "us", "Voltara Grid Systems, Inc.", "VOLT", "0000999002")
+    doc = document(conn, cid, "https://www.sec.gov/v3.htm", datetime(2026, 9, 25, 22, tzinfo=UTC))
+    fact(conn, cid, doc, "backlog", "backlog:total", D(90) * 10**9, "usd", date(2026, 9, 25))
+    (fid,) = conn.execute("select id from facts where document_id = %s", (doc,)).fetchone() or (None,)
+    conn.execute(
+        "insert into diffs (company_id, subject_key, new_fact_id, change_kind, computed_note, created_at) "
+        "values (%s, 'backlog:total', %s, 'new', 'new: $90.0B', '2026-09-26 01:35+00')",
+        (cid, fid),
+    )
+    assert "new: $90.0B" not in capex.brief(conn, WEEK)
+    assert "new: $90.0B" in capex.brief(conn, WEEK + timedelta(days=7))

@@ -53,6 +53,8 @@ from pipeline.us.submissions import parse_submissions
 SHORTLIST = 100
 TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
+RETRY_DAYS = 14  # a filing whose documents can't be fetched is tried daily this long after it was queued, then
+# `failed` (M5 review R2-F4)
 TIME_BUDGET_MIN = 4.0  # document starts: daily.yml stays ~8 min with the SEC/NSE jobs before it (SPEC_ISSUES 29)
 LINK_BATCH = 20
 RANK = {"capex_desk": 0, "candidate_shortlist": 1, "other": 2}
@@ -182,33 +184,34 @@ def store_facts(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, facts:
 
 
 def risk_changes(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, norm: Normalized,
-                 fetch: Callable[[DocJob], bytes], router: Router, stats: TextStats) -> None:  # fmt: skip
-    """Item 1A against the same company's previous document of the same form (Appendix F.6)."""
+                 fetch: Callable[[DocJob], bytes], router: Router, stats: TextStats) -> bool:  # fmt: skip
+    """Item 1A against the same company's previous document of the same form (Appendix F.6). False when P-03 was
+    deferred: the document is read again the next day, for its risk diff only (M5 review R2-F3)."""
     assert job.company.id is not None
     new_rf = next((s for s in norm.section_map if s["name"] == "risk_factors"), None)
     prev = facts_repo.previous_document(conn, job.company.id, job.kind, job.published_at)
     if new_rf is None or prev is None:
-        return
+        return True
     try:
         old = normalize(prev["url"], fetch(DocJob(job.company, job.kind, prev["url"], "", prev["published_at"])))
     except (httpx.HTTPError, NseBlocked, ValueError) as e:
         stats.errors.append(f"risk diff {prev['url']}: {type(e).__name__}"[:200])
-        return
+        return True
     old_rf = next((s for s in old.section_map if s["name"] == "risk_factors"), None)
     if old_rf is None:
-        return
+        return True
     new_p = risk_diff.paragraphs(norm.text, int(str(new_rf["char_start"])), int(str(new_rf["char_end"])))
     old_p = risk_diff.paragraphs(old.text, int(str(old_rf["char_start"])), int(str(old_rf["char_end"])))
     if min(len(new_p), len(old_p)) < risk_diff.MIN_PARAGRAPHS:
-        return
+        return True
     changes = risk_diff.compare(old_p, new_p)
     if not changes:
-        return
+        return True
     items = tuple((f"p{k}", para.text[:2000]) for k, c in enumerate(changes) if (para := c.new or c.old) is not None)
     answer = router.call(risk_diff.RiskTagInput(items))
     if isinstance(answer, Deferred):
         stats.errors.append(f"risk tags deferred for {job.url}")
-        return
+        return False
     tags = risk_diff.parse_tags(answer.content, [i for i, _ in items])
     rows = []
     for k, c in enumerate(changes):
@@ -232,11 +235,12 @@ def risk_changes(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, norm:
         )
     facts_repo.insert_risk_changes(conn, rows)
     stats.risk_changes += len(rows)
+    return True
 
 
 def process(conn: psycopg.Connection[Any], job: DocJob, fetch: Callable[[DocJob], bytes], router: Router,
             raw_root: Path, stats: TextStats) -> str:  # fmt: skip
-    """extracted | deferred | failed"""
+    """extracted | deferred | retry (the fetch failed: try again another day) | failed (the document is broken)"""
     c = job.company
     assert c.id is not None
     try:
@@ -244,7 +248,7 @@ def process(conn: psycopg.Connection[Any], job: DocJob, fetch: Callable[[DocJob]
     except (httpx.HTTPError, NseBlocked) as e:
         stats.errors.append(f"fetch {job.url}: {type(e).__name__}"[:200])
         stats.failed += 1
-        return "failed"
+        return "retry"
     path, digest = store_raw(raw_root, c.cik or c.nse_symbol or str(c.id), "", job.url, body)
     try:
         norm = normalize(job.url, body)
@@ -257,24 +261,42 @@ def process(conn: psycopg.Connection[Any], job: DocJob, fetch: Callable[[DocJob]
         published_at=job.published_at, sha256=digest, raw_path=str(path), text_chars=len(norm.text),
         section_map=norm.section_map, page_map=norm.page_map, status="normalized",
     )  # fmt: skip
-    meta = DocMeta(c.name, c.ticker or c.nse_symbol or "", c.fiscal_year_end, job.kind, job.title, job.published_at)
-    out = extract_document(meta, norm, router, xbrl_lookup(conn, c.id, job.published_at))
     stats.documents += 1
-    for k, n in out.rejected.items():
-        stats.rejected[k] = stats.rejected.get(k, 0) + n
-    if out.status == "deferred":
-        facts_repo.set_document_status(conn, doc_id, "deferred")
+    if not facts_repo.document_has_facts(conn, doc_id):  # facts stored on an earlier day: only the risk diff is left
+        meta = DocMeta(c.name, c.ticker or c.nse_symbol or "", c.fiscal_year_end, job.kind, job.title,
+                       job.published_at)  # fmt: skip
+        out = extract_document(meta, norm, router, xbrl_lookup(conn, c.id, job.published_at))
+        for k, n in out.rejected.items():
+            stats.rejected[k] = stats.rejected.get(k, 0) + n
+        if out.status == "deferred":
+            facts_repo.set_document_status(conn, doc_id, "deferred")
+            stats.deferred += 1
+            return "deferred"
+        store_facts(conn, job, doc_id, out.facts, stats)
+    if job.kind in {"10-K", "10-Q"} and not risk_changes(conn, job, doc_id, norm, fetch, router, stats):
+        facts_repo.set_document_status(conn, doc_id, "deferred")  # P-03 deferred: tomorrow, the risk diff only
         stats.deferred += 1
         return "deferred"
-    store_facts(conn, job, doc_id, out.facts, stats)
-    if job.kind in {"10-K", "10-Q"}:
-        risk_changes(conn, job, doc_id, norm, fetch, router, stats)
     facts_repo.set_document_status(conn, doc_id, "extracted")
     stats.extracted += 1
     return "extracted"
 
 
 # ---------------------------------------------------------------- filings -> documents
+
+
+class IndexUnavailable(Exception):
+    """An 8-K's filing index couldn't be fetched: the filing stays `new` and is tried again (M5 review R2-F4)."""
+
+
+def filing_status(results: list[str], expired: bool) -> str:
+    """A filing is `new` (read again tomorrow) while a document is deferred, or one couldn't be fetched and the
+    filing is younger than RETRY_DAYS; `failed` when no document could be read; else `extracted`."""
+    if "deferred" in results or ("retry" in results and not expired):
+        return "new"
+    if results and all(r in ("failed", "retry") for r in results):
+        return "failed"
+    return "extracted"
 
 
 def filing_jobs(f: Mapping[str, Any], company: Company, http: HttpClient) -> list[DocJob]:
@@ -284,8 +306,8 @@ def filing_jobs(f: Mapping[str, Any], company: Company, http: HttpClient) -> lis
     jobs = []
     try:
         ex = exhibit_urls(http.get_bytes(f["index_url"]).decode("utf-8", errors="replace"))
-    except httpx.HTTPError:
-        ex = {}
+    except httpx.HTTPError as e:
+        raise IndexUnavailable(f"filing index {f['index_url']}: {type(e).__name__}") from e
     for kind, u in sorted(ex.items()):
         jobs.append(DocJob(company, kind, u, f"8-K {kind}", filed, f["id"]))
     if AGREEMENT_ITEMS & set(f.get("items") or []):
@@ -298,17 +320,22 @@ def filing_jobs(f: Mapping[str, Any], company: Company, http: HttpClient) -> lis
 
 def triage_announcements(conn: psycopg.Connection[Any], router: Router, companies: Mapping[UUID, Company],
                          day: date, stats: TextStats) -> list[DocJob]:  # fmt: skip
-    """Triage the scope companies' recent announcements; returns PDF jobs for read_pdf ones not read yet."""
+    """Triage the scope companies' recent announcements (the last TRIAGE_DAYS); returns PDF jobs for read_pdf ones,
+    also those triaged on an earlier day whose PDF couldn't be fetched (the caller skips URLs already read)."""
     ids = [cid for cid, c in companies.items() if c.market == "in"]
     if not ids:
         return []
     events = [e for e in as_of(day).corp_events(conn, ids, since=day - timedelta(days=TRIAGE_DAYS))
               if e.kind == "announcement" and e.id is not None]  # fmt: skip
     done = facts_repo.triaged(conn, [e.id for e in events if e.id is not None])
+    pdf = facts_repo.triaged_pdf(conn, [e.id for e in events if e.id is not None])
     jobs = []
     for e in events:
         assert e.id is not None
         title = str(e.detail.get("category") or "")
+        if e.id in pdf and e.source_url.lower().endswith(".pdf"):  # triaged earlier: its PDF until it's read
+            jobs.append(DocJob(companies[e.company_id], "press_release", e.source_url, title, e.filed_at, None, True))
+            continue  # (the caller drops a URL already read; a failed fetch left none: M5 review R2-F4)
         if e.id in done or any(s in title.lower() for s in SKIP_TRIAGE):
             continue
         if router.exhausted("P-07"):
@@ -451,16 +478,21 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
         with conn.transaction():
             if filing_id is not None:
                 f = next(x for x in facts_repo.filings_by_status(conn, ["new"]) if x["id"] == filing_id)
-                parts = filing_jobs(f, job.company, http)
+                expired = (day - f["created_at"].date()).days > RETRY_DAYS  # RETRY_DAYS after it was first queued
+                try:
+                    parts = filing_jobs(f, job.company, http)
+                except IndexUnavailable as e:
+                    stats.errors.append(str(e)[:200])
+                    stats.failed += 1
+                    if expired:
+                        facts_repo.set_filing_status(conn, filing_id, "failed")
+                    continue
                 known = facts_repo.document_status(conn, [j.url for j in parts])
                 todo = [j for j in parts if known.get(j.url, (None, ""))[1] != "extracted"]  # read once (M5 R1-F2)
                 results = [process(conn, j, fetch, router, raw_root, stats) for j in todo]
                 results += ["extracted"] * (len(parts) - len(todo))
                 done += len(todo)
-                status = ("failed" if results and all(r == "failed" for r in results) else
-                          "new" if "deferred" in results else "extracted")  # fmt: skip
-                if status != "new":
-                    facts_repo.set_filing_status(conn, filing_id, status)
+                facts_repo.set_filing_status(conn, filing_id, filing_status(results, expired))
             else:
                 process(conn, job, fetch, router, raw_root, stats)
                 done += 1

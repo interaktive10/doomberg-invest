@@ -235,7 +235,8 @@ def export_fact(conn: psycopg.Connection[Any], c: Company, doc_id: UUID, text: s
 
 
 def brief(conn: psycopg.Connection[Any], week: date) -> str:
-    since = cutoff_for(week) - timedelta(days=7)
+    until = cutoff_for(week)  # the week's window: [cutoff - 7 days, cutoff), so an item is in one brief (R2-F6)
+    since = until - timedelta(days=7)
     now = {r["category"]: r for r in facts_repo.capex_index(conn, week)}
     prev = {r["category"]: r for r in facts_repo.capex_index(conn, week - timedelta(days=7))
             if r["week_end"] < week}  # fmt: skip
@@ -244,9 +245,11 @@ def brief(conn: psycopg.Connection[Any], week: date) -> str:
     new = [NewFact(r["company"], r["fact_type"], r["subject_key"], r["computed_note"], r["change_kind"], r["quote"],
                    r["url"], abs(r["delta_pct"]) if r["delta_pct"] is not None else
                    (Decimal(100) if r["change_kind"] == "new" and r["value_num"] is not None else Decimal(0)))
-           for r in facts_repo.new_diffs(conn, since)]  # fmt: skip
-    links = [(r["company"], r["entity"], r["relation"]) for r in facts_repo.new_links(conn, since)]
-    members = [(r["company"], r["category"], r["quote"] or "") for r in facts_repo.new_memberships(conn, since, "p06")]
+           for r in facts_repo.new_diffs(conn, since, until)]  # fmt: skip
+    links = [(r["company"], r["entity"], r["relation"]) for r in facts_repo.new_links(conn, since, until)]
+    members = [
+        (r["company"], r["category"], r["quote"] or "") for r in facts_repo.new_memberships(conn, since, until, "p06")
+    ]
     s11 = [(r["company"], r["inputs"]) for r in facts_repo.fired_signal(conn, week, "S11")]
     return render(week, moves, new, links, members, s11)
 

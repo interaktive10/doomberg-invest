@@ -163,6 +163,13 @@ EXPECTED: list[tuple[str, str, Any, str]] = [
     ("weights.yaml", "lab_rules.neutral_weight", 1.0, "§4.10.5"),
     ("weights.yaml", "lab_rules.demote_weight", 0.0, "§4.10.5"),
     ("weights.yaml", "lab_rules.demote_max_t_nw", -2.0, "§4.10.5"),
+    # §4.10 Signal Lab defaults (M8 review ideas: a period or horizon change shows here)
+    ("lab.yaml", "horizons_months", [12, 24, 36], "§4.10.1"),
+    ("lab.yaml", "periods.in_sample", ["2012-01", "2018-12"], "§4.10.3"),
+    ("lab.yaml", "periods.out_of_sample", ["2019-01", "2025-12"], "§4.10.3"),
+    ("lab.yaml", "event_window_months", 12, "§4.10.2"),
+    ("lab.yaml", "deciles", 10, "§4.10.3"),
+    ("lab.yaml", "india_min_quarters", 8, "§4.10.7"),
     # §4.7 context metrics
     ("context.yaml", "c1.history_years", 10, "§4.7 C1"),
     ("context.yaml", "c2_reverse_dcf.years", 10, "§4.7 C2"),
