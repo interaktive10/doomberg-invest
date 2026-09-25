@@ -31,14 +31,21 @@ export const ScreenSpec = z
 
 export type ScreenSpec = z.infer<typeof ScreenSpec>;
 
+/** A submitted form or a query string (FormData and URLSearchParams both fit). */
+export interface FormLike {
+  get(name: string): FormDataEntryValue | null;
+  getAll(name: string): FormDataEntryValue[];
+}
+
 const num = (v: FormDataEntryValue | null): number | undefined => {
   if (v === null || String(v).trim() === "") return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 };
 
-/** The filter builder's form -> a validated spec (empty fields are left out). */
-export function specFromForm(form: FormData): ScreenSpec {
+/** The filter builder's form (or its query string) -> a validated spec (empty fields are left out); throws a ZodError
+ * on a value outside the contract. */
+export function specFromForm(form: FormLike): ScreenSpec {
   const pick = (name: string): string | undefined => {
     const v = form.get(name);
     return v === null || String(v) === "" ? undefined : String(v);
@@ -58,7 +65,40 @@ export function specFromForm(form: FormData): ScreenSpec {
     families_all: list("families_all").length ? list("families_all") : undefined,
     exclude_hard_flags: form.get("exclude_hard_flags") === "on" ? true : undefined,
     metrics: metrics.length ? metrics : undefined,
+    limit: num(form.get("limit")),
   };
   for (const k of Object.keys(raw)) if (raw[k] === undefined) delete raw[k];
   return ScreenSpec.parse(raw);
+}
+
+/** A spec back to the builder's query string (the inverse of specFromForm), for links, saved screens and CSV export. */
+export function specToQuery(spec: ScreenSpec): URLSearchParams {
+  const q = new URLSearchParams();
+  if (spec.market) q.set("market", spec.market);
+  if (spec.capex_desk !== undefined) q.set("capex_desk", String(spec.capex_desk));
+  if (spec.sector) q.set("sector", spec.sector);
+  for (const b of spec.buckets ?? []) q.append("buckets", b);
+  if (spec.min_evidence !== undefined) q.set("min_evidence", String(spec.min_evidence));
+  if (spec.min_gap !== undefined) q.set("min_gap", String(spec.min_gap));
+  for (const s of spec.signals_any ?? []) q.append("signals_any", s);
+  for (const f of spec.families_all ?? []) q.append("families_all", f);
+  if (spec.exclude_hard_flags) q.set("exclude_hard_flags", "on");
+  (spec.metrics ?? []).slice(0, 3).forEach((m, i) => {
+    q.set(`metric_${i}`, m.metric);
+    q.set(`op_${i}`, m.op);
+    q.set(`value_${i}`, String(m.value));
+  });
+  if (spec.limit !== undefined) q.set("limit", String(spec.limit));
+  return q;
+}
+
+/** The screener's CSV columns (personal use, BRIEF §6). */
+export const CSV_COLUMNS = [
+  "name", "market", "ticker", "nse_symbol", "sector", "industry", "capex_desk", "week_end", "bucket", "evidence", "gap",
+  "families", "fired_signals", "red_flags", "hard_flag", "c1", "c2", "c3", "c4", ...METRICS, "company_id",
+] as const;
+
+/** A screener row with its metrics spread into columns. */
+export function csvRow<T extends { metrics: Record<string, number | null> }>(r: T): Record<string, unknown> {
+  return { ...r, ...Object.fromEntries(METRICS.map((m) => [m, r.metrics[m] ?? null])) };
 }

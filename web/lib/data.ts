@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/supabase/admin";
 import type { ScreenSpec } from "@/lib/screener";
 import type { QuarterRow } from "@/lib/metrics";
+import { packDiff, reviewedThrough, type FilingRow } from "@/lib/reviews";
 
 // Server-side reads for the screens (BRIEF §6). Point-in-time tables are read only through the *_display_v views
 // (db/migrations/0003; the guard's pit_rule); everything else through service_role.
@@ -212,10 +213,10 @@ export async function company(id: string): Promise<Company | null> {
   ).eq("id", id).maybeSingle());
 }
 
-export async function fundamentals(id: string): Promise<(QuarterRow & { currency: string | null })[]> {
+export async function fundamentals(id: string): Promise<(QuarterRow & { currency: string | null; filed_at: string })[]> {
   return rows(await db().from("fundamentals_display_v").select(
-    "period_end, revenue, op_income, net_income, pretax_income, tax_expense, cfo, capex, da, total_assets, cash, " +
-      "total_debt, equity, rpo, diluted_shares, shares_outstanding, currency",
+    "period_end, filed_at, revenue, op_income, net_income, pretax_income, tax_expense, cfo, capex, da, total_assets, " +
+      "cash, total_debt, equity, rpo, diluted_shares, shares_outstanding, currency",
   ).eq("company_id", id).order("period_end"));
 }
 
@@ -248,13 +249,14 @@ export interface FactRow {
   as_of: string;
   quote: string;
   documents: { url: string; kind: string; published_at: string; title: string | null } | null;
+  companies: Pick<Company, "name" | "market" | "ticker" | "nse_symbol"> | null;
 }
 
 export async function facts(companyIds: string[], limit = 30): Promise<(FactRow & { company_id: string })[]> {
   if (companyIds.length === 0) return [];
   return rows(await db().from("facts").select(
     "id, company_id, fact_type, subject_key, value_num, value_low, value_high, unit, period_label, as_of, quote, " +
-      "documents(url, kind, published_at, title)",
+      "documents(url, kind, published_at, title), companies(name, market, ticker, nse_symbol)",
   ).in("company_id", companyIds).eq("verification_status", "verified").order("as_of", { ascending: false })
     .limit(limit));
 }
@@ -317,6 +319,45 @@ export async function postmortem(thesisId: string): Promise<Postmortem | null> {
     .eq("thesis_id", thesisId).maybeSingle());
 }
 
+/** BRIEF §4.9 Reviews: for each thesis or position whose company has filed a quarter the thesis hasn't seen, a review
+ * row with the pack diff (one per quarter end: the unique index makes a re-render a no-op), and the thesis moves to
+ * the Review column until Manzoor marks it (§1.8). */
+export async function ensureReviews(list: Pick<Thesis, "id" | "company_id" | "state" | "evidence_pack" | "accepted_at" | "created_week">[]): Promise<number> {
+  let made = 0;
+  for (const t of list) {
+    if (t.state !== "thesis" && t.state !== "position" && t.state !== "review") continue;
+    const [filed, last, kills] = await Promise.all([
+      fundamentals(t.company_id),
+      one<{ period_end: string | null }>(await db().from("reviews").select("period_end").eq("thesis_id", t.id)
+        .order("period_end", { ascending: false, nullsFirst: false }).limit(1).maybeSingle()),
+      killCriteria(t.id),
+    ]);
+    const rowsFiled: FilingRow[] = filed.map((r) => ({
+      period_end: r.period_end, filed_at: r.filed_at, revenue: r.revenue, op_income: r.op_income,
+      net_income: r.net_income, cfo: r.cfo, rpo: r.rpo, diluted_shares: r.diluted_shares,
+    }));
+    const start = t.accepted_at ?? `${t.created_week}T00:00:00Z`;
+    const since = reviewedThrough(last?.period_end ?? null, t.evidence_pack, rowsFiled, start);
+    const diff = packDiff(rowsFiled, since, kills.map((k) => ({
+      metric: k.metric, operator: k.operator, threshold: k.threshold, status: k.status, last_value: k.last_value,
+    })));
+    const latest = diff?.quarters[diff.quarters.length - 1];
+    if (!diff || !latest) continue;
+    const ins = await db().from("reviews").upsert(
+      { thesis_id: t.id, period_end: latest.period_end, pack_diff: diff },
+      { onConflict: "thesis_id,period_end", ignoreDuplicates: true },
+    ).select("id");
+    if (ins.error) throw new Error(ins.error.message);
+    if ((ins.data ?? []).length > 0) made += 1;
+    if (t.state !== "review") {
+      const up = await db().from("theses").update({ state: "review", updated_at: new Date().toISOString() })
+        .eq("id", t.id).in("state", ["thesis", "position"]);
+      if (up.error) throw new Error(up.error.message);
+    }
+  }
+  return made;
+}
+
 export async function setting<T>(key: string, fallback: T): Promise<T> {
   const r = one<{ value: T }>(await db().from("app_settings").select("value").eq("key", key).maybeSingle());
   return r === null ? fallback : r.value;
@@ -363,14 +404,15 @@ export async function capexDeskIds(): Promise<string[]> {
 
 export interface GraphEdge {
   from_company_id: string;
+  to_entity_id: string;
   relation: string;
   companies: { name: string } | null;
   entities: { name: string; kind: string } | null;
 }
 
 export async function graphEdges(limit = 400): Promise<GraphEdge[]> {
-  return rows(await db().from("links").select("from_company_id, relation, companies(name), entities(name, kind)")
-    .limit(limit));
+  return rows(await db().from("links").select("from_company_id, to_entity_id, relation, companies(name), entities(name, kind)")
+    .order("first_seen_at", { ascending: false }).limit(limit));
 }
 
 export async function capexBriefs(): Promise<{ week_end: string; body_md: string }[]> {
@@ -409,6 +451,13 @@ export async function weightsVersions(): Promise<{ version: string; weights: Rec
     .order("approved_at", { ascending: false, nullsFirst: true }));
 }
 
-export async function universeCounts(): Promise<{ market: string; in_universe: boolean }[]> {
-  return rows(await db().from("companies").select("market, in_universe").limit(20000));
+/** Company counts per market, in and outside the universe (head-only counts: PostgREST caps rows at max_rows). */
+export async function universeCounts(): Promise<{ market: "us" | "in"; in_universe: boolean; count: number }[]> {
+  const cells = (["us", "in"] as const).flatMap((market) => [true, false].map((inside) => ({ market, inside })));
+  return Promise.all(cells.map(async ({ market, inside }) => {
+    const res = await db().from("companies").select("id", { count: "exact", head: true }).eq("market", market)
+      .eq("in_universe", inside);
+    if (res.error) throw new Error(res.error.message);
+    return { market, in_universe: inside, count: res.count ?? 0 };
+  }));
 }

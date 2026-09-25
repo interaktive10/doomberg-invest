@@ -13,6 +13,8 @@ create table reviews (id uuid primary key default gen_random_uuid(), thesis_id u
   period_end date, pack_diff jsonb not null default '{}', verdict text check (verdict in ('intact','weakened','broken')),
   note text, created_at timestamptz not null default now(), decided_at timestamptz);
 create index reviews_thesis on reviews (thesis_id, created_at desc);
+-- One review per thesis and quarter: a page render that creates it twice (two tabs) inserts it once.
+create unique index reviews_thesis_period on reviews (thesis_id, period_end);
 create table candidate_actions (id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies on delete cascade, week_end date not null,
   action text not null check (action in ('research','dismiss')), reason text,
