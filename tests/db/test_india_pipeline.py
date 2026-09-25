@@ -188,3 +188,15 @@ def test_india_daily_run(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     assert [(e.kind, e.detail["category"]) for e in nitco] == [("announcement", "Trading Window")]
     again = run_daily(conn, nse, day, tmp_path / "daily.json", lookback_days=200)  # disclosures already read
     assert again.pit_fetched == 0 and len(as_of(day).insider_events(conn)) == len(events)
+
+
+def test_reseed_keeps_the_india_surveillance_exclusion(conn: psycopg.Connection[Any]) -> None:
+    """M2 review F9, same rule for India: the quarterly re-seed doesn't let an ASM/GSM company back in; the weekly
+    run's next surveillance check decides."""
+    from pipeline.db import seed
+
+    seed.seed(conn)
+    assert repo.set_india_universe(conn, {"BHAGERIA": "surveillance: ASM long-term stage 1"}) == 1
+    seed.seed(conn)
+    b = company(conn, "BHAGERIA")
+    assert (b.in_universe, b.excluded_reason) == (False, "surveillance: ASM long-term stage 1")

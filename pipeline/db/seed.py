@@ -90,11 +90,9 @@ def seed(conn: psycopg.Connection[Any], root: Path = REPO_ROOT) -> SeedReport:
     with conn.transaction():
         repo.upsert_us_companies(conn, us)
         repo.upsert_in_companies(conn, india)
-        us_out = repo.mark_missing_out_of_universe(
-            conn, "us", [c.cik for c in us if c.cik], "not in the SEC NYSE/Nasdaq snapshot"
-        )
+        us_out = repo.mark_missing_out_of_universe(conn, "us", [c.cik for c in us if c.cik], repo.SNAPSHOT_OUT["us"])
         in_out = repo.mark_missing_out_of_universe(
-            conn, "in", [c.nse_symbol for c in india if c.nse_symbol], "not in the NSE EQ snapshot"
+            conn, "in", [c.nse_symbol for c in india if c.nse_symbol], repo.SNAPSHOT_OUT["in"]
         )
         w: dict[str, Any] = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
         inserted = repo.insert_weights_version(

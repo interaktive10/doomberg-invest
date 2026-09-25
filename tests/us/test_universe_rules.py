@@ -22,8 +22,8 @@ def filing(form: str, day: date) -> Filing:
 
 
 def subs(exchanges: tuple[str, ...] = ("NYSE",), sic: str | None = "3571", forms: tuple[str, ...] = ("10-Q",),
-         filed: date = date(2026, 8, 1)) -> Submissions:  # fmt: skip
-    return Submissions("0000000001", "Test Co", "operating", sic, None, "1231", ("TST",), exchanges,
+         filed: date = date(2026, 8, 1), tickers: tuple[str, ...] = ("TST",)) -> Submissions:  # fmt: skip
+    return Submissions("0000000001", "Test Co", "operating", sic, None, "1231", tickers, exchanges,
                        tuple(filing(f, filed) for f in forms))  # fmt: skip
 
 
@@ -67,3 +67,40 @@ def test_rules_come_from_config() -> None:
 )  # fmt: skip
 def test_sector_for_sic_takes_the_narrowest_range(sic: str | None, sector: str | None) -> None:
     assert sector_for_sic(sic, SECTORS) == sector
+
+
+def test_common_stock_must_be_listed() -> None:
+    """Review F6: filers listed only through preferred shares or notes are not common-stock listings (§1.3)."""
+    from pipeline.us.universe import public_float
+
+    pref = subs(tickers=("SCE-PB", "SCE-PC", "SCE-PD"))
+    assert decide(pref, BIG, RULES, TODAY).reason == "no common stock listed (preferred series only)"
+    assert decide(subs(tickers=("BRK-A", "BRK-B")), BIG, RULES, TODAY).in_universe  # share classes, not preferred
+    sub = decide(subs(tickers=("GPJA",)), BIG, RULES, TODAY, Decimal(0))  # a subsidiary's listed notes
+    assert sub.reason == "no public common equity (10-K public float 0)"
+    assert decide(subs(), BIG, RULES, TODAY, None).in_universe  # not reported yet (a new registrant): no exclusion
+    cf = {"facts": {"dei": {"EntityPublicFloat": {"units": {"USD": [
+        {"end": "2023-06-30", "val": 5e9, "form": "10-K", "filed": "2024-02-20"},
+        {"end": "2024-06-30", "val": 0, "form": "10-K", "filed": "2025-02-20"},
+        {"end": "2024-06-30", "val": 7e9, "form": "S-1", "filed": "2025-03-01"}]}}}}}  # fmt: skip
+    assert public_float(cf) == 0 and public_float({"facts": {}}) is None
+
+
+def test_partial_ttm_puts_a_new_registrant_in_the_universe() -> None:
+    """Review F5 acceptance: GE Vernova's rows as filed by 2024-05-01 (its first 10-Q) put it in the universe."""
+    import json
+
+    from pipeline.us.companyfacts import load_facts
+    from pipeline.us.quarterize import quarterize, ttm_revenue
+    from pipeline.us.submissions import parse_submissions
+
+    fix, cik, cutoff = REPO_ROOT / "fixtures" / "us", "0001996810", datetime(2024, 5, 1, tzinfo=UTC)
+    doc = json.loads((fix / "companyfacts" / f"CIK{cik}.json").read_text(encoding="utf-8"))
+    s = parse_submissions(json.loads((fix / "submissions" / f"CIK{cik}.json").read_text(encoding="utf-8")))
+    cfg = yaml.safe_load((REPO_ROOT / "config" / "signals.yaml").read_text(encoding="utf-8"))["xbrl_map"]
+    facts, _ = load_facts(doc, {k: v for k, v in cfg.items() if not isinstance(v, str)}, s.accepted())
+    rows, _ = quarterize([f for f in facts if f.filed_at < cutoff], {f.accession: f.report_date for f in s.filings
+                                                                     if f.report_date})  # fmt: skip
+    ttm, partial = ttm_revenue(rows)
+    assert partial and ttm is not None and ttm >= RULES.min_ttm_revenue_usd
+    assert decide(s, ttm, RULES, cutoff.date()).in_universe

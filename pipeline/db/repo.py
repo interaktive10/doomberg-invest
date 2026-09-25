@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -78,26 +78,39 @@ def _set_excluded(cols: Iterable[str]) -> str:
 
 
 _METADATA = ("sector", "industry", "sic", "fiscal_year_end")  # filled by the weekly runs, not by listings
+SNAPSHOT_OUT = {"us": "not in the SEC NYSE/Nasdaq snapshot", "in": "not in the NSE EQ snapshot"}
+_DECISION = ("in_universe", "excluded_reason")
+
+
+def _keep_decision(col: str) -> str:
+    """A re-seed doesn't undo the weekly run's universe decision (review F9: the quarterly seed re-admitted SPACs and
+    funds right before the 13F step). It re-admits only a company the snapshot step had moved out (listed again)."""
+    return (
+        f"{col} = case when companies.excluded_reason is null or companies.excluded_reason = %(snapshot_out)s "
+        f"then excluded.{col} else companies.{col} end"
+    )
 
 
 def upsert_us_companies(conn: Conn, companies: Sequence[Company]) -> None:
     """US companies are keyed by CIK. The listing snapshot has no SIC/sector/industry/fiscal year: a re-seed keeps
-    the values the weekly run stored rather than blanking them."""
+    the values the weekly run stored rather than blanking them, and keeps its universe decision."""
     if any(c.market != "us" or not c.cik for c in companies):
         raise ValueError("upsert_us_companies needs market='us' rows with a cik")
     upd = (
         ", ".join(
-            f"{c} = coalesce(excluded.{c}, companies.{c})" if c in _METADATA else f"{c} = excluded.{c}"
+            f"{c} = coalesce(excluded.{c}, companies.{c})"
+            if c in _METADATA
+            else _keep_decision(c)
+            if c in _DECISION
+            else f"{c} = excluded.{c}"
             for c in _COMPANY_COLS
             if c not in ("market", "cik")
         )
         + ", updated_at = now()"
     )
+    rows = [{**c.model_dump(include=set(_COMPANY_COLS)), "snapshot_out": SNAPSHOT_OUT["us"]} for c in companies]
     with conn.cursor() as cur:
-        cur.executemany(
-            _insert("companies", _COMPANY_COLS, f"on conflict (cik) do update set {upd}"),
-            [c.model_dump(include=set(_COMPANY_COLS)) for c in companies],
-        )
+        cur.executemany(_insert("companies", _COMPANY_COLS, f"on conflict (cik) do update set {upd}"), rows)
 
 
 def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
@@ -105,10 +118,14 @@ def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
     first; a face-value split keeps the symbol and changes the ISIN, which the upsert on symbol handles."""
     if any(c.market != "in" or not c.nse_symbol or not c.isin for c in companies):
         raise ValueError("upsert_in_companies needs market='in' rows with nse_symbol and isin")
-    rows = [c.model_dump(include=set(_COMPANY_COLS)) for c in companies]
+    rows = [{**c.model_dump(include=set(_COMPANY_COLS)), "snapshot_out": SNAPSHOT_OUT["in"]} for c in companies]
     upd = (
         ", ".join(
-            f"{c} = coalesce(excluded.{c}, companies.{c})" if c in _METADATA else f"{c} = excluded.{c}"
+            f"{c} = coalesce(excluded.{c}, companies.{c})"
+            if c in _METADATA
+            else _keep_decision(c)
+            if c in _DECISION
+            else f"{c} = excluded.{c}"
             for c in _COMPANY_COLS
             if c not in ("market", "nse_symbol")
         )
@@ -252,6 +269,14 @@ def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow]) -> None:
             ),
             [r.model_dump() for r in rows],
         )
+
+
+def prune_fundamentals(conn: Conn, company_id: UUID, keep: Sequence[tuple[date, datetime]], min_period: date) -> int:
+    """Delete the company's fundamentals_q versions not in `keep` (period_end, filed_at) and quarters before
+    `min_period` (migration 0004; review F10). Called right after the company's rows are rewritten."""
+    payload = Jsonb([[p.isoformat(), t.isoformat()] for p, t in keep])
+    row = conn.execute(_q("select prune_fundamentals(%s, %s, %s)"), (company_id, payload, min_period)).fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
 
 
 _OWN_COLS = (

@@ -65,6 +65,13 @@ jobs:
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: US fundamentals and universe
         run: uv run --frozen python -m pipeline.us.weekly $FORCE
+      - name: data issues (every §4.1.5 null reason)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: us-data-issues
+          path: .cache/us/issues.csv
+          if-no-files-found: ignore
 
   india:
     needs: check

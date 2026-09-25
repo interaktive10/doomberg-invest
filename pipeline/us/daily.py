@@ -1,6 +1,8 @@
 """US daily run (BRIEF §2.1 "daily", §4.2): EDGAR daily index -> insider purchases, 8-K items, late filings,
 spin-offs. `python -m pipeline.us.daily --date YYYY-MM-DD`.
 
+By default the run catches up: it lists the quarter's published daily indexes (index.json) and processes every day
+after the last one it finished (state file), so a day SEC publishes after the run starts is read the next day.
 Spin-off registrants are not in the universe yet, so a small state file (cache dir) remembers CIKs that filed a
 Form 10-12B; their later filings are checked until the registration is effective.
 """
@@ -22,12 +24,23 @@ from pipeline.db import repo
 from pipeline.db.models import Company, CorpEvent, FilingRow, InsiderEvent
 from pipeline.net.http import HttpClient
 from pipeline.settings import Settings
-from pipeline.us.events import FORM10, filing_events, master_index_url, parse_master_index, select
+from pipeline.us.events import (
+    FORM10,
+    days_to_process,
+    filing_events,
+    master_index_url,
+    parse_master_index,
+    published_days,
+    quarter_listing_url,
+    quarters_between,
+    select,
+)
 from pipeline.us.form4 import Form4Error, parse_submission
 from pipeline.us.specials import effective_spinoff, html_to_text, parent_candidates
 from pipeline.us.submissions import Submissions, end_of_day_utc, parse_submissions
 
 RESCAN_DAYS = 120  # Form 10 registrations usually take 1-4 months to become effective
+RETRY_DAYS = 3  # a day with failed downloads is re-read by the next runs, for this many days (then logged and passed)
 
 
 def submissions_url(cik: str) -> str:
@@ -44,6 +57,7 @@ class DailyStats:
     text_filings: int = 0
     spinoffs: int = 0
     errors: list[str] = field(default_factory=list)
+    retry: int = 0  # failed downloads (network, index not there yet): catch-up re-reads the day
 
 
 def _pending(path: Path | None) -> set[str]:
@@ -85,9 +99,12 @@ def run_daily(
     try:
         text = client.get_bytes(master_index_url(day)).decode("latin-1")
     except httpx.HTTPStatusError as e:
-        if e.response.status_code in (403, 404):  # weekend/holiday: no index
-            return stats
-        raise
+        if e.response.status_code not in (403, 404):
+            raise
+        if day.weekday() < 5:  # SEC answers 403 for an index it hasn't written yet: not a holiday (review F2)
+            stats.errors.append(f"master index {day}: HTTP {e.response.status_code} (not published yet or holiday)")
+            stats.retry += 1
+        return stats
     rows = parse_master_index(text)
     stats.index_rows = len(rows)
     sel = select(rows, universe)
@@ -100,6 +117,7 @@ def run_daily(
             f4 = parse_submission(client.get_bytes(r.url).decode("utf-8", "replace"))
         except (Form4Error, httpx.HTTPError) as e:  # one bad filing never stops the run (it is marked partial)
             stats.errors.append(f"{r.accession}: {type(e).__name__}: {e}"[:300])
+            stats.retry += isinstance(e, httpx.HTTPError)
             continue
         issuer = by_cik.get(f4.issuer_cik)
         if issuer is None or not issuer.in_universe or issuer.id is None:
@@ -132,6 +150,7 @@ def run_daily(
             subs = parse_submissions(json.loads(client.get_bytes(submissions_url(cik))))
         except (httpx.HTTPError, ValueError, KeyError) as e:
             stats.errors.append(f"submissions {cik}: {type(e).__name__}: {e}"[:300])
+            stats.retry += isinstance(e, httpx.HTTPError)
             continue
         today = {r.accession for r in rows if r.cik == cik}
         company = by_cik.get(cik)
@@ -167,6 +186,7 @@ def run_daily(
                 event = _spinoff_event(conn, client, subs, company, names)
             except httpx.HTTPError as e:  # retried at the registrant's next filing (the evidence stays in its history)
                 stats.errors.append(f"form 10 {cik}: {type(e).__name__}: {e}"[:300])
+                stats.retry += 1
                 continue
             if event is not None:
                 corp.append(event)
@@ -222,9 +242,47 @@ def _spinoff_event(
     )
 
 
+def load_last_day(path: Path | None) -> date | None:
+    if path is None or not path.exists():
+        return None
+    v = json.loads(path.read_text(encoding="utf-8")).get("last_day")
+    return date.fromisoformat(v) if v else None
+
+
+def save_last_day(path: Path | None, day: date) -> None:
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"last_day": day.isoformat()}), encoding="utf-8")
+
+
+def run_catch_up(
+    conn: psycopg.Connection[Any], client: HttpClient, today: date, pending_path: Path | None, day_path: Path | None
+) -> list[DailyStats]:
+    """Every published EDGAR day after the last one processed (review F2: at 01:30 UTC yesterday's index often
+    isn't published yet; it is picked up by the next run instead of being skipped as a 'holiday').
+
+    Each day is committed before the cursor moves past it. A day with failed downloads holds the cursor, so the next
+    run reads it again (inserts are idempotent); after RETRY_DAYS the cursor moves on and the errors stay logged."""
+    last = load_last_day(day_path)
+    first = (last + timedelta(days=1)) if last else today - timedelta(days=7)
+    published: list[date] = []
+    for q in quarters_between(min(first, today), today):
+        published += published_days(json.loads(client.get_bytes(quarter_listing_url(q))))
+    out: list[DailyStats] = []
+    held = False
+    for day in days_to_process([d for d in published if d <= today], last):
+        with conn.transaction():
+            stats = run_daily(conn, client, day, pending_path)
+        out.append(stats)
+        held = held or (stats.retry > 0 and (today - day).days <= RETRY_DAYS)
+        if not held:
+            save_last_day(day_path, day)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--date", type=date.fromisoformat, default=(datetime.now(UTC) - timedelta(days=1)).date())
+    ap.add_argument("--date", type=date.fromisoformat, default=None, help="one day only (default: catch up)")
     ap.add_argument("--rescan-days", type=int, default=None,
                     help=f"re-read this many past daily indexes for Form 10 filers (default: {RESCAN_DAYS} when the "
                          "pending-registrations state file is missing)")  # fmt: skip
@@ -232,13 +290,18 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     client = HttpClient(settings)
     state = settings.cache_dir / "us" / "pending_form10.json"
+    day_state = settings.cache_dir / "us" / "daily_state.json"
+    today = datetime.now(UTC).date()
     rescan = a.rescan_days if a.rescan_days is not None else (0 if state.exists() else RESCAN_DAYS)
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "us_daily", "sec") as run:
         if rescan:
-            _save_pending(state, _pending(state) | rescan_form10(client, a.date, rescan))
-        stats = run_daily(conn, client, a.date, state)
-        run.update(stats.__dict__)
-    print(f"us daily {stats.day}: {stats.purchases} purchases, {stats.corp_events} events, {stats.spinoffs} spin-offs")
+            _save_pending(state, _pending(state) | rescan_form10(client, a.date or today, rescan))
+        days = (
+            [run_daily(conn, client, a.date, state)] if a.date else run_catch_up(conn, client, today, state, day_state)
+        )
+        run.update({"days": [d.__dict__ for d in days], "errors": [e for d in days for e in d.errors]})
+    for d in days:
+        print(f"us daily {d.day}: {d.purchases} purchases, {d.corp_events} events, {d.spinoffs} spin-offs")
     return 0
 
 

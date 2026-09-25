@@ -1,0 +1,113 @@
+{
+ "directory": {
+  "item": [
+   {
+    "last-modified": "02/28/2025 10:23:49 PM",
+    "name": "company.20250228.idx",
+    "type": "file",
+    "href": "company.20250228.idx",
+    "size": "1456 KB"
+   },
+   {
+    "last-modified": "03/03/2025 10:22:03 PM",
+    "name": "company.20250303.idx",
+    "type": "file",
+    "href": "company.20250303.idx",
+    "size": "1205 KB"
+   },
+   {
+    "last-modified": "03/04/2025 10:22:47 PM",
+    "name": "company.20250304.idx",
+    "type": "file",
+    "href": "company.20250304.idx",
+    "size": "1688 KB"
+   },
+   {
+    "last-modified": "02/28/2025 10:23:50 PM",
+    "name": "crawler.20250228.idx",
+    "type": "file",
+    "href": "crawler.20250228.idx",
+    "size": "1794 KB"
+   },
+   {
+    "last-modified": "03/03/2025 10:22:03 PM",
+    "name": "crawler.20250303.idx",
+    "type": "file",
+    "href": "crawler.20250303.idx",
+    "size": "1484 KB"
+   },
+   {
+    "last-modified": "03/04/2025 10:22:47 PM",
+    "name": "crawler.20250304.idx",
+    "type": "file",
+    "href": "crawler.20250304.idx",
+    "size": "2079 KB"
+   },
+   {
+    "last-modified": "02/28/2025 10:23:49 PM",
+    "name": "form.20250228.idx",
+    "type": "file",
+    "href": "form.20250228.idx",
+    "size": "1933 KB"
+   },
+   {
+    "last-modified": "03/03/2025 10:22:02 PM",
+    "name": "form.20250303.idx",
+    "type": "file",
+    "href": "form.20250303.idx",
+    "size": "1599 KB"
+   },
+   {
+    "last-modified": "03/04/2025 10:22:47 PM",
+    "name": "form.20250304.idx",
+    "type": "file",
+    "href": "form.20250304.idx",
+    "size": "2241 KB"
+   },
+   {
+    "last-modified": "02/28/2025 10:23:49 PM",
+    "name": "master.20250228.idx",
+    "type": "file",
+    "href": "master.20250228.idx",
+    "size": "890 KB"
+   },
+   {
+    "last-modified": "03/03/2025 10:22:02 PM",
+    "name": "master.20250303.idx",
+    "type": "file",
+    "href": "master.20250303.idx",
+    "size": "719 KB"
+   },
+   {
+    "last-modified": "03/04/2025 10:22:47 PM",
+    "name": "master.20250304.idx",
+    "type": "file",
+    "href": "master.20250304.idx",
+    "size": "981 KB"
+   },
+   {
+    "last-modified": "02/28/2025 10:23:50 PM",
+    "name": "sitemap.20250228.xml",
+    "type": "file",
+    "href": "sitemap.20250228.xml",
+    "size": "2161 KB"
+   },
+   {
+    "last-modified": "03/03/2025 10:22:03 PM",
+    "name": "sitemap.20250303.xml",
+    "type": "file",
+    "href": "sitemap.20250303.xml",
+    "size": "1788 KB"
+   },
+   {
+    "last-modified": "03/04/2025 10:22:48 PM",
+    "name": "sitemap.20250304.xml",
+    "type": "file",
+    "href": "sitemap.20250304.xml",
+    "size": "2505 KB"
+   }
+  ],
+  "name": "daily-index/2025/QTR1/",
+  "parent-dir": "../"
+ }
+}

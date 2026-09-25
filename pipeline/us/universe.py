@@ -8,6 +8,8 @@ royalty trusts, 20-F/40-F exclusion, TTM revenue >= $50M) from submissions and f
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -89,10 +91,35 @@ class UniverseDecision:
     reason: str | None
 
 
-def decide(subs: Submissions, ttm_revenue: Decimal | None, rules: UniverseRules, today: date) -> UniverseDecision:
-    """First failing rule wins, so the stored reason is the most basic one."""
+PREFERRED_TICKER = re.compile(r"-P[A-Z]?$")  # SEC tickers of preferred series: SCE-PB, CMS-PB; not BRK-B, BF-B
+
+
+def public_float(companyfacts: Mapping[str, Any]) -> Decimal | None:
+    """dei:EntityPublicFloat from the latest 10-K (None when never reported, e.g. a new registrant)."""
+    units = companyfacts.get("facts", {}).get("dei", {}).get("EntityPublicFloat", {}).get("units", {})
+    rows = [r for r in units.get("USD", []) if str(r.get("form", "")).startswith("10-K")]
+    if not rows:
+        return None
+    latest = max(rows, key=lambda r: (str(r.get("filed", "")), str(r.get("end", ""))))
+    return Decimal(str(latest["val"]))
+
+
+def decide(
+    subs: Submissions,
+    ttm_revenue: Decimal | None,
+    rules: UniverseRules,
+    today: date,
+    float_usd: Decimal | None = None,
+) -> UniverseDecision:
+    """First failing rule wins, so the stored reason is the most basic one. "Common stock listed" (§1.3, review
+    F6): a filer whose listed tickers are all preferred series, or whose latest 10-K reports a public float of 0
+    (a wholly-owned subsidiary with listed preferred shares or notes), is out."""
     if not any(e.lower() in rules.exchanges for e in subs.exchanges):
         return UniverseDecision(False, "not listed on NYSE/Nasdaq")
+    if subs.tickers and all(PREFERRED_TICKER.search(t) for t in subs.tickers):
+        return UniverseDecision(False, "no common stock listed (preferred series only)")
+    if float_usd is not None and float_usd <= 0:
+        return UniverseDecision(False, "no public common equity (10-K public float 0)")
     sic = subs.sic or ""
     if sic in rules.spac_sic:
         return UniverseDecision(False, f"SPAC (SIC {sic})")

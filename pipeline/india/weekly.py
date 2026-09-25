@@ -129,14 +129,14 @@ def update_universe(conn: psycopg.Connection[Any], nse: NseClient, stats: IndiaW
         capex = seed.capex_sets(yaml.safe_load((root / "config" / "capex_seed.yaml").read_text(encoding="utf-8")))[1]
         repo.upsert_in_companies(conn, seed.in_companies(securities, capex))
         stats.universe_changes += repo.mark_missing_out_of_universe(
-            conn, "in", [s.symbol for s in securities], "not in the NSE EQ snapshot"
+            conn, "in", [s.symbol for s in securities], repo.SNAPSHOT_OUT["in"]
         )
         stats.eq_companies = len(securities)
     elif securities:
         stats.errors.append(f"securities list has {len(securities)} rows < {cfg['min_count_check']}: not applied")
     eq = {s.symbol for s in securities} or {
         c.nse_symbol for c in repo.companies(conn, market="in")
-        if c.nse_symbol and c.excluded_reason != "not in the NSE EQ snapshot"
+        if c.nse_symbol and c.excluded_reason != repo.SNAPSHOT_OUT["in"]
     }  # fmt: skip
     try:
         lists = parse_asm(nse.api("reportASM")) + parse_gsm(nse.api("reportGSM"))
