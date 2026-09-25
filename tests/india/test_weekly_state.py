@@ -23,7 +23,13 @@ import pytest
 
 from pipeline.db.models import Company
 from pipeline.india import bhavcopy, weekly
-from pipeline.india.results_xbrl import LISTING_API, ResultsListing, listing_path, load_ind_as_map, parse_results
+from pipeline.india.results_xbrl import (
+    ResultsListing,
+    company_listing_path,
+    listing_path,
+    load_ind_as_map,
+    parse_results,
+)
 from pipeline.india.securities import NSE_EQUITY_LIST_URL, parse_equity_list
 from pipeline.india.shareholding import parse_shareholding
 from pipeline.india.weekly import SHP_API, IndiaWeeklyStats, State
@@ -206,7 +212,7 @@ def test_shareholding_budget_writes_every_pattern_while_the_backfill_runs(
     quarters = ("31-MAR-2025", "30-JUN-2025", "30-SEP-2025", "31-DEC-2025", "31-MAR-2026", "30-JUN-2026", "30-SEP-2026")
     for c in universe:
         rows = [listing_row(str(c.nse_symbol), q) for q in quarters]
-        http.register_mock(f"{NSE_API}/{LISTING_API}&symbol={c.nse_symbol}",
+        http.register_mock(f"{NSE_API}/{company_listing_path(str(c.nse_symbol))}",
                            json.dumps({"data": rows, "totalCount": 7}).encode())  # fmt: skip
     patterns = []
     for i, c in enumerate(universe):
@@ -287,6 +293,50 @@ def test_a_short_listing_is_incomplete_and_the_cursor_stays(tmp_path: Path) -> N
     assert not weekly.queue_results(nse, state, friday, ids, stats)
     assert state.results_listed_to == "2026-08-07" and len(state.results_queue) == 100  # what was read is queued
     assert stats.errors == ["results listing 2026-08-06..2026-08-14: page 3 is empty after 100 of 120 rows"]
+
+
+def test_backfill_reads_every_page_of_a_company_history(tmp_path: Path) -> None:
+    """Review R2-F2: NSE serves a company's history newest first, 20 rows a page; the backfill reads every page, so
+    the oldest quarters of the KEEP_YEARS horizon are queued too (the first page alone gave 10 of 12)."""
+    http, nse = clients(tmp_path)
+    friday = date(2026, 10, 2)
+    quarter_ends = [date(2023, 12, 31), date(2024, 3, 31), date(2024, 6, 30), date(2024, 9, 30)]
+    quarter_ends += [d.replace(year=d.year + k) for k in (1, 2) for d in quarter_ends]
+    rows = []
+    for i, qe in enumerate(
+        sorted(quarter_ends, reverse=True)
+    ):  # 12 quarters x (consolidated, standalone), newest first
+        for basis in ("Consolidated", "Standalone"):
+            url = f"{ARCHIVE}/INTEGRATED_FILING_INDAS_{900 + 2 * i + (basis == 'Standalone')}_WEB.xml"
+            rows.append({"seq_Id": url.split("_")[-2], "symbol": "KEI", "qe_Date": f"{qe:%d-%b-%Y}".upper(),
+                         "consolidated": basis, "type_Sub": "Original", "creation_Date": "15-Oct-2025 19:59:16",
+                         "xbrl": url})  # fmt: skip
+    assert len(rows) == 24
+    for page, chunk in ((1, rows[:20]), (2, rows[20:])):  # NSE's pages of 20, whatever size is asked
+        doc = {"data": chunk, "totalCount": 24, "size": 20, "page": page}
+        http.register_mock(f"{NSE_API}/{company_listing_path('KEI', page)}", json.dumps(doc).encode())
+    state, stats = State(), IndiaWeeklyStats(friday.isoformat())
+    weekly.queue_backfill(nse, state, {"KEI": uuid4()}, ["KEI"], 1, friday, stats)
+    queued = sorted(date.fromisoformat(str(q["period_end"])) for q in state.results_queue)
+    assert queued == sorted(quarter_ends) and stats.errors == [] and state.backfilled == {"KEI"}
+    assert {q["basis"] for q in state.results_queue} == {"consolidated"}
+
+
+def test_a_failed_history_page_leaves_the_company_for_next_week(tmp_path: Path) -> None:
+    """A history read that stops early (page 2 fails) queues nothing and retries the company next week."""
+    http, nse = clients(tmp_path)
+    rows = [{"seq_Id": str(i), "symbol": "KEI", "qe_Date": "30-JUN-2026", "consolidated": "Consolidated",
+             "type_Sub": "Original", "creation_Date": "03-Aug-2026 20:48:35",
+             "xbrl": f"{ARCHIVE}/INTEGRATED_FILING_INDAS_{i}_WEB.xml"} for i in range(20)]  # fmt: skip
+    http.register_mock(f"{NSE_API}/{company_listing_path('KEI', 1)}",
+                       json.dumps({"data": rows, "totalCount": 24}).encode())  # fmt: skip
+    http.register_mock(
+        f"{NSE_API}/{company_listing_path('KEI', 2)}", json.dumps({"data": [], "totalCount": 24}).encode()
+    )
+    state, stats = State(), IndiaWeeklyStats("2026-10-02")
+    weekly.queue_backfill(nse, state, {"KEI": uuid4()}, ["KEI"], 1, date(2026, 10, 2), stats)
+    assert state.results_queue == [] and state.backfilled == set()
+    assert stats.errors == ["results history KEI: page 2 is empty after 20 of 24 rows"]
 
 
 def test_an_empty_window_is_complete(tmp_path: Path) -> None:

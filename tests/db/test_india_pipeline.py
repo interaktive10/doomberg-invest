@@ -22,7 +22,7 @@ from pipeline.db.models import Company, FundamentalsRow, OwnershipRow
 from pipeline.db.pit import as_of
 from pipeline.india import announcements, bhavcopy, pit
 from pipeline.india.daily import DailyState, mark_source, run_daily
-from pipeline.india.results_xbrl import LISTING_API, listing_path, load_ind_as_map
+from pipeline.india.results_xbrl import company_listing_path, listing_path, load_ind_as_map
 from pipeline.india.securities import NSE_EQUITY_LIST_URL
 from pipeline.india.weekly import SHP_API, IndiaWeeklyStats, State, ingest_filings, mark_sources, run_weekly
 from pipeline.net.bse import BseClient
@@ -66,7 +66,7 @@ def weekly_mocks(http: HttpClient) -> None:
     capex = yaml.safe_load((FIN.parents[1] / "config" / "capex_seed.yaml").read_text(encoding="utf-8"))["india"]
     for e in (e for e in capex if e.get("nse")):  # filing histories for the backfill (capex desk first)
         empty = json.dumps({"data": [], "totalCount": 0}).encode()
-        http.register_mock(f"{NSE_API}/{LISTING_API}&symbol={e['nse']}", kei_listing() if e["nse"] == "KEI" else empty)
+        http.register_mock(f"{NSE_API}/{company_listing_path(e['nse'])}", kei_listing() if e["nse"] == "KEI" else empty)
     for r in json.loads(kei_listing())["data"]:
         http.register_mock(r["xbrl"], (FIN / "results" / KEI_FILES[r["xbrl"].rsplit("_", 3)[-3]]).read_bytes())
     http.register_mock(f"{NSE_API}/{SHP_API}", (FIN / "shareholding" / "index.json").read_bytes())

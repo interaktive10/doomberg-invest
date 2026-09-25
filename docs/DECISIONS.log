@@ -91,3 +91,5 @@
 2026-09-25 M2 review R3-F3: the guard's repo.py exemption needs the _insert( helper itself (word-bounded), and size_guard.py's key exemption applies only inside the _SAMPLES literal. Protected path (guard + seeded cases): covered by the human-approved label this PR already needs.
 2026-09-25 M2 review round-3 ideas: issues.csv rows are sorted; insider_events_display_v shows amends (migration 0005); prune_fundamentals with an empty keep list prunes nothing.
 
+2026-09-25 M3 review R2-F1: weekly.yml gains a size_guard job after every writing job (us, india; M4 adds scores), run also when one failed (always(), DATABASE_URL set): the 120-day announcement prune and the 400 MB check run every week (BRIEF §2.8).
+2026-09-25 M3 review R2-F2: the backfill reads a company's results history page by page (&page=N&size=50, up to totalCount; NSE serves 20 rows when unpaged), through the same pager as the dated listing; an incomplete read queues nothing and the company is retried next week.

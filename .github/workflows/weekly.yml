@@ -97,3 +97,23 @@ jobs:
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: India universe, prices, results and shareholding
         run: uv run --frozen python -m pipeline.india.weekly
+
+  size_guard:
+    # BRIEF §2.8: after every job that writes, prune (signal_values past 3 years, NSE announcements past 120 days) and
+    # fail the weekly run above 400 MB. Runs when a writer failed too (review R2-F1 on M3).
+    needs: [check, us, india]
+    if: always() && needs.check.outputs.db == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Storage guard (prune, then fail above 400 MB)
+        run: uv run --frozen python -m pipeline.db.size_guard

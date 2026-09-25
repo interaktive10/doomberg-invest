@@ -30,6 +30,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -44,10 +45,10 @@ from pipeline.india import bhavcopy, manual_import
 from pipeline.india.bhavcopy import BhavRow
 from pipeline.india.pledges import PERSON, pledge_event
 from pipeline.india.results_xbrl import (
-    LISTING_API,
     Filed,
     ResultsListing,
     build_rows,
+    company_listing_path,
     from_json,
     listing_path,
     load_ind_as_map,
@@ -235,14 +236,14 @@ def _listing_json(x: ResultsListing, backfill: bool = False) -> dict[str, Any]:
             "backfill": backfill}  # fmt: skip
 
 
-def list_results(nse: NseClient, day_from: date, day_to: date) -> tuple[list[ResultsListing], str | None]:
-    """Every row listed for [day_from, day_to], page by page up to the total count. Returns the rows read and, when
-    the listing is incomplete (a failed or short page), why."""
+def read_pages(nse: NseClient, path: Callable[[int], str]) -> tuple[list[ResultsListing], str | None]:
+    """Every row of a paged results listing (`path(page)`), page by page up to the total count. Returns the rows read
+    and, when the listing is incomplete (a failed or short page), why."""
     rows: list[ResultsListing] = []
     seen = 0
     try:
         for page in range(1, MAX_PAGES + 1):
-            got, total, n = parse_listing(nse.api(listing_path(day_from, day_to, page)))
+            got, total, n = parse_listing(nse.api(path(page)))
             rows += got
             seen += n
             if seen >= total:
@@ -252,6 +253,11 @@ def list_results(nse: NseClient, day_from: date, day_to: date) -> tuple[list[Res
     except (NseBlocked, httpx.HTTPError, ValueError, KeyError) as e:
         return rows, f"{type(e).__name__}: {e}"
     return rows, f"more than {MAX_PAGES} pages"
+
+
+def list_results(nse: NseClient, day_from: date, day_to: date) -> tuple[list[ResultsListing], str | None]:
+    """Every row listed for [day_from, day_to] (read_pages)."""
+    return read_pages(nse, partial(listing_path, day_from, day_to))
 
 
 def results_window(state: State, friday: date, stats: IndiaWeeklyStats) -> tuple[date, date]:
@@ -295,10 +301,9 @@ def queue_backfill(
     for symbol in [s for s in order if s in ids and s not in state.backfilled][:n]:
         if nse.unavailable:
             break
-        try:
-            history, _, _ = parse_listing(nse.api(f"{LISTING_API}&symbol={symbol}"))
-        except (NseBlocked, httpx.HTTPError, ValueError, KeyError) as e:
-            stats.errors.append(f"results history {symbol}: {type(e).__name__}"[:300])
+        history, error = read_pages(nse, partial(company_listing_path, symbol))
+        if error is not None:  # retried next week (the symbol isn't marked backfilled)
+            stats.errors.append(f"results history {symbol}: {error}"[:300])
             continue
         state.backfilled.add(symbol)
         stats.backfill_companies += 1
