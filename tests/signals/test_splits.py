@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal as D
+from pathlib import Path
 
-from pipeline.prices.splits import adjust, split_ratio
+from pipeline.net.stooq import parse_csv
+from pipeline.prices.splits import adjust, price_jumps, split_ratio
 
 FRIDAYS = [date(2026, 1, 2) + timedelta(weeks=i) for i in range(20)]
 
@@ -52,3 +54,12 @@ def test_bonus_issue_one_for_one_and_a_consolidation() -> None:
     merge = [(d, D(10) * (10 if i >= 5 else 1)) for i, d in enumerate(FRIDAYS)]  # 1:10 consolidation
     cons = adjust(merge, list(zip(QUARTERS, (D(1000), D(100), D(100)), strict=True)))
     assert [j.ratio for j in cons.confirmed] == [D("0.1")] and cons.adj_close[FRIDAYS[0]] == D(100)
+
+
+def test_f_px_jbl_split_week_is_an_exact_two_for_one_drop() -> None:
+    """The scoring-run test flags JBL's week-150 drop: the fixture halves the close with no market move on top
+    (a 2:1 drop times one week's move fell outside the 3% tolerance and was never detected)."""
+    csv = Path(__file__).resolve().parents[2] / "fixtures" / "px" / "jbl.us_w.csv"
+    bars = parse_csv(csv.read_bytes())
+    jumps = price_jumps([(b.week_end, b.close) for b in bars])
+    assert [(j.week_end, j.ratio) for j in jumps] == [(bars[150].week_end, D(2))]
