@@ -1,8 +1,21 @@
 import "server-only";
 import { db } from "@/lib/supabase/admin";
+import { allPages } from "@/lib/paging";
 import type { ScreenSpec } from "@/lib/screener";
-import type { QuarterRow } from "@/lib/metrics";
-import { packDiff, reviewedThrough, type FilingRow } from "@/lib/reviews";
+import type { QuarterRow, SeriesPoint } from "@/lib/metrics";
+import {
+  FIGURES,
+  killReview,
+  lastSnapshot,
+  needsKillReview,
+  packSnapshot,
+  quarterReviews,
+  reviewedThrough,
+  type FilingRow,
+  type KillSnapshot,
+  type NewItems,
+  type Snapshot,
+} from "@/lib/reviews";
 
 // Server-side reads for the screens (BRIEF §6). Point-in-time tables are read only through the *_display_v views
 // (db/migrations/0003; the guard's pit_rule); everything else through service_role.
@@ -47,6 +60,7 @@ export interface Company {
   capex_desk: boolean;
   in_universe: boolean;
   excluded_reason: string | null;
+  fiscal_year_end: string | null;
 }
 
 export interface Thesis {
@@ -63,7 +77,7 @@ export interface Thesis {
   accepted_at: string | null;
   dismissed_reason: string | null;
   updated_at: string;
-  companies?: Pick<Company, "name" | "market" | "ticker" | "nse_symbol"> | null;
+  companies?: Pick<Company, "name" | "market" | "ticker" | "nse_symbol" | "fiscal_year_end"> | null;
 }
 
 export interface Card {
@@ -159,28 +173,28 @@ export interface LlmUse {
   tokensOut: number;
 }
 
-export async function llmUse(days = 7): Promise<LlmUse[]> {
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  const data = rows<{ provider: string; ok: boolean; error: string | null; tokens_in: number | null; tokens_out: number | null }>(
-    await db().from("llm_calls").select("provider, ok, error, tokens_in, tokens_out").gte("created_at", since),
+/** LLM calls by provider over the last 7 days, counted in the database (the llm_use_7d view, like the digest's
+ * thesis_repo.llm_use): PostgREST returns at most max_rows rows, so counting fetched rows undercounts a busy week (M7
+ * review R1-F6). */
+export async function llmUse(): Promise<LlmUse[]> {
+  const data = rows<{ provider: string; calls: number; ok: number; rate_limited: number; tokens_in: number; tokens_out: number }>(
+    await db().from("llm_use_7d").select("provider, calls, ok, rate_limited, tokens_in, tokens_out").order("provider"),
   );
-  const by = new Map<string, LlmUse>();
-  for (const r of data) {
-    const u = by.get(r.provider) ?? { provider: r.provider, calls: 0, ok: 0, rateLimited: 0, tokensIn: 0, tokensOut: 0 };
-    u.calls += 1;
-    u.ok += r.ok ? 1 : 0;
-    u.rateLimited += !r.ok && (r.error ?? "").includes(": 429") ? 1 : 0;
-    u.tokensIn += r.tokens_in ?? 0;
-    u.tokensOut += r.tokens_out ?? 0;
-    by.set(r.provider, u);
-  }
-  return [...by.values()].sort((a, b) => a.provider.localeCompare(b.provider));
+  return data.map((r) => ({
+    provider: r.provider,
+    calls: Number(r.calls),
+    ok: Number(r.ok),
+    rateLimited: Number(r.rate_limited),
+    tokensIn: Number(r.tokens_in),
+    tokensOut: Number(r.tokens_out),
+  }));
 }
 
 // ---------------------------------------------------------------- Candidates and the screener
 
+/** screen(spec) rows up to spec.limit (the SQL function's default is 500), a page at a time (lib/paging.ts). */
 export async function screen(spec: ScreenSpec): Promise<ScreenerRow[]> {
-  return rows(await db().rpc("screen", { p: spec }));
+  return allPages<ScreenerRow>((from, to) => db().rpc("screen", { p: spec }).range(from, to), spec.limit ?? 500);
 }
 
 export async function dismissedThisWeek(week: string): Promise<Set<string>> {
@@ -209,7 +223,8 @@ export async function screens(): Promise<{ id: string; name: string; spec: Scree
 
 export async function company(id: string): Promise<Company | null> {
   return one(await db().from("companies").select(
-    "id, market, name, ticker, nse_symbol, cik, isin, sector, industry, capex_desk, in_universe, excluded_reason",
+    "id, market, name, ticker, nse_symbol, cik, isin, sector, industry, capex_desk, in_universe, excluded_reason, " +
+      "fiscal_year_end",
   ).eq("id", id).maybeSingle());
 }
 
@@ -218,6 +233,11 @@ export async function fundamentals(id: string): Promise<(QuarterRow & { currency
     "period_end, filed_at, revenue, op_income, net_income, pretax_income, tax_expense, cfo, capex, da, total_assets, " +
       "cash, total_debt, equity, rpo, diluted_shares, shares_outstanding, currency",
   ).eq("company_id", id).order("period_end"));
+}
+
+/** The Company page's chart series: company_series, written by the weekly signals run (M7 review R1-F5). */
+export async function companySeries(id: string): Promise<{ week_end: string; points: SeriesPoint[] } | null> {
+  return one(await db().from("company_series").select("week_end, points").eq("company_id", id).maybeSingle());
 }
 
 export async function ownership(id: string): Promise<Record<string, unknown>[]> {
@@ -281,14 +301,14 @@ export async function thesesOf(companyId: string): Promise<Pick<Thesis, "id" | "
 export async function theses(): Promise<Thesis[]> {
   return rows(await db().from("theses").select(
     "id, company_id, state, card_md, card_json, evidence_pack, author, validation, created_week, next_review, " +
-      "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol)",
+      "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol, fiscal_year_end)",
   ).order("updated_at", { ascending: false }));
 }
 
 export async function thesis(id: string): Promise<Thesis | null> {
   return one(await db().from("theses").select(
     "id, company_id, state, card_md, card_json, evidence_pack, author, validation, created_week, next_review, " +
-      "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol)",
+      "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol, fiscal_year_end)",
   ).eq("id", id).maybeSingle());
 }
 
@@ -319,37 +339,121 @@ export async function postmortem(thesisId: string): Promise<Postmortem | null> {
     .eq("thesis_id", thesisId).maybeSingle());
 }
 
-/** BRIEF §4.9 Reviews: for each thesis or position whose company has filed a quarter the thesis hasn't seen, a review
- * row with the pack diff (one per quarter end: the unique index makes a re-render a no-op), and the thesis moves to
- * the Review column until Manzoor marks it (§1.8). Returns the ids it moved to Review: the page shows their new state
- * with lib/theses.ts markMoved, because reading the rows again in the same render returns the first answer (Next
- * memoizes a repeated GET within a render). */
+interface ReviewState {
+  period_end: string | null;
+  verdict: string | null;
+  created_at: string;
+  snapshot: unknown;
+}
+
+// A select of its own, not reviews(): the page reads reviews() after ensureReviews, and Next memoizes a repeated GET
+// within a render, so the page would not see the reviews made here.
+async function reviewStates(thesisId: string): Promise<ReviewState[]> {
+  return rows(await db().from("reviews").select("period_end, verdict, created_at, snapshot:pack_diff->snapshot")
+    .eq("thesis_id", thesisId));
+}
+
+function latestWeek<T extends { week_end: string }>(list: T[]): T[] {
+  const week = list.reduce<string | null>((w, r) => (w === null || r.week_end > w ? r.week_end : w), null);
+  return list.filter((r) => r.week_end === week);
+}
+
+function number(x: unknown): number | null {
+  const n = typeof x === "number" ? x : typeof x === "string" && x !== "" ? Number(x) : Number.NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The company's state now, for a review (M7 review R1-F4): the latest quarter's figures, the latest scored week's
+ * fired signals and red flags, context and scores, and the kill criteria's latest values. */
+async function stateNow(companyId: string, filed: FilingRow[], kills: KillCriterion[]): Promise<Snapshot> {
+  const [signals, flags, context, score] = await Promise.all([
+    db().from("signal_values").select("week_end, signal_id, fired").eq("company_id", companyId)
+      .order("week_end", { ascending: false }).limit(80),
+    db().from("redflag_values").select("week_end, flag_id, inputs").eq("company_id", companyId)
+      .order("week_end", { ascending: false }).limit(40),
+    db().from("context_values").select("week_end, metric_id, value").eq("company_id", companyId)
+      .order("week_end", { ascending: false }).limit(20),
+    db().from("scores").select("week_end, evidence, gap").eq("company_id", companyId)
+      .order("week_end", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const latest = [...filed].sort((a, b) => a.period_end.localeCompare(b.period_end)).pop();
+  const figures: Record<string, number | null> = {};
+  if (latest) for (const name of FIGURES) figures[name] = latest[name];
+  const ctx: Record<string, number | null> = {};
+  for (const c of latestWeek(rows<{ week_end: string; metric_id: string; value: unknown }>(context))) ctx[c.metric_id] = number(c.value);
+  const sc = one<{ evidence: unknown; gap: unknown }>(score);
+  if (sc) Object.assign(ctx, { evidence: number(sc.evidence), gap: number(sc.gap) });
+  return {
+    as_of: new Date().toISOString().slice(0, 10),
+    quarter: latest?.period_end ?? null,
+    figures,
+    signals: latestWeek(rows<{ week_end: string; signal_id: string; fired: boolean }>(signals))
+      .filter((r) => r.fired).map((r) => r.signal_id).sort(),
+    red_flags: latestWeek(rows<{ week_end: string; flag_id: string; inputs: Record<string, unknown> | null }>(flags))
+      .filter((r) => r.inputs?.status === "fired").map((r) => r.flag_id).sort(),
+    context: ctx,
+    kill: Object.fromEntries(kills.map((k) => [k.metric, number(k.last_value)])),
+  };
+}
+
+/** Verified facts, ownership rows and insider events after `since` (ownership and insiders through the
+ * point-in-time views). */
+async function itemsSince(companyId: string, since: string | null): Promise<NewItems> {
+  const after = since ?? "1900-01-01";
+  const [f, o, i] = await Promise.all([
+    db().from("facts").select("id, subject, value_num, unit, as_of, quote, documents(url)").eq("company_id", companyId)
+      .eq("verification_status", "verified").gt("as_of", after).order("as_of").limit(50),
+    db().from("ownership_display_v").select("quarter_end, filed_at, inst_holders, fii_pct, dii_pct, promoter_pct, " +
+      "promoter_pledged_pct").eq("company_id", companyId).gt("filed_at", after).order("filed_at").limit(20),
+    db().from("insider_events_display_v").select("event_date, filed_at, person, role, kind, shares, value, currency")
+      .eq("company_id", companyId).gt("filed_at", after).order("filed_at").limit(50),
+  ]);
+  const facts = rows<{ id: string; subject: string; value_num: unknown; unit: string; as_of: string; quote: string;
+    documents: { url: string } | null }>(f); // prettier-ignore
+  return {
+    facts: facts.map((x) => ({ id: x.id, subject: x.subject, value: number(x.value_num), unit: x.unit, as_of: x.as_of,
+      quote: x.quote, url: x.documents?.url ?? null })), // prettier-ignore
+    ownership: rows<Record<string, unknown>>(o),
+    insiders: rows<Record<string, unknown>>(i),
+  };
+}
+
+/** BRIEF §4.9 Reviews: for each thesis or position whose company has filed quarters the thesis hasn't seen, one
+ * review per quarter (the unique index makes a re-render a no-op), and for a thesis a kill criterion moved to Review
+ * without a new quarter, one review to record a verdict on (a partial unique index keeps it to one open). A review
+ * holds the pack diff since the last one (figures, signals, red flags, context, kill metrics, new facts, ownership
+ * and insider events) and the state it saw, and the thesis moves to the Review column until Manzoor marks it (§1.8;
+ * M7 review R1-F1, F4, F9). Returns the ids it moved to Review: the page shows their new state with lib/theses.ts
+ * markMoved, because reading the rows again in the same render returns the first answer (Next memoizes a repeated
+ * GET within a render). */
 export async function ensureReviews(list: Pick<Thesis, "id" | "company_id" | "state" | "evidence_pack" | "accepted_at" | "created_week">[]): Promise<Set<string>> {
   const moved = new Set<string>();
   for (const t of list) {
     if (t.state !== "thesis" && t.state !== "position" && t.state !== "review") continue;
-    const [filed, last, kills] = await Promise.all([
-      fundamentals(t.company_id),
-      one<{ period_end: string | null }>(await db().from("reviews").select("period_end").eq("thesis_id", t.id)
-        .order("period_end", { ascending: false, nullsFirst: false }).limit(1).maybeSingle()),
-      killCriteria(t.id),
-    ]);
+    const [filed, revs, kills] = await Promise.all([fundamentals(t.company_id), reviewStates(t.id), killCriteria(t.id)]);
     const rowsFiled: FilingRow[] = filed.map((r) => ({
       period_end: r.period_end, filed_at: r.filed_at, revenue: r.revenue, op_income: r.op_income,
       net_income: r.net_income, cfo: r.cfo, rpo: r.rpo, diluted_shares: r.diluted_shares,
     }));
     const start = t.accepted_at ?? `${t.created_week}T00:00:00Z`;
-    const since = reviewedThrough(last?.period_end ?? null, t.evidence_pack, rowsFiled, start);
-    const diff = packDiff(rowsFiled, since, kills.map((k) => ({
+    const lastQuarter = revs.map((r) => r.period_end).filter((p): p is string => p !== null).sort().pop() ?? null;
+    const since = reviewedThrough(lastQuarter, t.evidence_pack, rowsFiled, start);
+    const fresh = rowsFiled.some((r) => since === null || r.period_end > since);
+    if (!fresh && !needsKillReview(t.state, revs)) continue;
+    const before = lastSnapshot(revs) ?? packSnapshot(t.evidence_pack);
+    const snap: KillSnapshot[] = kills.map((k) => ({
       metric: k.metric, operator: k.operator, threshold: k.threshold, status: k.status, last_value: k.last_value,
-    })));
-    const latest = diff?.quarters[diff.quarters.length - 1];
-    if (!diff || !latest) continue;
-    const ins = await db().from("reviews").upsert(
-      { thesis_id: t.id, period_end: latest.period_end, pack_diff: diff },
-      { onConflict: "thesis_id,period_end", ignoreDuplicates: true },
-    ).select("id");
-    if (ins.error) throw new Error(ins.error.message);
+    }));
+    const [now, items] = await Promise.all([stateNow(t.company_id, rowsFiled, kills), itemsSince(t.company_id, before?.as_of ?? null)]);
+    if (fresh) {
+      const made = quarterReviews(rowsFiled, since, before, now, snap, items)
+        .map((d) => ({ thesis_id: t.id, period_end: d.quarters[0]?.period_end ?? null, pack_diff: d }));
+      const ins = await db().from("reviews").upsert(made, { onConflict: "thesis_id,period_end", ignoreDuplicates: true }).select("id");
+      if (ins.error) throw new Error(ins.error.message);
+    } else {
+      const ins = await db().from("reviews").insert({ thesis_id: t.id, period_end: null, pack_diff: killReview(since, before, now, snap, items) });
+      if (ins.error && ins.error.code !== "23505") throw new Error(ins.error.message); // another render made it
+    }
     if (t.state !== "review") {
       const up = await db().from("theses").update({ state: "review", updated_at: new Date().toISOString() })
         .eq("id", t.id).in("state", ["thesis", "position"]).select("id");

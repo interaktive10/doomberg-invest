@@ -1,8 +1,10 @@
 """Seed data for the web app's end-to-end tests (BRIEF §8 M7; CI job `web`, after the migrations on the local Supabase
 stack). Five companies scored for the week ending 2026-09-18, one per bucket or so, and everything the screens show:
 fundamentals, signals, red flags, context, a verified fact with its document, a counterparty link, a thesis card in
-research with kill criteria, capex memberships waiting for a decision, the demand index, a brief, a digest, source
-health, LLM use, Lab results and weights versions. Fixed ids (web/e2e/seed.ts has the same ones).
+research with kill criteria and its company's chart series (company_series), a thesis a kill criterion moved to
+Review, a closed thesis with journal entries and a post-mortem, ownership, insider and event rows, capex memberships
+waiting for a decision, the demand index, a brief, a digest, source health, LLM use, Lab results and weights versions.
+Fixed ids (web/e2e/seed.ts has the same ones).
 
 `python scripts/seed_e2e.py --database-url postgresql://...` (a fresh database: it inserts, it doesn't upsert).
 """
@@ -14,9 +16,16 @@ import json
 import os
 import sys
 from datetime import date, timedelta
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import psycopg
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline.signals.series import Quarter, Series  # noqa: E402
+from pipeline.signals.weekly import series_points  # noqa: E402
 
 W = date(2026, 9, 18)
 ECHO = "00000000-0000-4000-8000-0000000000e1"
@@ -25,6 +34,8 @@ DELTA = "00000000-0000-4000-8000-0000000000e3"
 OMEGA = "00000000-0000-4000-8000-0000000000e4"
 SIGMA = "00000000-0000-4000-8000-0000000000e5"
 ECHO_THESIS = "00000000-0000-4000-8000-0000000000a1"
+OMEGA_THESIS = "00000000-0000-4000-8000-0000000000a2"  # in Review: a kill criterion triggered, no new quarter
+SIGMA_THESIS = "00000000-0000-4000-8000-0000000000a3"  # closed, with journal entries and a post-mortem
 ECHO_DOC = "00000000-0000-4000-8000-0000000000d1"
 ECHO_FACT = "00000000-0000-4000-8000-0000000000f1"
 NIMBUS = "00000000-0000-4000-8000-0000000000b1"
@@ -54,7 +65,7 @@ Grid equipment demand from data-center interconnects is showing up in backlog be
 
 ## Facts
 - Total backlog reached $13.2 billion at quarter end [f:00000000-0000-4000-8000-0000000000f1].
-- Revenue was $1.20 billion in the quarter ended March 31, 2026 [m:revenue:2026-03-31].
+- Revenue was $1.16 billion in the quarter ended March 31, 2026 [m:revenue:2026-03-31].
 
 ## Why it may be mispriced
 - The price implies 5% annual growth while the evidence supports 17% [c:C2].
@@ -76,10 +87,61 @@ Grid equipment demand from data-center interconnects is showing up in backlog be
 """
 
 
+OMEGA_MD = """# Omega Systems Inc. (OMGA) — 2026-W31
+
+Server orders from two hyperscalers point to a second year of growth.
+
+## Kill criteria
+| Metric | Condition | Check after | Why |
+|---|---|---|---|
+| `m:evidence` | < 80 | 2026-09-01 | The order-book case needs an Evidence score of at least 80 |
+"""
+
+SIGMA_MD = """# Sigma Holdings Inc. (SGMA) — 2026-W14
+
+The holding company trades at a wide discount to the value of its listed stakes and buys back stock.
+"""
+
+
 def quarters() -> list[tuple[date, float]]:
     ends = [date(2024, 9, 30), date(2024, 12, 31), date(2025, 3, 31), date(2025, 6, 30), date(2025, 9, 30),
             date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]  # fmt: skip
     return [(d, 800e6 + 60e6 * i) for i, d in enumerate(ends)]
+
+
+FUNDAMENTALS = (
+    "revenue",
+    "op_income",
+    "net_income",
+    "pretax_income",
+    "tax_expense",
+    "cfo",
+    "capex",
+    "da",
+    "total_assets",
+    "cash",
+    "total_debt",
+    "equity",
+    "rpo",
+    "diluted_shares",
+    "shares_outstanding",
+)
+
+
+def echo_rows() -> list[tuple[date, dict[str, float]]]:
+    out = []
+    for end, revenue in quarters():
+        values = (revenue, revenue * 0.2, revenue * 0.15, revenue * 0.19, revenue * 0.04, revenue * 0.22,
+                  revenue * 0.05, revenue * 0.03, 9e9, 1.1e9, 2.0e9, 4.5e9, 10e9 + (end.year - 2024) * 1.6e9, 120e6,
+                  119e6)  # fmt: skip
+        out.append((end, dict(zip(FUNDAMENTALS, values, strict=True))))
+    return out
+
+
+def echo_series() -> list[dict[str, Any]]:
+    s2 = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "signals.yaml").read_text(encoding="utf-8"))
+    rows = [Quarter(end, {k: Decimal(str(v)) for k, v in row.items()}) for end, row in echo_rows()]
+    return series_points(Series(rows, "us"), s2["s2_incremental_roic"])
 
 
 def seed(conn: psycopg.Connection[Any]) -> None:
@@ -87,14 +149,16 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     for c in COMPANIES:
         x("insert into companies (id, market, name, cik, ticker, nse_symbol, isin, sector, industry, fiscal_year_end, "
           "in_universe, capex_desk) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s)", c)  # fmt: skip
-    for end, revenue in quarters():
+    for end, row in echo_rows():
         x("insert into fundamentals_q (company_id, period_end, fiscal_label, filed_at, revenue, op_income, net_income, "
           "pretax_income, tax_expense, cfo, capex, da, total_assets, cash, total_debt, equity, rpo, diluted_shares, "
           "shares_outstanding, currency, source) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
           "%s, %s, %s, %s, 'USD', 'sec_xbrl')",
-          (ECHO, end, f"Q{(end.month - 1) // 3 + 1} {end.year}", end + timedelta(days=36), revenue, revenue * 0.2,
-           revenue * 0.15, revenue * 0.19, revenue * 0.04, revenue * 0.22, revenue * 0.05, revenue * 0.03, 9e9, 1.1e9,
-           2.0e9, 4.5e9, 10e9 + (end.year - 2024) * 1.6e9, 120e6, 119e6))  # fmt: skip
+          (ECHO, end, f"Q{(end.month - 1) // 3 + 1} {end.year}", end + timedelta(days=36),
+           *(row[c] for c in FUNDAMENTALS)))  # fmt: skip
+    # the Company page's charts: what the weekly run writes (pipeline/signals/weekly.py series_points)
+    x("insert into company_series (company_id, week_end, points) values (%s, %s, %s)",
+      (ECHO, W, json.dumps(echo_series())))  # fmt: skip
     for cid, ev, gap, fam, bucket in SCORES:
         x("insert into scores (company_id, week_end, evidence, gap, families, bucket, weights_version) values "
           "(%s, %s, %s, %s, %s, %s, 'v1')", (cid, W, ev, gap, fam, bucket))  # fmt: skip
@@ -137,6 +201,14 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     pack = {"version": 1, "week": "2026-W38", "week_end": str(W),
             "metrics": [{"id": "m:revenue:2026-03-31", "name": "revenue", "period_end": "2026-03-31",
                          "value": "1160000000", "unit": "usd", "source": "sec_xbrl"}],
+            "signals": [{"id": "s:S1", "kind": "signal", "fired": True, "strength": "0.82", "inputs": {}},
+                        {"id": "s:S9", "kind": "signal", "fired": True, "strength": "0.4", "inputs": {}}],
+            "context": [{"id": "c:C2", "value": "0.12", "pct": None, "inputs": c2},
+                        {"id": "c:evidence", "value": "72.5", "pct": None, "inputs": {}}],
+            "facts": [{"id": f"f:{ECHO_FACT}", "fact_type": "backlog", "subject": "backlog", "value": "13200000000",
+                       "unit": "usd", "currency": "USD", "as_of": "2026-08-05", "quote": quote}],
+            "kill_metrics": [{"id": "m:revenue_ttm_yoy", "description": "TTM revenue vs the TTM a year earlier",
+                              "value": "0.24", "unit": "ratio"}],
             "next_filing": {"period_end": "2026-09-30", "form": "10-Q", "opens": "2026-10-01",
                             "closes": "2026-11-14"}}  # fmt: skip
     card = {"summary": "Grid equipment demand shows up in backlog first.",
@@ -147,6 +219,43 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     x("insert into kill_criteria (thesis_id, metric, operator, threshold, check_after, status, last_value, "
       "last_checked, why) values (%s, 'm:revenue_ttm_yoy', '<', 0.05, '2026-11-20', 'ok', 0.24, %s, "
       "'Growth thesis fails if TTM revenue growth drops below 5%%')", (ECHO_THESIS, W))  # fmt: skip
+
+    # a kill criterion (on the Evidence score) moved this thesis to Review without a new quarter (M7 review R1-F1)
+    omega_pack = {"version": 1, "week": "2026-W31", "week_end": "2026-07-31", "metrics": [], "signals": [],
+                  "context": [{"id": "c:evidence", "value": "82.0", "pct": None, "inputs": {}}],
+                  "kill_metrics": [{"id": "m:evidence", "description": "Evidence score, latest scored week (0-100)",
+                                    "value": "82.0", "unit": "score"}]}  # fmt: skip
+    x(
+        "insert into theses (id, company_id, state, card_md, card_json, evidence_pack, author, validation, "
+        "created_week, accepted_at, next_review) values (%s, %s, 'review', %s, '{}', %s, 'routine', '{\"ok\": true}', "
+        "'2026-07-31', '2026-08-03 09:00+00', '2026-11-14')",
+        (OMEGA_THESIS, OMEGA, OMEGA_MD, json.dumps(omega_pack)),
+    )
+    x("insert into kill_criteria (thesis_id, metric, operator, threshold, check_after, status, last_value, "
+      "last_checked, triggered_week, why) values (%s, 'm:evidence', '<', 80, '2026-09-01', 'triggered', 66, %s, %s, "
+      "'The order-book case needs an Evidence score of at least 80')", (OMEGA_THESIS, W, W))  # fmt: skip
+
+    # a closed thesis with its journal and post-mortem (the screens' other states, for the axe run)
+    x("insert into theses (id, company_id, state, card_md, card_json, evidence_pack, author, validation, "
+      "created_week, accepted_at) values (%s, %s, 'closed', %s, '{}', '{}', 'routine', '{\"ok\": true}', "
+      "'2026-04-03', '2026-04-10 09:00+00')", (SIGMA_THESIS, SIGMA, SIGMA_MD))  # fmt: skip
+    x("insert into journal (thesis_id, entry_date, action, portfolio_pct, reason) values "
+      "(%s, '2026-05-15', 'start_position', 2.0, 'The discount to book is wide and the company buys back stock.'), "
+      "(%s, '2026-08-20', 'exit', null, 'The discount closed.')", (SIGMA_THESIS, SIGMA_THESIS))  # fmt: skip
+    x("insert into postmortems (thesis_id, what_happened, thesis_right, signals_right, lessons) values "
+      "(%s, 'The discount to book closed within a quarter.', true, '{\"note\": \"S7 fired twice before it did.\"}', "
+      "'Size the position before the second buyback.')", (SIGMA_THESIS,))  # fmt: skip
+
+    # ownership, an insider buy filed after the card's week (new in its review) and an index change
+    x("insert into ownership_q (company_id, quarter_end, filed_at, inst_holders, inst_pct, source) values "
+      "(%s, '2026-03-31', '2026-05-15 12:00+00', 398, 0.69, 'sec_13f'), "
+      "(%s, '2026-06-30', '2026-08-14 12:00+00', 412, 0.71, 'sec_13f')", (ECHO, ECHO))  # fmt: skip
+    x("insert into insider_events (company_id, event_date, filed_at, person, role, kind, shares, value, currency, "
+      "source_url) values (%s, '2026-09-17', '2026-09-21 12:00+00', 'A. Director', 'Director', 'open_market_buy', "
+      "5000, 510000, 'USD', 'https://www.sec.gov/Archives/edgar/data/999101/form4.xml')", (ECHO,))  # fmt: skip
+    x("insert into corp_events (company_id, event_date, filed_at, kind, detail, source_url) values "
+      "(%s, '2026-07-01', '2026-07-02 12:00+00', 'index_change', '{\"index\": \"S&P MidCap 400\"}', "
+      "'https://www.sec.gov/Archives/edgar/data/999101/idx-8k.htm')", (ECHO,))  # fmt: skip
 
     x("insert into capex_memberships (company_id, category, source, status, evidence, quote) values "
       "(%s, 'power_equipment', 'p06', 'proposed', 'Transformer and HV cable orders from US data-center developers', "

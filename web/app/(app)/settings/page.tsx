@@ -8,6 +8,7 @@ import { env } from "@/lib/env";
 import { one, type Query } from "@/lib/forms";
 import { sourceStatus } from "@/lib/staleness";
 import { saveDiscipline } from "./actions";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Settings: universes, quotas, sources, allowed email; weights shown read-only (they change only through a
 // PR). Plus the §11.9 discipline rule, which is configurable here.
@@ -23,6 +24,7 @@ function Yaml({ name, text }: { name: string; text: string | null }) {
 }
 
 export default async function Settings({ searchParams }: { searchParams: Promise<Query> }) {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
   const [counts, sources, versions, weeks, quotas, universeUs, universeIn, weightsFile] = await Promise.all([
     universeCounts(),

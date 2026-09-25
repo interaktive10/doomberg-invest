@@ -3,10 +3,12 @@ import { Empty, Page, Section } from "@/components/page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { latestDigest, llmUse, sourceHealth } from "@/lib/data";
 import { sourceStatus } from "@/lib/staleness";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Home: the digest for this week; source health; LLM quota use; a stale-data banner (the layout's).
 export default async function Home() {
-  const [digest, sources, use] = await Promise.all([latestDigest(), sourceHealth(), llmUse(7)]);
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
+  const [digest, sources, use] = await Promise.all([latestDigest(), sourceHealth(), llmUse()]);
   const now = new Date();
   return (
     <Page title="This week">

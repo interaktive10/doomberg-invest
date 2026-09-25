@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterVerdict, canMove, markMoved, positionOpen } from "@/lib/theses";
+import { acceptable, afterVerdict, canMove, markMoved, positionOpen } from "@/lib/theses";
 
 describe("thesis workflow (BRIEF §1.8)", () => {
   it("offers each move in its state only", () => {
@@ -37,5 +37,26 @@ describe("theses moved to Review in this render", () => {
     expect(shown.map((t) => t.state)).toEqual(["review", "position"]);
     expect(list[0]?.state).toBe("thesis");
     expect(markMoved(list, new Set())).toEqual(list);
+  });
+});
+
+describe("accepting a card (§1.8; M7 review R1-F2)", () => {
+  const card = { state: "research" as const, author: "routine", card_md: "# Echo", validation: { ok: true } };
+  it("only a validated card can be accepted", () => {
+    expect(acceptable(card)).toBe(true);
+    expect(acceptable({ ...card, author: "manual", card_md: "", validation: {} })).toBe(false);
+    expect(acceptable({ ...card, card_md: "  " })).toBe(false);
+    expect(acceptable({ ...card, validation: { ok: false } })).toBe(false);
+    expect(acceptable({ ...card, validation: null })).toBe(false);
+    expect(acceptable({ ...card, state: "thesis" })).toBe(false);
+  });
+});
+
+describe("leaving Review (§1.8; M7 review R1-F9)", () => {
+  it("leaves Review only when no review is pending", () => {
+    expect(afterVerdict("review", "intact", true, 1)).toBe("review");
+    expect(afterVerdict("review", "intact", true, 0)).toBe("position");
+    expect(afterVerdict("review", "weakened", false)).toBe("thesis");
+    expect(afterVerdict("review", "broken", false, 0)).toBe("review");
   });
 });

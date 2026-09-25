@@ -7,10 +7,12 @@ import { journal, postmortems, theses } from "@/lib/data";
 import { code, num } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
 import { addNote } from "./actions";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Journal: private entries and post-mortems. They live only in the database; the web app makes no LLM calls
 // and the pipeline's privacy check refuses them (llm/privacy.py).
 export default async function Journal({ searchParams }: { searchParams: Promise<Query> }) {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
   const [entries, pms, ths] = await Promise.all([journal(), postmortems(), theses()]);
   const names = new Map(ths.map((t) => [t.id, t.companies ? `${t.companies.name} (${code(t.companies)})` : t.company_id]));

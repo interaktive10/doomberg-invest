@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CAVEATS } from "@/lib/caveats";
 import { labResults, weightsVersions, type LabResult } from "@/lib/data";
 import { num, pct } from "@/lib/format";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Signal Lab: results by signal, horizon and period; score deciles; weights versions; open proposals. §7:
 // the first four honest limits at the top of the screen.
@@ -53,6 +54,7 @@ function Head() {
 }
 
 export default async function Lab() {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const [results, versions] = await Promise.all([labResults(), weightsVersions()]);
   const deciles = results.filter((r) => DECILE.test(r.signal_id));
   const signals = results.filter((r) => !DECILE.test(r.signal_id));
@@ -71,7 +73,7 @@ export default async function Lab() {
           <Empty>No Lab run yet (lab.yml, manual; it needs the Stooq bulk file).</Empty>
         ) : (
           <>
-            <p className="mb-2 text-sm text-gray-700">Run of {signals[0]?.run_at.slice(0, 10)}. Excess returns are vs the market&apos;s benchmark, before dividends, taxes and costs.</p>
+            <p className="mb-2 text-sm text-gray-700">Run of {signals[0]?.run_at.slice(0, 10)}. Excess returns are over the equal-weighted mean of the month&apos;s population (the companies priced at both dates), before dividends, taxes and costs (BRIEF §4.10.1).</p>
             <Table label="Lab results by signal">
               <Head />
               <ResultRows rows={signals} />

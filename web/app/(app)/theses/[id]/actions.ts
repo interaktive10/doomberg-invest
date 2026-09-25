@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { journal as journalOf, setting, thesis as getThesis, type JournalEntry } from "@/lib/data";
-import { checkStartPosition, thesisWeeks } from "@/lib/discipline";
+import { checkStartPosition, entryDateCheck, thesisWeeks } from "@/lib/discipline";
+import { nextFiling } from "@/lib/filing";
 import { field, ISO_DATE, UUID, withMessage } from "@/lib/forms";
 import { db } from "@/lib/supabase/admin";
-import { afterVerdict, canMove, positionOpen } from "@/lib/theses";
+import { acceptable, afterVerdict, canMove, positionOpen } from "@/lib/theses";
 
 // BRIEF §1.8 and §4.9: the thesis workflow's writes. Every action checks the session, the id and the state, then
 // returns to the thesis page with ?ok= or ?error=. Journal entries and post-mortems stay in the database (never sent
@@ -48,6 +49,7 @@ async function setState(id: string, patch: Record<string, unknown>): Promise<str
 export async function accept(form: FormData): Promise<void> {
   const t = await load(form);
   if (!canMove(t.state, "accept")) fail(t.id, "Only a card in research can be accepted.");
+  if (!acceptable(t)) fail(t.id, "Only a card the routine wrote and validate.py passed can be accepted (M7 review R1-F2).");
   const nf = t.evidence_pack.next_filing;
   const next = typeof nf === "object" && nf !== null ? (nf as Record<string, unknown>).closes : undefined;
   const err = await setState(t.id, {
@@ -88,7 +90,10 @@ export async function addJournal(form: FormData): Promise<void> {
     if (t.state !== "thesis" && t.state !== "position" && t.state !== "review") fail(t.id, "Accept the card as a thesis before starting a position.");
     if (open) fail(t.id, "A position is already open.");
     const minWeeks = Number(await setting<number | string>("position_min_thesis_weeks", 4));
-    const check = checkStartPosition(thesisWeeks(t.accepted_at, t.created_week, new Date()), minWeeks, override);
+    // §11.9 at the entry's date, not when it is typed in (M7 review R1-F8)
+    const when = entryDateCheck(date, t.accepted_at, t.created_week, new Date());
+    if (!when.ok) fail(t.id, when.message);
+    const check = checkStartPosition(thesisWeeks(t.accepted_at, t.created_week, when.at), minWeeks, override);
     if (!check.ok) fail(t.id, check.message);
     overrideReason = check.message === "override" ? override : null;
   } else if ((action === "add" || action === "trim" || action === "exit") && !open) {
@@ -113,18 +118,34 @@ export async function decideReview(form: FormData): Promise<void> {
   if (!UUID.test(reviewId)) fail(t.id, "That review isn't valid.");
   if (verdict === undefined) fail(t.id, "Pick intact, weakened or broken.");
   const res = await db().from("reviews").update({ verdict, note: note || null, decided_at: new Date().toISOString() })
-    .eq("id", reviewId).eq("thesis_id", t.id).is("verdict", null).select("id");
+    .eq("id", reviewId).eq("thesis_id", t.id).is("verdict", null).select("id, period_end");
   if (res.error) fail(t.id, res.error.message);
-  if ((res.data ?? []).length === 0) fail(t.id, "That review was already decided.");
+  const decided = (res.data ?? [])[0] as { id: string; period_end: string | null } | undefined;
+  if (decided === undefined) fail(t.id, "That review was already decided.");
   if (field(form, "to_journal") === "on" && note.length > 0) {
     const j = await db().from("journal").insert({
       thesis_id: t.id, entry_date: new Date().toISOString().slice(0, 10), action: "review", reason: note,
     });
     if (j.error) fail(t.id, j.error.message);
   }
-  const next = afterVerdict(t.state, verdict, positionOpen(await journalOf(t.id)));
-  if (next !== t.state) {
-    const err = await setState(t.id, { state: next });
+  // a thesis leaves Review only when no other review waits for a verdict (M7 review R1-F9)
+  const waiting = await db().from("reviews").select("id").eq("thesis_id", t.id).is("verdict", null);
+  if (waiting.error) fail(t.id, waiting.error.message);
+  const next = afterVerdict(t.state, verdict, positionOpen(await journalOf(t.id)), (waiting.data ?? []).length);
+  // the next review date: the filing window after the reviewed quarter, or after the latest quarter on file for a
+  // kill-criteria review (§1.8 review dates; M7 review R1-F3)
+  let quarter = decided.period_end;
+  if (quarter === null) {
+    const last = await db().from("fundamentals_display_v").select("period_end").eq("company_id", t.company_id)
+      .order("period_end", { ascending: false }).limit(1).maybeSingle();
+    quarter = (last.data as { period_end: string } | null)?.period_end ?? null;
+  }
+  const c = t.companies;
+  const window = c ? nextFiling(c.market, c.fiscal_year_end, quarter, new Date().toISOString().slice(0, 10)) : null;
+  const patch: Record<string, unknown> = window ? { next_review: window.closes } : {};
+  if (next !== t.state) patch.state = next;
+  if (Object.keys(patch).length > 0) {
+    const err = await setState(t.id, patch);
     if (err) fail(t.id, err);
   }
   done(t.id, verdict === "broken" ? "Marked broken: close it with a post-mortem." : `Marked ${verdict}.`);

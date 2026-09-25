@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   company as getCompany,
+  companySeries,
   contextHistory,
   events,
   facts,
@@ -16,12 +17,13 @@ import {
   thesesOf,
 } from "@/lib/data";
 import { big, code, num, pct } from "@/lib/format";
-import { series } from "@/lib/metrics";
+import { chartRows } from "@/lib/metrics";
 import { UUID } from "@/lib/forms";
 import { STATE_LABEL } from "@/lib/theses";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Company: fundamentals charts (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA,
-// RPO/backlog); signal timeline; verified facts with quotes and links; ownership and insiders; events; context
+// RPO/backlog; the weekly run's company_series, §4.6 definitions); signal timeline; verified facts with quotes and links; ownership and insiders; events; context
 // (valuation percentile chart, reverse-DCF inputs and implied growth); thesis link.
 
 function factValue(f: { value_num: number | null; value_low: number | null; value_high: number | null; unit: string }): string {
@@ -41,11 +43,12 @@ function str(v: unknown): string {
 }
 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const c = await getCompany(id);
   if (c === null) notFound();
-  const [rows, own, ins, evs, fs, sigs, ctx, ths] = await Promise.all([
+  const [rows, own, ins, evs, fs, sigs, ctx, ths, ser] = await Promise.all([
     fundamentals(id),
     ownership(id),
     insiders(id),
@@ -54,9 +57,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     signalTimeline(id),
     contextHistory(id),
     thesesOf(id),
+    companySeries(id),
   ]);
-  const points = series(rows, c.market);
-  const data: Row[] = points.map((p) => ({ ...p }));
+  const data: Row[] = chartRows(ser?.points ?? []).map((p) => ({ ...p }));
   const weeks = new Map<string, string[]>();
   for (const s of sigs) weeks.set(s.week_end, [...(weeks.get(s.week_end) ?? []), s.signal_id]);
   const c1: Row[] = ctx.filter((x) => x.metric_id === "C1" && x.pct !== null).map((x) => ({ week: x.week_end, pct: Number(x.pct) / 100 }));
@@ -91,10 +94,13 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         )}
       </Section>
       <Section title="Fundamentals (TTM)" id="fundamentals">
-        {rows.length === 0 ? (
-          <Empty>No fundamentals yet.</Empty>
+        {data.length === 0 ? (
+          <Empty>No chart series yet: the weekly scoring run computes them.</Empty>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
+            <p className="text-xs text-gray-700 md:col-span-2">
+              As of the week scored {ser?.week_end}, with the signals' definitions (BRIEF §4.6).
+            </p>
             <LineChartCard title="Revenue (TTM)" data={data} series={[{ key: "revenue", label: "Revenue" }]} format="big" />
             <LineChartCard title="Operating margin (TTM)" data={data} series={[{ key: "opm", label: "OPM" }]} format="pct" />
             <LineChartCard

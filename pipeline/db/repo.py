@@ -674,6 +674,20 @@ def upsert_company_metrics(conn: Conn, week: date, metrics: Mapping[UUID, Mappin
         )
 
 
+def upsert_company_series(conn: Conn, week: date, series: Mapping[UUID, Sequence[Mapping[str, Any]]]) -> None:
+    """The Company page's per-quarter series (weekly.series_points), replaced when a newer week is scored; a replay
+    of an older week leaves a newer one alone (M7 review R1-F5)."""
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q(
+                "insert into company_series (company_id, week_end, points, updated_at) values (%s, %s, %s, now()) "
+                "on conflict (company_id) do update set week_end = excluded.week_end, points = excluded.points, "
+                "updated_at = now() where company_series.week_end <= excluded.week_end"
+            ),
+            [(cid, week, Jsonb([dict(p) for p in points])) for cid, points in series.items()],
+        )
+
+
 def recent_attention(conn: Conn, week: date, since: date) -> dict[UUID, int]:
     """The latest GDELT article count per company from C4 rows in [since, week): C4 is re-queried monthly."""
     rows = conn.execute(

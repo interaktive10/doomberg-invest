@@ -1,35 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { series, type QuarterRow } from "@/lib/metrics";
+import { chartRows } from "@/lib/metrics";
 
-const row = (period_end: string, revenue: number, op_income: number): QuarterRow => ({
-  period_end,
-  revenue,
-  op_income,
-  net_income: op_income * 0.8,
-  pretax_income: op_income,
-  tax_expense: op_income * 0.2,
-  cfo: op_income,
-  capex: 10,
-  da: 5,
-  total_assets: 1000,
-  cash: 100,
-  total_debt: 200,
-  equity: 500,
-  rpo: 900,
-  diluted_shares: 50,
-  shares_outstanding: 49,
-});
-
-describe("Company page series (display only)", () => {
-  it("needs four quarters for a TTM value and computes OPM, CCR and ND/EBITDA from them", () => {
-    const rows = ["2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"].map((d, i) => row(d, 100 + i * 10, 20));
-    const s = series(rows, "us");
-    expect(s[2]?.revenue).toBeNull();
-    expect(s[3]?.revenue).toBe(460);
-    expect(s[3]?.opm).toBeCloseTo(80 / 460);
-    expect(s[3]?.ccr).toBeCloseTo(80 / 64);
-    expect(s[3]?.nd_ebitda).toBeCloseTo(100 / 100);
-    expect(s[4]?.incremental_roic).toBeNull(); // no TTM a year earlier
-    expect(s[4]?.shares).toBe(50);
+describe("Company series use the §4.6 definitions (M7 review R1-F5)", () => {
+  it("charts the pipeline's company_series points as they are, oldest first, with gaps for missing values", () => {
+    // values as pipeline/signals/weekly.py series_points writes them (tests/signals/test_series_points.py pins them to
+    // pipeline/signals/series.py: ROIC on mean invested capital, debt carried from the 10-K, S2's incremental ROIC)
+    const rows = chartRows([
+      { period_end: "2025-12-31", revenue_ttm: 4360, opm: 0.1497, roic: 0.1213, incremental_roic: 0.312, nd_to_ebitda: 2.4 },
+      { period_end: "2025-09-30", revenue_ttm: 4200, opm: 0.14, roic: 0.1116, nd_to_ebitda: 2.61, diluted_shares: 100 },
+    ]);
+    expect(rows.map((r) => r.period)).toEqual(["2025-09-30", "2025-12-31"]);
+    expect(rows[0]).toEqual({ period: "2025-09-30", revenue: 4200, opm: 0.14, roic: 0.1116, incremental_roic: null, ccr: null,
+                              shares: 100, nd_ebitda: 2.61, rpo: null }); // prettier-ignore
+    expect(rows[1]?.incremental_roic).toBe(0.312);
+    expect(chartRows([])).toEqual([]);
   });
 });

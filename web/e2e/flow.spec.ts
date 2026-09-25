@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { nextFiling } from "../lib/filing";
+import { OMEGA_THESIS } from "./seed";
 
 // BRIEF §8 M7-01: candidates → company → thesis → journal → review → close with post-mortem; screener save/load;
 // capex membership confirm (the allowlist login is e2e/auth.setup.ts). One seeded world, so the steps run in order.
@@ -32,6 +34,8 @@ test("candidates: dismiss one with a reason, start research on another", async (
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Delta Power Inc.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Research");
   await expect(page.getByText("No card yet")).toBeVisible();
+  // a manual research entry has no validated card, so it can't become a thesis (M7 review R1-F2)
+  await expect(page.getByRole("button", { name: "Accept as thesis" })).toHaveCount(0);
 });
 
 test("company → thesis → journal → review → close with a post-mortem", async ({ page }) => {
@@ -49,6 +53,9 @@ test("company → thesis → journal → review → close with a post-mortem", a
   // the quarter ended 2026-06-30 was filed after the card's pack: the page creates its review (§4.9)
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Review");
   await expect(page.getByText("waiting for a verdict")).toBeVisible();
+  // the pack diff since the card (M7 review R1-F4): the quarter's figures and the kill criteria before -> now
+  await expect(page.getByRole("region", { name: "Figures for review 2026-06-30" })).toContainText("1.16B → 1.22B");
+  await expect(page.getByRole("region", { name: "Kill criteria for review 2026-06-30" })).toContainText("m:revenue_ttm_yoy");
 
   await journalEntry(page, "start_position", "Backlog converts; the price implies 5% growth.");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("week(s) old; the rule is 4");
@@ -61,6 +68,9 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await page.getByRole("button", { name: "Record verdict" }).click();
   await flash(page, "Marked intact.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Position");
+  // the next review is the filing window after the reviewed quarter (M7 review R1-F3)
+  const next = nextFiling("us", "1231", "2026-06-30", new Date().toISOString().slice(0, 10));
+  await expect(page.getByText(`next review ${next?.closes}`)).toBeVisible();
 
   await journalEntry(page, "exit", "The thesis played out.");
   await flash(page, "Journal entry added.");
@@ -75,8 +85,8 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByRole("heading", { name: "Post-mortem" })).toBeVisible();
 
   await page.getByRole("link", { name: "Journal" }).first().click();
-  const entries = page.getByRole("region", { name: "Journal entries" });
-  for (const action of ["start_position", "review", "exit"]) await expect(entries.getByRole("cell", { name: action, exact: true })).toHaveCount(1);
+  const echo = page.getByRole("region", { name: "Journal entries" }).getByRole("row").filter({ hasText: "Echo Grid Corp." });
+  for (const action of ["start_position", "review", "exit"]) await expect(echo.getByRole("cell", { name: action, exact: true })).toHaveCount(1);
   await expect(page.getByText("Backlog converted as expected.")).toBeVisible();
 });
 
@@ -109,3 +119,15 @@ test("capex desk: confirm a membership", async ({ page }) => {
   await flash(page, "Confirmed: power_equipment.");
   await expect(page.getByRole("heading", { name: "Memberships waiting for a decision (0)" })).toBeVisible();
 });
+
+test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-F1)", async ({ page }) => {
+  await page.goto(`/theses/${OMEGA_THESIS}`);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Review");
+  await expect(page.getByText("A kill criterion triggered")).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("m:evidence");
+  await page.getByLabel("intact", { exact: true }).check();
+  await page.getByRole("button", { name: "Record verdict" }).click();
+  await flash(page, "Marked intact.");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Thesis");
+});
+

@@ -38,10 +38,25 @@ export function positionOpen(entries: readonly { action: string; entry_date: str
 }
 
 /** The state after a review verdict (§1.8 Review: intact / weakened / broken). A broken thesis stays in review until
- * it is closed with a post-mortem; otherwise it goes back to position (an open position) or thesis. */
-export function afterVerdict(state: ThesisState, verdict: "intact" | "weakened" | "broken", open: boolean): ThesisState {
-  if (state !== "review" || verdict === "broken") return state;
+ * it is closed with a post-mortem, and so does one with another review still waiting for a verdict (M7 review
+ * R1-F9); otherwise it goes back to position (an open position) or thesis. */
+export function afterVerdict(
+  state: ThesisState,
+  verdict: "intact" | "weakened" | "broken",
+  open: boolean,
+  stillPending = 0,
+): ThesisState {
+  if (state !== "review" || verdict === "broken" || stillPending > 0) return state;
   return open ? "position" : "thesis";
+}
+
+/** Only a card the pipeline wrote and validate.py passed can become a thesis (§1.8: Research is "a card was
+ * generated"; Thesis gets "monitoring, kill criteria and review dates"). A manual research entry has no card, pack
+ * or kill criteria, so it can be dismissed but not accepted (M7 review R1-F2). */
+export function acceptable(t: { state: ThesisState; author: string; card_md: string; validation: unknown }): boolean {
+  const v = t.validation;
+  const valid = typeof v === "object" && v !== null && (v as { ok?: unknown }).ok === true;
+  return t.state === "research" && t.author !== "manual" && t.card_md.trim() !== "" && valid;
 }
 
 /** The theses with those in `moved` shown in Review (lib/data.ts ensureReviews moved them in this render). */

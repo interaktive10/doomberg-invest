@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
+import { ReviewDiff } from "@/components/review-diff";
 import { Empty, Flash, Page, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,8 +12,9 @@ import { thesisWeeks } from "@/lib/discipline";
 import { big, code, num } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
 import type { PackDiff } from "@/lib/reviews";
-import { canMove, markMoved, positionOpen, STATE_LABEL } from "@/lib/theses";
+import { acceptable, canMove, markMoved, positionOpen, STATE_LABEL } from "@/lib/theses";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Theses: the thesis page with the card, kill-criteria status, review history and journal entries, plus the
 // §1.8 moves (accept, dismiss, start a position, review verdicts, close with a post-mortem).
@@ -21,40 +23,8 @@ function Hidden({ id }: { id: string }) {
   return <input type="hidden" name="thesis_id" value={id} />;
 }
 
-function DiffTable({ diff }: { diff: PackDiff }) {
-  return (
-    <Table label="Quarters since the last review">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Quarter</TableHead>
-          <TableHead>Filed</TableHead>
-          <TableHead>Revenue</TableHead>
-          <TableHead>Op. income</TableHead>
-          <TableHead>Net income</TableHead>
-          <TableHead>CFO</TableHead>
-          <TableHead>RPO</TableHead>
-          <TableHead>Diluted shares</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {diff.quarters.map((q) => (
-          <TableRow key={q.period_end}>
-            <TableCell>{q.period_end}</TableCell>
-            <TableCell>{q.filed_at.slice(0, 10)}</TableCell>
-            <TableCell>{big(q.revenue)}</TableCell>
-            <TableCell>{big(q.op_income)}</TableCell>
-            <TableCell>{big(q.net_income)}</TableCell>
-            <TableCell>{big(q.cfo)}</TableCell>
-            <TableCell>{big(q.rpo)}</TableCell>
-            <TableCell>{big(q.diluted_shares)}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
 export default async function ThesisPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Query> }) {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const { id } = await params;
   const q = await searchParams;
   if (!UUID.test(id)) notFound();
@@ -94,10 +64,17 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
       {canMove(t.state, "accept") ? (
         <Section title="Decide" id="decide">
           <div className="flex flex-wrap items-start gap-4">
-            <form action={accept}>
-              <Hidden id={t.id} />
-              <Button type="submit">Accept as thesis</Button>
-            </form>
+            {acceptable(t) ? (
+              <form action={accept}>
+                <Hidden id={t.id} />
+                <Button type="submit">Accept as thesis</Button>
+              </form>
+            ) : (
+              <p className="max-w-md text-sm">
+                Manual research: there is no validated card yet, so this can't become a thesis (a thesis needs the card's
+                kill criteria and review dates). The weekly routine writes cards for the week's shortlist.
+              </p>
+            )}
             <form action={dismissThesis} className="flex flex-wrap items-end gap-2">
               <Hidden id={t.id} />
               <div className="flex flex-col gap-1">
@@ -163,10 +140,10 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
             {revs.map((r) => (
               <li key={r.id} className="rounded-md border border-gray-300 p-3">
                 <div className="mb-2 text-sm font-medium">
-                  Quarter {r.period_end ?? "n/a"} · created {r.created_at.slice(0, 10)}{" "}
+                  {r.period_end ? `Quarter ${r.period_end}` : "A kill criterion triggered"} · created {r.created_at.slice(0, 10)}{" "}
                   {r.verdict ? <Badge variant={r.verdict === "broken" ? "destructive" : r.verdict === "weakened" ? "warning" : "success"}>{r.verdict}</Badge> : <Badge variant="warning">waiting for a verdict</Badge>}
                 </div>
-                {Array.isArray(r.pack_diff.quarters) ? <DiffTable diff={r.pack_diff as unknown as PackDiff} /> : null}
+                <ReviewDiff id={r.period_end ?? r.created_at.slice(0, 10)} diff={r.pack_diff as Partial<PackDiff>} />
                 {r.note ? <p className="mt-2 text-sm">Note: {r.note}</p> : null}
                 {r.verdict === null && pending.length > 0 ? (
                   <form action={decideReview} className="mt-3 flex flex-col gap-2">

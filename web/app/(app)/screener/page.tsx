@@ -9,6 +9,7 @@ import { code, num, pct } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
 import { BUCKETS, FAMILIES, METRICS, SIGNALS, specFromForm, specToQuery, type ScreenSpec } from "@/lib/screener";
 import { deleteScreen, saveScreen } from "./actions";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Screener: a filter builder over fundamentals, signals and context (the screen(spec) RPC, M4), saved screens
 // and a CSV export (personal use).
@@ -23,6 +24,7 @@ function toParams(q: Query): URLSearchParams {
 }
 
 export default async function Screener({ searchParams }: { searchParams: Promise<Query> }) {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
   const saved = await screens();
   const chosen = saved.find((s) => s.id === one(q, "screen"));

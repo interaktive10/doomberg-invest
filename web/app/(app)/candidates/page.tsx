@@ -9,6 +9,7 @@ import { code, num } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
 import { FAMILIES, type ScreenSpec } from "@/lib/screener";
 import { dismiss, research } from "./actions";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Candidates: tabs Candidate · Early · Priced-in · Excluded; filters market, desk, sector, family; columns
 // company, market, Evidence, Gap, families, top signals, red flags, C1–C4; actions open card, research, dismiss.
@@ -27,6 +28,7 @@ function href(q: Record<string, string | undefined>): string {
 }
 
 export default async function Candidates({ searchParams }: { searchParams: Promise<Query> }) {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
   const bucket = (TABS.find(([b]) => b === one(q, "bucket"))?.[0] ?? "candidate") as Bucket;
   const market = one(q, "market") === "us" || one(q, "market") === "in" ? (one(q, "market") as "us" | "in") : undefined;

@@ -10,6 +10,7 @@ import { capexBriefs, capexDeskIds, capexIndex, facts, graphEdges, memberships, 
 import { big, code, num, pct } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
 import { decideMembership } from "./actions";
+import { requireUser } from "@/lib/auth";
 
 // BRIEF §6 Capex Desk: category demand indices; ledger facts; counterparty graph (Cytoscape); cross-border
 // memberships (confirm/reject); brief archive.
@@ -19,6 +20,7 @@ function who(m: Membership): string {
 }
 
 export default async function Capex({ searchParams }: { searchParams: Promise<Query> }) {
+  await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
   const [index, members, ids, edges, briefs] = await Promise.all([capexIndex(), memberships(), capexDeskIds(), graphEdges(400), capexBriefs()]);
   const ledger = await facts(ids, 40);

@@ -170,3 +170,13 @@ def test_the_web_job_migrates_and_seeds_before_the_e2e_suite() -> None:
     doc = yaml.safe_load((WF / "web.yml").read_text(encoding="utf-8"))
     verify = next(s for s in doc["jobs"]["web"]["steps"] if "--only M7-" in str(s.get("run", "")))
     assert verify.get("if") == "always()"
+
+
+def test_the_web_job_runs_when_a_file_its_tests_pin_changes() -> None:
+    """M7 review R1-F14: the web job's parity tests read these files, so a PR that changes one runs them."""
+    doc = yaml.safe_load((WF / "web.yml").read_text(encoding="utf-8"))
+    pinned = ("config/staleness.yaml", "pipeline/screener.py", "docs/BRIEF.md", "config/signals.yaml",
+              "pipeline/signals/weekly.py", "pipeline/thesis/evidence_pack.py", "config/guards.yaml")  # fmt: skip
+    for trigger in ("pull_request", "push"):
+        paths = doc[True][trigger]["paths"]
+        assert all(p in paths for p in pinned), (trigger, [p for p in pinned if p not in paths])
