@@ -107,3 +107,19 @@ def test_adjusted_source_lagging_or_corrected_histories() -> None:
     assert rebased([(d, D("100.4")) for d in FRIDAYS[:19]], fresh) is None  # a dividend re-adjustment
     assert rebased([(d, D(100) if i != 7 else D(200)) for i, d in enumerate(FRIDAYS)], fresh) is None  # a fix
     assert rebased([], fresh) is None and rebased(fresh, fresh) is None
+
+
+def test_adjusted_source_after_a_gap_in_the_stored_history() -> None:
+    """M4 review R2-F2: the stored closes stop at 2026-01-02 (the company left the candidate set) and the download
+    comes back rebased 10:1. The split is dated at the newest week, not the gap's first, so the pre-split counts
+    known so far are all multiplied; when a 10-Q shows the 10x count, the share split takes over (no x100)."""
+    weeks = [date(2025, 10, 3) + timedelta(weeks=i) for i in range(51)]  # to 2026-09-18
+    stored = [(d, D(1200)) for d in weeks if d <= date(2026, 1, 2)]
+    fresh = [(d, D(120)) for d in weeks]
+    split = rebased(stored, fresh)
+    assert split == SourceSplit(date(2026, 9, 18), D(10))
+    counts = [(date(2025, 12, 31), NVDA_SHARES), (date(2026, 3, 31), NVDA_SHARES), (date(2026, 6, 30), NVDA_SHARES)]
+    a = adjust(fresh, counts, [split])
+    assert a.pending == [split] and a.share_factor(date(2026, 6, 30)) == 10  # market cap x10, never x1
+    later = adjust(fresh, [*counts, (date(2026, 9, 30), NVDA_SHARES * 10)], [split])
+    assert later.pending == [] and later.share_factor(date(2025, 12, 31)) == 10

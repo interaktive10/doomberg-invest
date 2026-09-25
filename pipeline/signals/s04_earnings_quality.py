@@ -25,7 +25,7 @@ def compute(ctx: Ctx) -> SignalResult:
         return missing("ttm_net_income" if ni is None else "ttm_cfo")
     if ni <= 0:
         return quiet(reason="net income not positive", ttm_net_income=num(ni))
-    if ni_then is None or cfo_then is None or ni_then <= 0:
+    if not s.year_back_ok(0) or ni_then is None or cfo_then is None or ni_then <= 0:  # a year back (R2-F3)
         return missing("ccr_year_ago", ttm_net_income=num(ni))
     ccr, ccr_then = cfo / ni, cfo_then / ni_then
     sl, sl_then = sloan(s, 0), sloan(s, 4)

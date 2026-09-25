@@ -23,7 +23,7 @@ from typing import Any
 from scipy.optimize import brentq
 
 from pipeline.signals.base import num
-from pipeline.signals.series import ZERO, Series, clip, growth
+from pipeline.signals.series import ZERO, Series, clip
 
 
 @dataclass(frozen=True)
@@ -122,6 +122,12 @@ class C2:
     inputs: dict[str, Any]
 
 
+def latest_revenue_yoy(s: Series) -> Decimal | None:
+    """The latest quarter's revenue YoY, else the TTM's; both need the quarter four back to be a year back."""
+    q = s.quarterly_yoy("revenue", 0)
+    return q if q is not None else s.ttm_yoy("revenue", 0)
+
+
 def c2(s: Series, ev: Decimal | None, market: str, cfg: Mapping[str, Any], g_ob: Decimal | None = None) -> C2:
     """cfg is config/context.yaml `c2_reverse_dcf`."""
     revenue, margin = s.ttm("revenue", 0), five_year_margin(s, cfg)
@@ -135,10 +141,7 @@ def c2(s: Series, ev: Decimal | None, market: str, cfg: Mapping[str, Any], g_ob:
     )  # fmt: skip
     lo, hi = (float(v) for v in cfg["brentq_bounds"])
     g_star = implied_growth(x, lo, hi)
-    latest = s.quarterly_yoy("revenue", 0)
-    if latest is None:
-        latest = growth(s.ttm("revenue", 0), s.ttm("revenue", 4))
-    g_e = evidence_growth(g_ob, revenue_cagr3(s), latest, cfg)
+    g_e = evidence_growth(g_ob, revenue_cagr3(s), latest_revenue_yoy(s), cfg)
     inputs = {"g_star": g_star, "g_e": num(g_e), "margin": x.margin, "s2c": x.s2c, "tax": x.tax, "ev": x.ev,
               "revenue": x.revenue, "discount": x.discount, "terminal_growth": x.terminal_growth}  # fmt: skip
     if g_star is None or g_e is None:
