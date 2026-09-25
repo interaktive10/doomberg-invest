@@ -80,8 +80,9 @@ def describe(market: str, pop: panel.Population | None, left_out: int) -> str:
                 "history, so they aren't applied)")  # fmt: skip
     floor = "" if pop.min_ttm_revenue is None else f" and TTM revenue of at least ${pop.min_ttm_revenue / 10**6:,.0f}M"
     return (f"the §1.3 universe as of each month-end: {left_out} companies with a structural exclusion (SPAC, fund, "
-            f"royalty/grantor trust, foreign private issuer, no listed common stock) are left out, and each month "
-            f"keeps the companies with a 10-K/10-Q filed in the last {pop.filing_days} days{floor}, as known then "
+            f"royalty/grantor trust, foreign private issuer, no listed common stock or no public common equity) are "
+            f"left out, and each month keeps the companies with a 10-K/10-Q filed in the last {pop.filing_days} "
+            f"days{floor}, as known then "
             "(never today's universe flag). Listing status and market cap aren't applied (today's listing would add "
             "survivorship bias; market cap is a candidate-stage rule)")  # fmt: skip
 

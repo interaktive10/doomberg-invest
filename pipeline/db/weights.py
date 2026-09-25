@@ -4,12 +4,15 @@ config/weights.yaml; the weekly scores run calls it too).
 
 config/weights.yaml changes only through a PR with the human-approved label, so the version it carries on main is
 approved. A version is immutable: a Lab proposal's row (its §4.10.5 reasons, approved_by null) is approved only when
-the merged weights equal the proposed ones; an edited proposal must carry a new version (M8 review R2-F3).
+the merged weights equal the proposed ones; an edited proposal must carry a new version (M8 review R2-F3). A run on
+any other branch (a workflow dispatched there: GITHUB_REF) records the version unapproved and approves nothing (M8
+review R3-F1); a run outside Actions (no GITHUB_REF) counts as main.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -27,6 +30,15 @@ INITIAL_VERSION = "w0-equal"
 INITIAL_REASON = "initial weights from config/weights.yaml (BRIEF §1.7: equal; legacy L* at 0)"
 MERGED_BY = "human-approved PR"
 MERGED_REASON = "config/weights.yaml changed through a human-approved PR"
+
+
+DEFAULT_BRANCH_REF = "refs/heads/main"
+
+
+def on_main(ref: str | None = None) -> bool:
+    """Whether this run may approve: on main, or outside Actions."""
+    ref = os.environ.get("GITHUB_REF") if ref is None else ref
+    return not ref or ref == DEFAULT_BRANCH_REF
 
 
 class WeightsMismatch(RuntimeError):
@@ -63,8 +75,14 @@ def record_weights_in_use(conn: psycopg.Connection[Any], w: dict[str, Any]) -> b
     version = str(w["version"])
     weights = {k: v for k, v in w.items() if k != "version"}
     stored = repo.weights_version(conn, version)
+    approve = on_main()
     if stored is None:
         initial = version == INITIAL_VERSION
+        if not approve:  # a branch's weights: recorded, approved only once merged (M8 review R3-F1)
+            ref = os.environ.get("GITHUB_REF", "")
+            row = WeightsVersion(version=version, weights=weights,
+                                 reason=f"config/weights.yaml on {ref}: not merged to main, not approved")  # fmt: skip
+            return repo.insert_weights_version(conn, row)
         return repo.insert_weights_version(
             conn,
             WeightsVersion(
@@ -82,7 +100,7 @@ def record_weights_in_use(conn: psycopg.Connection[Any], w: dict[str, Any]) -> b
             f"({'; '.join(diff[:5])}). A version is immutable: bump `version:` in config/weights.yaml (for example "
             f"{version}-edited) through a human-approved PR."
         )
-    if stored.approved_by is None:
+    if stored.approved_by is None and approve:
         repo.approve_weights_version(conn, version, MERGED_BY)
     return False
 

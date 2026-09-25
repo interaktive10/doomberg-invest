@@ -179,3 +179,20 @@ def test_the_weekly_run_records_the_weights_version_before_scoring(conn: psycopg
     with pytest.raises(WeightsMismatch, match="bump"):
         weekly.run(conn, nxt, http=None)
     assert conn.execute("select count(*) from scores where week_end = %s", (nxt,)).fetchone() == (0,)
+
+
+def test_a_run_off_main_never_approves_weights(conn: psycopg.Connection[Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    """M8 review R3-F1: a weekly or quarterly run dispatched on another branch (the Lab's weights PR branch) records
+    the version that branch carries, unapproved; only a run on main approves it."""
+    w = yaml.safe_load((ROOT / "config" / "weights.yaml").read_text(encoding="utf-8"))
+    proposal = {**w, "version": "lab-2026-10-20T120000Z", "signals": {**w["signals"], "S3": 1.5}}
+    sql = "select approved_by, approved_at from weights_versions where version = %s"
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/lab/weights-x")
+    assert record_weights_in_use(conn, proposal) is True
+    assert conn.execute(sql, (proposal["version"],)).fetchone() == (None, None)
+    assert record_weights_in_use(conn, proposal) is False  # again on the branch: still not approved
+    assert conn.execute(sql, (proposal["version"],)).fetchone() == (None, None)
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")  # merged: the run on main approves it
+    assert record_weights_in_use(conn, proposal) is False
+    by, at = conn.execute(sql, (proposal["version"],)).fetchone() or (None, None)
+    assert by == MERGED_BY and at is not None

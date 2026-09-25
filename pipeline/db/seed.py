@@ -96,9 +96,10 @@ def seed(conn: psycopg.Connection[Any], root: Path = REPO_ROOT) -> SeedReport:
         in_out = repo.mark_missing_out_of_universe(
             conn, "in", [c.nse_symbol for c in india if c.nse_symbol], repo.SNAPSHOT_OUT["in"]
         )
-        w: dict[str, Any] = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
-        inserted = record_weights_in_use(conn, w)
         repo.ensure_sources(conn, SOURCES)
+    w: dict[str, Any] = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
+    with conn.transaction():  # apart: a weights mismatch doesn't undo the universe rebuild (M8 review R3 idea)
+        inserted = record_weights_in_use(conn, w)
     return SeedReport(
         us=len(us),
         india=len(india),
