@@ -247,7 +247,7 @@ _PIT_ORM = re.compile(r"""\.(?:from_?|table)\(\s*['"](""" + _PIT_NAMES + r""")['
 _PIT_LITERAL = re.compile(r"""(['"])(""" + _PIT_NAMES + r""")\1""", re.IGNORECASE)
 PIT_LITERAL_OK = frozenset({PIT_OWNER, "scripts/guard.py"})
 _PIT_LITERAL_WHERE = {
-    "pipeline/db/repo.py": re.compile(r"_insert\(\s*$"),
+    "pipeline/db/repo.py": re.compile(r"(?<![\w.])_insert\(\s*$"),  # the _insert() helper itself (review R3-F3)
     "pipeline/db/size_guard.py": re.compile(
         r"(?:_measure\(\s*conn,\s*|TableProjection\(\s*|_PROBE_TABLES\s*=\s*\([^)]*)$"
     ),
@@ -262,7 +262,8 @@ def _literal_allowed(rel: str, text: str, m: re.Match[str]) -> bool:
     if where is None:
         return False
     if rel == "pipeline/db/size_guard.py" and re.match(r"\s*:", text[m.end() :]):
-        return True  # a key of the probe samples
+        start = text.find("_SAMPLES: dict[str, str] = {")  # a key of the probe samples, inside their literal only
+        return 0 <= start < m.start() < text.find("\n}", start)
     return where.search(text[: m.start()]) is not None
 
 

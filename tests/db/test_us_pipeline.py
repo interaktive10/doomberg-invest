@@ -102,6 +102,20 @@ def test_write_company_replaces_versions_it_no_longer_produces(conn: psycopg.Con
     assert _value(conn, cid, date(2015, 12, 31), "revenue", date(2016, 3, 2)) == Decimal(11030000000)
 
 
+def test_prune_with_nothing_to_keep_deletes_nothing(conn: psycopg.Connection[Any]) -> None:
+    """Review R3 idea: a company whose facts gave no rows keeps its stored versions."""
+    cid = _load(conn, "0000018230", "CATERPILLAR INC")
+    before = conn.execute("select count(*) from fundamentals_q where company_id = %s", (cid,)).fetchone()
+    assert repo.prune_fundamentals(conn, cid, [], date(2011, 1, 1)) == 0
+    assert conn.execute("select count(*) from fundamentals_q where company_id = %s", (cid,)).fetchone() == before
+
+
+def test_the_display_view_carries_the_amendment_link(conn: psycopg.Connection[Any]) -> None:
+    """Review R3 idea: the web reads insider events through insider_events_display_v, which shows `amends`."""
+    cols = conn.execute("select * from insider_events_display_v limit 0").description or []
+    assert "amends" in [c.name for c in cols]
+
+
 def test_derived_quarters_wait_for_a_consistent_vintage(conn: psycopg.Connection[Any]) -> None:
     """Review F3: Apple's FY2017 Q2 CFO. The FY2018 Q1 10-Q (2018-02-02) restated Q1 FY2017; YTD6 minus that
     restated Q1 (12,345M) was never reported by any filing. The FY2018 Q2 10-Q (2018-05-02) restated YTD6 too:

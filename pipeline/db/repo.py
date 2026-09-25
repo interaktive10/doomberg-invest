@@ -282,7 +282,10 @@ def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow], fill_only: 
 
 def prune_fundamentals(conn: Conn, company_id: UUID, keep: Sequence[tuple[date, datetime]], min_period: date) -> int:
     """Delete the company's fundamentals_q versions not in `keep` (period_end, filed_at) and quarters before
-    `min_period` (migration 0004; review F10). Called right after the company's rows are rewritten."""
+    `min_period` (migration 0004; review F10). Called right after the company's rows are rewritten. An empty `keep`
+    prunes nothing: a company whose facts gave no rows keeps what it had (review R3 idea)."""
+    if not keep:
+        return 0
     payload = Jsonb([[p.isoformat(), t.isoformat()] for p, t in keep])
     row = conn.execute(_q("select prune_fundamentals(%s, %s, %s)"), (company_id, payload, min_period)).fetchone()
     return int(row[0]) if row and row[0] is not None else 0

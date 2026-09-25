@@ -116,3 +116,6 @@ def test_partial_ttm_puts_a_new_registrant_in_the_universe() -> None:
     ttm, partial = ttm_revenue(rows)
     assert partial and ttm is not None and ttm >= RULES.min_ttm_revenue_usd
     assert decide(s, ttm, RULES, cutoff.date()).in_universe
+    # review R3-F1: that is the quarter GE Vernova reported (Q1 2024, 7,260M), not its 2023 comparative (6,822M)
+    q1 = {r.period_end: r for r in rows}[date(2024, 3, 31)]
+    assert (q1.fiscal_label, q1.values["revenue"], ttm) == ("FY2024Q1", Decimal(7_260_000_000), Decimal(7_260_000_000))

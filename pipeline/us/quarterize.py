@@ -13,7 +13,9 @@
 Point in time: every fact carries its filing's acceptance time. Rows are rebuilt at each acceptance time using only
 facts accepted by then, and a quarter gets a new row (with that filed_at) whenever any of its values changes. A
 restatement is therefore a new row with a later filed_at; the old row stays. The fiscal calendar (quarter end dates)
-is derived from all filings: dates, never values, so it cannot leak a number into the past.
+is derived from the filings given: dates, never values, so it cannot leak a number into the past. Before a filer's
+first 10-K (a spin-off or an IPO), its years come from the 10-Qs' year-to-date periods, which give the same quarter
+ends the 10-K later does, so the rows written meanwhile are the ones a full-history run writes (review R3-F1).
 Vintages: a derived value (YTD difference, Q4) is recomputed only when the larger period's value comes from a filing
 at least as recent as every value subtracted from it; while a later filing has restated a subtracted quarter but
 not yet the year, the last consistent value is kept (and the reason logged).
@@ -104,11 +106,34 @@ def _quarter_ends(start: date, end: date | None, durations: Mapping[tuple[date, 
             e = None  # outside a closed year (bad data)
         ends.append(e)
         cur = e + timedelta(days=1) if e else None
+    ends.append(end)
+    for k in (2, 1, 0):  # a quarter never reported ends the day before the next quarter's 3-month period (R3-F1)
+        nxt = ends[k + 1]
+        if ends[k] is None and nxt is not None:
+            s = _pick((s2, n) for (s2, e2), n in durations.items() if e2 == nxt and _in((e2 - s2).days, QUARTER_DAYS))
+            if s is not None and s > start:
+                ends[k] = s - timedelta(days=1)
     return (ends[0], ends[1], ends[2], end)
 
 
+def _registrant_starts(durations: Mapping[tuple[date, date], int]) -> list[date]:
+    """Year starts of a filer with no 10-K yet (review R3-F1): the starts of its 10-Qs' year-to-date periods (6 and 9
+    months, this year's and the prior-year comparatives); with only first-quarter reports, the starts of their
+    3-month periods. Starts closer than 300 days to the previous one are stray periods, not years."""
+    starts = sorted({s for s, e in durations if _in((e - s).days, HALF_DAYS) or _in((e - s).days, NINE_DAYS)})
+    if not starts:
+        starts = sorted({s for s, e in durations if _in((e - s).days, QUARTER_DAYS)})
+    out: list[date] = []
+    for s in starts:
+        if not out or (s - out[-1]).days >= 300:
+            out.append(s)
+    return out
+
+
 def fiscal_years(facts: Sequence[Fact]) -> list[FiscalYear]:
-    """Fiscal years from annual 10-K durations; the year after the last one is open (in progress)."""
+    """Fiscal years from annual 10-K durations; the year after the last one is open (in progress). A new registrant
+    (no 10-K yet) gets its years from the 10-Qs' year-to-date periods: its reported quarters and their prior-year
+    comparatives land in their own years, with the quarter ends a later 10-K gives them."""
     durations = Counter((f.start, f.end) for f in facts if f.start is not None)
     by_end: dict[date, dict[date, int]] = defaultdict(lambda: defaultdict(int))
     for f in facts:
@@ -125,10 +150,11 @@ def fiscal_years(facts: Sequence[Fact]) -> list[FiscalYear]:
         nxt = years[-1][1] + timedelta(days=1)
         if any(s == nxt for s, _ in durations):
             out.append(FiscalYear(nxt, None, _quarter_ends(nxt, None, durations)))
-    else:  # no 10-K yet (new registrant): anchor on the earliest 3-month period
-        starts = sorted(s for s, e in durations if _in((e - s).days, QUARTER_DAYS))
-        if starts:
-            out.append(FiscalYear(starts[0], None, _quarter_ends(starts[0], None, durations)))
+    else:  # no 10-K yet (a new registrant): each year ends the day before the next one starts; the last is open
+        starts = _registrant_starts(durations)
+        for i, first in enumerate(starts):
+            last = starts[i + 1] - timedelta(days=1) if i + 1 < len(starts) else None
+            out.append(FiscalYear(first, last, _quarter_ends(first, last, durations)))
     return out
 
 
@@ -240,7 +266,7 @@ def _year_values(
     for k in range(1, 5):
         e = ends[k - 1]
         if e is not None:
-            out[e] = {}
+            out[e] = dict.fromkeys(columns)  # every column, so a quarter end learned later adds no empty version
 
     def keep(e: date, c: str) -> Decimal | None:
         issues.add(Issue(e, c, MIXED))
