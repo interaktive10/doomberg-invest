@@ -80,3 +80,18 @@ def test_capex_desk_8k_items_are_queued_for_text() -> None:
     assert t.primary_doc_url == "https://www.sec.gov/Archives/edgar/data/1996810/000119312524084048/d807682d8k.htm"
     assert t.accepted_at == datetime(2024, 4, 2, 10, 58, 4, tzinfo=UTC)
     assert filing_events(gev, {"0001193125-24-084048"}, capex_desk=False) == ([], [])
+
+
+def test_published_days_and_catch_up_planning() -> None:
+    """Review F2: the daily run reads the quarter's listing and processes every published day it hasn't done."""
+    from pipeline.us.events import days_to_process, published_days, quarter_listing_url, quarters_between
+
+    listing = json.loads((FIX / "events" / "daily-index-2025-QTR1.json").read_text(encoding="utf-8"))
+    days = published_days(listing)
+    assert days == [date(2025, 2, 28), date(2025, 3, 3), date(2025, 3, 4)]  # company/form/crawler/sitemap ignored
+    assert days_to_process(days, None) == days  # a first run takes the latest three
+    assert days_to_process(days, date(2025, 3, 3)) == [date(2025, 3, 4)]
+    assert days_to_process(days, date(2025, 3, 4)) == []  # 03-05 isn't published yet: nothing is skipped for good
+    assert quarter_listing_url(date(2025, 3, 4)).endswith("/daily-index/2025/QTR1/index.json")
+    assert quarters_between(date(2024, 12, 30), date(2025, 1, 2)) == [date(2024, 10, 1), date(2025, 1, 1)]
+    assert quarters_between(date(2025, 2, 1), date(2025, 3, 4)) == [date(2025, 1, 1)]

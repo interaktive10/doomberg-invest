@@ -46,31 +46,71 @@ def mock_client(tmp_path: Path) -> HttpClient:
 # ---------------------------------------------------------------- M2-02
 
 
-def test_restatement_is_a_new_row_and_as_of_returns_the_right_version(conn: psycopg.Connection[Any]) -> None:
-    """Apple's FY2017 Q2 (ended 2017-04-01) CFO: first derivable from the FY2018 Q1 10-Q's comparative (12,345M),
-    restated by the FY2018 Q2 10-Q on 2018-05-02 (12,570M). Both rows stay."""
-    cid = add(conn, "0000320193", "Apple Inc.")
-    cf = json.loads((FIX / "companyfacts" / "CIK0000320193.json").read_text(encoding="utf-8"))
-    subs = parse_submissions(json.loads((FIX / "submissions" / "CIK0000320193.json").read_text(encoding="utf-8")))
+def _load(conn: psycopg.Connection[Any], cik: str, name: str) -> uuid.UUID:
+    cid = add(conn, cik, name)
+    cf = json.loads((FIX / "companyfacts" / f"CIK{cik}.json").read_text(encoding="utf-8"))
+    subs = parse_submissions(json.loads((FIX / "submissions" / f"CIK{cik}.json").read_text(encoding="utf-8")))
     result = quarterize_company(cf, subs, load_xbrl_map(), date(2026, 9, 20))
     assert write_company(conn, cid, result) == len(result.rows)
+    return cid
+
+
+def _value(conn: psycopg.Connection[Any], cid: uuid.UUID, q: date, col: str, w: date) -> Decimal | None | str:
+    rows = [r for r in as_of(w).fundamentals(conn, [cid]) if r.period_end == q]
+    return getattr(rows[0], col) if rows else "no row"
+
+
+def test_restatement_is_a_new_row_and_as_of_returns_the_right_version(conn: psycopg.Connection[Any]) -> None:
+    """CAT's FY2015 Q4 operating income: -114M from the FY2015 10-K (2016-02-16), restated to -175M by the FY2016
+    10-K (2017-02-15). Both rows stay; as_of returns the one known at the time."""
+    cid = _load(conn, "0000018230", "CATERPILLAR INC")
+    q = date(2015, 12, 31)
+    assert _value(conn, cid, q, "op_income", date(2016, 2, 15)) == "no row"
+    assert _value(conn, cid, q, "op_income", date(2016, 2, 16)) == Decimal(-114000000)
+    assert _value(conn, cid, q, "op_income", date(2017, 2, 14)) == Decimal(-114000000)
+    assert _value(conn, cid, q, "op_income", date(2017, 2, 15)) == Decimal(-175000000)
+    n = conn.execute("select count(*) from fundamentals_q where company_id = %s and period_end = %s", (cid, q))
+    assert n.fetchone() == (4,)  # 2016-02-16, 2016-05-02 (total assets), 2017-02-15, 2019-02-14 (cash)
+    result = quarterize_company(json.loads((FIX / "companyfacts" / "CIK0000018230.json").read_text(encoding="utf-8")),
+                                parse_submissions(json.loads((FIX / "submissions" / "CIK0000018230.json").read_text(
+                                    encoding="utf-8"))), load_xbrl_map(), date(2026, 9, 20))  # fmt: skip
+    write_company(conn, cid, result)  # a re-run rewrites the same versions
+    n = conn.execute("select count(*) from fundamentals_q where company_id = %s and period_end = %s", (cid, q))
+    assert n.fetchone() == (4,)
+
+
+def test_rewriting_a_company_prunes_stale_versions(conn: psycopg.Connection[Any]) -> None:
+    """Review F10: versions the current code no longer produces, and quarters outside the 60-quarter window, go."""
+    from datetime import UTC, datetime
+
+    from pipeline.db.models import FundamentalsRow
+
+    cid = _load(conn, "0000018230", "CATERPILLAR INC")
+    before = conn.execute("select count(*) from fundamentals_q where company_id = %s", (cid,)).fetchone()
+    stale = [
+        FundamentalsRow(company_id=cid, period_end=date(2015, 12, 31), fiscal_label="FY2015Q4",
+                        filed_at=datetime(2016, 3, 1, tzinfo=UTC), revenue=Decimal(1), currency="USD",
+                        source="sec_xbrl"),  # a version an older code produced
+        FundamentalsRow(company_id=cid, period_end=date(2009, 12, 31), fiscal_label="FY2009Q4",
+                        filed_at=datetime(2010, 2, 20, tzinfo=UTC), revenue=Decimal(1), currency="USD",
+                        source="sec_xbrl"),  # outside the 60-quarter window
+    ]  # fmt: skip
+    repo.insert_fundamentals(conn, stale)
+    _load(conn, "0000018230", "CATERPILLAR INC")  # the weekly run rewrites the company
+    after = conn.execute("select count(*) from fundamentals_q where company_id = %s", (cid,)).fetchone()
+    assert after == before
+    assert _value(conn, cid, date(2015, 12, 31), "revenue", date(2016, 3, 2)) == Decimal(11030000000)
+
+
+def test_derived_quarters_wait_for_a_consistent_vintage(conn: psycopg.Connection[Any]) -> None:
+    """Review F3: Apple's FY2017 Q2 CFO. The FY2018 Q1 10-Q (2018-02-02) restated Q1 FY2017; YTD6 minus that
+    restated Q1 (12,345M) was never reported by any filing. The FY2018 Q2 10-Q (2018-05-02) restated YTD6 too:
+    12,570M."""
+    cid = _load(conn, "0000320193", "Apple Inc.")
     q = date(2017, 4, 1)
-
-    def cfo(w: date) -> Decimal | None:
-        rows = [r for r in as_of(w).fundamentals(conn, [cid]) if r.period_end == q]
-        return rows[0].cfo if rows else None
-
-    assert cfo(date(2017, 5, 2)) is None  # the 10-Q was accepted 2017-05-03: nothing yet
-    first = [r for r in as_of(date(2017, 5, 3)).fundamentals(conn, [cid]) if r.period_end == q]
-    assert first[0].revenue == Decimal(52896000000) and first[0].cfo is None and first[0].fiscal_label == "FY2017Q2"
-    assert cfo(date(2018, 3, 1)) == Decimal(12345000000)
-    assert cfo(date(2018, 5, 1)) == Decimal(12345000000)
-    assert cfo(date(2018, 5, 2)) == Decimal(12570000000)  # accepted 2018-05-02 20:32:12Z
-    n = conn.execute("select count(*) from fundamentals_q where company_id = %s and period_end = %s", (cid, q))
-    assert n.fetchone() == (3,)
-    assert write_company(conn, cid, result) == len(result.rows)  # a re-run rewrites the same versions
-    n = conn.execute("select count(*) from fundamentals_q where company_id = %s and period_end = %s", (cid, q))
-    assert n.fetchone() == (3,)
+    assert _value(conn, cid, q, "revenue", date(2017, 5, 3)) == Decimal(52896000000)
+    assert _value(conn, cid, q, "cfo", date(2018, 3, 1)) is None
+    assert _value(conn, cid, q, "cfo", date(2018, 5, 2)) == Decimal(12570000000)
 
 
 # ---------------------------------------------------------------- M2-04
@@ -120,6 +160,24 @@ def test_daily_run_stores_purchases_late_filings_and_auditor_changes(
     run_daily(conn, client, date(2025, 3, 3), state)  # re-run: no duplicates
     assert len(as_of(date(2025, 3, 5)).insider_events(conn, [ids["0000886744"]])) == 3
     assert len(as_of(date(2025, 3, 5)).corp_events(conn, list(ids.values()))) == 4
+
+
+def test_catch_up_processes_every_published_day_once(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """Review F2: yesterday's index is often published after the 01:30 UTC run; catch-up reads it the next day."""
+    from pipeline.us.daily import load_last_day, run_catch_up, save_last_day
+    from pipeline.us.events import quarter_listing_url
+
+    add(conn, "0000886744", "GERON CORP")
+    client = daily_client(tmp_path)
+    client.register_mock(
+        quarter_listing_url(date(2025, 3, 1)), (FIX / "events" / "daily-index-2025-QTR1.json").read_bytes()
+    )
+    day_state, pending = tmp_path / "day.json", tmp_path / "pending.json"
+    save_last_day(day_state, date(2025, 2, 28))
+    stats = run_catch_up(conn, client, date(2025, 3, 5), pending, day_state)
+    assert [s.day for s in stats] == ["2025-03-03", "2025-03-04"] and stats[0].purchases == 3
+    assert load_last_day(day_state) == date(2025, 3, 4)
+    assert run_catch_up(conn, client, date(2025, 3, 5), pending, day_state) == []  # nothing new until 03-05 is listed
 
 
 def test_companies_outside_the_universe_are_ignored(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
@@ -195,9 +253,12 @@ def test_weekly_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Path) -> No
     ids = {cik: add(conn, cik, name) for cik, name in F_US.items()}
     cf, subs, state = JsonSource(FIX / "companyfacts"), JsonSource(FIX / "submissions"), tmp_path / "state.json"
     t0 = time.monotonic()
-    stats = run_weekly(conn, cf, subs, date(2026, 9, 20), state)
+    stats = run_weekly(conn, cf, subs, date(2026, 9, 20), state, issues_path=tmp_path / "issues.csv")
     assert time.monotonic() - t0 < 600  # BRIEF M2-06: < 10 min in CI
     assert (stats.companies, stats.quarterized, stats.errors, stats.in_universe) == (8, 8, [], 8)
+    logged = (tmp_path / "issues.csv").read_text(encoding="utf-8").splitlines()
+    assert logged[0] == "cik,period_end,column,reason" and len(logged) - 1 == stats.issues > 20  # review F8: all
+    assert sum(stats.issue_counts.values()) == stats.issues
     n_rows = conn.execute("select count(*) from fundamentals_q").fetchone()
     assert n_rows is not None and n_rows[0] == stats.rows > 8 * 40
     again = run_weekly(conn, cf, subs, date(2026, 9, 20), state)  # unchanged files: nothing re-quarterized

@@ -14,6 +14,9 @@ Point in time: every fact carries its filing's acceptance time. Rows are rebuilt
 facts accepted by then, and a quarter gets a new row (with that filed_at) whenever any of its values changes. A
 restatement is therefore a new row with a later filed_at; the old row stays. The fiscal calendar (quarter end dates)
 is derived from all filings: dates, never values, so it cannot leak a number into the past.
+Vintages: a derived value (YTD difference, Q4) is recomputed only when the larger period's value comes from a filing
+at least as recent as every value subtracted from it; while a later filing has restated a subtracted quarter but
+not yet the year, the last consistent value is kept (and the reason logged).
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ YEAR_DAYS = (350, 380)
 Q4_MAX_MULTIPLE = Decimal(3)
 
 Key = tuple[str, date, date]  # ("D", start, end) | ("I", end, end) | ("C", report_end, report_end)
+Timed = tuple[Decimal, datetime]  # a value and the acceptance time of the filing(s) it came from
 QuarterEnds = tuple[date | None, date | None, date | None, date | None]
 
 
@@ -152,21 +156,22 @@ def _trailing_zeros(v: Decimal) -> int:
 
 
 class _State:
-    """Latest value per (column, key, alternative, part) as of the facts applied so far. The effective value is the
-    lowest-ranked alternative whose required part (0) is present, summed over its parts. A later value that only
-    differs by rounding keeps the more precise of the two (no spurious restatement)."""
+    """Latest value per (column, key, alternative, part) as of the facts applied so far, with the acceptance time
+    of the filing it came from. The effective value is the lowest-ranked alternative whose required part (0) is
+    present, summed over its parts; its time is the latest of those parts'. A later value that only differs by
+    rounding keeps the more precise of the two and the earlier time (not a restatement)."""
 
     def __init__(self) -> None:
-        self._by: dict[tuple[str, Key], dict[tuple[int, int], Decimal]] = {}
+        self._by: dict[tuple[str, Key], dict[tuple[int, int], tuple[Decimal, datetime]]] = {}
 
-    def apply(self, column: str, key: Key, rank: int, part: int, val: Decimal) -> None:
+    def apply(self, column: str, key: Key, rank: int, part: int, val: Decimal, t: datetime) -> None:
         parts = self._by.setdefault((column, key), {})
         old = parts.get((rank, part))
-        if old is not None and rounding_equal(old, val):
-            val = old if _trailing_zeros(old) <= _trailing_zeros(val) else val
-        parts[(rank, part)] = val
+        if old is not None and rounding_equal(old[0], val):
+            val, t = (old[0] if _trailing_zeros(old[0]) <= _trailing_zeros(val) else val), old[1]
+        parts[(rank, part)] = (val, t)
 
-    def get(self, column: str, key: Key) -> Decimal | None:
+    def get_t(self, column: str, key: Key) -> Timed | None:
         parts = self._by.get((column, key))
         if not parts:
             return None
@@ -174,7 +179,12 @@ class _State:
         if not ranks:
             return None
         best = min(ranks)
-        return sum((v for (r, _), v in parts.items() if r == best), Decimal(0))
+        chosen = [vt for (r, _), vt in parts.items() if r == best]
+        return sum((v for v, _ in chosen), Decimal(0)), max(t for _, t in chosen)
+
+    def get(self, column: str, key: Key) -> Decimal | None:
+        vt = self.get_t(column, key)
+        return None if vt is None else vt[0]
 
 
 def _key(f: Fact, report_end: Mapping[str, date]) -> Key | None:
@@ -192,8 +202,22 @@ def _q4_check(q4: Decimal, q: list[Decimal]) -> bool:
     return abs(q4) <= Q4_MAX_MULTIPLE * mean_abs
 
 
+def _consistent(minuend: Timed, subtrahends: Sequence[Timed]) -> bool:
+    """A derived value (YTD difference, Q4 = FY - Q1..Q3) is only computed when the larger period comes from a
+    filing at least as recent as every value subtracted from it. Otherwise a restated quarter would be subtracted
+    from an unrestated year, giving a number no filing reported (review F3)."""
+    return all(minuend[1] >= t for _, t in subtrahends)
+
+
+MIXED = "inputs from different vintages (a later filing restated a subtracted period); kept the last consistent value"
+
+
 def _year_values(
-    st: _State, fy: FiscalYear, columns: Sequence[str], issues: set[Issue]
+    st: _State,
+    fy: FiscalYear,
+    columns: Sequence[str],
+    issues: set[Issue],
+    last: Mapping[date, Mapping[str, Decimal | None]],
 ) -> dict[date, dict[str, Decimal | None]]:
     out: dict[date, dict[str, Decimal | None]] = {}
     ends = fy.quarter_ends
@@ -201,6 +225,11 @@ def _year_values(
         e = ends[k - 1]
         if e is not None:
             out[e] = {}
+
+    def keep(e: date, c: str) -> Decimal | None:
+        issues.add(Issue(e, c, MIXED))
+        return last.get(e, {}).get(c)
+
     for c in columns:
         kind = COLUMN_KIND[c]
         if kind in (Kind.INSTANT, Kind.COVER):
@@ -208,25 +237,34 @@ def _year_values(
             for e in out:
                 out[e][c] = st.get(c, (tag, e, e))
             continue
-        q: dict[int, Decimal | None] = {}
+        q: dict[int, Timed | None] = {}
         for k in (1, 2, 3):
             e, s = ends[k - 1], fy.quarter_start(k)
             if e is None or s is None:
                 q[k] = None
                 continue
-            direct = st.get(c, ("D", s, e))
+            direct = st.get_t(c, ("D", s, e))
             if direct is None and kind is Kind.FLOW and k > 1:
-                ytd, prev_ytd = st.get(c, ("D", fy.start, e)), None
+                ytd = st.get_t(c, ("D", fy.start, e))
+                prev: Timed | None = None
                 pe = ends[k - 2]
+                subtrahends: list[Timed] = []
                 if pe is not None:
-                    prev_ytd = st.get(c, ("D", fy.start, pe)) if k > 2 else q.get(1)
-                if prev_ytd is None:
+                    prev = st.get_t(c, ("D", fy.start, pe)) if k > 2 else q.get(1)
+                    subtrahends = [prev] if prev is not None else []
+                if prev is None:
                     known = [q.get(j) for j in range(1, k)]
                     if all(v is not None for v in known):
-                        prev_ytd = sum((v for v in known if v is not None), Decimal(0))
-                direct = ytd - prev_ytd if ytd is not None and prev_ytd is not None else None
+                        subtrahends = [v for v in known if v is not None]
+                        prev = (sum((v for v, _ in subtrahends), Decimal(0)), max(t for _, t in subtrahends))
+                if ytd is not None and prev is not None:
+                    if _consistent(ytd, subtrahends):
+                        direct = (ytd[0] - prev[0], ytd[1])
+                    else:
+                        kept = keep(e, c)
+                        direct = None if kept is None else (kept, ytd[1])
             q[k] = direct
-            out[e][c] = direct
+            out[e][c] = None if direct is None else direct[0]
         e4, s4 = ends[3], fy.quarter_start(4)
         if e4 is None or s4 is None:
             continue
@@ -234,17 +272,21 @@ def _year_values(
         if direct4 is not None:
             out[e4][c] = direct4
             continue
-        annual = st.get(c, ("D", fy.start, e4))
+        annual = st.get_t(c, ("D", fy.start, e4))
         q123 = [q.get(1), q.get(2), q.get(3)]
         if annual is None or any(v is None for v in q123):
             out[e4][c] = None
             continue
-        parts: list[Decimal] = [v for v in q123 if v is not None]
-        if kind is Kind.AVERAGE and not all(annual / 2 <= v <= annual * 2 for v in parts):
+        timed: list[Timed] = [v for v in q123 if v is not None]
+        parts = [v for v, _ in timed]
+        if not _consistent(annual, timed):
+            out[e4][c] = keep(e4, c)
+            continue
+        if kind is Kind.AVERAGE and not all(annual[0] / 2 <= v <= annual[0] * 2 for v in parts):
             out[e4][c] = None  # a split restated some periods but not others: the bases don't match
             issues.add(Issue(e4, c, "Q1-Q3 and FY share counts are on different bases (split?); Q4 left null"))
             continue
-        q4 = annual - sum(parts) if kind is Kind.FLOW else Decimal(4) * annual - sum(parts)
+        q4 = annual[0] - sum(parts) if kind is Kind.FLOW else Decimal(4) * annual[0] - sum(parts)
         if _q4_check(q4, parts):
             out[e4][c] = q4
         else:
@@ -302,11 +344,11 @@ def quarterize(
             key = _key(f, report_end)
             if key is None:
                 continue
-            st.apply(f.column, key, f.rank, f.part, f.val)
+            st.apply(f.column, key, f.rank, f.part, f.val, f.filed_at)
             touched.update(i for i, fy in enumerate(years) if fy.contains(key[2]))
         for i in sorted(touched):
             fy = years[i]
-            for e, vals in sorted(_year_values(st, fy, cols, issues).items()):
+            for e, vals in sorted(_year_values(st, fy, cols, issues, last).items()):
                 if all(v is None for v in vals.values()) or last.get(e) == vals:
                     continue
                 last[e] = vals
@@ -314,3 +356,24 @@ def quarterize(
                 rows.append(QuarterRow(e, f"FY{labels[i]}Q{n}", t, dict(vals)))
     rows.sort(key=lambda r: (r.period_end, r.filed_at))
     return rows, sorted(issues, key=lambda i: (i.period_end, i.column))
+
+
+def ttm_revenue(rows: Sequence[QuarterRow]) -> tuple[Decimal | None, bool]:
+    """TTM revenue for the universe rule (§1.3 "TTM revenue ≥ $50M"), from the latest version of each quarter: the
+    sum of the last 4 quarters; with fewer known quarters in the last 12 months (a spin-off, an IPO, or a quarter
+    left null by a sanity check), the known ones annualized (sum x 4 / n), flagged by the bool. Otherwise a new
+    registrant stays out until its fourth quarter (review F5: GE Vernova for ~10 months of S10's 18-month window).
+    Signals compute their own TTM values (M4)."""
+    latest = {r.period_end: r for r in rows}
+    if not latest:
+        return None, False
+    ends = sorted(latest)
+    last4 = ends[-4:]
+    vals = [latest[e].values.get("revenue") for e in last4]
+    if len(last4) == 4 and all(v is not None for v in vals) and (last4[-1] - last4[0]).days <= 300:
+        return sum((v for v in vals if v is not None), Decimal(0)), False
+    recent = [latest[e].values.get("revenue") for e in ends if (ends[-1] - e).days < 300]
+    known = [v for v in recent if v is not None]
+    if not known or len(known) >= 4:
+        return None, False
+    return sum(known, Decimal(0)) * 4 / len(known), True

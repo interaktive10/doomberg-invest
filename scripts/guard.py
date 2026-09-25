@@ -233,19 +233,35 @@ def check_identifiers(rel: str, text: str, cfg: GuardConfig) -> list[Violation]:
     return out
 
 
-_PIT_SQL = re.compile(r"\b(?:from|join)\s+(?:public\.)?\"?(" + "|".join(PIT_TABLES) + r")\b", re.IGNORECASE)
-_PIT_ORM = re.compile(r"""\.(?:from|table)\(\s*['"](""" + "|".join(PIT_TABLES) + r""")['"]""")
+_PIT_NAMES = "|".join(PIT_TABLES)
+# Matched over the whole file (\s+ spans newlines, so SQL split across lines is caught): FROM/JOIN, psql's TABLE,
+# COPY (to or from), DELETE ... USING, with optional ONLY / schema / quotes; ORM .from( / .from_( / .table(.
+_PIT_SQL = re.compile(
+    r"\b(?:from|join|table|copy|using)\s+(?:only\s+)?(?:public\s*\.\s*)?\"?(" + _PIT_NAMES + r")\b", re.IGNORECASE
+)
+_PIT_ORM = re.compile(r"""\.(?:from_?|table)\(\s*['"](""" + _PIT_NAMES + r""")['"]""")
+# A table name used as a string value (f-strings, concatenation, variables) can build any read, so it's only allowed
+# in the modules that write or size these tables (and in this guard's own list).
+_PIT_LITERAL = re.compile(r"""(['"])(""" + _PIT_NAMES + r""")\1""")
+PIT_LITERAL_OK = frozenset({PIT_OWNER, "pipeline/db/repo.py", "pipeline/db/size_guard.py", "scripts/guard.py"})
 
 
 def check_pit(rel: str, text: str) -> list[Violation]:
     if rel == PIT_OWNER or rel.startswith("db/migrations/"):
         return []
-    out: list[Violation] = []
-    for i, line in enumerate(text.splitlines(), 1):
-        m = _PIT_SQL.search(line) or _PIT_ORM.search(line)
-        if m:
-            out.append(Violation(rel, i, "PIT_READ", f"direct read of {m.group(1)} outside {PIT_OWNER} (use as_of())"))
-    return out
+    found: dict[tuple[int, str], str] = {}
+    for rx in (_PIT_SQL, _PIT_ORM):
+        for m in rx.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            found.setdefault((line, m.group(1)), f"direct read of {m.group(1)} outside {PIT_OWNER} (use as_of())")
+    if rel not in PIT_LITERAL_OK:
+        for m in _PIT_LITERAL.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            found.setdefault(
+                (line, m.group(2)),
+                f"{m.group(2)} used as a string value outside {PIT_OWNER} (reads go through as_of())",
+            )
+    return [Violation(rel, line, "PIT_READ", msg) for (line, _), msg in sorted(found.items())]
 
 
 def check_privacy(rel: str, text: str) -> list[Violation]:

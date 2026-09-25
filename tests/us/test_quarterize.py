@@ -13,12 +13,13 @@ T1 = datetime(2024, 8, 1, tzinfo=UTC)  # Q2 10-Q
 T2 = datetime(2024, 11, 1, tzinfo=UTC)  # Q3 10-Q
 T3 = datetime(2025, 2, 20, tzinfo=UTC)  # 10-K
 T4 = datetime(2025, 5, 1, tzinfo=UTC)  # next Q1 10-Q (restates last year's Q1 comparative)
+T5 = datetime(2026, 2, 20, tzinfo=UTC)  # next 10-K (restates last year's FY comparative)
 FY = (date(2024, 1, 1), date(2024, 12, 31))
 Q = [(date(2024, 1, 1), date(2024, 3, 31)), (date(2024, 4, 1), date(2024, 6, 30)),
      (date(2024, 7, 1), date(2024, 9, 30)), (date(2024, 10, 1), date(2024, 12, 31))]  # fmt: skip
-ACC = {T0: "a0", T1: "a1", T2: "a2", T3: "a3", T4: "a4"}
-FORM = {T0: "10-Q", T1: "10-Q", T2: "10-Q", T3: "10-K", T4: "10-Q"}
-REPORT = {"a0": Q[0][1], "a1": Q[1][1], "a2": Q[2][1], "a3": FY[1], "a4": date(2025, 3, 31)}
+ACC = {T0: "a0", T1: "a1", T2: "a2", T3: "a3", T4: "a4", T5: "a5"}
+FORM = {T0: "10-Q", T1: "10-Q", T2: "10-Q", T3: "10-K", T4: "10-Q", T5: "10-K"}
+REPORT = {"a0": Q[0][1], "a1": Q[1][1], "a2": Q[2][1], "a3": FY[1], "a4": date(2025, 3, 31), "a5": date(2025, 12, 31)}
 
 
 def fact(col: str, start: date | None, end: date, val: int | str, t: datetime, rank: int = 0, part: int = 0) -> Fact:
@@ -71,11 +72,34 @@ def test_values_are_point_in_time() -> None:
 
 def test_restatement_adds_a_row_and_keeps_the_old_one() -> None:
     facts = [*base_year(), fact("revenue", *Q[0], 105, T4)]  # next year's 10-Q restates the Q1 comparative
-    rows, _ = quarterize(facts, REPORT)
+    rows, issues = quarterize(facts, REPORT)
     q1 = [r for r in rows if r.period_end == Q[0][1]]
     assert [(r.filed_at, r.values["revenue"]) for r in q1] == [(T0, D(100)), (T4, D(105))]
     q4 = [r for r in rows if r.period_end == Q[3][1]]
-    assert [(r.filed_at, r.values["revenue"]) for r in q4] == [(T3, D(130)), (T4, D(125))]  # derived Q4 follows
+    # review F3: 460 (unrestated FY) - 105 (restated Q1) - 110 - 120 = 125 was reported by no filing; Q4 keeps 130
+    assert [(r.filed_at, r.values["revenue"]) for r in q4] == [(T3, D(130))]
+    assert any(i.period_end == Q[3][1] and "vintages" in i.reason for i in issues)
+
+
+def test_a_restated_year_recomputes_the_derived_q4() -> None:
+    facts = [*base_year(), fact("revenue", *Q[0], 105, T4), fact("revenue", *FY, 470, T5)]
+    q4 = [r for r in quarterize(facts, REPORT)[0] if r.period_end == Q[3][1]]
+    assert [(r.filed_at, r.values["revenue"]) for r in q4] == [(T3, D(130)), (T5, D(135))]  # 470 - 105 - 110 - 120
+
+
+def test_ytd_difference_waits_for_a_consistent_vintage() -> None:
+    """Apple's FY2017 Q2 CFO: YTD6 (original 10-Q) minus a Q1 restated by the next year's 10-Q is no filing's
+    number; the restated YTD6 from the next Q2 10-Q gives the consistent one."""
+    t6 = datetime(2025, 8, 1, tzinfo=UTC)
+    acc, form = {**ACC, t6: "a6"}, {**FORM, t6: "10-Q"}
+    report = {**REPORT, "a6": date(2025, 6, 30)}
+
+    def f(start: date, end: date, val: int, t: datetime) -> Fact:
+        return Fact("cfo", 0, 0, start, end, D(val), acc[t], form[t], 2024, "Q2", t)
+
+    facts = [f(FY[0], Q[1][1], 130, T1), f(*Q[0], 55, T4), f(FY[0], Q[1][1], 140, t6)]  # no original Q1
+    q2 = [(r.filed_at, r.values["cfo"]) for r in quarterize(facts, report)[0] if r.period_end == Q[1][1]]
+    assert q2 == [(t6, D(85))]  # never 130 - 55 = 75 (mixed); 140 - 55 = 85 once both are restated
 
 
 def test_rounding_only_change_is_not_a_restatement() -> None:
@@ -124,3 +148,21 @@ def test_summed_alternative_needs_its_first_part() -> None:
         fact("total_debt", None, e, 5, T0, rank=0, part=1),
     ]  # rank 0 has only an optional part: skipped
     assert latest(quarterize(facts, REPORT)[0])[e].values["total_debt"] == D(80)
+
+
+def test_ttm_revenue_annualizes_a_new_registrant() -> None:
+    """Review F5: a spin-off's first quarters are annualized so §1.3's TTM revenue minimum can be applied."""
+    from pipeline.us.quarterize import QuarterRow, ttm_revenue
+
+    def row(end: date, rev: int | None) -> QuarterRow:
+        return QuarterRow(end, "FY2024Q1", T0, {"revenue": None if rev is None else D(rev)})
+
+    one = [row(date(2024, 3, 31), 7_260_000_000)]  # GE Vernova's first 10-Q
+    assert ttm_revenue(one) == (D(29_040_000_000), True)
+    four = [row(Q[k][1], 100 + 10 * k) for k in range(4)]
+    assert ttm_revenue(four) == (D(460), False)
+    # a quarter left null (e.g. by the 3x Q4 check) doesn't drop a company from the universe for a year
+    assert ttm_revenue([*four[:3], row(Q[3][1], None)]) == (D(440), True)
+    assert ttm_revenue([]) == (None, False)
+    stale = [row(date(2022, 3, 31), 50), row(date(2024, 3, 31), 60)]  # only the recent quarter counts
+    assert ttm_revenue(stale) == (D(240), True)

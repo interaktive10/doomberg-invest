@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -229,6 +229,14 @@ def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow]) -> None:
             ),
             [r.model_dump() for r in rows],
         )
+
+
+def prune_fundamentals(conn: Conn, company_id: UUID, keep: Sequence[tuple[date, datetime]], min_period: date) -> int:
+    """Delete the company's fundamentals_q versions not in `keep` (period_end, filed_at) and quarters before
+    `min_period` (migration 0004; review F10). Called right after the company's rows are rewritten."""
+    payload = Jsonb([[p.isoformat(), t.isoformat()] for p, t in keep])
+    row = conn.execute(_q("select prune_fundamentals(%s, %s, %s)"), (company_id, payload, min_period)).fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
 
 
 _OWN_COLS = (

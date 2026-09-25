@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       date:
-        description: "Filing date YYYY-MM-DD (default: yesterday, UTC)"
+        description: "One filing date YYYY-MM-DD (default: every published day not yet processed)"
         required: false
 
 concurrency:
@@ -50,12 +50,14 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
-      - name: pending Form 10 registrations (spin-offs not yet effective)
+      - name: daily state (last EDGAR day processed; Form 10 registrations not yet effective)
         uses: actions/cache@v4
         with:
-          path: .cache/us/pending_form10.json
-          key: us-pending-form10-${{ github.run_id }}
-          restore-keys: us-pending-form10-
+          path: |
+            .cache/us/pending_form10.json
+            .cache/us/daily_state.json
+          key: us-daily-state-${{ github.run_id }}
+          restore-keys: us-daily-state-
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: SEC events
         run: uv run --frozen python -m pipeline.us.daily ${DAY:+--date "$DAY"}

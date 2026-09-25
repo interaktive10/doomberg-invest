@@ -13,7 +13,7 @@ Items and acceptance times come from the company's submissions JSON (the index h
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
@@ -66,6 +66,42 @@ def parse_master_index(text: str) -> list[IndexRow]:
 def master_index_url(d: date) -> str:
     q = (d.month - 1) // 3 + 1
     return f"https://www.sec.gov/Archives/edgar/daily-index/{d.year}/QTR{q}/master.{d:%Y%m%d}.idx"
+
+
+def quarter_listing_url(d: date) -> str:
+    """The EDGAR directory listing of a quarter's daily indexes (published days only)."""
+    return f"https://www.sec.gov/Archives/edgar/daily-index/{d.year}/QTR{(d.month - 1) // 3 + 1}/index.json"
+
+
+def published_days(listing: Mapping[str, object]) -> list[date]:
+    """Days with a master.YYYYMMDD.idx in a quarter's index.json. SEC writes a day's index around 22:00 ET, so a
+    day that isn't listed yet is simply not published (holidays are never listed)."""
+    directory = listing.get("directory")
+    items = directory.get("item", []) if isinstance(directory, dict) else []
+    days: list[date] = []
+    for it in items:
+        name = str(it.get("name", "")) if isinstance(it, dict) else ""
+        if name.startswith("master.") and name.endswith(".idx") and name[7:15].isdigit():
+            days.append(date(int(name[7:11]), int(name[11:13]), int(name[13:15])))
+    return sorted(days)
+
+
+def quarters_between(first: date, last: date) -> list[date]:
+    """A date in each calendar quarter from `first`'s to `last`'s (for quarter_listing_url)."""
+    out: list[date] = []
+    y, q = first.year, (first.month - 1) // 3
+    while (y, q) <= (last.year, (last.month - 1) // 3):
+        out.append(date(y, 3 * q + 1, 1))
+        y, q = (y, q + 1) if q < 3 else (y + 1, 0)
+    return out
+
+
+def days_to_process(published: Sequence[date], last_done: date | None, first_run_days: int = 3) -> list[date]:
+    """Published days after the last one processed; a first run takes the latest few."""
+    days = sorted(set(published))
+    if last_done is None:
+        return days[-first_run_days:]
+    return [d for d in days if d > last_done]
 
 
 @dataclass(frozen=True)

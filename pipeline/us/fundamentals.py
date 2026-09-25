@@ -21,7 +21,7 @@ from pipeline.db import repo
 from pipeline.db.models import FundamentalsRow
 from pipeline.settings import REPO_ROOT
 from pipeline.us.companyfacts import Alternative, load_facts
-from pipeline.us.quarterize import Issue, QuarterRow, quarterize
+from pipeline.us.quarterize import Issue, QuarterRow, quarterize, ttm_revenue
 from pipeline.us.submissions import Submissions
 
 KEEP_QUARTERS = 60
@@ -38,19 +38,15 @@ class CompanyResult:
     rows: list[QuarterRow] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    min_period: date | None = None  # quarters before this are outside the 60-quarter window
 
     def latest(self) -> dict[date, QuarterRow]:
         """Latest version of each quarter (rows are sorted by period_end, filed_at)."""
         return {r.period_end: r for r in self.rows}
 
     def ttm_revenue(self) -> Decimal | None:
-        """Sum of the last 4 quarters' revenue as currently known; None if any of them is missing."""
-        latest = self.latest()
-        quarters = sorted(latest)[-4:]
-        vals = [latest[q].values.get("revenue") for q in quarters]
-        if len(vals) < 4 or any(v is None for v in vals):
-            return None
-        return sum((v for v in vals if v is not None), Decimal(0))
+        """TTM revenue as currently known; annualized for a company with fewer than 4 quarters (quarterize.py)."""
+        return ttm_revenue(self.rows)[0]
 
 
 def quarterize_company(
@@ -69,6 +65,7 @@ def quarterize_company(
         rows=[r for r in rows if r.period_end >= cutoff],
         issues=[i for i in issues if i.period_end >= cutoff],
         notes=notes,
+        min_period=cutoff,
     )
 
 
@@ -90,6 +87,10 @@ def to_models(company_id: UUID, rows: Sequence[QuarterRow], currency: str = "USD
 
 
 def write_company(conn: psycopg.Connection[Any], company_id: UUID, result: CompanyResult) -> int:
+    """Write the company's versions, then drop versions the current code no longer produces and quarters outside
+    the window (review F10), so a code fix never leaves stale rows behind."""
     models = to_models(company_id, result.rows)
     repo.insert_fundamentals(conn, models)
+    if result.min_period is not None:
+        repo.prune_fundamentals(conn, company_id, [(m.period_end, m.filed_at) for m in models], result.min_period)
     return len(models)

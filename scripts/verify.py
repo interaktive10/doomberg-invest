@@ -154,7 +154,7 @@ CHECKS: list[Check] = [
         "M2-02",
         "m2",
         "a restatement creates a new row; as_of returns the right version (Apple FY2017 Q2 CFO)",
-        [*PYTEST, "tests/db/test_us_pipeline.py", "-k", "restatement"],
+        [*PYTEST, "tests/db/test_us_pipeline.py", "-k", "restatement or vintage"],
         requires=_needs_database,
     ),
     Check(
