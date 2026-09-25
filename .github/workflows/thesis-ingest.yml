@@ -1,0 +1,42 @@
+name: thesis-ingest
+# BRIEF §4.9 step 3, §2.5 (<= 3 min): on a push touching data/thesis_cards/** (the Sunday routine pushes its branch,
+# Appendix G), validate the pushed weeks' cards again and upsert them into `theses` (state research, author routine)
+# with their kill criteria. With the free LLM keys, P-05 re-checks the sentences without numbers.
+on:
+  push:
+    paths:
+      - "data/thesis_cards/**"
+
+concurrency:
+  group: thesis-ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Database secret
+        id: db
+        run: |
+          if [ -n "$DATABASE_URL" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to ingest"; fi
+      - if: steps.db.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      - name: Validate and ingest the pushed cards
+        if: steps.db.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.thesis.ingest --event "$GITHUB_EVENT_PATH"

@@ -25,6 +25,7 @@ def blocks(title: str) -> list[str]:
         ("P-01.user.txt", "### P-01 EXTRACT_FACTS", 1),
         ("P-02.system.txt", "### P-02 ENTITY_NORMALIZE", 0),
         ("P-03.system.txt", "### P-03 RISK_TAGS", 0),
+        ("P-04.system.txt", "### P-04 THESIS_CARD", 0),
         ("P-05.system.txt", "### P-05 CLAIM_SUPPORT · free", 0),
         ("P-06.system.txt", "### P-06 CROSS_BORDER_MAP", 0),
         ("P-07.system.txt", "### P-07 ANNOUNCEMENT_TRIAGE", 0),
@@ -55,3 +56,10 @@ def test_render_is_one_pass_and_strict() -> None:
     assert render("A {{x}} B", {"x": "{{y}}"}) == "A {{y}} B"  # document text is never re-scanned
     with pytest.raises(KeyError):
         render("{{missing}}", {})
+
+
+def test_p04_user_message_is_the_pack() -> None:
+    """§5: `EVIDENCE PACK:` followed by `{{pack_json}}` (the pack's JSON on the next line)."""
+    assert "**User:** `EVIDENCE PACK:` followed by `{{pack_json}}`" in BRIEF
+    assert template("P-04", "user") == "EVIDENCE PACK:\n{{pack_json}}"
+    assert PROMPTS["P-04"].route == "P-04-fallback" and PROMPTS["P-04"].temperature == 0.3

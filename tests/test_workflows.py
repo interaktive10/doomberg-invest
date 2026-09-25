@@ -26,7 +26,9 @@ def test_13f_runs_before_the_universe_re_seed() -> None:
 def test_every_pipeline_job_migrates_first() -> None:
     for name, jobs in (
         ("daily.yml", ("us", "india", "text")),
-        ("weekly.yml", ("us", "india", "capex", "scores", "capex_brief")),
+        ("weekly.yml", ("us", "india", "capex", "scores", "capex_brief", "thesis")),
+        ("thesis-ingest.yml", ("ingest",)),
+        ("thesis-fallback.yml", ("fallback",)),
         ("quarterly.yml", ("us",)),
         ("lab.yml", ("lab",)),
     ):
@@ -88,3 +90,26 @@ def test_cassettes_are_recorded_by_hand_into_a_pr() -> None:
     runs = "\n".join(steps("record-cassettes.yml", "record"))
     assert "python -m pipeline.facts.evaluate --record" in runs and "git add pipeline/llm/cassettes\n" in runs
     assert "gh pr create" in runs and "git add -A" not in runs and "git add ." not in runs
+
+
+def test_the_weekly_thesis_job_evaluates_queues_commits_then_publishes() -> None:
+    """M6 (BRIEF §4.9 step 1, §4.12): kill criteria see this week's rows, the queue is committed to main for the
+    Sunday routine, and the digest issue follows (it lists this week's triggered criteria)."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    job = doc["jobs"]["thesis"]
+    assert set(job["needs"]) == {"check", "scores", "capex_brief"} and "needs.scores.result == 'success'" in job["if"]
+    assert job["permissions"] == {"contents": "write", "issues": "write"}
+    runs = [r for r in steps("weekly.yml", "thesis") if r]
+    order = [next(i for i, r in enumerate(runs) if key in r) for key in
+             ("pipeline.thesis.kill_criteria", "pipeline.thesis.queue", "git push origin HEAD:main",
+              "pipeline.digest.weekly")]  # fmt: skip
+    assert order == sorted(order)
+
+
+def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> None:
+    ingest_doc = yaml.safe_load((WF / "thesis-ingest.yml").read_text(encoding="utf-8"))
+    assert ingest_doc[True]["push"]["paths"] == ["data/thesis_cards/**"]
+    assert '--event "$GITHUB_EVENT_PATH"' in steps("thesis-ingest.yml", "ingest")[-1]
+    fallback = yaml.safe_load((WF / "thesis-fallback.yml").read_text(encoding="utf-8"))
+    assert fallback[True]["schedule"] == [{"cron": "0 6 * * 1"}]  # BRIEF §2.5
+    assert steps("thesis-fallback.yml", "fallback")[-1].endswith("python -m pipeline.thesis.fallback_writer")

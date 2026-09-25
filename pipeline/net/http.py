@@ -176,13 +176,27 @@ class HttpClient:
     ) -> bytes:
         """POST a JSON body (the LLM providers, BRIEF §2.6). Same allowlist and mock rules as get_bytes; never cached
         (bodies carry document text) and no redirects. Non-2xx raises httpx.HTTPStatusError with the response."""
+        return self.send_json("POST", url, payload, headers=headers, timeout=timeout)
+
+    def send_json(
+        self,
+        method: str,
+        url: str,
+        payload: Mapping[str, Any],
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 120.0,
+    ) -> bytes:
+        """POST or PATCH a JSON body (the LLM providers; the digest's GitHub issue, BRIEF §4.12), as post_json."""
+        if method not in ("POST", "PATCH"):
+            raise ValueError(method)
         host = check_allowed(url)
         if self.settings.mock_externals:
             return self._mock(url, host)
         self.limiter.wait(host)
         if self._client is None:
             self._client = httpx.Client(follow_redirects=False, timeout=timeout)
-        r = self._client.post(url, json=dict(payload), headers=dict(headers or {}), timeout=timeout)
+        r = self._client.request(method, url, json=dict(payload), headers=dict(headers or {}), timeout=timeout)
         r.raise_for_status()
         return r.content
 

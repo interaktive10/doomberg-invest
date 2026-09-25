@@ -1,0 +1,41 @@
+name: thesis-fallback
+# BRIEF §4.9 step 4, §2.5 (Monday 06:00 UTC, <= 10 min, only if no cards): when the routine wrote no card for the
+# newest queue week, Gemini (P-04, free tier) writes them; each is validated and upserted with author `fallback`.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Database secret
+        id: db
+        run: |
+          if [ -n "$DATABASE_URL" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
+      - if: steps.db.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      - name: Cards for a week the routine missed
+        if: steps.db.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.thesis.fallback_writer

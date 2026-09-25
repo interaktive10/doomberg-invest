@@ -28,12 +28,14 @@ class PromptSpec:
     tool_name: str
     temperature: float
     task: str  # the config/quotas.yaml model: "extract" (Flash-Lite class) or "card" (Flash)
+    route: str = ""  # the config/quotas.yaml `routing` key, when it isn't the id (P-04 runs only as the fallback)
 
 
 PROMPTS: dict[str, PromptSpec] = {
     "P-01": PromptSpec("P-01", "tool", "record_facts", 0.0, "extract"),
     "P-02": PromptSpec("P-02", "tool", "record_matches", 0.0, "extract"),
     "P-03": PromptSpec("P-03", "tool", "record_tags", 0.0, "extract"),
+    "P-04": PromptSpec("P-04", "json", "thesis_card", 0.3, "card", route="P-04-fallback"),
     "P-05": PromptSpec("P-05", "tool", "record_support", 0.0, "card"),
     "P-06": PromptSpec("P-06", "json", "cross_border_map", 0.0, "card"),
     "P-07": PromptSpec("P-07", "json", "announcement_triage", 0.0, "extract"),

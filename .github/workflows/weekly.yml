@@ -2,8 +2,8 @@ name: weekly
 # BRIEF §2.1 "weekly", §2.5 (Saturday): SEC bulk companyfacts + submissions -> fundamentals_q and the US universe
 # rules; India: securities + ASM/GSM -> universe, bhavcopy -> prices_w (NSE, else BSE, else imports/), results XBRL
 # -> fundamentals_q, shareholding -> ownership_q. M4 adds signals -> red flags -> prices -> context -> scores; M5 the
-# Capex Desk (demand index and memberships before scores, the Capex brief after); M6 adds evidence packs, the thesis
-# queue and the digest issue.
+# Capex Desk (demand index and memberships before scores, the Capex brief after); M6 kill criteria, evidence packs,
+# the thesis queue (committed to main) and the digest issue.
 # The bulk zips (a few GB) stay on the runner; only the per-company sha256 state is cached between weeks.
 on:
   schedule:
@@ -166,10 +166,51 @@ jobs:
       - name: Capex brief
         run: uv run --frozen python -m pipeline.capex.run --stage brief
 
+  thesis:
+    # M6 (BRIEF §4.9, §4.12): kill criteria on the week's new rows -> evidence packs -> the thesis queue file, committed
+    # to main for the Sunday routine (Appendix G) -> the digest issue (after the Capex brief, which it includes).
+    needs: [check, scores, capex_brief]
+    if: always() && needs.check.outputs.db == 'true' && needs.scores.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # the queue commit
+      issues: write     # the digest issue
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      GITHUB_TOKEN: ${{ github.token }}
+      APP_URL: ${{ vars.APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Kill criteria (theses whose company got new rows this week)
+        run: uv run --frozen python -m pipeline.thesis.kill_criteria
+      - name: Evidence packs -> data/thesis_queue/<week>.json
+        run: uv run --frozen python -m pipeline.thesis.queue
+      - name: Commit the queue to main (Actions bot)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/thesis_queue
+          if git diff --cached --quiet; then
+            echo "the queue file is unchanged"
+          else
+            git commit -m "Thesis queue $(date -u +%G-W%V)"
+            git push origin HEAD:main
+          fi
+      - name: Digest issue
+        run: uv run --frozen python -m pipeline.digest.weekly
+
   size_guard:
     # BRIEF §2.8: after every job that writes, prune (signal_values past 3 years, NSE announcements past 120 days) and
     # fail the weekly run above 400 MB. Runs when a writer failed too (review R2-F1 on M3).
-    needs: [check, us, india, capex, scores, capex_brief]
+    needs: [check, us, india, capex, scores, capex_brief, thesis]
     if: always() && needs.check.outputs.db == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
