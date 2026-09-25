@@ -14,6 +14,8 @@ share-count change confirms it. Unconfirmed jumps are flagged and never adjusted
   weeks already stored differ from them by a split ratio shows the split before any filing does (`rebased`, M4
   review R1-F6). Until a share count confirms it, every earlier count is multiplied by its ratio: price x the
   pre-split count would be off by the ratio for the ~11 weeks until the next 10-Q.
+- Limit: a company priced for the first time after a split has no stored closes to compare, so the split shows only
+  when a filing reports the new count; until then its market cap is price x the pre-split count.
 """
 
 from __future__ import annotations
@@ -98,8 +100,14 @@ def rebased(stored: Sequence[tuple[date, Decimal]], fresh: Sequence[tuple[date, 
     before = [q for _, q in qs[: last + 1]]
     if sum(1 for q in before if abs(q / k - 1) <= TOL) < Decimal("0.9") * len(before):
         return None
-    after = [d for d, _ in qs[last + 1 :]] or sorted(d for d in new if d > qs[-1][0])
-    return SourceSplit(after[0], k) if after else None
+    after = [d for d, _ in qs[last + 1 :]]
+    if after:
+        return SourceSplit(after[0], k)  # stored weeks already on the new basis date it
+    # Otherwise the split happened after the last stored week, possibly long after it when the stored history has a
+    # gap (the company left the candidate set): date it at the newest week, so every count known so far reads as
+    # pre-split until a filing shows the new count (M4 review R2-F2).
+    newest = max(new) if new else None
+    return SourceSplit(newest, k) if newest is not None and newest > qs[-1][0] else None
 
 
 @dataclass(frozen=True)

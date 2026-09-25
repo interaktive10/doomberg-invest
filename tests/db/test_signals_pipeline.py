@@ -219,6 +219,38 @@ def test_manual_price_import_when_stooq_fails(conn: psycopg.Connection[Any], tmp
     assert conn.execute("select count(*) from prices_w where company_id = %s", (cid,)).fetchone() == (260,)
 
 
+def test_s7_amendment_filed_later_moving_the_trade_back_is_read(conn: psycopg.Connection[Any]) -> None:
+    """M4 review R2-F4: the weekly run loaded insider events by trade date (the last 100 days), so a Form 4/A filed
+    this month that moves a trade to May was never loaded and the original still counted. Loading by filing date
+    keeps the amendment next to its original: S7 goes quiet."""
+    week = date(2026, 9, 18)
+    cid = add(conn, "0000018230")
+
+    def buy(person: str, value: int, day: date, filed: datetime, url: str, amends: date | None = None) -> InsiderEvent:
+        return InsiderEvent(company_id=cid, event_date=day, filed_at=filed, person=person, kind="open_market_buy",
+                            shares=Decimal(1000), value=Decimal(value), currency="USD", source_url=url,
+                            amends=amends)  # fmt: skip
+
+    repo.insert_insider_events(conn, [
+        buy("ALICE", 200_000, date(2026, 9, 1), datetime(2026, 9, 2, 20, tzinfo=UTC), "https://www.sec.gov/a"),
+        buy("BOB", 100_000, date(2026, 9, 3), datetime(2026, 9, 4, 20, tzinfo=UTC), "https://www.sec.gov/b"),
+    ])  # fmt: skip
+
+    def s7() -> tuple[bool, Any]:
+        row = conn.execute("select fired, inputs from signal_values where company_id = %s and week_end = %s "
+                           "and signal_id = 'S7'", (cid, week)).fetchone()  # fmt: skip
+        assert row is not None
+        return row[0], row[1]
+
+    weekly.run(conn, week, http=None)
+    assert s7()[0] is True
+    repo.insert_insider_events(conn, [buy("ALICE", 200_000, date(2026, 5, 1), datetime(2026, 9, 10, 20, tzinfo=UTC),
+                                          "https://www.sec.gov/a-amended", amends=date(2026, 9, 2))])  # fmt: skip
+    weekly.run(conn, week, http=None)
+    fired, inputs = s7()
+    assert fired is False and inputs["insiders"] == 1
+
+
 def test_stooq_stale_when_every_download_fails_cleared_when_it_answers(
     conn: psycopg.Connection[Any], tmp_path: Path
 ) -> None:

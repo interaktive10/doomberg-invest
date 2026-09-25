@@ -42,7 +42,7 @@ from pipeline.signals.base import CapexView, Ctx, Event, Fact, Holding, Insider,
 from pipeline.signals.buckets import Ranked, bucket, market_cap_ok, shortlist
 from pipeline.signals.context import percentile_rank
 from pipeline.signals.scores import Evidence, Weights, evidence, gap
-from pipeline.signals.series import Series, growth
+from pipeline.signals.series import Series
 
 BATCH = 300
 STOOQ_MAX_SYMBOLS = 400  # §4.4, benchmarks included
@@ -144,7 +144,9 @@ def load_batch(conn: psycopg.Connection[Any], week: date, ids: Sequence[UUID], f
             Fact(x.fact_type, x.subject_key, x.as_of, x.value_num, x.unit, x.subject, x.period_end, x.counterparty)
         )
     if full:
-        for i in snap.insider_events(conn, ids, since=week - timedelta(days=100)):
+        # every event filed in the last 100 days: S7's windows (60/90 days) and the Form 4/As that move a trade
+        # back out of them (M4 review R2-F4)
+        for i in snap.insider_events(conn, ids, filed_since=week - timedelta(days=100)):
             b.insiders[i.company_id].append(
                 Insider(
                     str(i.company_id),
@@ -239,7 +241,6 @@ class Scored:
 def company_metrics(s: Series) -> dict[str, Any]:
     """The screener's per-company numbers (company_metrics; price-based ones are added at the candidate stage)."""
     nd, ebitda = s.net_debt(0), s.ebitda(0)
-    shares, then = s.shares(0)[0], s.shares(4)[0]
     ni, cfo = s.ttm("net_income", 0), s.ttm("cfo", 0)
     rows = {
         "revenue_ttm": s.ttm("revenue", 0),
@@ -249,7 +250,7 @@ def company_metrics(s: Series) -> dict[str, Any]:
         "fcf_ttm": s.fcf(0),
         "ccr": cfo / ni if cfo is not None and ni is not None and ni > 0 else None,
         "nd_to_ebitda": nd / ebitda if nd is not None and ebitda is not None and ebitda > 0 else None,
-        "share_change_yoy": growth(shares, then),
+        "share_change_yoy": s.shares_yoy(0),  # split-adjusted, a year back (M4 review R2-F1/F3)
     }
     return {k: num(v) for k, v in rows.items() if v is not None}
 
@@ -282,8 +283,8 @@ def score_company(
     soft = sum(1 for f in flags if f.status == "fired" and not f.hard)
     hard = any(f.status == "fired" and f.hard for f in flags)
     ev = evidence(results, soft, cfgs.weights, cfgs.signals["scores"])
-    ob, _ = s01_orderbook.order_book(ctx)
-    return results, flags, Scored(c, s, ev, hard, fired, growth(ob(0), ob(4)), company_metrics(s))
+    g_ob = s01_orderbook.orderbook_growth(ctx)  # a year back or None (M4 review R2-F3)
+    return results, flags, Scored(c, s, ev, hard, fired, g_ob, company_metrics(s))
 
 
 # ---------------------------------------------------------------- prices and context (candidate stage)

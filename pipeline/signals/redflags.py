@@ -113,12 +113,14 @@ def acquisition(events: Sequence[Event], since: date, until: date) -> list[str]:
 def r4(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
     """Share count +10% YoY without an acquisition."""
     s = ctx.series
-    (now, source), (then, _) = s.shares(0), s.shares(4)
-    g = growth(now, then) if s.year_back_ok(0) else None
+    source = s.shares(0)[1]
+    g = s.shares_yoy(0)  # split-adjusted: a bonus issue or a face-value split isn't dilution (M4 review R2-F1)
     if g is None:
         return FlagResult("R4", "unknown", _hard(c), {"missing": ["share_count_yoy"]})
     deals = acquisition(ctx.events, months_before(ctx.week, 12), ctx.week) if c.get("unless_acquisition", True) else []
-    inputs = {"share_change_yoy": num(g), "shares_source": source, "acquisitions": deals}
+    back = s.at(4)
+    splits = [f"{sp.new_end} x{sp.ratio}" for sp in s.share_splits() if back is not None and sp.new_end > back.end]
+    inputs = {"share_change_yoy": num(g), "shares_source": source, "acquisitions": deals, "splits": splits}
     return FlagResult("R4", "fired" if g >= _dec(c, "share_growth_min") and not deals else "clear", _hard(c), inputs)
 
 
