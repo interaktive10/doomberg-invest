@@ -1,12 +1,15 @@
 """The weekly digest (BRIEF §4.12): a GitHub issue "Doomberg weekly — {week}" (the web Home screen shows the same
 markdown, from the `digests` table).
 
-Sections: new candidates (at most 10, one line each: families fired, Evidence, Gap, link); theses needing attention
-(kill criteria triggered this week, reviews due); the Capex brief; source health and staleness; LLM quota use; Lab
-notes when a run happened this week. No price-move content: no gainers, losers or returns.
+Under the title, a banner lists every source that is stale or past its §2.7 SLA (config/staleness.yaml; M6 review
+R1-F12). Sections: new candidates (at most 10, one line each: families fired, Evidence, Gap, link; when the week has
+no scores, it says the candidates are missing); theses needing attention (kill criteria triggered this week, reviews
+due); the Capex brief; source health and staleness; LLM quota use; Lab notes when a run happened this week. No
+price-move content: no gainers, losers or returns.
 
-`python -m pipeline.digest.weekly [--week D]` (weekly.yml `thesis` job, after the queue). The issue is published
-with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true) it is only stored.
+`python -m pipeline.digest.weekly [--week D]` (weekly.yml `digest` job: every week, whatever the other jobs did).
+The issue is published with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true)
+it is only stored.
 """
 
 from __future__ import annotations
@@ -21,16 +24,21 @@ from decimal import Decimal
 from typing import Any
 
 import psycopg
+import yaml
 
 from pipeline.db import repo, thesis_repo
 from pipeline.db.models import Company, SourceHealth
 from pipeline.digest.github_issue import GitHubIssues, Issues, MockIssues, publish
 from pipeline.net.http import HttpClient
-from pipeline.settings import Settings
+from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals.weekly import last_friday
 from pipeline.thesis.evidence_pack import week_label
 
-STALE_AFTER_DAYS = {"sec": 3, "nse": 3, "stooq": 8, "llm": 3}  # a source not refreshed this long reads as late
+
+def sla_days(root: Any = REPO_ROOT) -> dict[str, int]:
+    """Each source's §2.7 SLA in days (config/staleness.yaml)."""
+    doc = yaml.safe_load((root / "config" / "staleness.yaml").read_text(encoding="utf-8"))
+    return {str(k): int(v) for k, v in (doc.get("sla_days") or {}).items()}
 
 
 def _fmt(x: Decimal | float | None, digits: int = 1) -> str:
@@ -47,6 +55,9 @@ def _link(c: Company, app_url: str) -> str:
 
 
 def candidates(conn: psycopg.Connection[Any], week: date, companies: Mapping[Any, Company], app_url: str) -> list[str]:
+    if not thesis_repo.scored(conn, week):
+        return [f"**Candidates are missing this week:** no scores were written for {week:%Y-%m-%d} (the scoring run "
+                "didn't finish; see source health below)."]  # fmt: skip
     out = []
     for r in thesis_repo.shortlist(conn, week)[:10]:
         c = companies.get(r["company_id"])
@@ -86,20 +97,37 @@ def capex(conn: psycopg.Connection[Any], week: date) -> list[str]:
     return lines or ["No Capex brief this week."]
 
 
-def health(rows: Sequence[SourceHealth], now: datetime) -> list[str]:
+def late(h: SourceHealth, now: datetime, sla: Mapping[str, int]) -> bool:
+    days = sla.get(h.source)
+    return days is not None and h.last_success is not None and now - h.last_success > timedelta(days=days)
+
+
+def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int]) -> list[str]:
+    """§2.7: every source that is stale, or past its SLA, named under the title."""
+    items = []
+    for h in rows:
+        if h.stale:
+            items.append(f"{h.source} (stale)")
+        elif late(h, now, sla) and h.last_success is not None:
+            items.append(f"{h.source} (no success for {(now - h.last_success).days} days; SLA {sla[h.source]})")
+    return [f"**Stale data:** {', '.join(items)}. Signals and scores that read these sources may be out of date.",
+            ""] if items else []  # fmt: skip
+
+
+def health(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int] | None = None) -> list[str]:
     if not rows:
         return ["No source has reported yet."]
+    sla = sla if sla is not None else sla_days()
     out = ["| Source | Last success | Status |", "|---|---|---|"]
     for h in rows:
-        late = STALE_AFTER_DAYS.get(h.source)
         if h.stale:
             status = "**stale**" + (f": {h.last_error.removeprefix('stale: ')[:120]}" if h.last_error else "")
         elif h.last_error:
             status = f"error: {h.last_error[:120]}"
         elif h.last_success is None:
             status = "never succeeded"
-        elif late is not None and now - h.last_success > timedelta(days=late):
-            status = f"late (no success for {(now - h.last_success).days} days)"
+        elif late(h, now, sla):
+            status = f"late (no success for {(now - h.last_success).days} days; SLA {sla[h.source]} days)"
         else:
             status = "ok"
         when = "never" if h.last_success is None else f"{h.last_success:%Y-%m-%d %H:%M}Z"
@@ -134,17 +162,18 @@ def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: dat
     since = datetime.combine(week - timedelta(days=6), time(0), tzinfo=UTC)
     until = datetime.combine(week + timedelta(days=1), time(0), tzinfo=UTC)
     title = f"Doomberg weekly — {week_label(week)}"
+    sources, sla = repo.source_health(conn), sla_days()
     parts: list[tuple[str, list[str]]] = [
         ("New candidates", candidates(conn, week, companies, app_url)),
         ("Theses needing attention", attention(conn, week)),
         ("Capex brief", capex(conn, week)),
-        ("Source health", health(repo.source_health(conn), now)),
+        ("Source health", health(sources, now, sla)),
         ("LLM quota use", llm(thesis_repo.llm_use(conn, since, until))),
     ]
     notes = lab(thesis_repo.lab_runs(conn, since, until))
     if notes:
         parts.append(("Lab notes", notes))
-    lines = [f"Week ending {week:%Y-%m-%d}. Research only: no orders, no price alerts.", ""]
+    lines = [f"Week ending {week:%Y-%m-%d}. Research only: no orders, no price alerts.", "", *banner(sources, now, sla)]
     for name, body in parts:
         lines += [f"## {name}", "", *body, ""]
     return title, "\n".join(lines).rstrip() + "\n"

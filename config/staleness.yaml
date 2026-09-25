@@ -1,0 +1,12 @@
+# BRIEF §2.7 "Staleness is visible": a source with no success for longer than its SLA reads as late, and every late or
+# stale source is listed in a banner at the top of the digest (§4.12) and of the web app. The brief sets the US weekly
+# sources at 8 days and the India weekly ones at 10; the others follow their own cadence.
+sla_days:
+  sec: 8        # US weekly (companyfacts, submissions); the daily events run refreshes it too
+  stooq: 8      # US weekly prices (candidate set and benchmarks)
+  gdelt: 8      # weekly attention counts
+  fred: 8       # weekly macro context
+  eia: 8        # the Capex Desk's weekly input
+  nse: 10       # India weekly
+  bse: 10       # India fallback
+  sec_13f: 100  # quarterly 13F data sets

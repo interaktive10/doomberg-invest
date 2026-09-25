@@ -279,6 +279,30 @@ def test_a_new_fundamentals_row_triggers_a_kill_criterion(conn: psycopg.Connecti
     assert third.theses == 0  # in review: no longer monitored, and not triggered twice
 
 
+def test_a_retriggered_criterion_is_in_that_weeks_digest(conn: psycopg.Connection[Any]) -> None:
+    """M6 review R1-F10: met in week 1 (review), kept as a thesis, not met in week 2, met again in week 3: the
+    criterion's triggered_week is week 3, so week 3's digest lists it."""
+    cid = company(conn, "00000000-0000-4000-8000-0000000000d2", "Retrigger Test", "RTRG")
+    repo.insert_fundamentals(conn, quarters(cid, [100, 105, 110, 115, 120, 126, 132, 138]))
+    tid = watched(conn, cid)
+    weak = FundamentalsRow(company_id=cid, period_end=date(2026, 9, 30), fiscal_label="Q202609",
+                           filed_at=datetime(2026, 9, 22, 21, tzinfo=UTC), revenue=Decimal(40), currency="USD",
+                           source="sec_xbrl")  # fmt: skip
+    w1, w2, w3 = W + timedelta(days=7), W + timedelta(days=14), W + timedelta(days=21)
+    repo.insert_fundamentals(conn, [weak])
+    assert len(kill_criteria.evaluate(conn, w1).triggered) == 1
+    conn.execute("update theses set state = 'thesis' where id = %s", (tid,))  # reviewed: the thesis stands
+    strong = weak.model_copy(update={"revenue": Decimal(150), "filed_at": datetime(2026, 9, 29, 21, tzinfo=UTC)})
+    repo.insert_fundamentals(conn, [strong])
+    assert kill_criteria.evaluate(conn, w2).triggered == []
+    repo.insert_fundamentals(conn, [weak.model_copy(update={"filed_at": datetime(2026, 10, 6, 21, tzinfo=UTC)})])
+    assert len(kill_criteria.evaluate(conn, w3).triggered) == 1
+    row = conn.execute("select status, triggered_week from kill_criteria where thesis_id = %s", (tid,)).fetchone()
+    assert row == ("triggered", w3)
+    _, body = digest.build(conn, w3)
+    assert "**Retrigger Test**: kill criterion `m:revenue_ttm_yoy` < 0.05 met" in body
+
+
 # ---------------------------------------------------------------- M6-06
 
 
@@ -297,7 +321,7 @@ def test_digest_issue_body_snapshot(conn: psycopg.Connection[Any]) -> None:
     conn.execute("insert into capex_briefs (week_end, body_md) values (%s, %s)", (W, brief))
     conn.execute(
         "insert into source_health (source, last_success, last_error, stale) values "
-        "('sec', '2026-09-18 06:00+00', null, false), ('nse', '2026-09-12 06:00+00', null, false), "
+        "('sec', '2026-09-18 06:00+00', null, false), ('nse', '2026-09-07 06:00+00', null, false), "
         "('stooq', null, 'stale: 13 downloads failed: stooq PWR: Exceeded the daily hits limit', true)"
     )
     conn.execute(
@@ -329,3 +353,112 @@ def test_digest_issue_body_snapshot(conn: psycopg.Connection[Any]) -> None:
 @pytest.fixture(autouse=True)
 def _mock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MOCK_EXTERNALS", "true")
+
+
+# ---------------------------------------------------------------- M6 review round 1
+
+
+def test_a_pushed_queue_or_code_change_ingests_nothing(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """R1-F4: a card push may change data/thesis_cards/** only; anything else (the queue, code) ingests nothing.
+    Cards are checked against the queue on disk (main's, in thesis-ingest.yml), and that pack must itself pass the
+    EvidencePack schema: an extra field fails."""
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    card_tree(tmp_path, cid)
+    card = "data/thesis_cards/2026-W38/us-nmbs.json"
+    for other in ("data/thesis_queue/2026-W38.json", "pipeline/thesis/validate.py"):
+        stats = ingest.from_changed(conn, [card, other], tmp_path)
+        assert stats.ingested == [] and "outside data/thesis_cards" in stats.rejected["push"][0], other
+    assert conn.execute("select count(*) from theses").fetchone() == (0,)
+    queue = tmp_path / "data" / "thesis_queue" / "2026-W38.json"
+    doc = json.loads(queue.read_text())
+    doc["packs"][0]["metrics"][1]["pct"] = "1350000000"  # an edited pack
+    queue.write_text(json.dumps(doc))
+    stats = ingest.from_changed(conn, [card], tmp_path)
+    assert stats.ingested == [] and any("Extra inputs" in e for e in stats.rejected["2026-W38/us-nmbs.json"])
+    del doc["packs"][0]["metrics"][1]["pct"]
+    queue.write_text(json.dumps(doc))
+    assert ingest.from_changed(conn, [card, card.replace(".json", ".md")], tmp_path).ingested == [
+        "2026-W38/us-nmbs.json"
+    ]
+
+
+def test_card_md_is_the_rendering_of_the_validated_json(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """R1-F7: a pushed .md never becomes card_md; the rendering of the validated JSON does."""
+    from pipeline.thesis.render import render, title_for
+
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    cards, _ = card_tree(tmp_path, cid)
+    (cards / "us-nmbs.md").write_text("A guaranteed multibagger: revenue will triple to $9 billion.\n")
+    assert ingest.ingest(conn, ["2026-W38"], tmp_path).ingested == ["2026-W38/us-nmbs.json"]
+    md = conn.execute("select card_md from theses where company_id = %s", (cid,)).fetchone()
+    good = json.loads((cards / "us-nmbs.json").read_text())
+    assert md == (render(good, title_for(cards / "us-nmbs.json", tmp_path)),) and "multibagger" not in md[0]
+
+
+def test_fallback_and_ingest_llm_calls_are_logged(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """R1-F9: the fallback's P-04 (and P-05) calls go through a router that writes llm_calls and starts from the day's
+    usage; both mains build it that way."""
+    import inspect
+
+    from pipeline.db import facts_repo
+    from pipeline.llm.quotas import Quotas
+    from tests.llm.conftest import Scripted, quotas
+
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    cards, _ = card_tree(tmp_path, cid)
+    (cards / "us-nmbs.json").unlink()
+    good = json.loads((FIX / "card" / "good.json").read_text())
+    base = quotas(["gemini"])
+    q = Quotas.from_doc({**base.raw, "routing": {**base.raw["routing"], "P-04-fallback": ["gemini"]}})
+    gemini = Scripted("gemini", [good])
+    today = datetime.now(UTC).date()  # llm_calls.created_at is the database's now()
+    router = facts_repo.logged_router(conn, {"gemini": gemini}, q, today)
+    out = fallback_writer.write_cards(conn, router, "2026-W38", tmp_path,
+                                      now=lambda: datetime(2026, 9, 21, 6, tzinfo=UTC))  # fmt: skip
+    assert out.written == ["us-nmbs"] and len(gemini.requests) >= 1
+    rows = conn.execute("select prompt_id, provider, ok from llm_calls order by created_at").fetchall()
+    assert len(rows) == len(gemini.requests) and rows[0] == ("P-04", "gemini", True)
+    assert facts_repo.llm_usage(conn, today)["gemini"][0] == len(rows)  # where the next run starts
+    for main in (fallback_writer.main, ingest.main):
+        assert "facts_repo.logged_router(" in inspect.getsource(main)
+
+
+def test_the_digest_without_scores_says_the_candidates_are_missing(conn: psycopg.Connection[Any]) -> None:
+    """R1-F6: the digest runs every week; when the scoring run didn't finish it still publishes, and says so."""
+    conn.execute("insert into source_health (source, last_success, last_error, stale) values "
+                 "('sec', '2026-09-01 06:00+00', null, false)")  # fmt: skip
+    _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
+    assert "**Candidates are missing this week:** no scores were written for 2026-09-18" in body
+    assert "**Stale data:** sec (no success for 17 days; SLA 8)" in body and "## Source health" in body
+
+
+def test_fallback_p04_and_p05_replay_from_cassettes(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """R1-F13 (BRIEF §9 "fallback P-04" and P-05 cassettes): P-04 on F-CARD's pack and validate.py's P-05 call are
+    recorded through cassette recorders (pipeline.thesis.samples, as record-cassettes.yml does), and the fallback
+    writer replays them offline and writes the card."""
+    from pipeline.llm.cassettes import Player, Recorder, manifest_problems, write_manifest
+    from pipeline.llm.quotas import Quotas
+    from pipeline.llm.router import Router
+    from pipeline.thesis import samples
+    from tests.llm.conftest import FakeClock, Scripted, quotas
+
+    order = "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002"
+    card = json.loads((FIX / "card" / "good.json").read_text())
+    card["facts"][3] = {"text": f"A hyperscale cloud provider placed a multi-year order [{order}].", "cites": [order]}
+    base = quotas(["gemini"])
+    q = Quotas.from_doc({**base.raw, "routing": {**base.raw["routing"], "P-04-fallback": ["gemini"]}})
+    tapes = tmp_path / "cassettes"
+    support = {"supported": True, "unsupported_parts": [], "reason": "the quote states the order"}
+    recorder = Router({"gemini": Recorder(Scripted("gemini", [card, support]), tapes)}, q, FakeClock())
+    _, result = samples.run(recorder)
+    assert result is not None and result.ok, result
+    write_manifest(tapes)
+    assert {p.parent.name for p in tapes.rglob("*.json")} == {"P-04", "P-05"} and manifest_problems(tapes) == []
+    pack_id = json.loads((FIX / "card" / "pack.json").read_text())["company"]["company_id"]
+    cid = company(conn, pack_id, "Nimbus Compute Corp.", "NMBS")
+    cards, _ = card_tree(tmp_path / "repo", cid)
+    (cards / "us-nmbs.json").unlink()  # the routine wrote nothing: the fallback runs
+    player = Router({"gemini": Player("gemini", tapes)}, q, FakeClock())
+    out = fallback_writer.write_cards(conn, player, "2026-W38", tmp_path / "repo",
+                                      now=lambda: datetime(2026, 9, 21, 6, tzinfo=UTC))  # fmt: skip
+    assert out.written == ["us-nmbs"] and out.failed == {}

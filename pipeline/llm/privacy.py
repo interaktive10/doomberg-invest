@@ -7,7 +7,9 @@ so no private type needs to be named here:
 
 - every router input is a `PublicData` value: a frozen dataclass whose class is defined in one of PUBLIC_MODULES
   (the LLM package, the text-facts engine, the Capex Desk, the India announcement triage, the thesis evidence pack);
-  a subclass defined anywhere else is refused, so nothing can wrap a private row to get through;
+  a subclass defined anywhere else is refused, so nothing can wrap a private row to get through. A field may also
+  hold a pydantic model defined in a public module (the EvidencePack P-04 reads; M6 review R1-F4), checked field by
+  field the same way;
 - every field holds what its annotation says (a `str` field a str, `tuple[str, ...]` a tuple of str, a PublicData
   field that PublicData type, ...; M5 review R1-F6), built only from str, number, bool, date/datetime, UUID, None
   and other PublicData values; anything else (a pydantic row, a database record as a dict or a tuple, an arbitrary
@@ -29,6 +31,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+
+from pydantic import BaseModel
 
 PUBLIC_MODULES = (
     "pipeline.llm",
@@ -55,6 +59,23 @@ def _public_module(module: str) -> bool:
 
 def is_public_type(t: type) -> bool:
     return issubclass(t, PublicData) and dataclasses.is_dataclass(t) and _public_module(t.__module__)
+
+
+def is_public_model(t: Any) -> bool:
+    """A pydantic model class defined in a public module (the evidence pack and its parts)."""
+    return isinstance(t, type) and issubclass(t, BaseModel) and _public_module(t.__module__)
+
+
+def _model_hints(t: type) -> dict[str, Any]:
+    """Each field's annotation: pydantic's resolved one (model_fields[...].annotation), else the class's hints."""
+    if t not in _HINTS:
+        fields: dict[str, Any] = dict(getattr(t, "model_fields", {}) or {})
+        found = {name: getattr(f, "annotation", None) for name, f in fields.items()}
+        if any(a is None for a in found.values()):
+            declared = typing.get_type_hints(t)
+            found = {n: a if a is not None else declared.get(n, Any) for n, a in found.items()}
+        _HINTS[t] = found
+    return _HINTS[t]
 
 
 _HINTS: dict[type, dict[str, Any]] = {}
@@ -121,7 +142,7 @@ def fits(value: Any, hint: Any, path: str = "input") -> None:
                 raise PrivacyViolation(f"{path}: dict keys must be str, got {type(k).__name__}")
             fits(v, args[1] if len(args) == 2 else Any, f"{path}.{k}")
         return
-    if isinstance(hint, type) and issubclass(hint, PublicData):
+    if isinstance(hint, type) and (issubclass(hint, PublicData) or is_public_model(hint)):
         if not isinstance(value, hint):
             raise _refuse(path, value, hint)
         check(value, path)
@@ -155,6 +176,10 @@ def check(value: Any, path: str = "input") -> None:
         hints = _hints(t)
         for f in dataclasses.fields(value):
             fits(getattr(value, f.name), hints.get(f.name, Any), f"{path}.{f.name}")
+        return
+    if isinstance(value, BaseModel) and is_public_model(t):
+        for name, hint in _model_hints(t).items():
+            fits(getattr(value, name), hint, f"{path}.{name}")
         return
     raise PrivacyViolation(
         f"{path}: {t.__module__}.{t.__qualname__} is not public data; the router accepts only PublicData types "

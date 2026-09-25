@@ -1,5 +1,7 @@
 Week ending 2026-09-18. Research only: no orders, no price alerts.
 
+**Stale data:** nse (no success for 11 days; SLA 10), stooq (stale). Signals and scores that read these sources may be out of date.
+
 ## New candidates
 
 1. **Echo Grid Corp.** (ECHO, US): families fundamentals, text · Evidence 72.5 · Gap 61.2 · [company page](https://doomberg.example/company/00000000-0000-4000-8000-0000000000e1)
@@ -19,7 +21,7 @@ Week ending 2026-09-18. Research only: no orders, no price alerts.
 
 | Source | Last success | Status |
 |---|---|---|
-| nse | 2026-09-12 06:00Z | late (no success for 6 days) |
+| nse | 2026-09-07 06:00Z | late (no success for 11 days; SLA 10 days) |
 | sec | 2026-09-18 06:00Z | ok |
 | stooq | never | **stale**: 13 downloads failed: stooq PWR: Exceeded the daily hits limit |
 

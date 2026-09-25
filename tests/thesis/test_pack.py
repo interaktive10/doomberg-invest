@@ -42,7 +42,7 @@ def test_the_schema_has_no_private_field() -> None:
 
 
 def test_router_inputs_built_from_a_pack_are_public_data() -> None:
-    privacy.check(ep.CardInput(json.dumps(PACK)))
+    privacy.check(ep.CardInput(ep.EvidencePack.model_validate(PACK)))
     privacy.check(ep.ClaimInput("Revenue rose.", ("quote",), ("m:x = 1",)))
 
 

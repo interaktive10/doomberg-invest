@@ -128,6 +128,8 @@ def _ranges(quote: str, nums: list[Parsed]) -> list[Parsed]:
         between = _CURRENCY_BEFORE.sub("", quote[a.end : b.start])  # "$70 billion to $75 billion"
         if not _RANGE.fullmatch(between + " ") and not _RANGE.fullmatch(between):
             continue
+        if _kinds_differ(a, b):
+            continue  # "rose 27.6% to $1.25 billion": a change and a level, not a range (M6 review R1-F8)
         before = _CURRENCY_BEFORE.sub("", quote[max(0, a.start - 14) : a.start])  # "between $70 and $75 billion"
         if between.strip().lower() == "and" and not _BETWEEN.search(before):
             continue
@@ -137,6 +139,15 @@ def _ranges(quote: str, nums: list[Parsed]) -> list[Parsed]:
         b2 = replace(b, range_with=i, currency=b.currency or a.currency, unit=b.unit or a.unit)
         out[i], out[i + 1] = a2, b2
     return out
+
+
+def _kinds_differ(a: Parsed, b: Parsed) -> bool:
+    """Both ends say what they are, and it differs (a percent and a currency amount, two currencies, two units)."""
+    if a.currency and b.currency and a.currency != b.currency:
+        return True
+    if a.unit and b.unit and a.unit != b.unit:
+        return True
+    return bool((a.unit and b.currency) or (a.currency and b.unit))
 
 
 def scale_of(word: str | None) -> Decimal:

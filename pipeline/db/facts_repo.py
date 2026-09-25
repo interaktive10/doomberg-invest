@@ -7,7 +7,7 @@ through pit.AsOf.facts (the document's publication time). Announcements are read
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
@@ -20,6 +20,9 @@ from psycopg.types.json import Jsonb
 from pipeline.db.models import LlmCall
 from pipeline.facts.diff import Diff
 from pipeline.facts.verify1 import Candidate
+from pipeline.llm.providers.base import Provider
+from pipeline.llm.quotas import Quotas
+from pipeline.llm.router import CallRecord, Router
 
 Conn = psycopg.Connection[Any]
 
@@ -44,6 +47,16 @@ def llm_usage(conn: Conn, day: date) -> dict[str, tuple[int, int]]:
            "from llm_calls where created_at >= %s and created_at < %s group by provider")  # fmt: skip
     rows = _rows(conn, sql, (start, start + timedelta(days=1)))
     return {r["provider"]: (int(r["n"]), int(r["t"])) for r in rows}
+
+
+def logged_router(conn: Conn, providers: Mapping[str, Provider], quotas: Quotas, day: date) -> Router:
+    """A Router whose calls land in llm_calls (the digest's "LLM quota use") and whose day starts from what earlier
+    runs spent (BRIEF §2.6 daily budgets; M6 review R1-F9)."""
+
+    def log(r: CallRecord) -> None:
+        record_llm_calls(conn, [LlmCall(**asdict(r))])
+
+    return Router(providers, quotas, log=log, used_today=llm_usage(conn, day))
 
 
 def record_llm_calls(conn: Conn, calls: Iterable[LlmCall]) -> None:

@@ -169,8 +169,10 @@ class EvidencePack(Model):
     next_filing: FilingWindow | None
 
     def ids(self) -> list[str]:
-        return [x.id for x in (*self.metrics, *self.signals, *self.context, *self.facts, *self.ownership,
-                               *self.insiders, *self.kill_metrics)]  # fmt: skip
+        """Every citable id, in pack order (one generator per item type: mypy joins a mixed tuple to Model)."""
+        return [*(x.id for x in self.metrics), *(x.id for x in self.signals), *(x.id for x in self.context),
+                *(x.id for x in self.facts), *(x.id for x in self.ownership), *(x.id for x in self.insiders),
+                *(x.id for x in self.kill_metrics)]  # fmt: skip
 
 
 def week_label(week_end: date) -> str:
@@ -508,13 +510,14 @@ CARD_SCHEMA = obj({
 
 @dataclass(frozen=True)
 class CardInput(PromptInput):
-    """P-04 (the fallback writer): the pack's JSON text."""
+    """P-04 (the fallback writer): the evidence pack itself, validated (BRIEF §2.6: the router takes EvidencePack
+    types; M6 review R1-F4), sent as its JSON."""
 
     prompt_id: ClassVar[str] = "P-04"
-    pack_json: str
+    pack: EvidencePack
 
     def variables(self) -> dict[str, str]:
-        return {"pack_json": self.pack_json}
+        return {"pack_json": json.dumps(to_json(self.pack), indent=1, ensure_ascii=False)}
 
     def schema(self) -> dict[str, Any]:
         return CARD_SCHEMA

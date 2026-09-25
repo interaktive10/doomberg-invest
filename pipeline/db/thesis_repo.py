@@ -43,6 +43,12 @@ def shortlist(conn: Conn, week: date) -> list[dict[str, Any]]:
                  (week,))  # fmt: skip
 
 
+def scored(conn: Conn, week: date) -> int:
+    """How many companies have a score for the week (0: the scoring run didn't finish)."""
+    row = conn.execute(_q("select count(*) from scores where week_end = %s"), (week,)).fetchone()
+    return int(row[0]) if row else 0
+
+
 def week_score(conn: Conn, company_id: UUID, week: date) -> Score | None:
     rows = _rows(conn, "select company_id, week_end, evidence, gap, families, bucket, weights_version from scores "
                        "where company_id = %s and week_end = %s", (company_id, week))  # fmt: skip
@@ -184,12 +190,15 @@ def criteria_of(conn: Conn, thesis_id: UUID) -> list[dict[str, Any]]:
 def record_check(
     conn: Conn, criterion_id: UUID, status: str, value: Decimal | None, checked: date, triggered_week: date | None
 ) -> None:
+    """triggered_week is the week the criterion last went from not met to met: a criterion that clears and triggers
+    again gets its new week, so that week's digest lists it (M6 review R1-F10)."""
     conn.execute(
         _q(
-            "update kill_criteria set status = %s, last_value = %s, last_checked = %s, "
-            "triggered_week = coalesce(triggered_week, %s) where id = %s"
+            "update kill_criteria set triggered_week = case when %(status)s = 'triggered' and status is distinct "
+            "from 'triggered' then %(week)s else triggered_week end, status = %(status)s, last_value = %(value)s, "
+            "last_checked = %(checked)s where id = %(id)s"
         ),  # fmt: skip
-        (status, value, checked, triggered_week, criterion_id),
+        {"status": status, "week": triggered_week, "value": value, "checked": checked, "id": criterion_id},
     )
 
 

@@ -102,8 +102,16 @@ def test_p04_routes_through_its_fallback_key_with_the_card_model(clock: FakeCloc
     q = Quotas.from_doc({**base.raw, "routing": {**base.raw["routing"], "P-04-fallback": ["gemini"]}})
     ps = providers([{"summary": "s"}], [ANSWER], [ANSWER])
     r = Router(ps, q, clock)
-    out = r.call(CardInput('{"week": "2026-W38"}'))
+    import json
+    from pathlib import Path
+
+    from pipeline.thesis.evidence_pack import EvidencePack, to_json
+
+    doc = json.loads((Path(__file__).resolve().parents[2] / "fixtures" / "card" / "pack.json").read_text("utf-8"))
+    pack = EvidencePack.model_validate(doc)
+    out = r.call(CardInput(pack))
     assert isinstance(out, Done) and (out.provider, out.model) == ("gemini", "gemini-big")
-    assert ps["gemini"].requests[0].user == 'EVIDENCE PACK:\n{"week": "2026-W38"}'
+    sent = ps["gemini"].requests[0].user
+    assert sent.startswith("EVIDENCE PACK:\n{") and json.loads(sent.split("\n", 1)[1]) == to_json(pack)
     assert ps["gemini"].requests[0].temperature == 0.3 and not r.exhausted("P-04")
     assert Router(ps, quotas(), clock).exhausted("P-04")  # no P-04-fallback route: nothing to call

@@ -95,24 +95,52 @@ def test_cassettes_are_recorded_by_hand_into_a_pr() -> None:
     assert "gh pr create" in runs and "git add -A" not in runs and "git add ." not in runs
 
 
-def test_the_weekly_thesis_job_evaluates_queues_commits_then_publishes() -> None:
-    """M6 (BRIEF §4.9 step 1, §4.12): kill criteria see this week's rows, the queue is committed to main for the
-    Sunday routine, and the digest issue follows (it lists this week's triggered criteria)."""
+def test_the_weekly_thesis_job_evaluates_then_queues() -> None:
+    """M6 (BRIEF §4.9 step 1): kill criteria see this week's rows, then the queue is written and committed to main
+    for the Sunday routine."""
     doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
     job = doc["jobs"]["thesis"]
     assert set(job["needs"]) == {"check", "scores", "capex_brief"} and "needs.scores.result == 'success'" in job["if"]
-    assert job["permissions"] == {"contents": "write", "issues": "write"}
+    assert job["permissions"] == {"contents": "write"}
     runs = [r for r in steps("weekly.yml", "thesis") if r]
-    order = [next(i for i, r in enumerate(runs) if key in r) for key in
-             ("pipeline.thesis.kill_criteria", "pipeline.thesis.queue", "git push origin HEAD:main",
-              "pipeline.digest.weekly")]  # fmt: skip
+    keys = ("pipeline.thesis.kill_criteria", "pipeline.thesis.queue", "git push origin HEAD:refs/heads/main")
+    order = [next(i for i, r in enumerate(runs) if key in r) for key in keys]
     assert order == sorted(order)
+
+
+def test_the_queue_commit_is_main_only_and_stages_the_queue_alone() -> None:
+    """M6 review R1-F5 (queue_commit): the commit step runs only on refs/heads/main, stages data/thesis_queue/ alone,
+    and pushes on top of a freshly fetched origin/main, rebasing and retrying when main moved."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    step = next(s for s in doc["jobs"]["thesis"]["steps"] if "git push" in str(s.get("run", "")))
+    run = step["run"]
+    assert step["if"] == "github.ref == 'refs/heads/main'"
+    assert "git add -- data/thesis_queue" in run and "git add -A" not in run and "git add ." not in run
+    assert 'git commit -m "Thesis queue $(date -u +%G-W%V)" -- data/thesis_queue' in run
+    fetch, rebase, push = (run.index(x) for x in ("git fetch --no-tags origin main", "git rebase --autostash "
+                                                   "origin/main", "git push origin HEAD:refs/heads/main"))  # fmt: skip
+    assert fetch < rebase < push and "for attempt in 1 2 3" in run
+
+
+def test_the_digest_always_runs() -> None:
+    """M6 review R1-F6 (digest_always): the digest is its own job, run every week whatever scores, the thesis job
+    or the queue push did (those are the weeks source health matters)."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    job = doc["jobs"]["digest"]
+    assert job["if"] == "always() && needs.check.outputs.db == 'true'"
+    assert job["permissions"] == {"contents": "read", "issues": "write"}
+    assert steps("weekly.yml", "digest")[-1].endswith("python -m pipeline.digest.weekly")
+    assert not any("pipeline.digest" in r for r in steps("weekly.yml", "thesis"))
 
 
 def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> None:
     ingest_doc = yaml.safe_load((WF / "thesis-ingest.yml").read_text(encoding="utf-8"))
     assert ingest_doc[True]["push"]["paths"] == ["data/thesis_cards/**"]
-    assert '--event "$GITHUB_EVENT_PATH"' in steps("thesis-ingest.yml", "ingest")[-1]
+    assert '--changed "$RUNNER_TEMP/changed.txt"' in steps("thesis-ingest.yml", "ingest")[-1]
+    # M6 review R1-F4: main's code and queue; only the pushed cards come from the pushed commit
+    checkout = ingest_doc["jobs"]["ingest"]["steps"][0]
+    assert checkout["with"]["ref"] == "${{ github.event.repository.default_branch }}"
+    assert 'git checkout "$SHA" -- data/thesis_cards' in "\n".join(steps("thesis-ingest.yml", "ingest"))
     fallback = yaml.safe_load((WF / "thesis-fallback.yml").read_text(encoding="utf-8"))
     assert fallback[True]["schedule"] == [{"cron": "0 6 * * 1"}]  # BRIEF §2.5
     assert steps("thesis-fallback.yml", "fallback")[-1].endswith("python -m pipeline.thesis.fallback_writer")
