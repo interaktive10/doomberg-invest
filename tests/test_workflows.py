@@ -28,3 +28,15 @@ def test_every_pipeline_job_migrates_first() -> None:
         for job in jobs:
             runs = [r for r in steps(name, job) if "python -m pipeline" in r]
             assert runs and "pipeline.db.migrate" in runs[0], (name, job)
+
+
+def test_size_guard_runs_after_every_weekly_job_that_writes() -> None:
+    """Review R2-F1 (M3): the 120-day announcement retention and the 400 MB check run every week (BRIEF §2.8), after
+    the jobs that write, also when one of them failed."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    job = doc["jobs"]["size_guard"]
+    writers = set(doc["jobs"]) - {"check", "size_guard"}
+    assert writers and set(job["needs"]) == writers | {"check"}
+    assert job["if"].startswith("always()") and "needs.check.outputs.db == 'true'" in job["if"]
+    runs = [r for r in steps("weekly.yml", "size_guard") if "python -m pipeline" in r]
+    assert "pipeline.db.migrate" in runs[0] and runs[-1].endswith("python -m pipeline.db.size_guard")

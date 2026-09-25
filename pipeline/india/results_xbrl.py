@@ -242,6 +242,11 @@ def listing_path(day_from: date, day_to: date, page: int = 1) -> str:
             f"&page={page}&size={PAGE_SIZE}")  # fmt: skip
 
 
+def company_listing_path(symbol: str, page: int = 1) -> str:
+    """One company's filing history, newest first (unpaged, NSE returns only the first 20 rows; review R2-F2 on M3)."""
+    return f"{LISTING_API}&symbol={symbol}&page={page}&size={PAGE_SIZE}"
+
+
 def parse_listing(raw: bytes | str) -> tuple[list[ResultsListing], int, int]:
     """The usable rows of one page, the total count across pages, and the page's row count (usable or not: paging
     counts every row)."""
