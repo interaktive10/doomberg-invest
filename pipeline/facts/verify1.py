@@ -36,16 +36,67 @@ PRICE_SUBJECT = re.compile(
     r"stock\s+performance|analysts?\b|ratings?\b|valuation\b|per\s+(?:diluted\s+)?share\b|\bEPS\b",
     re.I,
 )
-# The same topics in the grounded quote itself: the model's subject and key are its own labels, so a stock-price
-# move, EPS or a buyback labelled "price increase" or "purchase commitment" is caught from the text (M5 review R1-F1)
-PRICE_QUOTE = re.compile(
-    r"\b(?:share|stock)\s+price|price\s+target|market\s+cap(?:italization)?\b|\bdividends?\b|"
-    r"\b(?:share|stock)\s+(?:repurchase|buyback)s?\b|\brepurchase\s+(?:program|plan|authorization)|\bbuybacks?\b|"
-    r"\b(?:stock|shares)\s+(?:rose|fell|gained|lost|jumped|dropped|declined|climbed|traded|closed|performance)\b|"
-    r"\banalysts?\b|\b(?:upgraded|downgraded)\b|\bearnings\s+per\s+(?:diluted\s+)?share\b|\bper\s+diluted\s+"
-    r"share\b|\bEPS\b",
+# Share-price topics in the document's own words (M5 review R1-F1, R2-F1/F2): the model's subject, key and even its
+# quote are its own choices, so V1-TYPE reads the sentence that contains the quote in the canonical text, clause by
+# clause. A number fails when its clause names a price topic, or when the clause only modifies the one before it
+# ("..., up 14% from a year ago") and that one does. Plain words ("upgraded our plant", "analysts had modeled",
+# "continuing to pay dividends") don't: only these phrases do.
+PRICE_TOPIC = re.compile(
+    r"\b(?:share|stock)\s+prices?\b|\bprice\s+(?:target|objective)s?\b|\bmarket\s+cap(?:italization)?\b"
+    r"|\bmarket\s+value\s+of\s+(?:our\s+)?(?:common\s+)?(?:stock|shares)\b"
+    r"|\btotal\s+(?:share|stock)holder\s+returns?\b|\bTSR\b|\b(?:share|stock)holder\s+returns?\b"
+    r"|\b(?:common\s+)?(?:stock|shares)\s+(?:(?:is|was|are|were|has\s+been|have\s+been)\s+)?(?:up|down|higher|lower|rose|"
+    r"risen|fell|fallen|gained|lost|jumped|dropped|declined|climbed|traded|closed|outperformed|underperformed|returned|"
+    r"increased|decreased)\b"
+    r"|\b(?:share|stock)\s+(?:repurchases?|buy-?backs?)\b|\brepurchase\s+(?:program|plan|authorization)s?\b|\bbuy-?backs?\b"
+    r"|\brepurchased?\b[^.;]{0,30}\bshares\b"
+    r"|\bdividends?\s+(?:of|per|declared|paid|payable|yield|increase)\b|\bdividend\s+yield\b"
+    r"|\b(?:declared|paid|raised|increased|cut)\s+(?:a|the|our|its)?\s*(?:quarterly\s+|annual\s+|special\s+|cash\s+)?"
+    r"dividends?\b"
+    r"|\b(?:earnings|net\s+income|income|loss)\s+per\s+(?:diluted\s+|basic\s+)?(?:common\s+)?share\b"
+    r"|\bper\s+diluted\s+share\b|\bEPS\b"
+    r"|\banalysts?\s+(?:upgraded|downgraded|rated|raised|cut|lowered)\b"
+    r"|\b(?:upgraded|downgraded)\s+(?:their|the|our|its)?\s*(?:ratings?|stock|shares)\b"
+    r"|\b(?:buy|sell|hold|overweight|underweight)\s+ratings?\b",
     re.I,
 )
+CLAUSE_BREAK = re.compile(r"[,;:()\u2014\u2013]|\s(?:and|while|but|whereas)\s", re.I)
+MODIFIER = re.compile(
+    r"^\s*(?:up|down|higher|lower|rising|falling|an?\s+(?:increase|decrease|rise|decline|gain|drop|jump)\s+of|compared|"
+    r"versus|vs\.?|from|to)\b",
+    re.I,
+)
+SENTENCE_END = re.compile(r"(?<=[.!?])[\"'\u201d\u2019)]*\s+(?=[A-Z0-9\"'\u201c(])|\n")
+
+
+def sentence_span(text: str, start: int, end: int) -> tuple[int, int]:
+    """The sentence(s) of the canonical text that contain [start, end)."""
+    lo, hi = max(0, start - 2000), min(len(text), end + 2000)
+    a, b = lo, hi
+    for m in SENTENCE_END.finditer(text, lo, hi):
+        if m.end() <= start:
+            a = m.end()
+        elif m.start() >= end:
+            b = m.start()
+            break
+    return a, b
+
+
+def _clauses(sentence: str) -> list[tuple[int, int]]:
+    cuts = [0, *(x for m in CLAUSE_BREAK.finditer(sentence) for x in (m.start(), m.end())), len(sentence)]
+    return [(cuts[i], cuts[i + 1]) for i in range(0, len(cuts) - 1, 2)]
+
+
+def price_context(sentence: str, pos: int) -> bool:
+    """Whether the number at `pos` of the sentence is about the share price, EPS, a buyback or a dividend."""
+    clauses = _clauses(sentence)
+    k = next((i for i, (a, b) in enumerate(clauses) if a <= pos < b), len(clauses) - 1)
+    a, b = clauses[k]
+    if PRICE_TOPIC.search(sentence[a:b]):
+        return True
+    return k > 0 and bool(MODIFIER.match(sentence[a:b])) and bool(PRICE_TOPIC.search(sentence[slice(*clauses[k - 1])]))
+
+
 PER_SHARE_AFTER = re.compile(r"^\s*(?:per|a)\s+(?:diluted\s+)?share\b", re.I)
 # up to 40 characters back within the clause; a decimal point ("$1.87") doesn't end it (M5 review R1-F1)
 PER_SHARE_BEFORE = re.compile(r"(?:\bper\s+(?:diluted\s+)?share|\bEPS)\b(?:[^.;]|\.(?=\d)){0,40}$", re.I)
@@ -123,8 +174,10 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
     if g is None:
         return Rejected("V1-QUOTE", "quote not found in the chunk (exact, then whitespace/punctuation-insensitive)")
     start, end, quote = g
-    if PRICE_SUBJECT.search(p.subject) or PRICE_SUBJECT.search(p.subject_key) or PRICE_QUOTE.search(quote):
+    if PRICE_SUBJECT.search(p.subject) or PRICE_SUBJECT.search(p.subject_key):
         return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
+    s0, s1 = sentence_span(doc.text, start, end)
+    sentence = doc.text[s0:s1]
     review: dict[str, str] = {}
 
     parsed = numbers.parse(quote)
@@ -140,8 +193,13 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
     for m in matched.values():
         if not _unit_ok(p.unit, m, quote):
             return Rejected("V1-UNIT", f"unit {p.unit} disagrees with the quote around {quote[m.start : m.end]!r}")
-        if PER_SHARE_AFTER.match(quote[m.end :]) or PER_SHARE_BEFORE.search(quote[: m.start]):
+        pos = start - s0 + m.start  # the number's place in its sentence
+        if PER_SHARE_AFTER.match(sentence[pos - m.start + m.end :]) or PER_SHARE_BEFORE.search(sentence[:pos]):
             return Rejected("V1-TYPE", "a per-share amount is a price field")
+        if price_context(sentence, pos):
+            return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
+    if not matched and price_context(sentence, start - s0):
+        return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
         if m.currency is not None and m.currency != "usd":
             review["currency"] = f"{m.currency.upper()} amount: v1 stores USD only"
     if p.currency and p.currency.strip().upper() not in {"USD", "US$", "$"}:

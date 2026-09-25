@@ -55,17 +55,25 @@ class Period:
     end: date
 
 
-def _year(s: str) -> int:
-    """2027, '27 and 27 -> 2027; a range names the year it ends in: 2025-26 -> 2026, 1999-2000 -> 2000."""
+def _year(s: str) -> int | None:
+    """2027, '27 and 27 -> 2027. An Indian range names the year it ends in (2025-26 -> 2026, 1999-2000 -> 2000); a
+    range of more than one year ("2026-2028", a multi-year plan) is no single period: None (M5 review R2-F5)."""
     parts = re.split(r"\s*[-\u2013/]\s*", s.strip())
     if len(parts) == 2:
         first, last = int(parts[0].lstrip("'")), parts[1].lstrip("'")
         if len(last) == 4:
-            return int(last)
-        end = first // 100 * 100 + int(last)
-        return end + 100 if end < first else end
+            end = int(last)
+        else:
+            end = first // 100 * 100 + int(last)
+            end = end + 100 if end < first else end
+        return end if end == first + 1 else None
     y = int(s.lstrip("'"))
     return 2000 + y if y < 100 else y
+
+
+def _fy(s: str, fye: str | None) -> Period | None:
+    y = _year(s)
+    return None if y is None else fiscal_year(y, fye)
 
 
 def _date(m: re.Match[str]) -> date | None:
@@ -121,7 +129,8 @@ def resolve(label: str | None, fye: str | None, as_of: date | None = None) -> Pe
         m = pat.search(label)
         if m:
             q = ORDINAL.get(m.group(1).lower()) or int(m.group(1))
-            return _block(fiscal_year(_year(m.group(2)), fye), 3 * (q - 1), 3)
+            fy = _fy(m.group(2), fye)
+            return None if fy is None else _block(fy, 3 * (q - 1), 3)
     m = _ENDED.search(label)
     if m:
         end = _date(m)
@@ -135,14 +144,17 @@ def resolve(label: str | None, fye: str | None, as_of: date | None = None) -> Pe
     m = _HALF.search(label)
     if m:
         h = int(m.group(1) or m.group(2) or 0) or (1 if m.group(3).lower() == "first" else 2)
-        return _block(fiscal_year(_year(m.group(4)), fye), 6 * (h - 1), 6)
+        fy = _fy(m.group(4), fye)
+        return None if fy is None else _block(fy, 6 * (h - 1), 6)
     m = _CALENDAR.search(label)
     if m:
+        if re.search(r"[-\u2013/]", m.group(1)):
+            return None  # a calendar-year range is more than one year
         y = _year(m.group(1))
-        return Period(date(y, 1, 1), date(y, 12, 31))
+        return None if y is None else Period(date(y, 1, 1), date(y, 12, 31))
     m = _FISCAL.search(label) or _PLAIN_YEAR.match(label)
     if m:
-        return fiscal_year(_year(m.group(1)), fye)
+        return _fy(m.group(1), fye)
     if _NEXT_12.search(label) and as_of is not None:
         return Period(as_of + timedelta(days=1), _add_months(as_of, 12))
     return None
