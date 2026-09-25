@@ -23,7 +23,7 @@ from pipeline.net.stooq import csv_url
 from pipeline.screener import MetricFilter, ScreenSpec, run_screen
 from pipeline.settings import Settings
 from pipeline.signals import weekly
-from pipeline.us.fundamentals import load_xbrl_map, quarterize_company
+from pipeline.us.fundamentals import load_xbrl_map, quarterize_company, to_models
 from pipeline.us.submissions import parse_submissions
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures"
@@ -42,9 +42,9 @@ def fundamentals(conn: psycopg.Connection[Any], cik: str, cid: uuid.UUID, known_
     cf = json.loads((FIX / "us" / "companyfacts" / f"CIK{cik}.json").read_text(encoding="utf-8"))
     subs = parse_submissions(json.loads((FIX / "us" / "submissions" / f"CIK{cik}.json").read_text(encoding="utf-8")))
     rows = quarterize_company(cf, subs, load_xbrl_map(), TODAY).rows
-    rows = [r.model_copy(update={"company_id": cid}) for r in rows if known_by is None or r.filed_at < known_by]
-    repo.insert_fundamentals(conn, rows)
-    return len(rows)
+    models = to_models(cid, [r for r in rows if known_by is None or r.filed_at < known_by])
+    repo.insert_fundamentals(conn, models)
+    return len(models)
 
 
 def snapshot(conn: psycopg.Connection[Any], week: date) -> tuple[list[Any], list[Any], list[Any]]:
