@@ -11,7 +11,8 @@ const SDKS = /(?:from\s+|require\(|import\()\s*["'](?:openai|groq-sdk|@anthropic
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
-    if (["node_modules", ".next", "tests", "test-results", "playwright-report"].includes(name)) return [];
+    // the app's code only: the tests (tests/, e2e/) name the LLM hosts they assert against
+    if (["node_modules", ".next", "tests", "e2e", "test-results", "playwright-report"].includes(name)) return [];
     const p = join(dir, name);
     return statSync(p).isDirectory() ? files(p) : /\.(tsx?|mjs|cjs|js)$/.test(name) ? [p] : [];
   });
