@@ -84,3 +84,23 @@ def test_common_stock_must_be_listed() -> None:
         {"end": "2024-06-30", "val": 0, "form": "10-K", "filed": "2025-02-20"},
         {"end": "2024-06-30", "val": 7e9, "form": "S-1", "filed": "2025-03-01"}]}}}}}  # fmt: skip
     assert public_float(cf) == 0 and public_float({"facts": {}}) is None
+
+
+def test_partial_ttm_puts_a_new_registrant_in_the_universe() -> None:
+    """Review F5 acceptance: GE Vernova's rows as filed by 2024-05-01 (its first 10-Q) put it in the universe."""
+    import json
+
+    from pipeline.us.companyfacts import load_facts
+    from pipeline.us.quarterize import quarterize, ttm_revenue
+    from pipeline.us.submissions import parse_submissions
+
+    fix, cik, cutoff = REPO_ROOT / "fixtures" / "us", "0001996810", datetime(2024, 5, 1, tzinfo=UTC)
+    doc = json.loads((fix / "companyfacts" / f"CIK{cik}.json").read_text(encoding="utf-8"))
+    s = parse_submissions(json.loads((fix / "submissions" / f"CIK{cik}.json").read_text(encoding="utf-8")))
+    cfg = yaml.safe_load((REPO_ROOT / "config" / "signals.yaml").read_text(encoding="utf-8"))["xbrl_map"]
+    facts, _ = load_facts(doc, {k: v for k, v in cfg.items() if not isinstance(v, str)}, s.accepted())
+    rows, _ = quarterize([f for f in facts if f.filed_at < cutoff], {f.accession: f.report_date for f in s.filings
+                                                                     if f.report_date})  # fmt: skip
+    ttm, partial = ttm_revenue(rows)
+    assert partial and ttm is not None and ttm >= RULES.min_ttm_revenue_usd
+    assert decide(s, ttm, RULES, cutoff.date()).in_universe

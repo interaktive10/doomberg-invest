@@ -3,7 +3,21 @@
 from __future__ import annotations
 
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
+
+
+def index_pages(names: Iterable[str]) -> dict[str, list[str]]:
+    """CIK -> its older-filings pages (CIK##########-submissions-001.json ...), in order. submissions.zip holds ~1M
+    members, so this is built once per run; each company's lookup is then a dict hit, not a scan (review F1)."""
+    pages: dict[str, list[str]] = {}
+    for n in names:
+        cik, sep, rest = n.partition("-submissions-")
+        if sep and cik.startswith("CIK") and rest.endswith(".json"):
+            pages.setdefault(cik[3:], []).append(n)
+    for v in pages.values():
+        v.sort()
+    return pages
 
 
 class JsonSource:
@@ -14,15 +28,7 @@ class JsonSource:
         self._zip = zipfile.ZipFile(path) if path.is_file() else None
         names = self._zip.namelist() if self._zip else [p.name for p in path.glob("*.json")]
         self._names = set(names)
-        # submissions.zip holds ~1M members; its older-filings pages (CIK##########-submissions-001.json) are indexed
-        # once here, so each company's lookup is a dict hit, not a scan of every name (review F1).
-        self._pages: dict[str, list[str]] = {}
-        for n in names:
-            cik, sep, rest = n.partition("-submissions-")
-            if sep and cik.startswith("CIK") and rest.endswith(".json"):
-                self._pages.setdefault(cik[3:], []).append(n)
-        for v in self._pages.values():
-            v.sort()
+        self._pages = index_pages(names)
 
     def read(self, name: str) -> bytes | None:
         if name not in self._names:

@@ -150,19 +150,19 @@ def test_summed_alternative_needs_its_first_part() -> None:
     assert latest(quarterize(facts, REPORT)[0])[e].values["total_debt"] == D(80)
 
 
-def test_ttm_revenue_annualizes_a_new_registrant() -> None:
-    """Review F5: a spin-off's first quarters are annualized so §1.3's TTM revenue minimum can be applied."""
+def test_ttm_revenue_is_a_lower_bound_for_a_new_registrant() -> None:
+    """Review F5: a spin-off's first quarters give a lower bound (their sum), so §1.3's minimum can be applied."""
     from pipeline.us.quarterize import QuarterRow, ttm_revenue
 
     def row(end: date, rev: int | None) -> QuarterRow:
         return QuarterRow(end, "FY2024Q1", T0, {"revenue": None if rev is None else D(rev)})
 
     one = [row(date(2024, 3, 31), 7_260_000_000)]  # GE Vernova's first 10-Q
-    assert ttm_revenue(one) == (D(29_040_000_000), True)
+    assert ttm_revenue(one) == (D(7_260_000_000), True)
     four = [row(Q[k][1], 100 + 10 * k) for k in range(4)]
     assert ttm_revenue(four) == (D(460), False)
-    # a quarter left null (e.g. by the 3x Q4 check) doesn't drop a company from the universe for a year
-    assert ttm_revenue([*four[:3], row(Q[3][1], None)]) == (D(440), True)
+    # a quarter left null (e.g. by the 3x Q4 check) doesn't drop a large company from the universe for a year
+    assert ttm_revenue([*four[:3], row(Q[3][1], None)]) == (D(330), True)
     assert ttm_revenue([]) == (None, False)
     stale = [row(date(2022, 3, 31), 50), row(date(2024, 3, 31), 60)]  # only the recent quarter counts
-    assert ttm_revenue(stale) == (D(240), True)
+    assert ttm_revenue(stale) == (D(60), True)

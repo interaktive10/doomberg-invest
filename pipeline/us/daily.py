@@ -40,6 +40,7 @@ from pipeline.us.specials import effective_spinoff, html_to_text, parent_candida
 from pipeline.us.submissions import Submissions, end_of_day_utc, parse_submissions
 
 RESCAN_DAYS = 120  # Form 10 registrations usually take 1-4 months to become effective
+RETRY_DAYS = 3  # a day with failed downloads is re-read by the next runs, for this many days (then logged and passed)
 
 
 def submissions_url(cik: str) -> str:
@@ -56,6 +57,7 @@ class DailyStats:
     text_filings: int = 0
     spinoffs: int = 0
     errors: list[str] = field(default_factory=list)
+    retry: int = 0  # failed downloads (network, index not there yet): catch-up re-reads the day
 
 
 def _pending(path: Path | None) -> set[str]:
@@ -97,9 +99,12 @@ def run_daily(
     try:
         text = client.get_bytes(master_index_url(day)).decode("latin-1")
     except httpx.HTTPStatusError as e:
-        if e.response.status_code in (403, 404):  # weekend/holiday: no index
-            return stats
-        raise
+        if e.response.status_code not in (403, 404):
+            raise
+        if day.weekday() < 5:  # SEC answers 403 for an index it hasn't written yet: not a holiday (review F2)
+            stats.errors.append(f"master index {day}: HTTP {e.response.status_code} (not published yet or holiday)")
+            stats.retry += 1
+        return stats
     rows = parse_master_index(text)
     stats.index_rows = len(rows)
     sel = select(rows, universe)
@@ -112,6 +117,7 @@ def run_daily(
             f4 = parse_submission(client.get_bytes(r.url).decode("utf-8", "replace"))
         except (Form4Error, httpx.HTTPError) as e:  # one bad filing never stops the run (it is marked partial)
             stats.errors.append(f"{r.accession}: {type(e).__name__}: {e}"[:300])
+            stats.retry += isinstance(e, httpx.HTTPError)
             continue
         issuer = by_cik.get(f4.issuer_cik)
         if issuer is None or not issuer.in_universe or issuer.id is None:
@@ -144,6 +150,7 @@ def run_daily(
             subs = parse_submissions(json.loads(client.get_bytes(submissions_url(cik))))
         except (httpx.HTTPError, ValueError, KeyError) as e:
             stats.errors.append(f"submissions {cik}: {type(e).__name__}: {e}"[:300])
+            stats.retry += isinstance(e, httpx.HTTPError)
             continue
         today = {r.accession for r in rows if r.cik == cik}
         company = by_cik.get(cik)
@@ -179,6 +186,7 @@ def run_daily(
                 event = _spinoff_event(conn, client, subs, company, names)
             except httpx.HTTPError as e:  # retried at the registrant's next filing (the evidence stays in its history)
                 stats.errors.append(f"form 10 {cik}: {type(e).__name__}: {e}"[:300])
+                stats.retry += 1
                 continue
             if event is not None:
                 corp.append(event)
@@ -251,16 +259,24 @@ def run_catch_up(
     conn: psycopg.Connection[Any], client: HttpClient, today: date, pending_path: Path | None, day_path: Path | None
 ) -> list[DailyStats]:
     """Every published EDGAR day after the last one processed (review F2: at 01:30 UTC yesterday's index often
-    isn't published yet; it is picked up by the next run instead of being skipped as a 'holiday')."""
+    isn't published yet; it is picked up by the next run instead of being skipped as a 'holiday').
+
+    Each day is committed before the cursor moves past it. A day with failed downloads holds the cursor, so the next
+    run reads it again (inserts are idempotent); after RETRY_DAYS the cursor moves on and the errors stay logged."""
     last = load_last_day(day_path)
     first = (last + timedelta(days=1)) if last else today - timedelta(days=7)
     published: list[date] = []
     for q in quarters_between(min(first, today), today):
         published += published_days(json.loads(client.get_bytes(quarter_listing_url(q))))
     out: list[DailyStats] = []
+    held = False
     for day in days_to_process([d for d in published if d <= today], last):
-        out.append(run_daily(conn, client, day, pending_path))
-        save_last_day(day_path, day)
+        with conn.transaction():
+            stats = run_daily(conn, client, day, pending_path)
+        out.append(stats)
+        held = held or (stats.retry > 0 and (today - day).days <= RETRY_DAYS)
+        if not held:
+            save_last_day(day_path, day)
     return out
 
 

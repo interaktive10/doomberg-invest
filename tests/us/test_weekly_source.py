@@ -7,7 +7,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from pipeline.us.bulk import JsonSource
+from pipeline.us.bulk import JsonSource, index_pages
 
 
 def test_pages_are_found_in_order(tmp_path: Path) -> None:
@@ -34,3 +34,17 @@ def test_lookup_cost_does_not_grow_with_the_member_count(tmp_path: Path) -> None
     elapsed = time.monotonic() - t0
     assert all(g == [b"[]"] for g in got)
     assert elapsed < 2.0  # 5,000 lookups among 80,000 members; the old per-call sort scaled with the member count
+
+
+def test_pages_index_answers_the_live_zip_in_seconds() -> None:
+    """Review F1 acceptance: 6,047 lookups on a 1,000,000-member source in under 5 s, index build included (the live
+    submissions.zip had 991,718 members; the old per-call sort took 0.69 s per company)."""
+    names = [f"CIK{i:010d}.json" for i in range(600_000)]
+    names += [f"CIK{i:010d}-submissions-{p:03d}.json" for i in range(200_000) for p in (2, 1)]
+    t0 = time.monotonic()
+    index = index_pages(names)
+    got = [index.get(f"{i:010d}", []) for i in range(0, 6_047 * 50, 50)]
+    elapsed = time.monotonic() - t0
+    assert len(names) == 1_000_000 and elapsed < 5.0
+    assert got[1] == ["CIK0000000050-submissions-001.json", "CIK0000000050-submissions-002.json"]
+    assert got[-1] == []  # CIK 302,300 has no older pages

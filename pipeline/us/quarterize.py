@@ -360,10 +360,10 @@ def quarterize(
 
 def ttm_revenue(rows: Sequence[QuarterRow]) -> tuple[Decimal | None, bool]:
     """TTM revenue for the universe rule (§1.3 "TTM revenue ≥ $50M"), from the latest version of each quarter: the
-    sum of the last 4 quarters; with fewer known quarters in the last 12 months (a spin-off, an IPO, or a quarter
-    left null by a sanity check), the known ones annualized (sum x 4 / n), flagged by the bool. Otherwise a new
-    registrant stays out until its fourth quarter (review F5: GE Vernova for ~10 months of S10's 18-month window).
-    Signals compute their own TTM values (M4)."""
+    sum of the last 4 quarters. With fewer known quarters in the last 12 months (a spin-off, an IPO, or a quarter
+    left null by a sanity check), the sum of the known ones, flagged by the bool: revenue is never negative, so it is
+    a lower bound, and a company it clears certainly passes. Otherwise a new registrant stays out until its fourth
+    quarter (review F5: GE Vernova for ~10 months of S10's 18-month window). Signals compute their own TTM (M4)."""
     latest = {r.period_end: r for r in rows}
     if not latest:
         return None, False
@@ -376,4 +376,4 @@ def ttm_revenue(rows: Sequence[QuarterRow]) -> tuple[Decimal | None, bool]:
     known = [v for v in recent if v is not None]
     if not known or len(known) >= 4:
         return None, False
-    return sum(known, Decimal(0)) * 4 / len(known), True
+    return sum(known, Decimal(0)), True

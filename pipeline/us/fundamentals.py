@@ -45,7 +45,7 @@ class CompanyResult:
         return {r.period_end: r for r in self.rows}
 
     def ttm_revenue(self) -> Decimal | None:
-        """TTM revenue as currently known; annualized for a company with fewer than 4 quarters (quarterize.py)."""
+        """TTM revenue as currently known; a lower bound for a company with fewer than 4 quarters (quarterize.py)."""
         return ttm_revenue(self.rows)[0]
 
 

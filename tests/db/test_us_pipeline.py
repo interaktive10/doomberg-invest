@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -79,7 +79,7 @@ def test_restatement_is_a_new_row_and_as_of_returns_the_right_version(conn: psyc
     assert n.fetchone() == (4,)
 
 
-def test_rewriting_a_company_prunes_stale_versions(conn: psycopg.Connection[Any]) -> None:
+def test_write_company_replaces_versions_it_no_longer_produces(conn: psycopg.Connection[Any]) -> None:
     """Review F10: versions the current code no longer produces, and quarters outside the 60-quarter window, go."""
     from datetime import UTC, datetime
 
@@ -178,6 +178,54 @@ def test_catch_up_processes_every_published_day_once(conn: psycopg.Connection[An
     assert [s.day for s in stats] == ["2025-03-03", "2025-03-04"] and stats[0].purchases == 3
     assert load_last_day(day_state) == date(2025, 3, 4)
     assert run_catch_up(conn, client, date(2025, 3, 5), pending, day_state) == []  # nothing new until 03-05 is listed
+
+
+class NotYet(HttpClient):
+    """The mocks, except that `missing` URLs answer 403 (SEC's answer for an index it hasn't written yet)."""
+
+    def __init__(self, settings: Settings) -> None:
+        super().__init__(settings)
+        self.missing: set[str] = set()
+
+    def get_bytes(self, url: str, *, use_cache: bool = False, timeout: float = 60.0) -> bytes:
+        import httpx
+
+        if url in self.missing:
+            raise httpx.HTTPStatusError("403", request=httpx.Request("GET", url), response=httpx.Response(403))
+        return super().get_bytes(url, use_cache=use_cache, timeout=timeout)
+
+
+def test_catch_up_rereads_a_day_whose_index_is_not_there_yet(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """Review F2: a listed weekday whose index answers 403 isn't a holiday. It holds the cursor and the next run reads
+    it; a day that keeps failing is passed after RETRY_DAYS with the error logged."""
+    from pipeline.us.daily import RETRY_DAYS, load_last_day, run_catch_up, save_last_day
+    from pipeline.us.events import quarter_listing_url
+
+    add(conn, "0000886744", "GERON CORP")
+    quidel = add(conn, "0001906324", "QuidelOrtho Corp")
+    client = NotYet(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    client.mocks = daily_client(tmp_path).mocks
+    client.register_mock(
+        quarter_listing_url(date(2025, 3, 1)), (FIX / "events" / "daily-index-2025-QTR1.json").read_bytes()
+    )
+    client.missing = {master_index_url(date(2025, 3, 4))}
+    day_state, pending = tmp_path / "day.json", tmp_path / "pending.json"
+    save_last_day(day_state, date(2025, 2, 28))
+    first = run_catch_up(conn, client, date(2025, 3, 5), pending, day_state)
+    assert [(s.day, s.purchases, s.retry) for s in first] == [("2025-03-03", 3, 0), ("2025-03-04", 0, 1)]
+    assert "not published yet" in first[1].errors[0] and load_last_day(day_state) == date(2025, 3, 3)
+
+    client.missing = set()
+    second = run_catch_up(conn, client, date(2025, 3, 5), pending, day_state)
+    assert [(s.day, s.corp_events, s.retry) for s in second] == [("2025-03-04", 1, 0)]
+    assert load_last_day(day_state) == date(2025, 3, 4)
+    assert [e.kind for e in as_of(date(2025, 3, 5)).corp_events(conn, [quidel])] == ["auditor_change"]
+
+    save_last_day(day_state, date(2025, 3, 3))
+    client.missing = {master_index_url(date(2025, 3, 4))}
+    late = date(2025, 3, 4) + timedelta(days=RETRY_DAYS + 1)
+    assert [s.retry for s in run_catch_up(conn, client, late, pending, day_state)] == [1]
+    assert load_last_day(day_state) == date(2025, 3, 4)  # passed, with the error in the run's stats
 
 
 def test_companies_outside_the_universe_are_ignored(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
@@ -334,3 +382,51 @@ def test_reseed_keeps_the_weekly_metadata(conn: psycopg.Connection[Any]) -> None
     apple = next(c for c in repo.companies(conn, market="us") if c.cik == "0000320193")
     assert (apple.sic, apple.sector, apple.industry, apple.fiscal_year_end) == (
         "3571", "technology", "ELECTRONIC COMPUTERS", "0926")  # fmt: skip
+
+
+def test_reseed_keeps_the_weekly_universe_decision(conn: psycopg.Connection[Any]) -> None:
+    """Review F9: the quarterly seed runs before the 13F step, so it must not re-admit a company the weekly run
+    excluded (a SPAC here). A company the snapshot step had moved out is re-admitted once it is listed again."""
+    from pipeline.db import seed
+
+    spac, relisted = "0002040475", "0000320193"  # both in the committed SEC snapshot
+    add(conn, spac, "Drugs Made In America Acquisition II Corp.")
+    add(conn, relisted, "Apple Inc.")
+    weekly = {"name": None, "industry": None, "sector": None, "fiscal_year_end": None, "in_universe": False}
+    repo.update_us_company(conn, spac, **weekly, sic="6770", excluded_reason="SPAC (SIC 6770)")
+    repo.update_us_company(conn, relisted, **weekly, sic="3571", excluded_reason=repo.SNAPSHOT_OUT["us"])
+    seed.seed(conn)
+    rows = conn.execute(
+        "select cik, in_universe, excluded_reason, sic from companies where cik = any(%s)", ([spac, relisted],)
+    ).fetchall()
+    assert {r[0]: r[1:] for r in rows} == {
+        spac: (False, "SPAC (SIC 6770)", "6770"),
+        relisted: (True, None, "3571"),
+    }
+
+
+def test_form4_amendment_counts_once_and_the_original_stays_visible_before_it(conn: psycopg.Connection[Any]) -> None:
+    """Review F4: a Form 4/A restating purchases is stored as filed (point-in-time), and readers count only the latest
+    filing per insider and trade date: the original before the amendment is filed, the amendment after."""
+    from pipeline.db.models import InsiderEvent
+    from pipeline.signals.insiders import latest_versions
+    from pipeline.us.form4 import parse_submission
+
+    cid = add(conn, "0001697500", "Solaris Energy Infrastructure, Inc.")
+    amended = parse_submission((FIX / "form4" / "0000950170-25-055869.txt").read_text(encoding="utf-8"))
+    assert amended.document_type == "4/A" and amended.accepted_at is not None
+
+    def events(filed_at: datetime, url: str) -> list[InsiderEvent]:
+        return [InsiderEvent(company_id=cid, event_date=t.date, filed_at=filed_at, person=amended.person or "unknown",
+                             kind="open_market_buy", shares=t.shares, value=t.value, currency="USD", source_url=url)
+                for t in amended.purchases()]  # fmt: skip
+
+    first = datetime(2025, 3, 10, 21, tzinfo=UTC)  # the first amendment, which the fixture's 4/A restates
+    repo.insert_insider_events(conn, events(first, "https://www.sec.gov/first-4a.txt"))
+    repo.insert_insider_events(conn, events(amended.accepted_at, "https://www.sec.gov/second-4a.txt"))
+    before = as_of(amended.accepted_at).insider_events(conn, [cid])
+    after = as_of(amended.accepted_at + timedelta(seconds=1)).insider_events(conn, [cid])
+    assert len(after) == 2 * len(before) and len(before) == len(amended.purchases()) > 0  # history is kept
+    assert {e.source_url for e in latest_versions(before)} == {"https://www.sec.gov/first-4a.txt"}
+    kept = latest_versions(after)
+    assert len(kept) == len(before) and {e.source_url for e in kept} == {"https://www.sec.gov/second-4a.txt"}

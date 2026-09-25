@@ -78,26 +78,39 @@ def _set_excluded(cols: Iterable[str]) -> str:
 
 
 _US_METADATA = ("sector", "industry", "sic", "fiscal_year_end")  # filled by the weekly run from submissions (M2)
+SNAPSHOT_OUT = {"us": "not in the SEC NYSE/Nasdaq snapshot", "in": "not in the NSE EQ snapshot"}
+_DECISION = ("in_universe", "excluded_reason")
+
+
+def _keep_decision(col: str) -> str:
+    """A re-seed doesn't undo the weekly run's universe decision (review F9: the quarterly seed re-admitted SPACs and
+    funds right before the 13F step). It re-admits only a company the snapshot step had moved out (listed again)."""
+    return (
+        f"{col} = case when companies.excluded_reason is null or companies.excluded_reason = %(snapshot_out)s "
+        f"then excluded.{col} else companies.{col} end"
+    )
 
 
 def upsert_us_companies(conn: Conn, companies: Sequence[Company]) -> None:
     """US companies are keyed by CIK. The listing snapshot has no SIC/sector/industry/fiscal year: a re-seed keeps
-    the values the weekly run stored rather than blanking them."""
+    the values the weekly run stored rather than blanking them, and keeps its universe decision."""
     if any(c.market != "us" or not c.cik for c in companies):
         raise ValueError("upsert_us_companies needs market='us' rows with a cik")
     upd = (
         ", ".join(
-            f"{c} = coalesce(excluded.{c}, companies.{c})" if c in _US_METADATA else f"{c} = excluded.{c}"
+            f"{c} = coalesce(excluded.{c}, companies.{c})"
+            if c in _US_METADATA
+            else _keep_decision(c)
+            if c in _DECISION
+            else f"{c} = excluded.{c}"
             for c in _COMPANY_COLS
             if c not in ("market", "cik")
         )
         + ", updated_at = now()"
     )
+    rows = [{**c.model_dump(include=set(_COMPANY_COLS)), "snapshot_out": SNAPSHOT_OUT["us"]} for c in companies]
     with conn.cursor() as cur:
-        cur.executemany(
-            _insert("companies", _COMPANY_COLS, f"on conflict (cik) do update set {upd}"),
-            [c.model_dump(include=set(_COMPANY_COLS)) for c in companies],
-        )
+        cur.executemany(_insert("companies", _COMPANY_COLS, f"on conflict (cik) do update set {upd}"), rows)
 
 
 def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
