@@ -2,8 +2,8 @@
 
 They use price, so they never feed the Evidence score (§1.2.3). They are evaluated exactly like S1-S12 (events,
 statistics, the §4.10.5 rule) and carry weight 0 in config/weights.yaml until that rule promotes them. Point in time
-at a month-end: prices up to that month, fundamentals filed by then, and cross-sections over the companies priced
-that month.
+at a month-end: prices up to that month, fundamentals filed by then, and cross-sections over the month's population
+(the priced companies in the universe then, panel.Population).
 
 | ID | Rule | Definition |
 |---|---|---|
@@ -47,7 +47,7 @@ class LegacyInputs:
 
 @dataclass(frozen=True)
 class LegacyCross:
-    """Thresholds over the companies priced that month."""
+    """Thresholds over the month's population."""
 
     pe_tercile_max: float | None  # the bottom tercile's upper bound among positive P/Es
     ret_top_decile_min: float | None

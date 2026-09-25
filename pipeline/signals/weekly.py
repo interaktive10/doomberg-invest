@@ -44,6 +44,8 @@ from pipeline.db.models import (
     SignalValue,
 )
 from pipeline.db.pit import as_of, cutoff_for, select_as_of
+from pipeline.db.weights import read as read_weights
+from pipeline.db.weights import record_weights_in_use
 from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
 from pipeline.net.stooq import StooqClient, StooqUnavailable
@@ -475,6 +477,7 @@ def run(
     t0 = time.monotonic()
     stats = ScoresStats(week.isoformat())
     cfgs = Configs.load(root)
+    record_weights_in_use(conn, read_weights(root))  # the version the scores name, recorded and approved (M8 R2-F3)
     research = repo.research_company_ids(conn)
     companies = [c for c in repo.companies(conn) if c.id is not None and (c.in_universe or c.id in research)]
     stats.companies = len(companies)
