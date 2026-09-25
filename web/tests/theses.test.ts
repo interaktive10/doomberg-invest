@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { acceptable, afterVerdict, canMove, markMoved, positionOpen } from "@/lib/theses";
+import { needsKillReview } from "@/lib/reviews";
+import { acceptable, afterVerdict, canMove, markMoved, positionOpen, verdicts } from "@/lib/theses";
 
 describe("thesis workflow (BRIEF §1.8)", () => {
   it("offers each move in its state only", () => {
@@ -58,5 +59,26 @@ describe("leaving Review (§1.8; M7 review R1-F9)", () => {
     expect(afterVerdict("review", "intact", true, 0)).toBe("position");
     expect(afterVerdict("review", "weakened", false)).toBe("thesis");
     expect(afterVerdict("review", "broken", false, 0)).toBe("review");
+  });
+});
+
+describe("a broken verdict keeps the thesis in Review (§1.8; M7 review R2-F3)", () => {
+  // two quarters arrived together, so their reviews share created_at; the verdicts come in either order
+  const q2 = (verdict: string | null) => ({ period_end: "2026-03-31", verdict, created_at: "2026-09-25T18:24:37Z" });
+  const q3 = (verdict: string | null) => ({ period_end: "2026-06-30", verdict, created_at: "2026-09-25T18:24:37Z" });
+
+  it("Q3 broken, then Q2 intact: the thesis stays in Review", () => {
+    const first = verdicts([q2(null), q3("broken")]);
+    expect(afterVerdict("review", "broken", false, first.pending, first.broken)).toBe("review");
+    const then = verdicts([q2("intact"), q3("broken")]);
+    expect(then).toEqual({ pending: 0, broken: true });
+    expect(afterVerdict("review", "intact", false, then.pending, then.broken)).toBe("review");
+    expect(afterVerdict("review", "intact", false, 0, false)).toBe("thesis");
+  });
+
+  it("no kill-criteria review for a broken thesis, whichever order the tied reviews are read in", () => {
+    expect(needsKillReview("review", [q2("intact"), q3("broken")])).toBe(false);
+    expect(needsKillReview("review", [q3("broken"), q2("intact")])).toBe(false);
+    expect(needsKillReview("review", [q3("intact"), q2("intact")])).toBe(true);
   });
 });

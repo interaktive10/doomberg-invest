@@ -50,12 +50,18 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByRole("heading", { name: "Why it may be mispriced" })).toBeVisible();
   await page.getByRole("button", { name: "Accept as thesis" }).click();
   await flash(page, "Accepted");
+  // accept keeps the card's filing window: the one after the pack's quarter, 2026-03-31 (M7 review R2-F4)
+  await expect(page.getByText("next review 2026-08-14")).toBeVisible();
   // the quarter ended 2026-06-30 was filed after the card's pack: the page creates its review (§4.9)
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Review");
   await expect(page.getByText("waiting for a verdict")).toBeVisible();
   // the pack diff since the card (M7 review R1-F4): the quarter's figures and the kill criteria before -> now
   await expect(page.getByRole("region", { name: "Figures for review 2026-06-30" })).toContainText("1.16B → 1.22B");
   await expect(page.getByRole("region", { name: "Kill criteria for review 2026-06-30" })).toContainText("m:revenue_ttm_yoy");
+  // red flags from the scored week: R1 fired the two weeks before and is clear now (M7 review R2-F1)
+  await expect(page.getByText(/Red flags: started none; stopped none/)).toBeVisible();
+  // a fact about the June quarter published after the card's week (M7 review R2-F2)
+  await expect(page.getByText(/New fact \(as of 2026-06-30, published 2026-09-21\): backlog 14\.00B/)).toBeVisible();
 
   await journalEntry(page, "start_position", "Backlog converts; the price implies 5% growth.");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("week(s) old; the rule is 4");
@@ -68,8 +74,9 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await page.getByRole("button", { name: "Record verdict" }).click();
   await flash(page, "Marked intact.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Position");
-  // the next review is the filing window after the reviewed quarter (M7 review R1-F3)
+  // the next review is the filing window after the reviewed quarter (M7 review R1-F3), not the card's (R2-F4)
   const next = nextFiling("us", "1231", "2026-06-30", new Date().toISOString().slice(0, 10));
+  expect(next?.closes).not.toBe("2026-08-14");
   await expect(page.getByText(`next review ${next?.closes}`)).toBeVisible();
 
   await journalEntry(page, "exit", "The thesis played out.");

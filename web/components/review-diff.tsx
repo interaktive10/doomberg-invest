@@ -88,7 +88,7 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
         <ul className="list-disc pl-5">
           {state.facts.map((f) => (
             <li key={f.id}>
-              New fact ({f.as_of}): {f.subject} {f.value === null ? "" : f.unit === "usd" ? big(f.value) : `${num(f.value)} ${f.unit}`} — “{f.quote}”
+              New fact (as of {f.as_of}{f.published_at ? `, published ${f.published_at.slice(0, 10)}` : ""}): {f.subject} {f.value === null ? "" : f.unit === "usd" ? big(f.value) : `${num(f.value)} ${f.unit}`} — “{f.quote}”
               {f.url ? (
                 <>
                   {" "}

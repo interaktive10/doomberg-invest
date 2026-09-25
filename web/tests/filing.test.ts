@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entryDateCheck } from "@/lib/discipline";
+import { entryDateCheck, localToday } from "@/lib/discipline";
 import { nextFiling, type FilingWindow } from "@/lib/filing";
 import { repoFile } from "./repo";
 
@@ -33,5 +33,16 @@ describe("start_position age at the entry date (§11.9; M7 review R1-F8)", () =>
     expect(entryDateCheck("2026-09-26", "2026-08-01T09:00:00Z", "2026-07-31", now).ok).toBe(false);
     expect(entryDateCheck("2026-09-25", null, "2026-09-18", now).ok).toBe(true);
     expect(entryDateCheck("25/09/2026", null, "2026-09-18", now).ok).toBe(false);
+  });
+
+  it("takes today's date in IST, and never measures past now (M7 review round 2)", () => {
+    const night = new Date("2026-09-25T20:00:00Z"); // 01:30 IST on 2026-09-26
+    expect(localToday(night)).toBe("2026-09-26");
+    expect(localToday(now)).toBe("2026-09-25"); // 15:30 IST
+    const ist = entryDateCheck("2026-09-26", "2026-08-01T09:00:00Z", "2026-07-31", night);
+    expect(ist.ok && ist.at.toISOString()).toBe("2026-09-25T20:00:00.000Z");
+    expect(entryDateCheck("2026-09-27", "2026-08-01T09:00:00Z", "2026-07-31", night).ok).toBe(false);
+    const same = entryDateCheck("2026-09-25", "2026-08-01T09:00:00Z", "2026-07-31", now);
+    expect(same.ok && same.at.toISOString()).toBe("2026-09-25T10:00:00.000Z"); // not 23:59:59 later today
   });
 });

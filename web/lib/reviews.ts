@@ -38,7 +38,8 @@ export interface NewFact {
   subject: string;
   value: number | null;
   unit: string;
-  as_of: string;
+  as_of: string; // the date the quote states, else the document's
+  published_at: string | null; // when its document was published: what makes it new (M7 review R2-F2)
   quote: string;
   url: string | null;
 }
@@ -133,6 +134,28 @@ export function packSnapshot(pack: Record<string, unknown>): Snapshot | null {
   return { as_of: pack.week_end, quarter, figures, signals: signals.sort(), red_flags: flags.sort(), context, kill };
 }
 
+/** A company's rows from signal_values, redflag_values and context_values (week_end, id, and the fired flag, the
+ * inputs or the value). */
+export interface WeekRows {
+  signals: readonly { week_end: string; signal_id: string; fired: boolean }[];
+  flags: readonly { week_end: string; flag_id: string; inputs: Record<string, unknown> | null }[];
+  context: readonly { week_end: string; metric_id: string; value: unknown }[];
+}
+
+/** The fired signals, fired red flags and context of the latest scored week (scores.week_end; M7 review R2-F1). The
+ * weekly run stores a red flag only when it fired or is unknown (pipeline/signals/weekly.py), so a scored week without
+ * a flag's row is a week the flag was clear: the latest week that has any row would show a cleared flag as firing. */
+export function scoredWeek(week: string | null, rows: WeekRows): Pick<Snapshot, "signals" | "red_flags" | "context"> {
+  const at = <T extends { week_end: string }>(list: readonly T[]): T[] => list.filter((r) => r.week_end === week);
+  const context: Record<string, number | null> = {};
+  for (const c of at(rows.context)) context[c.metric_id] = num(c.value);
+  return {
+    signals: at(rows.signals).filter((r) => r.fired).map((r) => r.signal_id).sort(),
+    red_flags: at(rows.flags).filter((r) => r.inputs?.status === "fired").map((r) => r.flag_id).sort(),
+    context,
+  };
+}
+
 /** The snapshot stored with the most recent review that has one. */
 export function lastSnapshot(reviews: readonly { created_at: string; snapshot?: unknown }[]): Snapshot | null {
   const withOne = reviews.filter((r) => typeof r.snapshot === "object" && r.snapshot !== null);
@@ -148,9 +171,18 @@ function ordered(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
+/** The first day a row is new to a state as of `since` (yyyy-mm-dd): the next day, since a state as of a week end
+ * has what was published or filed by the end of that day (pipeline/db/pit.py cutoff_for; M7 review R2-F2). */
+export function dayAfter(since: string): string {
+  const d = new Date(`${since.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** What changed between `before` and `now`: signals and red flags that started or stopped firing, context before ->
- * now, the kill criteria's metrics before -> now, and the facts, ownership rows and insider events dated after
- * `before` (M7 review R1-F4). */
+ * now, the kill criteria's metrics before -> now (M7 review R1-F4), and the facts whose document was published after
+ * `before` (the pack's rule, whatever period they are about; M7 review R2-F2) and the ownership rows and insider
+ * events filed after it. */
 export function stateDiff(before: Snapshot | null, now: Snapshot, items: NewItems): StateDiff {
   const minus = (a: readonly string[], b: readonly string[]) => a.filter((x) => !b.includes(x));
   const since = before?.as_of ?? null;
@@ -170,7 +202,7 @@ export function stateDiff(before: Snapshot | null, now: Snapshot, items: NewItem
     kill: Object.keys(now.kill)
       .sort()
       .map((metric) => ({ metric, before: before?.kill[metric] ?? null, now: now.kill[metric] ?? null })),
-    facts: items.facts.filter((f) => after(f.as_of)),
+    facts: items.facts.filter((f) => after(f.published_at)),
     ownership: items.ownership.filter((o) => after(o.filed_at)),
     insiders: items.insiders.filter((e) => after(e.filed_at)),
   };
@@ -209,12 +241,11 @@ export function quarterReviews(
 }
 
 /** A thesis in Review with no review waiting for a verdict needs one (M7 review R1-F1): a kill criterion moved it
- * there without a new quarter. Not after a "broken" verdict, which keeps a thesis in Review until it is closed. */
-export function needsKillReview(state: string, reviews: readonly { verdict: string | null; created_at: string }[]): boolean {
-  if (state !== "review") return false;
-  if (reviews.some((r) => r.verdict === null)) return false;
-  const last = [...reviews].sort((a, b) => a.created_at.localeCompare(b.created_at)).pop();
-  return last === undefined || last.verdict !== "broken";
+ * there without a new quarter. Not after a "broken" verdict on any of its reviews, which keeps a thesis in Review until
+ * it is closed; reviews made together share created_at, so "the last verdict" would depend on the order read (M7
+ * review R2-F3). */
+export function needsKillReview(state: string, reviews: readonly { verdict: string | null }[]): boolean {
+  return state === "review" && !reviews.some((r) => r.verdict === null || r.verdict === "broken");
 }
 
 /** The review for a thesis a kill criterion moved to Review: no new quarter, the criteria as they stand, and what

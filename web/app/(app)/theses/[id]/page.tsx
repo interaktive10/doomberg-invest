@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ensureReviews, journal, killCriteria, postmortem, reviews, setting, thesis as getThesis } from "@/lib/data";
-import { thesisWeeks } from "@/lib/discipline";
+import { localToday, thesisWeeks } from "@/lib/discipline";
 import { big, code, num } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
 import type { PackDiff } from "@/lib/reviews";
@@ -42,8 +42,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
   const c = t.companies;
   const open = positionOpen(entries);
   const weeks = thesisWeeks(t.accepted_at, t.created_week, new Date());
-  const today = new Date().toISOString().slice(0, 10);
-  const pending = revs.filter((r) => r.verdict === null);
+  const today = localToday(new Date());
   return (
     <Page
       title={
@@ -145,7 +144,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                 </div>
                 <ReviewDiff id={r.period_end ?? r.created_at.slice(0, 10)} diff={r.pack_diff as Partial<PackDiff>} />
                 {r.note ? <p className="mt-2 text-sm">Note: {r.note}</p> : null}
-                {r.verdict === null && pending.length > 0 ? (
+                {r.verdict === null && t.state === "review" ? (
                   <form action={decideReview} className="mt-3 flex flex-col gap-2">
                     <Hidden id={t.id} />
                     <input type="hidden" name="review_id" value={r.id} />

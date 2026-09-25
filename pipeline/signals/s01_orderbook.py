@@ -4,22 +4,27 @@ above its year-ago value. Strength clip((g(ob) - g(rev)) / 0.30, 0, 1)."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from decimal import Decimal
 
-from pipeline.signals.base import Ctx, SignalResult, cfg_dec, fired, missing, num, quiet
-from pipeline.signals.series import ZERO, clip, growth, ratio
+from pipeline.signals.base import Ctx, Fact, SignalResult, cfg_dec, fired, missing, num, quiet
+from pipeline.signals.series import ZERO, Series, clip, growth, ratio
 
 ID, FAMILY = "S1", "fundamentals"
 MATCH_DAYS = 20  # a backlog fact belongs to a quarter when its period end is within this many days
 
 
 def order_book(ctx: Ctx) -> tuple[Callable[[int], Decimal | None], str]:
-    s = ctx.series
-    if ctx.market == "us" and any(q.get("rpo") is not None for q in s.quarters):
+    return book(ctx.series, ctx.market, ctx.facts)
+
+
+def book(s: Series, market: str, facts: Sequence[Fact]) -> tuple[Callable[[int], Decimal | None], str]:
+    """The order book by lag: US RPO where the filer tags it, else the latest verified `backlog:total` fact for the
+    quarter; and which of the two (the Company page's chart uses it too, weekly.series_points)."""
+    if market == "us" and any(q.get("rpo") is not None for q in s.quarters):
         return (lambda k: s.value("rpo", k)), "rpo"
     backlog = sorted(
-        (f for f in ctx.facts if f.fact_type == "backlog" and f.subject_key == "backlog:total" and f.period_end),
+        (f for f in facts if f.fact_type == "backlog" and f.subject_key == "backlog:total" and f.period_end),
         key=lambda f: f.as_of,
     )
 

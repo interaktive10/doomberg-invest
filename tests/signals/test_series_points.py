@@ -9,6 +9,8 @@ from decimal import Decimal
 import yaml
 
 from pipeline.settings import REPO_ROOT
+from pipeline.signals import s01_orderbook
+from pipeline.signals.base import Fact
 from pipeline.signals.series import Quarter, Series
 from pipeline.signals.weekly import series_points
 
@@ -50,3 +52,24 @@ def test_incremental_roic_needs_enough_invested_capital_growth() -> None:
     points = series_points(s, {**S2, "min_delta_ic_pct": 10})  # dIC never exceeds 10 x IC 12 quarters ago
     assert all("incremental_roic" not in p for p in points)
     assert "incremental_roic" not in series_points(s, S2)[0]  # the oldest points have no 12-quarter lookback
+
+
+def test_order_book_is_s1s_rpo_else_the_backlog_facts() -> None:
+    """M7 review R2-F5: the "RPO / backlog" chart plots S1's order book, RPO where the filer tags it, else the latest
+    verified backlog:total fact for the quarter (India, and US filers without RPO). It had RPO only."""
+    india = Series(quarters().quarters, "in")
+    facts = [
+        Fact("backlog", "backlog:total", date(2025, 10, 25), Decimal(4800), "inr", period_end=date(2025, 9, 30)),
+        Fact("backlog", "backlog:total", date(2026, 1, 20), Decimal(5200), "inr", period_end=date(2025, 12, 31)),
+        Fact("backlog", "backlog:total", date(2026, 2, 10), Decimal(5300), "inr", period_end=date(2025, 12, 31)),
+        Fact("backlog", "backlog:defence", date(2026, 2, 12), Decimal(900), "inr", period_end=date(2025, 12, 31)),
+    ]
+    points = series_points(india, S2, "in", facts)
+    ob, source = s01_orderbook.book(india, "in", facts)
+    assert source == "backlog_fact" and ob(0) == Decimal(5300)  # the latest statement for the quarter
+    assert [p.get("order_book") for p in points[-3:]] == [None, 4800.0, 5300.0]
+    assert all("order_book" not in p for p in series_points(india, S2, "in"))  # no facts, no order book
+    tagged = [Quarter(q.end, {**q.values, "rpo": Decimal(7000 + i)}) for i, q in enumerate(quarters().quarters)]
+    us = Series(tagged, "us")
+    last = series_points(us, S2, "us", facts)[-1]
+    assert last["order_book"] == last["rpo"] == 7015.0  # a filer that tags RPO: S1 uses RPO, not the text facts

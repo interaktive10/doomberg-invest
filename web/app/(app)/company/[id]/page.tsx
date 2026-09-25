@@ -115,7 +115,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
             <LineChartCard title="Cash conversion (CFO / net income, TTM)" data={data} series={[{ key: "ccr", label: "CCR" }]} format="x" />
             <LineChartCard title="Diluted shares" data={data} series={[{ key: "shares", label: "Shares" }]} format="big" />
             <LineChartCard title="Net debt / EBITDA" data={data} series={[{ key: "nd_ebitda", label: "ND/EBITDA" }]} format="x" />
-            <LineChartCard title="RPO / backlog" data={data} series={[{ key: "rpo", label: "RPO" }]} format="big" />
+            <LineChartCard title="RPO / backlog" data={data} series={[{ key: "order_book", label: "Order book" }]} format="big" />
           </div>
         )}
       </Section>

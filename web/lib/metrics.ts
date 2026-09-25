@@ -33,6 +33,7 @@ export interface SeriesPoint {
   nd_to_ebitda?: number;
   diluted_shares?: number;
   rpo?: number;
+  order_book?: number; // S1's order book: RPO where the filer tags it, else the verified backlog facts (M7 review R2-F5)
 }
 
 export interface Point {
@@ -44,7 +45,7 @@ export interface Point {
   ccr: number | null;
   shares: number | null;
   nd_ebitda: number | null;
-  rpo: number | null;
+  order_book: number | null;
 }
 
 /** The chart rows, oldest first, with a gap (null) where the pipeline had no value. */
@@ -61,6 +62,6 @@ export function chartRows(points: readonly SeriesPoint[]): Point[] {
       ccr: v(p.ccr),
       shares: v(p.diluted_shares),
       nd_ebitda: v(p.nd_to_ebitda),
-      rpo: v(p.rpo),
+      order_book: v(p.order_book),
     }));
 }

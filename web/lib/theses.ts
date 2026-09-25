@@ -39,15 +39,22 @@ export function positionOpen(entries: readonly { action: string; entry_date: str
 
 /** The state after a review verdict (§1.8 Review: intact / weakened / broken). A broken thesis stays in review until
  * it is closed with a post-mortem, and so does one with another review still waiting for a verdict (M7 review
- * R1-F9); otherwise it goes back to position (an open position) or thesis. */
+ * R1-F9) or with a broken verdict on another review, whatever the order the verdicts came in (M7 review R2-F3);
+ * otherwise it goes back to position (an open position) or thesis. */
 export function afterVerdict(
   state: ThesisState,
   verdict: "intact" | "weakened" | "broken",
   open: boolean,
   stillPending = 0,
+  brokenBefore = false,
 ): ThesisState {
-  if (state !== "review" || verdict === "broken" || stillPending > 0) return state;
+  if (state !== "review" || verdict === "broken" || brokenBefore || stillPending > 0) return state;
   return open ? "position" : "thesis";
+}
+
+/** The reviews still waiting for a verdict, and whether any says broken. */
+export function verdicts(reviews: readonly { verdict: string | null }[]): { pending: number; broken: boolean } {
+  return { pending: reviews.filter((r) => r.verdict === null).length, broken: reviews.some((r) => r.verdict === "broken") };
 }
 
 /** Only a card the pipeline wrote and validate.py passed can become a thesis (§1.8: Research is "a card was

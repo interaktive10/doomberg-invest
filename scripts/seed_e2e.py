@@ -1,6 +1,6 @@
 """Seed data for the web app's end-to-end tests (BRIEF §8 M7; CI job `web`, after the migrations on the local Supabase
 stack). Five companies scored for the week ending 2026-09-18, one per bucket or so, and everything the screens show:
-fundamentals, signals, red flags, context, a verified fact with its document, a counterparty link, a thesis card in
+fundamentals, signals, red flags, context, verified facts with their documents, a counterparty link, a thesis card in
 research with kill criteria and its company's chart series (company_series), a thesis a kill criterion moved to
 Review, a closed thesis with journal entries and a post-mortem, ownership, insider and event rows, capex memberships
 waiting for a decision, the demand index, a brief, a digest, source health, LLM use, Lab results and weights versions.
@@ -38,6 +38,8 @@ OMEGA_THESIS = "00000000-0000-4000-8000-0000000000a2"  # in Review: a kill crite
 SIGMA_THESIS = "00000000-0000-4000-8000-0000000000a3"  # closed, with journal entries and a post-mortem
 ECHO_DOC = "00000000-0000-4000-8000-0000000000d1"
 ECHO_FACT = "00000000-0000-4000-8000-0000000000f1"
+ECHO_DOC2 = "00000000-0000-4000-8000-0000000000d2"  # published after the card's week: new in its review
+ECHO_FACT2 = "00000000-0000-4000-8000-0000000000f2"
 NIMBUS = "00000000-0000-4000-8000-0000000000b1"
 
 COMPANIES = [
@@ -172,6 +174,11 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     x("insert into redflag_values (company_id, week_end, flag_id, hard, inputs) values "
       "(%s, %s, 'R1', true, '{\"status\": \"fired\"}'), (%s, %s, 'R5', false, '{\"status\": \"fired\"}')",
       (SIGMA, W, OMEGA, W))  # fmt: skip
+    # R1 fired for ECHO two and one week before and is clear in the scored week (no row): its review shows no red
+    # flag starting (M7 review R2-F1)
+    for weeks in (2, 1):
+        x("insert into redflag_values (company_id, week_end, flag_id, hard, inputs) values "
+          "(%s, %s, 'R1', true, '{\"status\": \"fired\"}')", (ECHO, W - timedelta(days=7 * weeks)))  # fmt: skip
     for k in range(5):
         week = W - timedelta(days=7 * (4 - k))
         x(
@@ -193,6 +200,18 @@ def seed(conn: psycopg.Connection[Any]) -> None:
       "scale_word, as_of, quote, char_start, char_end, extraction_model, confidence, verification_status) values "
       "(%s, %s, %s, 'backlog', 'backlog', 'backlog:total', 13200000000, 'usd', 'USD', 'billion', '2026-08-05', %s, "
       "0, %s, 'e2e', 0.90, 'verified')", (ECHO_FACT, ECHO, ECHO_DOC, quote, len(quote)))  # fmt: skip
+    # a fact about the June quarter published after the card's week: not in its pack, new in its review (M7 review
+    # R2-F2)
+    quote2 = "Backlog was $14.0 billion at June 30, 2026."
+    x("insert into documents (id, company_id, kind, url, title, published_at, sha256, raw_path, status) values "
+      "(%s, %s, 'presentation', 'https://www.sec.gov/Archives/edgar/data/999101/echo-investor-day.htm', "
+      "'Echo Grid investor day', '2026-09-21 12:00+00', %s, 'e2e/echo-investor-day.htm', 'extracted')",
+      (ECHO_DOC2, ECHO, "1" * 64))  # fmt: skip
+    x("insert into facts (id, company_id, document_id, fact_type, subject, subject_key, value_num, unit, currency, "
+      "scale_word, period_end, as_of, quote, char_start, char_end, extraction_model, confidence, verification_status) "
+      "values (%s, %s, %s, 'backlog', 'backlog', 'backlog:total', 14000000000, 'usd', 'USD', 'billion', '2026-06-30', "
+      "'2026-06-30', %s, 0, %s, 'e2e', 0.90, 'verified')",
+      (ECHO_FACT2, ECHO, ECHO_DOC2, quote2, len(quote2)))  # fmt: skip
     x("insert into entities (id, name, normalized, kind) values (%s, 'Nimbus Compute Corp.', 'nimbus compute', "
       "'company')", (NIMBUS,))  # fmt: skip
     x("insert into links (from_company_id, to_entity_id, relation, fact_id) values (%s, %s, 'customer', %s)",
@@ -209,8 +228,10 @@ def seed(conn: psycopg.Connection[Any]) -> None:
                        "unit": "usd", "currency": "USD", "as_of": "2026-08-05", "quote": quote}],
             "kill_metrics": [{"id": "m:revenue_ttm_yoy", "description": "TTM revenue vs the TTM a year earlier",
                               "value": "0.24", "unit": "ratio"}],
-            "next_filing": {"period_end": "2026-09-30", "form": "10-Q", "opens": "2026-10-01",
-                            "closes": "2026-11-14"}}  # fmt: skip
+            # the window after the pack's quarter (2026-03-31): what accept() writes as next_review, so the verdict's
+            # window (after 2026-06-30) differs from it (M7 review R2-F4)
+            "next_filing": {"period_end": "2026-06-30", "form": "10-Q", "opens": "2026-07-01",
+                            "closes": "2026-08-14"}}  # fmt: skip
     card = {"summary": "Grid equipment demand shows up in backlog first.",
             "facts": [{"text": quote, "cites": [f"f:{ECHO_FACT}"]}]}  # fmt: skip
     x("insert into theses (id, company_id, state, card_md, card_json, evidence_pack, author, validation, "

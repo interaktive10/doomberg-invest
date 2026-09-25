@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  dayAfter,
   killReview,
   lastSnapshot,
   needsKillReview,
@@ -7,6 +8,7 @@ import {
   packSnapshot,
   quarterReviews,
   reviewedThrough,
+  scoredWeek,
   stateDiff,
   type FilingRow,
   type NewItems,
@@ -95,8 +97,8 @@ describe("reviews (BRIEF §4.9: a review after each new quarterly filing, with t
     });
     const items: NewItems = {
       facts: [
-        { id: "f1", subject: "backlog", value: 13.2e9, unit: "usd", as_of: "2026-09-20", quote: "q", url: null },
-        { id: "f0", subject: "backlog", value: 12e9, unit: "usd", as_of: "2026-09-01", quote: "old", url: null },
+        { id: "f1", subject: "backlog", value: 13.2e9, unit: "usd", as_of: "2026-09-20", published_at: "2026-09-21T12:00:00+00:00", quote: "q", url: null },
+        { id: "f0", subject: "backlog", value: 12e9, unit: "usd", as_of: "2026-09-01", published_at: "2026-09-02T12:00:00+00:00", quote: "old", url: null },
       ],
       ownership: [{ quarter_end: "2026-06-30", filed_at: "2026-09-22T00:00:00Z" }, { filed_at: "2026-08-14T00:00:00Z" }],
       insiders: [{ person: "A", filed_at: "2026-09-19T10:00:00Z" }],
@@ -114,6 +116,49 @@ describe("reviews (BRIEF §4.9: a review after each new quarterly filing, with t
     expect(d.ownership).toHaveLength(1);
     expect(d.insiders).toHaveLength(1);
     expect(packSnapshot({})).toBeNull();
+  });
+
+  it("red flags now come from the latest scored week (M7 review R2-F1): a scored week without a flag's row is clear", () => {
+    const rows = {
+      signals: [
+        { week_end: "2026-09-18", signal_id: "S9", fired: true },
+        { week_end: "2026-09-18", signal_id: "S4", fired: false },
+        { week_end: "2026-09-11", signal_id: "S1", fired: true },
+      ],
+      // R1 fired in the two weeks before; the latest scored week has no R1 row (the weekly run stores no clear flag)
+      flags: [
+        { week_end: "2026-09-11", flag_id: "R1", inputs: { status: "fired" } },
+        { week_end: "2026-09-04", flag_id: "R1", inputs: { status: "fired" } },
+        { week_end: "2026-09-18", flag_id: "R3", inputs: { status: "unknown" } },
+      ],
+      context: [
+        { week_end: "2026-09-18", metric_id: "C2", value: "0.1" },
+        { week_end: "2026-09-11", metric_id: "C1", value: "3.1" },
+      ],
+    };
+    expect(scoredWeek("2026-09-18", rows)).toEqual({ signals: ["S9"], red_flags: [], context: { C2: 0.1 } });
+    expect(scoredWeek("2026-09-11", rows)).toEqual({ signals: ["S1"], red_flags: ["R1"], context: { C1: 3.1 } });
+    expect(scoredWeek(null, rows)).toEqual({ signals: [], red_flags: [], context: {} });
+    // so the review shows R1 as stopped since a card whose pack had it, not as started
+    const card = { ...NOW, as_of: "2026-09-11", red_flags: ["R1"] };
+    const d = stateDiff(card, { ...NOW, ...scoredWeek("2026-09-18", rows) }, NONE);
+    expect(d.red_flags).toEqual({ fired: [], dropped: ["R1"] });
+  });
+
+  it("new facts are those published after the state compared against, whatever date they state (M7 review R2-F2)", () => {
+    const before = packSnapshot(pack); // as of the card's week end, 2026-09-18
+    const fact = (id: string, as_of: string, published_at: string) =>
+      ({ id, subject: "backlog", value: 14e9, unit: "usd", as_of, published_at, quote: id, url: null }); // prettier-ignore
+    const d = stateDiff(before, NOW, {
+      ...NONE,
+      facts: [
+        fact("10-Q about 2026-06-30, published after the card", "2026-06-30", "2026-09-21T12:00:00+00:00"),
+        fact("published on the card's week end: in its pack", "2026-06-30", "2026-09-18T20:00:00+00:00"),
+        fact("published before the card", "2026-09-20", "2026-09-10T12:00:00+00:00"),
+      ],
+    });
+    expect(d.facts.map((f) => f.id)).toEqual(["10-Q about 2026-06-30, published after the card"]);
+    expect([dayAfter("2026-09-18"), dayAfter("2026-12-31"), dayAfter("2028-02-28")]).toEqual(["2026-09-19", "2027-01-01", "2028-02-29"]);
   });
 
   it("compares with the snapshot stored with the last review when there is one", () => {

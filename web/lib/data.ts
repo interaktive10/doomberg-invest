@@ -4,6 +4,7 @@ import { allPages } from "@/lib/paging";
 import type { ScreenSpec } from "@/lib/screener";
 import type { QuarterRow, SeriesPoint } from "@/lib/metrics";
 import {
+  dayAfter,
   FIGURES,
   killReview,
   lastSnapshot,
@@ -11,6 +12,7 @@ import {
   packSnapshot,
   quarterReviews,
   reviewedThrough,
+  scoredWeek,
   type FilingRow,
   type KillSnapshot,
   type NewItems,
@@ -353,66 +355,67 @@ async function reviewStates(thesisId: string): Promise<ReviewState[]> {
     .eq("thesis_id", thesisId));
 }
 
-function latestWeek<T extends { week_end: string }>(list: T[]): T[] {
-  const week = list.reduce<string | null>((w, r) => (w === null || r.week_end > w ? r.week_end : w), null);
-  return list.filter((r) => r.week_end === week);
-}
-
 function number(x: unknown): number | null {
   const n = typeof x === "number" ? x : typeof x === "string" && x !== "" ? Number(x) : Number.NaN;
   return Number.isFinite(n) ? n : null;
 }
 
-/** The company's state now, for a review (M7 review R1-F4): the latest quarter's figures, the latest scored week's
- * fired signals and red flags, context and scores, and the kill criteria's latest values. */
+/** The company's state now, for a review (M7 review R1-F4): the latest quarter's figures; the latest scored week's
+ * fired signals, red flags, context and scores (lib/reviews.ts scoredWeek, M7 review R2-F1); and the kill criteria's
+ * latest values. It is as of that week, like a card's pack, so the next review lists what was published after it,
+ * including what arrived after this review was made (M7 review R2-F2). */
 async function stateNow(companyId: string, filed: FilingRow[], kills: KillCriterion[]): Promise<Snapshot> {
-  const [signals, flags, context, score] = await Promise.all([
-    db().from("signal_values").select("week_end, signal_id, fired").eq("company_id", companyId)
-      .order("week_end", { ascending: false }).limit(80),
-    db().from("redflag_values").select("week_end, flag_id, inputs").eq("company_id", companyId)
-      .order("week_end", { ascending: false }).limit(40),
-    db().from("context_values").select("week_end, metric_id, value").eq("company_id", companyId)
-      .order("week_end", { ascending: false }).limit(20),
-    db().from("scores").select("week_end, evidence, gap").eq("company_id", companyId)
+  const score = one<{ week_end: string; evidence: unknown; gap: unknown }>(
+    await db().from("scores").select("week_end, evidence, gap").eq("company_id", companyId)
       .order("week_end", { ascending: false }).limit(1).maybeSingle(),
+  );
+  const week = score?.week_end ?? null;
+  const none = Promise.resolve({ data: [], error: null }); // never scored: no signals, flags or context yet
+  const [signals, flags, context] = await Promise.all([
+    week === null ? none : db().from("signal_values").select("week_end, signal_id, fired").eq("company_id", companyId)
+      .eq("week_end", week),
+    week === null ? none : db().from("redflag_values").select("week_end, flag_id, inputs").eq("company_id", companyId)
+      .eq("week_end", week),
+    week === null ? none : db().from("context_values").select("week_end, metric_id, value").eq("company_id", companyId)
+      .eq("week_end", week),
   ]);
   const latest = [...filed].sort((a, b) => a.period_end.localeCompare(b.period_end)).pop();
   const figures: Record<string, number | null> = {};
   if (latest) for (const name of FIGURES) figures[name] = latest[name];
-  const ctx: Record<string, number | null> = {};
-  for (const c of latestWeek(rows<{ week_end: string; metric_id: string; value: unknown }>(context))) ctx[c.metric_id] = number(c.value);
-  const sc = one<{ evidence: unknown; gap: unknown }>(score);
-  if (sc) Object.assign(ctx, { evidence: number(sc.evidence), gap: number(sc.gap) });
+  const at = scoredWeek(week, {
+    signals: rows<{ week_end: string; signal_id: string; fired: boolean }>(signals),
+    flags: rows<{ week_end: string; flag_id: string; inputs: Record<string, unknown> | null }>(flags),
+    context: rows<{ week_end: string; metric_id: string; value: unknown }>(context),
+  });
+  if (score) Object.assign(at.context, { evidence: number(score.evidence), gap: number(score.gap) });
   return {
-    as_of: new Date().toISOString().slice(0, 10),
+    as_of: week ?? new Date().toISOString().slice(0, 10),
     quarter: latest?.period_end ?? null,
     figures,
-    signals: latestWeek(rows<{ week_end: string; signal_id: string; fired: boolean }>(signals))
-      .filter((r) => r.fired).map((r) => r.signal_id).sort(),
-    red_flags: latestWeek(rows<{ week_end: string; flag_id: string; inputs: Record<string, unknown> | null }>(flags))
-      .filter((r) => r.inputs?.status === "fired").map((r) => r.flag_id).sort(),
-    context: ctx,
+    ...at,
     kill: Object.fromEntries(kills.map((k) => [k.metric, number(k.last_value)])),
   };
 }
 
-/** Verified facts, ownership rows and insider events after `since` (ownership and insiders through the
+/** Verified facts whose document was published after `since` (the pack's rule: pipeline/db/thesis_repo.py
+ * pack_facts; M7 review R2-F2), newest first, and the ownership rows and insider events filed after it (through the
  * point-in-time views). */
 async function itemsSince(companyId: string, since: string | null): Promise<NewItems> {
-  const after = since ?? "1900-01-01";
+  const from = since === null ? "1900-01-01" : dayAfter(since);
   const [f, o, i] = await Promise.all([
-    db().from("facts").select("id, subject, value_num, unit, as_of, quote, documents(url)").eq("company_id", companyId)
-      .eq("verification_status", "verified").gt("as_of", after).order("as_of").limit(50),
+    db().from("facts").select("id, subject, value_num, unit, as_of, quote, documents!inner(url, published_at)")
+      .eq("company_id", companyId).eq("verification_status", "verified").gte("documents.published_at", from)
+      .order("documents(published_at)", { ascending: false }).order("as_of", { ascending: false }).limit(50),
     db().from("ownership_display_v").select("quarter_end, filed_at, inst_holders, fii_pct, dii_pct, promoter_pct, " +
-      "promoter_pledged_pct").eq("company_id", companyId).gt("filed_at", after).order("filed_at").limit(20),
+      "promoter_pledged_pct").eq("company_id", companyId).gte("filed_at", from).order("filed_at").limit(20),
     db().from("insider_events_display_v").select("event_date, filed_at, person, role, kind, shares, value, currency")
-      .eq("company_id", companyId).gt("filed_at", after).order("filed_at").limit(50),
+      .eq("company_id", companyId).gte("filed_at", from).order("filed_at").limit(50),
   ]);
   const facts = rows<{ id: string; subject: string; value_num: unknown; unit: string; as_of: string; quote: string;
-    documents: { url: string } | null }>(f); // prettier-ignore
+    documents: { url: string; published_at: string } | null }>(f); // prettier-ignore
   return {
     facts: facts.map((x) => ({ id: x.id, subject: x.subject, value: number(x.value_num), unit: x.unit, as_of: x.as_of,
-      quote: x.quote, url: x.documents?.url ?? null })), // prettier-ignore
+      published_at: x.documents?.published_at ?? null, quote: x.quote, url: x.documents?.url ?? null })), // prettier-ignore
     ownership: rows<Record<string, unknown>>(o),
     insiders: rows<Record<string, unknown>>(i),
   };

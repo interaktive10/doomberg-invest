@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { journal as journalOf, setting, thesis as getThesis, type JournalEntry } from "@/lib/data";
-import { checkStartPosition, entryDateCheck, thesisWeeks } from "@/lib/discipline";
+import { checkStartPosition, entryDateCheck, localToday, thesisWeeks } from "@/lib/discipline";
 import { nextFiling } from "@/lib/filing";
 import { field, ISO_DATE, UUID, withMessage } from "@/lib/forms";
 import { db } from "@/lib/supabase/admin";
-import { acceptable, afterVerdict, canMove, positionOpen } from "@/lib/theses";
+import { acceptable, afterVerdict, canMove, positionOpen, verdicts } from "@/lib/theses";
 
 // BRIEF §1.8 and §4.9: the thesis workflow's writes. Every action checks the session, the id and the state, then
 // returns to the thesis page with ?ok= or ?error=. Journal entries and post-mortems stay in the database (never sent
@@ -117,6 +117,7 @@ export async function decideReview(form: FormData): Promise<void> {
   const note = field(form, "note");
   if (!UUID.test(reviewId)) fail(t.id, "That review isn't valid.");
   if (verdict === undefined) fail(t.id, "Pick intact, weakened or broken.");
+  if (t.state !== "review") fail(t.id, "Only a thesis in Review takes a verdict.");
   const res = await db().from("reviews").update({ verdict, note: note || null, decided_at: new Date().toISOString() })
     .eq("id", reviewId).eq("thesis_id", t.id).is("verdict", null).select("id, period_end");
   if (res.error) fail(t.id, res.error.message);
@@ -124,14 +125,16 @@ export async function decideReview(form: FormData): Promise<void> {
   if (decided === undefined) fail(t.id, "That review was already decided.");
   if (field(form, "to_journal") === "on" && note.length > 0) {
     const j = await db().from("journal").insert({
-      thesis_id: t.id, entry_date: new Date().toISOString().slice(0, 10), action: "review", reason: note,
+      thesis_id: t.id, entry_date: localToday(new Date()), action: "review", reason: note,
     });
     if (j.error) fail(t.id, j.error.message);
   }
-  // a thesis leaves Review only when no other review waits for a verdict (M7 review R1-F9)
-  const waiting = await db().from("reviews").select("id").eq("thesis_id", t.id).is("verdict", null);
-  if (waiting.error) fail(t.id, waiting.error.message);
-  const next = afterVerdict(t.state, verdict, positionOpen(await journalOf(t.id)), (waiting.data ?? []).length);
+  // a thesis leaves Review only when no other review waits for a verdict (M7 review R1-F9) and none says broken
+  // (M7 review R2-F3)
+  const all = await db().from("reviews").select("verdict").eq("thesis_id", t.id);
+  if (all.error) fail(t.id, all.error.message);
+  const { pending, broken } = verdicts((all.data ?? []) as { verdict: string | null }[]);
+  const next = afterVerdict(t.state, verdict, positionOpen(await journalOf(t.id)), pending, broken);
   // the next review date: the filing window after the reviewed quarter, or after the latest quarter on file for a
   // kill-criteria review (§1.8 review dates; M7 review R1-F3)
   let quarter = decided.period_end;
