@@ -1,0 +1,3 @@
+Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means
+every claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning
+cannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.

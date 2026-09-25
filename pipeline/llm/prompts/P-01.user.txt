@@ -1,0 +1,6 @@
+COMPANY: {{name}} ({{ticker}}), fiscal year ends {{fye}}
+DOCUMENT: {{kind}} · {{title}} · published {{published_at}}
+SECTION: {{section}} · excerpt chars {{char_start}}–{{char_end}}
+<<<
+{{text}}
+>>>

@@ -1,0 +1,2 @@
+Tag each risk-factor paragraph with the topics it is about, from the allowed list only. A paragraph can have zero
+tags. Do not summarize. Return only the tool call.

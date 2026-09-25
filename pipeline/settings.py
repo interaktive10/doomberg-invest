@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -21,6 +21,11 @@ class Settings:
     mock_externals: bool
     sec_user_agent: str | None
     cache_dir: Path
+    # free-tier keys (BRIEF §0.5, §2.6); a provider without its key is skipped by the router
+    gemini_api_key: str | None = field(default=None, repr=False)
+    groq_api_key: str | None = field(default=None, repr=False)
+    openrouter_api_key: str | None = field(default=None, repr=False)
+    eia_api_key: str | None = field(default=None, repr=False)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -29,4 +34,8 @@ class Settings:
             mock_externals=_flag("MOCK_EXTERNALS"),
             sec_user_agent=os.environ.get("SEC_USER_AGENT") or None,
             cache_dir=Path(os.environ.get("DOOM_CACHE_DIR", REPO_ROOT / ".cache")),
+            gemini_api_key=os.environ.get("GEMINI_API_KEY") or None,
+            groq_api_key=os.environ.get("GROQ_API_KEY") or None,
+            openrouter_api_key=os.environ.get("OPENROUTER_API_KEY") or None,
+            eia_api_key=os.environ.get("EIA_API_KEY") or None,
         )

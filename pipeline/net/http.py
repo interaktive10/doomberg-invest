@@ -16,9 +16,10 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -169,6 +170,21 @@ class HttpClient:
             cp.parent.mkdir(parents=True, exist_ok=True)
             cp.write_bytes(body)
         return body
+
+    def post_json(
+        self, url: str, payload: Mapping[str, Any], *, headers: Mapping[str, str] | None = None, timeout: float = 120.0
+    ) -> bytes:
+        """POST a JSON body (the LLM providers, BRIEF §2.6). Same allowlist and mock rules as get_bytes; never cached
+        (bodies carry document text) and no redirects. Non-2xx raises httpx.HTTPStatusError with the response."""
+        host = check_allowed(url)
+        if self.settings.mock_externals:
+            return self._mock(url, host)
+        self.limiter.wait(host)
+        if self._client is None:
+            self._client = httpx.Client(follow_redirects=False, timeout=timeout)
+        r = self._client.post(url, json=dict(payload), headers=dict(headers or {}), timeout=timeout)
+        r.raise_for_status()
+        return r.content
 
     def download(self, url: str, dest: Path, *, timeout: float = 600.0) -> Path:
         """Stream a large file (SEC bulk zips are gigabytes) to `dest` without holding it in memory. Same allowlist,
