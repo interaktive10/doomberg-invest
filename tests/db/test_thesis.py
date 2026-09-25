@@ -410,14 +410,16 @@ def test_fallback_and_ingest_llm_calls_are_logged(conn: psycopg.Connection[Any],
     good = json.loads((FIX / "card" / "good.json").read_text())
     base = quotas(["gemini"])
     q = Quotas.from_doc({**base.raw, "routing": {**base.raw["routing"], "P-04-fallback": ["gemini"]}})
-    gemini = Scripted("gemini", [good])
+    support = {"supported": True, "unsupported_parts": [], "reason": "stated"}
+    gemini = Scripted("gemini", [good, *[support] * 6])  # P-05 checks each of the 6 items (M6 review R3-F1)
     today = datetime.now(UTC).date()  # llm_calls.created_at is the database's now()
     router = facts_repo.logged_router(conn, {"gemini": gemini}, q, today)
     out = fallback_writer.write_cards(conn, router, "2026-W38", tmp_path,
                                       now=lambda: datetime(2026, 9, 21, 6, tzinfo=UTC))  # fmt: skip
-    assert out.written == ["us-nmbs"] and len(gemini.requests) >= 1
+    assert out.written == ["us-nmbs"] and len(gemini.requests) == 7
     rows = conn.execute("select prompt_id, provider, ok from llm_calls order by created_at").fetchall()
     assert len(rows) == len(gemini.requests) and rows[0] == ("P-04", "gemini", True)
+    assert [r[0] for r in rows[1:]] == ["P-05"] * 6
     assert facts_repo.llm_usage(conn, today)["gemini"][0] == len(rows)  # where the next run starts
     for main in (fallback_writer.main, ingest.main):
         assert "facts_repo.logged_router(" in inspect.getsource(main)
@@ -467,7 +469,8 @@ def test_fallback_p04_and_p05_replay_from_cassettes(conn: psycopg.Connection[Any
     q = Quotas.from_doc({**base.raw, "routing": {**base.raw["routing"], "P-04-fallback": ["gemini"]}})
     tapes = tmp_path / "cassettes"
     support = {"supported": True, "unsupported_parts": [], "reason": "the quote states the order"}
-    recorder = Router({"gemini": Recorder(Scripted("gemini", [card, support]), tapes)}, q, FakeClock())
+    # P-05 checks each of the card's 6 fact and why-mispriced items (M6 review R3-F1)
+    recorder = Router({"gemini": Recorder(Scripted("gemini", [card, *[support] * 6]), tapes)}, q, FakeClock())
     _, result = samples.run(recorder)
     assert result is not None and result.ok, result
     write_manifest(tapes)
