@@ -1,5 +1,5 @@
 import "server-only";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { env } from "@/lib/env";
 
@@ -12,7 +12,7 @@ export async function authClient() {
       getAll() {
         return store.getAll();
       },
-      setAll(list) {
+      setAll(list: { name: string; value: string; options: CookieOptions }[]) {
         try {
           for (const { name, value, options } of list) store.set(name, value, options);
         } catch {

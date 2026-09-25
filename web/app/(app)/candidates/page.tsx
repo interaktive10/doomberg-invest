@@ -196,7 +196,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
                             <Label htmlFor={`reason-${r.company_id}`}>Reason</Label>
                             <Input id={`reason-${r.company_id}`} name="reason" required className="w-48" />
                             <Button type="submit" size="sm" variant="outline">
-                              Dismiss
+                              Dismiss for this week
                             </Button>
                           </form>
                         </details>

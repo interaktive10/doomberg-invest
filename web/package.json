@@ -36,7 +36,6 @@
     "@axe-core/playwright": "^4.10.0",
     "@playwright/test": "^1.56.0",
     "@tailwindcss/postcss": "^4.1.0",
-    "@types/cytoscape": "^3.21.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

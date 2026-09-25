@@ -6,8 +6,8 @@ export function StaleBanner({ sources, now }: { sources: SourceHealth[]; now: Da
   const late = staleSources(sources, now);
   if (late.length === 0) return null;
   return (
-    <div role="alert" className="border-b border-amber-700 bg-amber-50 px-4 py-2 text-sm text-gray-900">
+    <aside aria-label="Stale data" className="border-b border-amber-700 bg-amber-50 px-4 py-2 text-sm text-gray-900">
       <strong>Stale data:</strong> {late.join(", ")}. Signals and scores that read these sources may be out of date.
-    </div>
+    </aside>
   );
 }

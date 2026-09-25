@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 async function flash(page: Page, text: string | RegExp): Promise<void> {
-  await expect(page.getByRole("status")).toContainText(text);
+  await expect(page.getByRole("main").getByRole("status")).toContainText(text);
 }
 
 async function journalEntry(page: Page, action: string, reason: string, override?: string): Promise<void> {
@@ -21,7 +21,7 @@ test("candidates: dismiss one with a reason, start research on another", async (
   const kappa = page.getByRole("row").filter({ hasText: "Kappa Cables Ltd" });
   await kappa.locator("summary").click();
   await kappa.getByLabel("Reason").fill("Promoter pledge is rising");
-  await kappa.getByRole("button", { name: "Dismiss" }).click();
+  await kappa.getByRole("button", { name: "Dismiss for this week", exact: true }).click();
   await flash(page, "Dismissed for this week.");
   await expect(page.getByRole("row").filter({ hasText: "Kappa Cables Ltd" })).toHaveCount(0);
   await expect(page.getByRole("row").filter({ hasText: "Echo Grid Corp." })).toHaveCount(1);
@@ -51,11 +51,11 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByText("waiting for a verdict")).toBeVisible();
 
   await journalEntry(page, "start_position", "Backlog converts; the price implies 5% growth.");
-  await expect(page.getByRole("alert")).toContainText("week(s) old; the rule is 4");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("week(s) old; the rule is 4");
   await journalEntry(page, "start_position", "Backlog converts; the price implies 5% growth.", "Order book confirmed.");
   await flash(page, "Position recorded in the journal.");
 
-  await page.getByLabel("intact").check();
+  await page.getByLabel("intact", { exact: true }).check();
   await page.getByLabel("Note", { exact: true }).fill("Q2 in line with the card.");
   await page.getByLabel("Also add the note to the journal").check();
   await page.getByRole("button", { name: "Record verdict" }).click();
@@ -66,7 +66,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await flash(page, "Journal entry added.");
 
   await page.getByLabel("What happened, compared with the thesis").fill("Backlog converted as expected.");
-  await page.getByLabel("yes").check();
+  await page.getByLabel("yes", { exact: true }).check();
   await page.getByLabel("What the signals said").fill("S1 and S9 fired early.");
   await page.getByLabel("Lessons").fill("Wait for the second quarter of conversion.");
   await page.getByRole("button", { name: "Close thesis" }).click();
@@ -93,7 +93,7 @@ test("screener: save a screen, load it, export CSV", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Results/ })).toHaveCount(0);
   await page.getByRole("link", { name: "e2e evidence 60" }).click();
   await expect(page.getByRole("heading", { name: "Results (3)" })).toBeVisible();
-  await expect(page.getByText("loaded")).toBeVisible();
+  await expect(page.getByText("loaded", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Min Evidence (0–100)")).toHaveValue("60");
 
   const csv = await page.request.get("/screener/export?min_evidence=60");
