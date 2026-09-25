@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal as D
+from uuid import uuid4
 
 import yaml
 
@@ -72,5 +73,5 @@ def test_r4_india_ingestion_keeps_acquisitions_beyond_the_announcement_prune() -
     assert not is_acquisition(SAST.detail["category"], SAST.detail["text"])
     assert not is_acquisition("Acquisition", SUBSIDIARY.detail["text"])
     events = daily._events([ann("Acquisition", "Acquisition of Grid Cables Pvt Ltd"),
-                            ann(SAST.detail["category"], SAST.detail["text"])], {"ARVL": "cid"})  # fmt: skip
+                            ann(SAST.detail["category"], SAST.detail["text"])], {"ARVL": uuid4()})  # fmt: skip
     assert sorted(e.kind for e in events) == ["acquisition", "announcement", "announcement"]
