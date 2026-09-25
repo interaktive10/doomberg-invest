@@ -1,4 +1,4 @@
-"""Repositories for the text facts and the Capex Desk (M5; BRIEF §4.5, §4.11, Appendix F.2, migration 0008).
+"""Repositories for the text facts and the Capex Desk (M5; BRIEF §4.5, §4.11, Appendix F.2, migration 0009).
 
 None of these tables is a point-in-time table of the guard's pit_rule; facts are read point in time for signals
 through pit.AsOf.facts (the document's publication time). Announcements are read through pit.AsOf.corp_events.

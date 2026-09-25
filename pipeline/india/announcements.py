@@ -8,11 +8,28 @@ Triage (P-07) and PDF extraction for the capex desk and candidates are M5's.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
+
+
+_ACQUISITION = re.compile(r"\bacqui(?:re|red|res|ring|sitions?)\b|\bamalgamat", re.I)
+_NOT_ACQUISITION = re.compile(  # M4 review R1-F5: shareholders' takeover-code disclosures and new subsidiaries
+    r"regulation\s*29|substantial\s+acquisition\s+of\s+shares|\bSAST\b|takeovers?\)?\s+regulations|"
+    r"incorporat(?:ion|ed|es|ing)\b",
+    re.I,
+)
+
+
+def is_acquisition(category: str, text: str) -> bool:
+    """An announcement of the company acquiring or amalgamating a business (R4's India exception): NSE files
+    SEBI takeover-code disclosures (Regulation 29, "Substantial Acquisition of Shares and Takeovers") and the
+    incorporation of subsidiaries under the same words, and those are not the company buying anything."""
+    s = f"{category} {text}"
+    return bool(_ACQUISITION.search(s)) and not _NOT_ACQUISITION.search(s)
 
 
 def ist_to_utc(s: str, fmt: str = "%d-%b-%Y %H:%M:%S") -> datetime:

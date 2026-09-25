@@ -317,3 +317,48 @@ def test_guards_yaml_is_appendix_e_verbatim() -> None:
     block = brief[start : brief.index("\n```", start) + 1]
     body = (CONFIG / "guards.yaml").read_text(encoding="utf-8").split("\n", 1)[1]
     assert body == block
+
+
+# ---------------------------------------------------------------- every protected key is read (M4 review R1-F9)
+
+PIPELINE = CONFIG.parent / "pipeline"
+READ_BY_CODE = ("signals.yaml", "redflags.yaml", "context.yaml")
+DATA_MAPS = {"xbrl_map", "ind_as_map", "families", "benchmarks"}  # their keys are data, iterated rather than named
+DATA_KEYS = {"version", "us", "in"}  # market codes are read as cfg[market]
+
+
+def _keys(doc: Any, path: str = "") -> list[str]:
+    out: list[str] = []
+    if isinstance(doc, dict):
+        for k, v in doc.items():
+            dotted = f"{path}.{k}" if path else str(k)
+            if str(k) in DATA_KEYS:
+                continue
+            out.append(dotted)
+            if str(k) not in DATA_MAPS:
+                out += _keys(v, dotted)
+    return out
+
+
+def _is_read(key: str, source: str) -> bool:
+    """The key is named in a subscript (cfg["key"]), a .get("key", ...), a section lookup (ctx.section("key")) or a
+    helper call (_dec(c, "key"))."""
+    import re
+
+    q = re.escape(key)
+    pattern = rf"""\[\s*["']{q}["']\s*\]|\.(?:get|section)\(\s*["']{q}["']|,\s*["']{q}["']\s*\)"""
+    return re.search(pattern, source) is not None
+
+
+def test_every_protected_key_is_read_by_code() -> None:
+    """A protected threshold that no code reads is a silent restatement: changing it (through a human-approved PR)
+    would change nothing. R1..R6 and S-ids are read as cfg[flag_id]/cfg[section] too, so only leaf names are checked
+    for them."""
+    source = "\n".join(p.read_text(encoding="utf-8") for p in PIPELINE.rglob("*.py"))
+    missing = []
+    for name in READ_BY_CODE:
+        for dotted in _keys(_load(name)):
+            leaf = dotted.rsplit(".", 1)[-1]
+            if not _is_read(leaf, source):
+                missing.append(f"{name}:{dotted}")
+    assert not missing, f"config keys no code reads: {missing}"

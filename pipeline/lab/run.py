@@ -75,7 +75,7 @@ def load(conn: psycopg.Connection[Any], market: str, prices: Path, today: date) 
         companies=companies,
         versions=_by_company(snap.fundamental_versions(conn, ids)),
         bars={c.id: bars[c.ticker] for c in companies if c.id is not None and c.ticker},
-        ownership=_by_company(snap.ownership(conn, ids)),
+        ownership=_by_company(snap.ownership_versions(conn, ids)),  # every version: replayed per month
         insiders=_by_company(snap.insider_events(conn, ids)),
         events=_by_company(snap.corp_events(conn, ids)),
         facts=_by_company(snap.facts(conn, ids)),

@@ -1,4 +1,4 @@
--- 0008 (M5): text facts and the Capex Desk (BRIEF §4.5, §4.11, §5 P-06/P-07, Appendix F).
+-- 0009 (M5): text facts and the Capex Desk (BRIEF §4.5, §4.11, §5 P-06/P-07, Appendix F).
 --   1. facts: the stored quote is exactly the canonical text between its offsets (V1-QUOTE; the M5-02 invariant), so
 --      its length equals the span. facts.withdrawn keeps P-01's withdrawal flag (Appendix F.6).
 --   2. announcement_triage: the P-07 result per India announcement (corp_events kind 'announcement'). No row = not

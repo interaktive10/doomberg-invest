@@ -3,7 +3,7 @@
 | Bucket    | Rule                                                              |
 | candidate | Evidence >= 60, Gap >= 50, no hard red flag                       |
 | priced_in | Evidence >= 60, Gap < 50                                          |
-| early     | Evidence 40-59 (below the candidate bar) with >= 2 families, Gap >= 50 |
+| early     | Evidence 40-59 (40 <= E < 60) with >= 2 families, Gap >= 50           |
 | excluded  | any hard red flag                                                 |
 | none      | anything else: Gap unknown, below the market-cap floor, weak evidence |
 
@@ -44,7 +44,7 @@ def bucket(
     if evidence >= _d(pin["min_evidence"]) and gap < _d(pin["max_gap_exclusive"]):
         return "priced_in"
     if (
-        _d(early["min_evidence"]) <= evidence < _d(cand["min_evidence"])
+        _d(early["min_evidence"]) <= evidence < _d(early["max_evidence"]) + 1  # "40-59": 59.9 is still early
         and n_families >= int(early["min_families"])
         and gap >= _d(early["min_gap"])
     ):

@@ -77,6 +77,8 @@ def five_year_margin(s: Series, cfg: Mapping[str, Any]) -> Decimal | None:
 def sales_to_capital(s: Series, cfg: Mapping[str, Any]) -> Decimal:
     ratios: list[Decimal] = []
     for k in range(0, 4 * int(cfg["s2c_median_years"]), 4):
+        if not s.year_back_ok(k):
+            continue
         rev, rev_then = s.ttm("revenue", k), s.ttm("revenue", k + 4)
         ic, ic_then = s.invested_capital(k), s.invested_capital(k + 4)
         if rev is None or rev_then is None or ic is None or ic_then is None or ic - ic_then <= 0:
