@@ -3,11 +3,16 @@
 - Browser headers plus a Referer; cookies from a warm-up request to the NSE home page, re-warmed every 600 s. A
   forced re-warm rebuilds the session, which drops cookies NSE has flagged. The home page itself is often refused
   to data-centre IPs while the APIs still answer, so a failed warm-up is not an error.
-- ≤ 1 request per 3 s per NSE host: enforced by pipeline/net/http.py's rate limiter (ALLOWED_HOSTS).
+- ≤ 1 request per 3 s to NSE as a whole (www and nsearchives share one limit): pipeline/net/http.py's rate limiter.
 - A block is a 401/403/429 response (NSE's CDN answers "Access Denied"). After a block: one retry on a rebuilt
   session, then exponential backoff. **3 consecutive blocks** make the client stale for the rest of the run:
   every later call raises NseStale at once, and the caller marks source_health 'nse' stale and switches to BSE,
   then to the manual CSV import (pipeline/india/manual_import.py).
+- 5xx answers and timeouts back off and retry; a URL that still fails after the retries is a failure, and **3
+  consecutive failed URLs** also make the client stale (review F9 on M3: a sustained outage must not spend the
+  run's time budget one URL at a time).
+- `deadline` (a clock value): the run's time budget. After it the client makes no request (NseDeadline) and the
+  runs leave the rest queued for the next run, so the job never reaches its timeout.
 - NSE also answers 403 for an archive file that doesn't exist (a holiday's bhavcopy), so callers ask NSE only for
   files that exist (the bhavcopy run checks the trading day with BSE first).
 - Immutable archive files (bhavcopy, XBRL) are cached on disk (use_cache).
@@ -29,6 +34,7 @@ NSE_ARCHIVES = "https://nsearchives.nseindia.com"
 WARM_EVERY_S = 600.0
 BLOCK_STATUSES = frozenset({401, 403, 429})
 MAX_CONSECUTIVE_BLOCKS = 3
+MAX_CONSECUTIVE_FAILURES = 3  # URLs that still failed (5xx, timeout) after their retries
 
 
 class NseBlocked(Exception):
@@ -36,7 +42,11 @@ class NseBlocked(Exception):
 
 
 class NseStale(NseBlocked):
-    """3 consecutive blocks: NSE is treated as unavailable for the rest of the run."""
+    """3 consecutive blocks (or failed URLs): NSE is treated as unavailable for the rest of the run."""
+
+
+class NseDeadline(NseBlocked):
+    """The run's time budget is spent: no more NSE requests this run (not a fault of NSE's)."""
 
 
 @dataclass
@@ -46,9 +56,20 @@ class NseClient:
     sleep: Callable[[float], None] = time.sleep
     backoff: tuple[float, ...] = (6.0, 12.0, 24.0)  # waits between attempts after the re-warm retry
     consecutive_blocks: int = 0
+    consecutive_failures: int = 0
     stale: bool = False
     blocks: list[str] = field(default_factory=list)  # "status url", for source_health.last_error
+    deadline: float | None = None  # clock() value after which no request is made
     _warmed_at: float | None = None
+
+    @property
+    def out_of_time(self) -> bool:
+        return self.deadline is not None and self.clock() >= self.deadline
+
+    @property
+    def unavailable(self) -> bool:
+        """Stale or out of time: loops stop and leave the rest queued."""
+        return self.stale or self.out_of_time
 
     def _warm(self, force: bool = False) -> None:
         now = self.clock()
@@ -68,11 +89,22 @@ class NseClient:
         if self.consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
             self.stale = True
 
+    def _failed(self, url: str, reason: str) -> NseBlocked:
+        """A URL that kept failing after its retries (5xx, timeout)."""
+        self.consecutive_failures += 1
+        self.blocks.append(f"{reason} {url}")
+        if self.consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            self.stale = True
+            return NseStale(f"NSE stale after {MAX_CONSECUTIVE_FAILURES} consecutive failed requests ({url})")
+        return NseBlocked(f"{reason} {url}")
+
     def get(self, url: str, *, referer: str = NSE_HOME, use_cache: bool = False) -> bytes:
         """GET an NSE API or archive URL. Raises NseStale (source unavailable this run), NseBlocked (this URL kept
         failing), or httpx.HTTPStatusError for other client errors (404)."""
         if self.stale:
-            raise NseStale(f"NSE is stale after {MAX_CONSECUTIVE_BLOCKS} consecutive blocks: {self.blocks[-3:]}")
+            raise NseStale(f"NSE is stale after 3 consecutive blocks or failures: {self.blocks[-3:]}")
+        if self.out_of_time:
+            raise NseDeadline(f"the run's time budget is spent ({url})")
         self._warm()
         headers = {"Referer": referer, "Accept": "application/json, text/plain, */*"}
         rewarmed = False
@@ -94,16 +126,16 @@ class NseClient:
                         continue
                 wait = next(waits, None)
                 if wait is None:
-                    raise NseBlocked(f"{status} {url}") from e
+                    raise self._failed(url, str(status)) from e
                 self.sleep(wait)
                 continue
             except httpx.TransportError as e:
                 wait = next(waits, None)
                 if wait is None:
-                    raise NseBlocked(f"{type(e).__name__} {url}") from e
+                    raise self._failed(url, type(e).__name__) from e
                 self.sleep(wait)
                 continue
-            self.consecutive_blocks = 0
+            self.consecutive_blocks = self.consecutive_failures = 0
             return body
 
     def api(self, path: str, referer: str = NSE_HOME) -> bytes:

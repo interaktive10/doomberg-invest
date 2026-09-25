@@ -56,6 +56,7 @@ class Form4:
     accession: str | None
     accepted_at: datetime | None  # UTC
     document_type: str  # "4" or "4/A"
+    original_date: date | None  # a 4/A's dateOfOriginalSubmission: the filing date of the Form 4 it amends
     issuer_cik: str
     issuer_name: str
     issuer_symbol: str | None
@@ -177,6 +178,7 @@ def parse_xml(xml: str, accession: str | None = None, accepted_at: datetime | No
         accession=accession,
         accepted_at=accepted_at,
         document_type=_text(root, "documentType") or "4",
+        original_date=_date(_text(root, "dateOfOriginalSubmission")),
         issuer_cik=(_text(root, "issuer/issuerCik") or "").zfill(10),
         issuer_name=_text(root, "issuer/issuerName") or "",
         issuer_symbol=_text(root, "issuer/issuerTradingSymbol"),
@@ -185,6 +187,13 @@ def parse_xml(xml: str, accession: str | None = None, accepted_at: datetime | No
         footnotes=footnotes,
         transactions=tuple(txs),
     )
+
+
+def _date(v: str | None) -> date | None:
+    try:
+        return date.fromisoformat(v.strip()[:10]) if v else None
+    except ValueError:
+        return None
 
 
 def header_acceptance(text: str) -> datetime | None:

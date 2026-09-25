@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline.india import announcements, bhavcopy
+from pipeline.india import announcements, bhavcopy, manual_import
 from pipeline.india.results_xbrl import Filed, build_rows, load_ind_as_map, parse_results
 from pipeline.india.securities import parse_asm, parse_equity_list, parse_gsm
 from pipeline.india.shareholding import parse_listing, parse_shareholding
@@ -211,3 +211,53 @@ def test_announcements() -> None:
     assert first.pdf_url is not None and first.pdf_url.startswith("https://nsearchives.nseindia.com/corporate/")
     assert announcements.api_path(date(2026, 9, 24), date(2026, 9, 25)).endswith(
         "from_date=24-09-2026&to_date=25-09-2026")  # fmt: skip
+
+
+# ---------------------------------------------------------------- the pages' CSVs (manual import; review F4 on M3)
+
+
+def test_announcements_page_csv() -> None:
+    """The announcements page's "Download (.csv)" carries every field corp_events keeps; its times are the API's."""
+    imp = manual_import.import_file(FIN / "announcements" / "announcements_2026-09-19.csv")
+    assert imp.kind == "announcements" and len(imp.announcements) == 185  # NSE's count for Saturday 2026-09-19
+    sfl = imp.announcements[0]
+    assert (sfl.symbol, sfl.category, sfl.event_date) == ("SFL", "Shareholders meeting", date(2026, 9, 19))
+    assert sfl.filed_at == datetime(2026, 9, 19, 18, 3, 28, tzinfo=UTC)  # dissemination 23:33:28 IST
+    assert (
+        sfl.pdf_url
+        == "https://nsearchives.nseindia.com/corporate/SFL_19092026233311_Intimation_of_Scrutinizer_Report.pdf"
+    )
+    assert imp.announcements[-1].filed_at == datetime(2026, 9, 18, 19, 0, tzinfo=UTC)  # 00:30 IST: still the 19th
+    by_day = manual_import.announcements_by_day(FIN / "announcements")
+    assert {d: len(v) for d, v in by_day.items()} == {date(2026, 9, 19): 185}
+    api = announcements.parse((FIN / "announcements" / "announcements.json").read_bytes())[0]
+    assert api.filed_at.second == 34  # the API's exchdisstime, the CSV's DISSEMINATION column
+
+
+def test_shareholding_page_csv() -> None:
+    """The shareholding page's CSV: promoter % by company name, the listing's broadcast time and XBRL link."""
+    imp = manual_import.import_file(FIN / "shareholding" / "shareholding_page.csv")
+    assert imp.kind == "shareholding" and len(imp.shareholding) == 27
+    listing = {x.symbol: x for x in parse_listing((FIN / "shareholding" / "index.json").read_bytes())}
+    rows = {r.company: r for r in imp.shareholding}
+    for symbol, name in (("KEI", "KEI Industries Limited"), ("JSWSTEEL", "JSW Steel Limited"),
+                         ("JPPOWER", "Jaiprakash Power Ventures Limited")):  # fmt: skip
+        xbrl = parse_shareholding((FIN / "shareholding" / f"SHP_{symbol}_2026-06-30.xml").read_bytes())
+        r = rows[name]
+        assert (r.quarter_end, r.promoter_pct) == (xbrl.quarter_end, xbrl.promoter_pct)
+        assert (r.filed_at, r.xbrl_url) == (listing[symbol].filed_at, listing[symbol].xbrl_url)
+    eq = parse_equity_list((FIN / "securities" / "EQUITY_L.csv").read_bytes())
+    names: dict[str, list[str]] = {}
+    for s in eq:
+        names.setdefault(manual_import.company_key(s.name), []).append(s.symbol)
+    matched = [names.get(manual_import.company_key(r.company), []) for r in imp.shareholding]
+    assert sum(len(m) == 1 for m in matched) == 26  # the other one is not on the EQ list
+    assert manual_import.company_key("Tata Motors Ltd.") == manual_import.company_key("TATA MOTORS LIMITED")
+    assert manual_import.company_key("A & B Industries") == manual_import.company_key("A and B Industries Limited")
+
+
+def test_listing_revised_value() -> None:
+    raw = json.dumps([{"symbol": "X", "date": "30-JUN-2026", "broadcastDate": "20-JUL-2026 15:18:41",
+                       "xbrl": "https://nsearchives.nseindia.com/corporate/xbrl/SHP_1_WEB.xml",
+                       "revisedData": "Revised"}])  # fmt: skip
+    assert parse_listing(raw)[0].revised  # NSE sends "Revised", not "Y"

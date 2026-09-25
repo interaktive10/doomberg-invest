@@ -1,4 +1,4 @@
--- 0005 (M4): what the weekly scoring run needs beyond §3.
+-- 0007 (M4): what the weekly scoring run needs beyond §3.
 --   1. corp_events kind 'acquisition' (US 8-K item 2.01), so R4 can tell dilution from an acquisition (§1.5).
 --   2. shortlists: the weekly focus list (§4.8.6), which also carries the 12-week novelty rule.
 --   3. company_metrics: the latest screener metrics per company (one row each, overwritten weekly).

@@ -55,6 +55,7 @@ class Insider:
     planned: bool
     source_url: str
     currency: str | None = None
+    amends: date | None = None  # a Form 4/A: the filing date of the Form 4 it amends (insiders.latest_versions)
 
 
 @dataclass(frozen=True)

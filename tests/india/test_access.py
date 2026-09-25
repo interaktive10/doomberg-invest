@@ -1,5 +1,6 @@
-"""NSE/BSE access rules (BRIEF §4.3, §8 M3-05, M3-06): 3 consecutive blocks -> stale -> BSE -> manual CSV import;
-≤ 1 request per 3 s per NSE host; retries, re-warm and backoff; holidays don't count as blocks."""
+"""NSE/BSE access rules (BRIEF §4.3, §8 M3-05, M3-06): 3 consecutive blocks (or failed URLs) -> stale -> BSE ->
+manual CSV import; ≤ 1 request per 3 s to NSE as a whole; retries, re-warm and backoff; a run deadline; holidays
+don't count as blocks."""
 
 from __future__ import annotations
 
@@ -12,10 +13,11 @@ import httpx
 import pytest
 
 from pipeline.india import bhavcopy, manual_import
+from pipeline.india.securities import NSE_EQUITY_LIST_URL
 from pipeline.net.bse import BseClient
 from pipeline.net.bse import bhavcopy_url as bse_url
 from pipeline.net.http import HttpClient, RateLimiter
-from pipeline.net.nse import NSE_HOME, NseBlocked, NseClient, NseStale
+from pipeline.net.nse import NSE_API, NSE_HOME, NseBlocked, NseClient, NseDeadline, NseStale
 from pipeline.settings import Settings
 
 FIN = Path(__file__).resolve().parents[2] / "fixtures" / "in"
@@ -105,6 +107,70 @@ def test_nse_rate_is_one_request_per_3_seconds(tmp_path: Path) -> None:
     arch = times["nsearchives.nseindia.com"]
     assert len(arch) == 5 and all(b - a >= 3.0 for a, b in zip(arch, arch[1:], strict=False))
     assert clock.t >= 12.0  # 5 archive requests need at least 4 gaps of 3 s
+
+
+def test_nse_rate_is_one_request_per_3_seconds_across_hosts(tmp_path: Path) -> None:
+    """Review F6: www.nseindia.com (home page, APIs) and nsearchives.nseindia.com (files) are one NSE: any two NSE
+    requests, warm-ups and re-warms included, start at least 3 s apart."""
+    clock = Clock()
+    http, nse, _ = clients(tmp_path, clock, limit=True)
+    http.register_mock(NSE_EQUITY_LIST_URL, b"SYMBOL,NAME OF COMPANY\n")
+    http.register_mock(f"{NSE_API}/reportASM", b"{}")
+    http.register_mock(URL, NSE_ZIP)
+    started: list[tuple[str, float]] = []
+    real_wait = http.limiter.wait
+
+    def wait(host: str) -> None:
+        real_wait(host)
+        started.append((host, clock.t))
+
+    http.limiter.wait = wait  # type: ignore[method-assign]
+    nse.get(NSE_EQUITY_LIST_URL)  # warm-up (www) + the file (archives)
+    nse.api("reportASM")
+    nse.get(URL)
+    clock.t += 600  # the cookies are old: re-warm (www) + the file (archives)
+    nse.get(URL)
+    assert {h for h, _ in started} == {"www.nseindia.com", "nsearchives.nseindia.com"} and len(started) == 6
+    assert all(b - a >= 3.0 for (_, a), (_, b) in zip(started, started[1:], strict=False)), started
+
+
+def test_three_failed_urls_make_nse_stale(tmp_path: Path) -> None:
+    """Review F9: a URL that still answers 5xx (or times out) after its retries is a failure; 3 in a row make NSE
+    stale, like 3 blocks. A success in between resets the count."""
+    clock = Clock()
+    http, nse, _ = clients(tmp_path, clock)
+    urls = [bhavcopy.nse_url(date(2026, 6, d)) for d in (1, 2, 3, 4)]
+    for u in urls:
+        http.register_error(u, 503, times=4)
+    for u in urls[:2]:
+        with pytest.raises(NseBlocked) as e:
+            nse.get(u)
+        assert not isinstance(e.value, NseStale) and not nse.stale
+    http.register_mock(URL, NSE_ZIP)
+    assert nse.get(URL) == NSE_ZIP and nse.consecutive_failures == 0  # a success resets the count
+    for u in urls[2:]:
+        with pytest.raises(NseBlocked):
+            nse.get(u)
+    assert not nse.stale and nse.consecutive_failures == 2
+    http.register_error(URL, 503, times=4)
+    with pytest.raises(NseStale):
+        nse.get(URL)
+    assert nse.stale and "503" in nse.blocks[-1]
+    assert clock.t == 5 * (6.0 + 12.0 + 24.0)  # each failed URL: three backoff waits
+
+
+def test_the_deadline_stops_requests(tmp_path: Path) -> None:
+    clock = Clock()
+    http, nse, _ = clients(tmp_path, clock)
+    http.register_mock(URL, NSE_ZIP)
+    nse.deadline = 100.0
+    assert nse.get(URL) == NSE_ZIP and not nse.unavailable
+    clock.t = 100.0
+    assert nse.unavailable and not nse.stale
+    calls = len(http.calls)
+    with pytest.raises(NseDeadline):
+        nse.get(URL)
+    assert len(http.calls) == calls  # no request after the deadline
 
 
 # ---------------------------------------------------------------- the weekly price chain

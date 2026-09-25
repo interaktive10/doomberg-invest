@@ -71,19 +71,31 @@ def test_sector_for_sic_takes_the_narrowest_range(sic: str | None, sector: str |
 
 def test_common_stock_must_be_listed() -> None:
     """Review F6: filers listed only through preferred shares or notes are not common-stock listings (§1.3)."""
-    from pipeline.us.universe import public_float
+    from pipeline.us.universe import PublicFloat, public_float
 
     pref = subs(tickers=("SCE-PB", "SCE-PC", "SCE-PD"))
     assert decide(pref, BIG, RULES, TODAY).reason == "no common stock listed (preferred series only)"
     assert decide(subs(tickers=("BRK-A", "BRK-B")), BIG, RULES, TODAY).in_universe  # share classes, not preferred
-    sub = decide(subs(tickers=("GPJA",)), BIG, RULES, TODAY, Decimal(0))  # a subsidiary's listed notes
+    gpja = subs(tickers=("GPJA",), forms=("10-Q", "10-K"), filed=date(2024, 11, 1))  # a periodic filer for years
+    sub = decide(gpja, BIG, RULES, TODAY, PublicFloat(Decimal(0), date(2025, 6, 30)))  # a subsidiary's listed notes
     assert sub.reason == "no public common equity (10-K public float 0)"
     assert decide(subs(), BIG, RULES, TODAY, None).in_universe  # not reported yet (a new registrant): no exclusion
     cf = {"facts": {"dei": {"EntityPublicFloat": {"units": {"USD": [
         {"end": "2023-06-30", "val": 5e9, "form": "10-K", "filed": "2024-02-20"},
         {"end": "2024-06-30", "val": 0, "form": "10-K", "filed": "2025-02-20"},
         {"end": "2024-06-30", "val": 7e9, "form": "S-1", "filed": "2025-03-01"}]}}}}}  # fmt: skip
-    assert public_float(cf) == 0 and public_float({"facts": {}}) is None
+    assert public_float(cf) == PublicFloat(Decimal(0), date(2024, 6, 30)) and public_float({"facts": {}}) is None
+
+
+def test_zero_float_of_a_company_listed_after_the_float_date_is_kept() -> None:
+    """Review R2-F3: Figma listed in July 2025, so its first 10-K (float date 2025-06-30) reports a float of 0. It
+    wasn't a reporting company on that date (first 10-Q for 2025-09-30), so it stays in."""
+    from pipeline.us.universe import PublicFloat
+
+    figma = Submissions("0001579878", "Figma, Inc.", "operating", "7372", None, "1231", ("FIG",), ("NYSE",),
+                        (filing("10-Q", date(2025, 11, 5)), filing("10-K", date(2026, 2, 18))))  # fmt: skip
+    got = decide(figma, BIG, RULES, TODAY, PublicFloat(Decimal(0), date(2025, 6, 30)))
+    assert got.in_universe, got.reason
 
 
 def test_partial_ttm_puts_a_new_registrant_in_the_universe() -> None:

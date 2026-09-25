@@ -88,7 +88,7 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
-      - name: India state (download queue, recent results per company, last shareholding pattern)
+      - name: India state (listing cursor, download queues, 3 years of results per company, last shareholding pattern)
         uses: actions/cache@v4
         with:
           path: .cache/in/weekly_state.json

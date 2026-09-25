@@ -1,6 +1,6 @@
 """The screener API (BRIEF §6 "Screener", §8 M4): a typed filter spec over the latest scored week.
 
-The database does the filtering: `screen(spec jsonb)` over `screener_v` (db/migrations/0005). The web app calls the
+The database does the filtering: `screen(spec jsonb)` over `screener_v` (db/migrations/0007). The web app calls the
 same function as an RPC with service_role, validating the spec with a zod schema that mirrors ScreenSpec; saved
 screens store the spec JSON. Every field is optional; metric filters use the keys of company_metrics."""
 

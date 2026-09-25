@@ -150,6 +150,7 @@ def load_batch(conn: psycopg.Connection[Any], week: date, ids: Sequence[UUID], f
                     i.planned,
                     i.source_url,
                     i.currency,
+                    i.amends,
                 )
             )
         for e in snap.corp_events(conn, ids, since=week - timedelta(days=31 * EVENT_MONTHS)):
