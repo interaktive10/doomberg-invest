@@ -1,6 +1,7 @@
 name: daily
 # BRIEF §2.1 "daily", §2.5: SEC events for the previous business day (Form 4 purchases, 8-K items 4.01 / 1.01 /
-# 2.03, NT filings, spin-offs). M3 adds NSE/BSE announcements; M5 adds capex-desk text extraction.
+# 2.03, NT filings, spin-offs) and NSE announcements + insider-trading disclosures. M5 adds capex-desk text
+# extraction.
 # Also the Supabase keep-alive (§2.9): a free project pauses without activity.
 on:
   schedule:
@@ -24,14 +25,17 @@ jobs:
     timeout-minutes: 2
     outputs:
       ready: ${{ steps.secrets.outputs.ready }}
+      db: ${{ steps.secrets.outputs.db }}
     steps:
       - id: secrets
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
+          if [ -n "$DATABASE_URL" ]; then echo "db=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
           if [ -n "$DATABASE_URL" ] && [ -n "$SEC_USER_AGENT" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::DATABASE_URL and SEC_USER_AGENT secrets are not set (BRIEF §2.4): nothing to do"; fi
+          elif [ -n "$DATABASE_URL" ]; then echo "::notice::SEC_USER_AGENT is not set: US jobs skipped"; fi
 
   us:
     needs: check
@@ -59,3 +63,29 @@ jobs:
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: SEC events
         run: uv run --frozen python -m pipeline.us.daily ${DAY:+--date "$DAY"}
+
+  india:
+    needs: check
+    if: needs.check.outputs.db == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      DAY: ${{ github.event.inputs.date }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: insider-trading disclosures already read
+        uses: actions/cache@v4
+        with:
+          path: .cache/in/daily_state.json
+          key: in-daily-state-${{ github.run_id }}
+          restore-keys: in-daily-state-
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: NSE announcements and insider trading
+        run: uv run --frozen python -m pipeline.india.daily ${DAY:+--date "$DAY"}

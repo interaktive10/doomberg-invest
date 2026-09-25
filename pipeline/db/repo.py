@@ -11,7 +11,7 @@ through pipeline.db.pit.as_of(). Writes are idempotent so a re-run of a weekly j
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -77,7 +77,7 @@ def _set_excluded(cols: Iterable[str]) -> str:
 # ---------------------------------------------------------------- companies
 
 
-_US_METADATA = ("sector", "industry", "sic", "fiscal_year_end")  # filled by the weekly run from submissions (M2)
+_METADATA = ("sector", "industry", "sic", "fiscal_year_end")  # filled by the weekly runs, not by listings
 
 
 def upsert_us_companies(conn: Conn, companies: Sequence[Company]) -> None:
@@ -87,7 +87,7 @@ def upsert_us_companies(conn: Conn, companies: Sequence[Company]) -> None:
         raise ValueError("upsert_us_companies needs market='us' rows with a cik")
     upd = (
         ", ".join(
-            f"{c} = coalesce(excluded.{c}, companies.{c})" if c in _US_METADATA else f"{c} = excluded.{c}"
+            f"{c} = coalesce(excluded.{c}, companies.{c})" if c in _METADATA else f"{c} = excluded.{c}"
             for c in _COMPANY_COLS
             if c not in ("market", "cik")
         )
@@ -106,7 +106,14 @@ def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
     if any(c.market != "in" or not c.nse_symbol or not c.isin for c in companies):
         raise ValueError("upsert_in_companies needs market='in' rows with nse_symbol and isin")
     rows = [c.model_dump(include=set(_COMPANY_COLS)) for c in companies]
-    upd = _set_excluded(c for c in _COMPANY_COLS if c not in ("market", "nse_symbol")) + ", updated_at = now()"
+    upd = (
+        ", ".join(
+            f"{c} = coalesce(excluded.{c}, companies.{c})" if c in _METADATA else f"{c} = excluded.{c}"
+            for c in _COMPANY_COLS
+            if c not in ("market", "nse_symbol")
+        )
+        + ", updated_at = now()"
+    )
     with conn.cursor() as cur:
         cur.executemany(
             _q(
@@ -117,6 +124,22 @@ def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
             rows,
         )
         cur.executemany(_insert("companies", _COMPANY_COLS, f"on conflict (nse_symbol) do update set {upd}"), rows)
+
+
+def set_india_universe(conn: Conn, reasons: Mapping[str, str | None]) -> int:
+    """India universe status by NSE symbol: a reason (e.g. an ASM/GSM listing) takes the company out, None puts it
+    back. Symbols not given are left as they are (companies missing from the securities list stay out)."""
+    rows = [{"sym": k, "why": v, "u": v is None} for k, v in reasons.items()]
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q(
+                "update companies set in_universe = %(u)s, excluded_reason = %(why)s, updated_at = now() "
+                "where market = 'in' and nse_symbol = %(sym)s "
+                "and (in_universe is distinct from %(u)s or excluded_reason is distinct from %(why)s)"
+            ),
+            rows,
+        )
+        return cur.rowcount
 
 
 def mark_missing_out_of_universe(conn: Conn, market: str, present_keys: Sequence[str], reason: str) -> int:

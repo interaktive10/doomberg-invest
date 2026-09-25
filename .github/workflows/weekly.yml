@@ -1,7 +1,8 @@
 name: weekly
 # BRIEF §2.1 "weekly", §2.5 (Saturday): SEC bulk companyfacts + submissions -> fundamentals_q and the US universe
-# rules. M3 adds India (bhavcopy, shareholding, PIT, results XBRL); M4 adds signals -> red flags -> prices ->
-# context -> scores; M6 adds evidence packs, the thesis queue and the digest issue.
+# rules; India: securities + ASM/GSM -> universe, bhavcopy -> prices_w (NSE, else BSE, else imports/), results XBRL
+# -> fundamentals_q, shareholding -> ownership_q. M4 adds signals -> red flags -> prices -> context -> scores; M6
+# adds evidence packs, the thesis queue and the digest issue.
 # The bulk zips (a few GB) stay on the runner; only the per-company sha256 state is cached between weeks.
 on:
   schedule:
@@ -26,14 +27,17 @@ jobs:
     timeout-minutes: 2
     outputs:
       ready: ${{ steps.secrets.outputs.ready }}
+      db: ${{ steps.secrets.outputs.db }}
     steps:
       - id: secrets
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
+          if [ -n "$DATABASE_URL" ]; then echo "db=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
           if [ -n "$DATABASE_URL" ] && [ -n "$SEC_USER_AGENT" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::DATABASE_URL and SEC_USER_AGENT secrets are not set (BRIEF §2.4): nothing to do"; fi
+          elif [ -n "$DATABASE_URL" ]; then echo "::notice::SEC_USER_AGENT is not set: US jobs skipped"; fi
 
   us:
     needs: check
@@ -61,3 +65,28 @@ jobs:
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: US fundamentals and universe
         run: uv run --frozen python -m pipeline.us.weekly $FORCE
+
+  india:
+    needs: check
+    if: needs.check.outputs.db == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: India state (download queue, recent results per company, last shareholding pattern)
+        uses: actions/cache@v4
+        with:
+          path: .cache/in/weekly_state.json
+          key: in-weekly-state-${{ github.run_id }}
+          restore-keys: in-weekly-state-
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: India universe, prices, results and shareholding
+        run: uv run --frozen python -m pipeline.india.weekly

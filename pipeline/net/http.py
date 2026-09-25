@@ -94,10 +94,17 @@ class HttpClient:
     settings: Settings
     limiter: RateLimiter = field(default_factory=RateLimiter)
     mocks: dict[str, bytes] = field(default_factory=dict)
+    mock_errors: dict[str, list[int]] = field(default_factory=dict)  # url -> HTTP statuses to raise first
+    rate_limit_mocks: bool = False  # tests of the limiter itself (M3-06) turn this on, with a fake clock
+    calls: list[str] = field(default_factory=list)  # URLs requested in mock mode, in order
     _client: httpx.Client | None = None
 
     def register_mock(self, url: str, body: bytes) -> None:
         self.mocks[url] = body
+
+    def register_error(self, url: str, status: int, times: int = 1) -> None:
+        """Mock mode: the next `times` requests for `url` fail with `status` (e.g. an NSE block is a 403)."""
+        self.mock_errors.setdefault(url, []).extend([status] * times)
 
     def _headers(self, host: str) -> dict[str, str]:
         if host.endswith("sec.gov"):
@@ -109,26 +116,47 @@ class HttpClient:
     def _cache_path(self, url: str) -> Path:
         return self.settings.cache_dir / "http" / hashlib.sha256(url.encode()).hexdigest()
 
-    def get_bytes(self, url: str, *, use_cache: bool = False, timeout: float = 60.0) -> bytes:
+    def _mock(self, url: str, host: str) -> bytes:
+        self.calls.append(url)
+        if self.rate_limit_mocks:
+            self.limiter.wait(host)
+        errors = self.mock_errors.get(url)
+        if errors:
+            status = errors.pop(0)
+            request = httpx.Request("GET", url)
+            raise httpx.HTTPStatusError(
+                f"{status} (mock)", request=request, response=httpx.Response(status, request=request)
+            )
+        if url in self.mocks:
+            return self.mocks[url]
+        raise MockNotRegistered(url)
+
+    def reset_session(self) -> None:
+        """Drop the connection and its cookies (NSE: a forced re-warm rebuilds the session; DOOMBERG_AUDIT §4)."""
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+    def get_bytes(
+        self, url: str, *, use_cache: bool = False, timeout: float = 60.0, headers: dict[str, str] | None = None
+    ) -> bytes:
         host = check_allowed(url)
         if self.settings.mock_externals:
-            if url in self.mocks:
-                return self.mocks[url]
-            raise MockNotRegistered(url)
+            return self._mock(url, host)
         cp = self._cache_path(url)
         if use_cache and cp.exists():
             return cp.read_bytes()
         self.limiter.wait(host)
         if self._client is None:
             self._client = httpx.Client(follow_redirects=False, timeout=timeout)
-        r = self._client.get(url, headers=self._headers(host))
+        r = self._client.get(url, headers={**self._headers(host), **(headers or {})})
         for _ in range(3):  # follow redirects only to allowlisted hosts
             if not (r.is_redirect and r.next_request is not None):
                 break
             nxt = str(r.next_request.url)
             nhost = check_allowed(nxt)
             self.limiter.wait(nhost)
-            r = self._client.get(nxt, headers=self._headers(nhost))
+            r = self._client.get(nxt, headers={**self._headers(nhost), **(headers or {})})
         r.raise_for_status()
         body = r.content
         if use_cache:
@@ -142,10 +170,8 @@ class HttpClient:
         host = check_allowed(url)
         dest.parent.mkdir(parents=True, exist_ok=True)
         if self.settings.mock_externals:
-            if url in self.mocks:
-                dest.write_bytes(self.mocks[url])
-                return dest
-            raise MockNotRegistered(url)
+            dest.write_bytes(self._mock(url, host))
+            return dest
         self.limiter.wait(host)
         part = dest.with_name(dest.name + ".part")
         with httpx.stream("GET", url, headers=self._headers(host), timeout=timeout, follow_redirects=False) as r:
