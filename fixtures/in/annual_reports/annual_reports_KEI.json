@@ -1,0 +1,37 @@
+{
+ "data": [
+  {
+   "companyName": "KEI Industries Limited",
+   "fromYr": "2025",
+   "toYr": "2026",
+   "submission_type": "New",
+   "broadcast_dttm": "05-SEP-2026 16:22:31",
+   "disseminationDateTime": "05-SEP-2026 16:22:32",
+   "timeTaken": "00:00:01",
+   "fileName": "https://nsearchives.nseindia.com/annual_reports/AR_31533_KEI_2025_2026_A_10132962_05092026162231.pdf",
+   "attFileSize": "9.66 MB"
+  },
+  {
+   "companyName": "KEI Industries Limited",
+   "fromYr": "2024",
+   "toYr": "2025",
+   "submission_type": "New",
+   "broadcast_dttm": "07-JUL-2025 15:09:06",
+   "disseminationDateTime": "07-JUL-2025 15:09:08",
+   "timeTaken": "00:00:02",
+   "fileName": "https://nsearchives.nseindia.com/annual_reports/AR_26768_KEI_2024_2025_A_07072025150906.pdf",
+   "attFileSize": null
+  },
+  {
+   "companyName": "KEI Industries Limited",
+   "fromYr": "2023",
+   "toYr": "2024",
+   "submission_type": "-",
+   "broadcast_dttm": "17-AUG-2024 18:46:37",
+   "disseminationDateTime": "17-AUG-2024 18:46:40",
+   "timeTaken": "00:00:03",
+   "fileName": "https://nsearchives.nseindia.com/annual_reports/AR_24997_KEI_2023_2024_17082024184637.pdf",
+   "attFileSize": null
+  }
+ ]
+}

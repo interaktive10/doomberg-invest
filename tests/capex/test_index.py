@@ -41,9 +41,11 @@ def test_accelerating_input_rises_and_decelerating_falls() -> None:
 
 
 def test_category_value_is_the_mean_z_and_direction_uses_the_sigma_thresholds() -> None:
-    stats = {"utility_large_load_gw": input_stat("utility_large_load_gw", growing(0.10, 0.60), WEEK, 156, 12),
-             "lead_time_transformers": input_stat("lead_time_transformers", growing(0.30, -0.10), WEEK, 156, 12),
-             "hyperscaler_capex_guidance": input_stat("hyperscaler_capex_guidance", growing(0.1, 0.6), WEEK, 156, 12)}
+    stats = {
+        "utility_large_load_gw": input_stat("utility_large_load_gw", growing(0.10, 0.60), WEEK, 156, 12),
+        "lead_time_transformers": input_stat("lead_time_transformers", growing(0.30, -0.10), WEEK, 156, 12),
+        "hyperscaler_capex_guidance": input_stat("hyperscaler_capex_guidance", growing(0.1, 0.6), WEEK, 156, 12),
+    }
     rows = {c.category: c for c in categories(stats, CFG)}
     grid = rows["grid"]  # inputs: large load (z up), transformers (z down), switchgear (missing)
     zs = [stats["utility_large_load_gw"].z, stats["lead_time_transformers"].z]

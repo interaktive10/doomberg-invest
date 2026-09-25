@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -55,8 +54,17 @@ TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
 LINK_BATCH = 20
 RANK = {"capex_desk": 0, "candidate_shortlist": 1, "other": 2}
-SKIP_TRIAGE = ("trading window", "newspaper publication", "loss of share certificate", "duplicate share certificate",
-               "shareholders meeting", "record date", "book closure", "change in registrar", "certificate under sebi")  # fmt: skip
+SKIP_TRIAGE = (
+    "trading window",
+    "newspaper publication",
+    "loss of share certificate",
+    "duplicate share certificate",
+    "shareholders meeting",
+    "record date",
+    "book closure",
+    "change in registrar",
+    "certificate under sebi",
+)
 
 
 @dataclass
@@ -194,7 +202,7 @@ def risk_changes(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, norm:
     changes = risk_diff.compare(old_p, new_p)
     if not changes:
         return
-    items = tuple((f"p{k}", (c.new or c.old).text[:2000]) for k, c in enumerate(changes) if (c.new or c.old))  # type: ignore[union-attr]
+    items = tuple((f"p{k}", para.text[:2000]) for k, c in enumerate(changes) if (para := c.new or c.old) is not None)
     answer = router.call(risk_diff.RiskTagInput(items))
     if isinstance(answer, Deferred):
         stats.errors.append(f"risk tags deferred for {job.url}")
@@ -205,12 +213,21 @@ def risk_changes(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, norm:
         t = tags.get(f"p{k}", [])
         if not t:
             continue
-        text, s, e = risk_diff.quote(c)
-        rows.append({"company_id": job.company.id, "from_document_id": prev["id"], "to_document_id": doc_id,
-                     "change_kind": c.kind, "text_before": text if c.kind == "removed" else None,
-                     "text_after": None if c.kind == "removed" else text,
-                     "similarity": None if c.similarity is None else Decimal(str(c.similarity)).quantize(Decimal("0.001")),
-                     "topic_tags": t, "char_start": s, "char_end": e})  # fmt: skip
+        text, start, end = risk_diff.quote(c)
+        rows.append(
+            {
+                "company_id": job.company.id,
+                "from_document_id": prev["id"],
+                "to_document_id": doc_id,
+                "change_kind": c.kind,
+                "text_before": text if c.kind == "removed" else None,
+                "text_after": None if c.kind == "removed" else text,
+                "similarity": None if c.similarity is None else Decimal(str(c.similarity)).quantize(Decimal("0.001")),
+                "topic_tags": t,
+                "char_start": start,
+                "char_end": end,
+            }
+        )
     facts_repo.insert_risk_changes(conn, rows)
     stats.risk_changes += len(rows)
 
@@ -303,7 +320,9 @@ def triage_announcements(conn: psycopg.Connection[Any], router: Router, companie
         if t is None:
             stats.errors.append(f"triage {e.id}: malformed answer")
             continue
-        facts_repo.insert_triage(conn, e.id, e.company_id, t.categories, t.read_pdf, f"{answer.provider}:{answer.model}")
+        facts_repo.insert_triage(
+            conn, e.id, e.company_id, t.categories, t.read_pdf, f"{answer.provider}:{answer.model}"
+        )
         stats.triaged += 1
         if t.read_pdf and e.source_url.lower().endswith(".pdf"):
             jobs.append(DocJob(companies[e.company_id], "press_release", e.source_url, title, e.filed_at, None, True))
@@ -384,8 +403,22 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
     for d in facts_repo.deferred_documents(conn):
         c = all_companies.get(d["company_id"])
         if c is not None:
-            jobs.append((-1, d["published_at"], DocJob(c, d["kind"], d["url"], d["title"] or "", d["published_at"],
-                                                       d["filing_id"], d["url"].startswith("https://nsearchives")), None))  # fmt: skip
+            jobs.append(
+                (
+                    -1,
+                    d["published_at"],
+                    DocJob(
+                        c,
+                        d["kind"],
+                        d["url"],
+                        d["title"] or "",
+                        d["published_at"],
+                        d["filing_id"],
+                        d["url"].startswith("https://nsearchives"),
+                    ),
+                    None,
+                )
+            )
     for f in facts_repo.filings_by_status(conn, ["new"]):
         c = in_scope.get(f["company_id"])
         if c is not None:

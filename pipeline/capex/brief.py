@@ -31,6 +31,10 @@ class NewFact:
     materiality: Decimal  # |delta %| for a change, 100 for a new fact with a value, 0 otherwise
 
 
+def _names(v: object) -> str:
+    return ", ".join(str(x) for x in v) if isinstance(v, list | tuple) else ""
+
+
 def _sigma(v: Decimal | None) -> str:
     return "–" if v is None else f"{v:+.2f}σ"
 
@@ -39,8 +43,14 @@ def material(facts: Sequence[NewFact], k: int = 10) -> list[NewFact]:
     return sorted(facts, key=lambda f: (-f.materiality, f.company, f.subject_key))[:k]
 
 
-def render(week: date, moves: Sequence[IndexMove], facts: Sequence[NewFact], links: Sequence[tuple[str, str, str]],
-           memberships: Sequence[tuple[str, str, str]], s11: Sequence[tuple[str, Mapping[str, object]]]) -> str:  # fmt: skip
+def render(
+    week: date,
+    moves: Sequence[IndexMove],
+    facts: Sequence[NewFact],
+    links: Sequence[tuple[str, str, str]],
+    memberships: Sequence[tuple[str, str, str]],
+    s11: Sequence[tuple[str, Mapping[str, object]]],
+) -> str:
     lines = [f"## Capex brief — week ending {week:%Y-%m-%d}", "", "### Demand index", "",
              "| Category | Index | Direction | Last week |", "|---|---|---|---|"]  # fmt: skip
     for m in sorted(moves, key=lambda m: m.category):
@@ -55,6 +65,8 @@ def render(week: date, moves: Sequence[IndexMove], facts: Sequence[NewFact], lin
     lines += ["", "### New India cross-border memberships (awaiting confirmation)", ""]
     lines += [f"- {name} → {cat}: “{quote}”" for name, cat, quote in memberships] or ["- None this week."]
     lines += ["", "### S11 capex propagation", ""]
-    lines += [f"- {name}: rising {', '.join(map(str, inputs.get('rising', [])))}"
-              f"{'; second-order' if inputs.get('second_order') else ''}" for name, inputs in s11] or ["- None."]  # fmt: skip
+    lines += [
+        f"- {name}: rising {_names(inputs.get('rising'))}{'; second-order' if inputs.get('second_order') else ''}"
+        for name, inputs in s11
+    ] or ["- None."]
     return "\n".join(lines) + "\n"

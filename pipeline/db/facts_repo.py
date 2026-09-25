@@ -371,3 +371,93 @@ def links(conn: Conn) -> list[dict[str, Any]]:
         "select l.from_company_id, l.to_entity_id, l.relation, l.first_seen_at, e.name as entity_name, e.cik as "
         "entity_cik from links l join entities e on e.id = l.to_entity_id",
     )
+
+
+# ---------------------------------------------------------------- scope (§4.5) and the brief's queries
+
+
+def latest_scored_week(conn: Conn) -> date | None:
+    row = conn.execute(_q("select max(week_end) from scores")).fetchone()
+    return None if row is None else row[0]
+
+
+def text_shortlist(conn: Conn, week: date, limit: int) -> list[UUID]:
+    """§4.5 scope 2: the top companies by Evidence in `week` that have no text document yet."""
+    rows = _rows(
+        conn,
+        "select s.company_id from scores s where s.week_end = %s and s.evidence > 0 and not exists "
+        "(select 1 from documents d where d.company_id = s.company_id) order by s.evidence desc, s.company_id limit %s",
+        (week, limit),
+    )
+    return [r["company_id"] for r in rows]
+
+
+def ledger_companies(conn: Conn) -> set[UUID]:
+    """Companies with at least one verified text fact (the Capex Desk ledger)."""
+    return {
+        r["company_id"]
+        for r in _rows(conn, "select distinct company_id from facts where verification_status = 'verified'")
+    }
+
+
+def p06_recent(conn: Conn, since: date) -> set[UUID]:
+    """Companies P-06 read since `since` (their profile document)."""
+    rows = _rows(
+        conn,
+        "select distinct company_id from documents where url like 'nse-profile:%%' and published_at >= %s",
+        (since,),
+    )
+    return {r["company_id"] for r in rows}
+
+
+def export_quotes(conn: Conn, company_ids: Sequence[UUID], cutoff: datetime) -> dict[UUID, dict[UUID, str]]:
+    """company -> {fact id: quote} of verified export_exposure facts published before the cutoff."""
+    rows = _rows(
+        conn,
+        "select f.id, f.company_id, f.quote from facts f join documents d on d.id = f.document_id "
+        "where f.company_id = any(%s) and f.fact_type = 'export_exposure' and f.verification_status = 'verified' "
+        "and d.published_at < %s",
+        (list(company_ids), cutoff),
+    )
+    out: dict[UUID, dict[UUID, str]] = {}
+    for r in rows:
+        out.setdefault(r["company_id"], {})[r["id"]] = r["quote"]
+    return out
+
+
+def new_diffs(conn: Conn, since: datetime) -> list[dict[str, Any]]:
+    return _rows(
+        conn,
+        "select c.name as company, f.fact_type, x.subject_key, x.computed_note, x.change_kind, x.delta_pct, "
+        "f.value_num, f.quote, d.url from diffs x join facts f on f.id = x.new_fact_id "
+        "join documents d on d.id = f.document_id join companies c on c.id = x.company_id "
+        "where x.created_at >= %s and x.change_kind <> 'reaffirmed' order by x.created_at",
+        (since,),
+    )
+
+
+def new_links(conn: Conn, since: datetime) -> list[dict[str, Any]]:
+    return _rows(
+        conn,
+        "select c.name as company, e.name as entity, l.relation from links l join companies c on c.id = "
+        "l.from_company_id join entities e on e.id = l.to_entity_id where l.first_seen_at >= %s order by c.name",
+        (since,),
+    )
+
+
+def new_memberships(conn: Conn, since: datetime, source: str) -> list[dict[str, Any]]:
+    return _rows(
+        conn,
+        "select c.name as company, m.category, m.quote from capex_memberships m join companies c on c.id = "
+        "m.company_id where m.source = %s and m.proposed_at >= %s order by c.name, m.category",
+        (source, since),
+    )
+
+
+def fired_signal(conn: Conn, week: date, signal_id: str) -> list[dict[str, Any]]:
+    return _rows(
+        conn,
+        "select c.name as company, v.inputs from signal_values v join companies c on c.id = v.company_id "
+        "where v.week_end = %s and v.signal_id = %s and v.fired order by c.name",
+        (week, signal_id),
+    )
