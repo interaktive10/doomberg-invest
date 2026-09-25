@@ -83,5 +83,5 @@ jobs:
             git push -u origin HEAD
             body="BRIEF §4.10.5 proposals from run ${GITHUB_RUN_ID}; the reasons per weight are in the report PR."
             gh pr create --title "[Lab] Weight proposals $stamp ($MARKET)" \
-              --body "$body config/weights.yaml is protected: it needs the human-approved label."
+              --body "$body config/weights.yaml is protected: it needs the human-approved label. If you edit a weight, also change \`version:\` (the proposal's version is stored as proposed; weights.yml fails on edited weights under the same version)."
           fi

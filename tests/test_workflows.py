@@ -31,6 +31,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("thesis-fallback.yml", ("fallback",)),
         ("quarterly.yml", ("us",)),
         ("lab.yml", ("lab",)),
+        ("weights.yml", ("weights",)),
     ):
         for job in jobs:
             runs = [r for r in steps(name, job) if "python -m pipeline" in r]
@@ -54,7 +55,8 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     13F step and the universe rebuild are done."""
     doc = yaml.safe_load((WF / "quarterly.yml").read_text(encoding="utf-8"))
     lab = doc["jobs"]["lab"]
-    assert lab["needs"] == "us" and doc["permissions"]["actions"] == "write"
+    assert lab["needs"] == "us" and lab["permissions"] == {"actions": "write"}
+    assert "actions" not in doc["permissions"]  # only the dispatching job's token can (least privilege)
     assert any("gh workflow run lab.yml" in str(s.get("run", "")) for s in lab["steps"])
     runs = steps("quarterly.yml", "us")
     assert "pipeline.db.seed" in runs[-1]  # the rebuild is the us job's last step, so the Lab runs on the new universe
@@ -62,14 +64,15 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
 
 def test_text_facts_run_daily_after_the_event_jobs_within_the_minutes_budget() -> None:
     """M5 (BRIEF §2.1 daily "capex-desk filings -> text facts", §2.5 budget): the text job follows the SEC and NSE
-    event jobs (P-07 reads their announcements), has the free-tier keys, and stops starting documents at 8 minutes."""
+    event jobs (P-07 reads their announcements), has the free-tier keys, and stops starting documents at 4 minutes, so
+    daily.yml stays within §2.5's ~8 minutes (M5 review R1-F8; docs/SPEC_ISSUES.md 29)."""
     doc = yaml.safe_load((WF / "daily.yml").read_text(encoding="utf-8"))
     job = doc["jobs"]["text"]
     assert set(job["needs"]) == {"check", "us", "india"} and job["if"].startswith("always()")
     assert {"GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"} <= set(job["env"])
     assert "ANTHROPIC_API_KEY" not in job["env"] and "OPENAI_API_KEY" not in job["env"]
     run = steps("daily.yml", "text")[-1]
-    assert "python -m pipeline.facts.run" in run and "--minutes 8" in run
+    assert "python -m pipeline.facts.run" in run and "--minutes 4" in run
 
 
 def test_the_capex_index_runs_before_scores_and_the_brief_after() -> None:
@@ -113,3 +116,16 @@ def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> No
     fallback = yaml.safe_load((WF / "thesis-fallback.yml").read_text(encoding="utf-8"))
     assert fallback[True]["schedule"] == [{"cron": "0 6 * * 1"}]  # BRIEF §2.5
     assert steps("thesis-fallback.yml", "fallback")[-1].endswith("python -m pipeline.thesis.fallback_writer")
+
+
+def test_weights_approval_runs_when_weights_change_on_main() -> None:
+    """M8 review R2-F3: a push to main that changes config/weights.yaml (a merged human-approved PR) records and
+    approves its version at merge time, from main only; the weekly scores run records it too before it writes a
+    score (tests/db/test_lab_run.py)."""
+    doc = yaml.safe_load((WF / "weights.yml").read_text(encoding="utf-8"))
+    on = doc[True]  # PyYAML reads the `on:` key as the boolean True
+    assert on["push"] == {"branches": ["main"], "paths": ["config/weights.yaml"]}
+    job = doc["jobs"]["weights"]
+    assert "github.ref == 'refs/heads/main'" in job["if"] and doc["permissions"] == {"contents": "read"}
+    runs = [r for r in steps("weights.yml", "weights") if "python -m pipeline" in r]
+    assert runs[0].endswith("python -m pipeline.db.migrate") and runs[-1].endswith("python -m pipeline.db.weights")

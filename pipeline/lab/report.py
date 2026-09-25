@@ -31,6 +31,7 @@ class RunInfo:
     events: int
     periods: Mapping[str, tuple[date, date]]
     source: str  # where the prices came from ("Stooq bulk d_us_txt.zip", "F-LAB synthetic panel", ...)
+    population: str = ""  # which companies each month-end's cross-section holds (run.describe)
 
 
 def _f(x: float | None, pct: bool = True) -> str:
@@ -58,13 +59,14 @@ def render(info: RunInfo, events: Sequence[Stat], evidence: Sequence[Stat], gap:
     lines += [
         "## Run",
         f"- Market: {info.market}. Prices: {info.source}.",
+        *([f"- Population: {info.population}."] if info.population else []),
         f"- Months: {info.first_month:%Y-%m} to {info.last_month:%Y-%m}; {info.companies} companies, "
         f"{info.company_months} company-months, {info.events} events (first fire per company in 12 months).",
         f"- Periods (by event month): {periods}.",
-        "- Excess = forward price return minus the equal-weighted mean of the companies priced at both dates. "
-        "t (NW) is the Newey-West t-stat of the mean excess (lags = horizon months) with its standard error floored "
-        "at the plain standard error, so it is never larger than the plain t (docs/SPEC_ISSUES.md 19); lab_results "
-        "notes keep the unfloored value.",
+        "- Excess = forward price return minus the equal-weighted mean of the month's population priced at both "
+        "dates. t (NW) is the Newey-West t-stat of the mean excess (lags = horizon months) with its standard error "
+        "floored at the plain standard error, so it is never larger than the plain t (docs/SPEC_ISSUES.md 19); "
+        "lab_results notes keep the unfloored value.",
         "",
         "## Signals",
         *_table(events),

@@ -16,8 +16,11 @@ from pipeline.facts.canonical import canonical
 MIN_QUOTE, MAX_QUOTE = 5, 600  # facts.quote check (Appendix F.2)
 
 
+KEPT_PUNCTUATION = frozenset("%\u2030")  # % and per mille are units, not punctuation (M5 review R1-F10)
+
+
 def _kept(c: str) -> bool:
-    return not (c.isspace() or c == "|" or unicodedata.category(c).startswith("P"))
+    return c in KEPT_PUNCTUATION or not (c.isspace() or c == "|" or unicodedata.category(c).startswith("P"))
 
 
 def ground(quote: str, text: str, lo: int = 0, hi: int | None = None) -> tuple[int, int] | None:

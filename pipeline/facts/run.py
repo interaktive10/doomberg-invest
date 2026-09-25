@@ -11,7 +11,7 @@
    chunk, Verify-1, store facts, diffs (code, F.6) and, for 10-K/10-Q, the risk-factor diff with P-03 tags.
 5. Links: verified facts with a counterparty -> P-02 -> entities and links.
 The run stops asking providers when every one is out for the day (the rest stays queued or `deferred`) or at the
-daily document limit (config/quotas.yaml text_daily_limits). Journal data never enters this module (llm/privacy.py).
+daily document limit (config/quotas.yaml text_daily_limits). Private data never enters this module (llm/privacy.py).
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ from pipeline.us.submissions import parse_submissions
 SHORTLIST = 100
 TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
-TIME_BUDGET_MIN = 8.0  # the daily text job's share of BRIEF §2.5's 1,200 minutes a month
+TIME_BUDGET_MIN = 4.0  # document starts: daily.yml stays ~8 min with the SEC/NSE jobs before it (SPEC_ISSUES 29)
 LINK_BATCH = 20
 RANK = {"capex_desk": 0, "candidate_shortlist": 1, "other": 2}
 SKIP_TRIAGE = (
@@ -406,9 +406,11 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
         pdf_jobs = triage_announcements(conn, router, in_scope, day, stats)
 
     jobs: list[tuple[int, datetime, DocJob, UUID | None]] = []
+    new_filings = [f for f in facts_repo.filings_by_status(conn, ["new"]) if f["company_id"] in in_scope]
+    queued = {f["id"] for f in new_filings}
     for d in facts_repo.deferred_documents(conn):
         c = all_companies.get(d["company_id"])
-        if c is not None:
+        if c is not None and d["filing_id"] not in queued:  # else its filing, still new, re-reads it (M5 R1-F2)
             jobs.append(
                 (
                     -1,
@@ -425,11 +427,10 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
                     None,
                 )
             )
-    for f in facts_repo.filings_by_status(conn, ["new"]):
-        c = in_scope.get(f["company_id"])
-        if c is not None:
-            jobs.append((ranks[f["company_id"]], f["filed_at"], DocJob(c, str(f["form_type"]), "", "", f["filed_at"],
-                                                                       f["id"]), f["id"]))  # fmt: skip
+    for f in new_filings:
+        c = in_scope[f["company_id"]]
+        jobs.append((ranks[f["company_id"]], f["filed_at"], DocJob(c, str(f["form_type"]), "", "", f["filed_at"],
+                                                                   f["id"]), f["id"]))  # fmt: skip
     seen_urls = set(facts_repo.document_status(conn, [j.url for j in pdf_jobs]))
     for j in pdf_jobs:
         if j.url not in seen_urls:
@@ -450,8 +451,12 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
         with conn.transaction():
             if filing_id is not None:
                 f = next(x for x in facts_repo.filings_by_status(conn, ["new"]) if x["id"] == filing_id)
-                results = [process(conn, j, fetch, router, raw_root, stats) for j in filing_jobs(f, job.company, http)]
-                done += len(results)
+                parts = filing_jobs(f, job.company, http)
+                known = facts_repo.document_status(conn, [j.url for j in parts])
+                todo = [j for j in parts if known.get(j.url, (None, ""))[1] != "extracted"]  # read once (M5 R1-F2)
+                results = [process(conn, j, fetch, router, raw_root, stats) for j in todo]
+                results += ["extracted"] * (len(parts) - len(todo))
+                done += len(todo)
                 status = ("failed" if results and all(r == "failed" for r in results) else
                           "new" if "deferred" in results else "extracted")  # fmt: skip
                 if status != "new":

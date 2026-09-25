@@ -143,3 +143,77 @@ def test_unresolvable_periods() -> None:
     assert resolve("the plan period", "1231") is None and resolve(None, "1231") is None
     nxt = resolve("the next 12 months", "1231", date(2026, 6, 30))
     assert nxt is not None and nxt.end == date(2027, 6, 30)
+
+
+DISTRACTORS = ("Our stock price rose 23% during the quarter, and two analysts upgraded their ratings to buy.\n\n"
+               "Diluted earnings per share were $1.87, up 14% from a year ago.\n\n"
+               "The Board authorized a new share repurchase program of up to $2.0 billion.")  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"fact_type": "price_increase", "subject": "price increase", "subject_key": "price_increase:quarter",
+         "value": D(23), "unit": "percent", "currency": None, "scale_word": None, "period_label": None,
+         "quote": "Our stock price rose 23% during the quarter"},
+        {"fact_type": "price_increase", "subject": "earnings increase", "subject_key": "price_increase:year",
+         "value": D(14), "unit": "percent", "currency": None, "scale_word": None, "period_label": None,
+         "quote": "Diluted earnings per share were $1.87, up 14% from a year ago."},
+        {"fact_type": "commitment_purchase", "subject": "purchase commitment",
+         "subject_key": "purchase_obligations:total", "value": D("2.0"), "unit": "usd", "currency": "USD",
+         "scale_word": "billion", "period_label": None,
+         "quote": "The Board authorized a new share repurchase program of up to $2.0 billion."},
+    ],
+)  # fmt: skip
+def test_price_topics_in_the_quote_are_rejected_whatever_the_labels(change: dict[str, Any]) -> None:
+    """M5 review R1-F1: F-SYN's distractors labelled with a subject and key that don't name the topic (a stock-price
+    move, EPS, a buyback) are rejected from the quote itself, not trusted from the model's labels."""
+    doc = DocContext("10-Q", date(2026, 10, 28), "0630", DISTRACTORS)
+    r = verify(prop(**change), Chunk(DISTRACTORS, 0, "mdna"), doc)
+    assert isinstance(r, Rejected) and r.check == "V1-TYPE", r
+
+
+@pytest.mark.parametrize(
+    ("label", "fye", "expected"),
+    [
+        ("FY2025-26", "0331", (date(2025, 4, 1), date(2026, 3, 31))),  # India names the year it ends in
+        ("FY 2025\u201326", "0331", (date(2025, 4, 1), date(2026, 3, 31))),
+        ("Q1 FY2025-26", "0331", (date(2025, 4, 1), date(2025, 6, 30))),
+        ("FY26", "0331", (date(2025, 4, 1), date(2026, 3, 31))),
+        ("1H FY26", "0331", (date(2025, 4, 1), date(2025, 9, 30))),
+        ("2H FY26", "0331", (date(2025, 10, 1), date(2026, 3, 31))),
+        ("three months ended June 30, 2026", "1231", (date(2026, 4, 1), date(2026, 6, 30))),
+        ("six months ended Sept. 30, 2025", "0331", (date(2025, 4, 1), date(2025, 9, 30))),
+        ("year ended December 31, 2025", "1231", (date(2025, 1, 1), date(2025, 12, 31))),
+        ("quarter ended 2026-06-30", "1231", (date(2026, 4, 1), date(2026, 6, 30))),
+        ("as of June 30, 2026", "1231", (date(2026, 6, 30), date(2026, 6, 30))),  # a point in time
+        ("nine months ended September 27, 2025", "0927", (date(2024, 12, 28), date(2025, 9, 27))),  # 52/53 weeks
+    ],
+)
+def test_period_labels_india_halves_and_dates(label: str, fye: str, expected: tuple[date, date]) -> None:
+    """M5 review R1-F4: Indian year ranges, "1H", and the SEC's date labels resolve to the right period."""
+    p = resolve(label, fye)
+    assert p is not None and (p.start, p.end) == expected, (label, p)
+
+
+def test_a_unit_without_a_number_and_an_implausible_period() -> None:
+    """M5 review R1-F9: a fact with no value in the quote keeps no unit ("other"), and a period ending more than
+    10 years from the document goes to review."""
+    text = "Backlog reached a record.\n\nWe expect capital expenditures of about $2 billion in fiscal 2090."
+    doc = DocContext("10-Q", date(2026, 10, 28), "0630", text)
+    none = ok(verify(prop(fact_type="backlog", subject="backlog", subject_key="backlog:total", value=None,
+                          unit="mw", currency=None, scale_word=None, period_label=None,
+                          quote="Backlog reached a record."), Chunk(text, 0, None), doc))  # fmt: skip
+    assert none.unit == "other" and none.value_num is None
+    far = ok(verify(prop(value=D(2), period_label="fiscal 2090", subject_key="capex_guidance:fy2090",
+                         quote="We expect capital expenditures of about $2 billion in fiscal 2090."),
+                    Chunk(text, 0, None), doc))  # fmt: skip
+    assert far.verification_status == "needs_review" and "more than 10 years" in far.verification_notes["period"]
+
+
+def test_grounding_keeps_percent_signs() -> None:
+    """M5 review R1-F10: % is a unit, so "35%" never grounds to "35"."""
+    from pipeline.facts.ground import ground
+
+    assert ground("Exports were 35% of revenue", "Exports were 35 of revenue") is None
+    assert ground("Exports were 35 % of revenue", "Exports were 35% of revenue") == (0, 27)

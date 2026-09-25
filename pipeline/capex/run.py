@@ -41,6 +41,7 @@ from pipeline.facts.chunk import Chunk, score
 from pipeline.facts.extract import Proposed
 from pipeline.facts.fetch import store_raw
 from pipeline.facts.pdf_text import page_texts
+from pipeline.facts.process import normalize
 from pipeline.facts.verify1 import Candidate, DocContext, verify
 from pipeline.llm.router import Deferred, Router
 from pipeline.net.http import HttpClient
@@ -123,8 +124,9 @@ def ingest_eia(conn: psycopg.Connection[Any], http: HttpClient, key: str | None,
         stats.errors.append(str(e))
         repo.mark_source_error(conn, "eia", str(e), stale=False)
         return
-    for month, mw in series:
-        facts_repo.upsert_capex_inputs(conn, month, {"eia_planned_additions_mw": (mw, {"source": "EIA-860M planned"})})
+    for month, mw in series:  # filed under the month it is published in, so a re-run of a past week reads what was out
+        facts_repo.upsert_capex_inputs(conn, eia.available(month), {
+            "eia_planned_additions_mw": (mw, {"source": "EIA-860M planned", "month": f"{month:%Y-%m}"})})  # fmt: skip
     stats.eia_months = len(series)
     repo.mark_source_success(conn, "eia")
 
@@ -184,9 +186,12 @@ def cross_border(
         if router.exhausted("P-06"):
             stats.p06_deferred += 1
             continue
-        text = membership.profile_text(india_text(conn, nse, c, week, stats))
-        if not text:
+        raw = membership.profile_text(india_text(conn, nse, c, week, stats))
+        if not raw:
             continue
+        url = f"nse-profile:{c.nse_symbol}:{week:%Y-%m-%d}"
+        full = normalize(url, raw.encode()).text  # the canonical text every offset refers to (Appendix F.3)
+        text = full[: membership.MAX_TEXT_CHARS]  # what P-06 sees, and all a quote is grounded in (M5 review R1-F3)
         answer = router.call(membership.CrossBorderInput(c.name, c.nse_symbol or "", cats, text))
         if isinstance(answer, Deferred):
             stats.p06_deferred += 1
@@ -194,12 +199,11 @@ def cross_border(
         stats.p06_companies += 1
         r = membership.parse(answer.content, text, cats)
         stats.p06_dropped += len(r.dropped)
-        url = f"nse-profile:{c.nse_symbol}:{week:%Y-%m-%d}"
-        path, digest = store_raw(raw_root, c.nse_symbol or str(c.id), "profile", f"{week:%Y%m%d}.txt", text.encode())
+        path, digest = store_raw(raw_root, c.nse_symbol or str(c.id), "profile", f"{week:%Y%m%d}.txt", raw.encode())
         doc_id = facts_repo.upsert_document(
             conn, company_id=c.id, kind="other", url=url, title="P-06 text: announcements and annual-report excerpts",
             published_at=datetime.combine(week, datetime.min.time(), UTC), sha256=digest, raw_path=str(path),
-            text_chars=len(text), status="extracted",
+            text_chars=len(full), status="extracted",
         )  # fmt: skip
         for g in r.categories:
             stats.proposed_in += facts_repo.propose_membership(

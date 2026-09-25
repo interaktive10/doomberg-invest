@@ -43,6 +43,11 @@ def material(facts: Sequence[NewFact], k: int = 10) -> list[NewFact]:
     return sorted(facts, key=lambda f: (-f.materiality, f.company, f.subject_key))[:k]
 
 
+def _change(kind: str, note: str) -> str:
+    """ "raised: $70B → $80B (+14.3%)"; a note that already names its kind ("new: $80.0B") isn't prefixed again."""
+    return note if note.startswith(f"{kind}:") else f"{kind}: {note}"
+
+
 def render(
     week: date,
     moves: Sequence[IndexMove],
@@ -58,7 +63,7 @@ def render(
         lines.append(f"| {m.category} | {_sigma(m.value)} | {m.direction} | {was} |")
     lines += ["", "### Most material new facts", ""]
     top = material(facts)
-    lines += [f"- **{f.company}** · {f.fact_type} `{f.subject_key}` · {f.change_kind}: {f.note} — “{f.quote}” "
+    lines += [f"- **{f.company}** · {f.fact_type} `{f.subject_key}` · {_change(f.change_kind, f.note)} — “{f.quote}” "
               f"([source]({f.url}))" for f in top] or ["- None this week."]  # fmt: skip
     lines += ["", "### New links", ""]
     lines += [f"- {a} → {b} ({rel})" for a, b, rel in links] or ["- None this week."]

@@ -14,6 +14,12 @@ share-count change confirms it. Unconfirmed jumps are flagged and never adjusted
   weeks already stored differ from them by a split ratio shows the split before any filing does (`rebased`, M4
   review R1-F6). Until a share count confirms it, every earlier count is multiplied by its ratio: price x the
   pre-split count would be off by the ratio for the ~11 weeks until the next 10-Q.
+- After a gap in the stored history (the company left the candidate set) the split happened some time after the last
+  stored week (`SourceSplit.since`). A share split of the same ratio whose window reaches past that week (a filing
+  already reported it) confirms it, and the split is stored inside that window (`date_source_split`, M4 review
+  R3-F1); otherwise it is dated at the newest week, so every count known so far reads as pre-split (R2-F2).
+- Limit: a company priced for the first time after a split has no stored closes to compare, so the split shows only
+  when a filing reports the new count; until then its market cap is price x the pre-split count.
 """
 
 from __future__ import annotations
@@ -26,14 +32,25 @@ from decimal import Decimal
 RATIOS = tuple(sorted({Decimal(n) for n in range(2, 51)} | {Decimal("1.5"), Decimal("2.5")}))
 TOL = Decimal("0.03")
 BEFORE_DAYS, AFTER_DAYS = 30, 120
+_WHOLE = (2, 50)  # RATIOS' whole ratios
+_HALVES = (Decimal("1.5"), Decimal("2.5"))
+
+
+def _near(x: Decimal) -> set[Decimal]:
+    """The RATIOS nearest x (the distance grows either side of it): the whole ratios either side of x, clipped to
+    2..50, and 1.5 and 2.5."""
+    lo = int(min(x, Decimal(_WHOLE[1])))
+    return {Decimal(min(max(n, _WHOLE[0]), _WHOLE[1])) for n in (lo, lo + 1)} | set(_HALVES)
 
 
 def split_ratio(r: Decimal) -> Decimal | None:
-    """r = new count / old count (or old price / new price). The standard ratio it matches, or None."""
+    """r = new count / old count (or old price / new price). The standard ratio it matches, or None. Checks only
+    the ratios near r and 1/r (the same answer as trying every one of RATIOS, in RATIOS' order; M4 review R3 idea:
+    this runs for every pair of consecutive counts)."""
     if r <= 0:
         return None
     best: tuple[Decimal, Decimal] | None = None  # (distance, ratio)
-    for k in RATIOS:
+    for k in sorted(_near(r) | _near(1 / r)):
         for ratio, dist in ((k, abs(r / k - 1)), (1 / k, abs(r * k - 1))):  # a split, or a consolidation
             if dist <= TOL and (best is None or dist < best[0]):
                 best = (dist, ratio)
@@ -79,6 +96,7 @@ def price_jumps(closes: Sequence[tuple[date, Decimal]]) -> list[Jump]:
 class SourceSplit:
     week_end: date  # the first week on the new basis
     ratio: Decimal  # new shares per old share (= stored close / re-downloaded close)
+    since: date | None = None  # after a gap in the stored history: the first week the split may have happened
 
 
 def rebased(stored: Sequence[tuple[date, Decimal]], fresh: Sequence[tuple[date, Decimal]]) -> SourceSplit | None:
@@ -98,8 +116,17 @@ def rebased(stored: Sequence[tuple[date, Decimal]], fresh: Sequence[tuple[date, 
     before = [q for _, q in qs[: last + 1]]
     if sum(1 for q in before if abs(q / k - 1) <= TOL) < Decimal("0.9") * len(before):
         return None
-    after = [d for d, _ in qs[last + 1 :]] or sorted(d for d in new if d > qs[-1][0])
-    return SourceSplit(after[0], k) if after else None
+    after = [d for d, _ in qs[last + 1 :]]
+    if after:
+        return SourceSplit(after[0], k)  # stored weeks already on the new basis date it
+    # Otherwise the split happened after the last stored week, possibly long after it when the stored history has a
+    # gap (the company left the candidate set): date it at the newest week, so every count known so far reads as
+    # pre-split until a filing shows the new count (M4 review R2-F2).
+    newest = max(new) if new else None
+    if newest is None or newest <= qs[-1][0]:
+        return None
+    first = min(d for d in new if d > qs[-1][0])  # the first week the split may have happened
+    return SourceSplit(newest, k, first if first < newest else None)
 
 
 @dataclass(frozen=True)
@@ -125,6 +152,23 @@ class Adjusted:
 def matches(j: Jump, s: ShareSplit) -> bool:
     in_window = s.old_end - timedelta(days=BEFORE_DAYS) <= j.week_end <= s.new_end + timedelta(days=AFTER_DAYS)
     return in_window and abs(s.ratio / j.ratio - 1) <= TOL
+
+
+def date_source_split(split: SourceSplit, shares: Sequence[tuple[date, Decimal]], weeks: Sequence[date]) -> SourceSplit:
+    """The week to store a split the source showed after a gap in the stored history (M4 review R3-F1). A share split
+    of the same ratio whose window reaches past `split.since` (a filing already reported the new count) is this
+    split: it is stored at the first of `weeks` inside that window, so adjust() confirms it and the counts use the
+    share split's dating. Otherwise it stays at the newest week (every count known so far reads as pre-split)."""
+    if split.since is None:
+        return split
+    for s in reversed(share_splits(shares)):  # the latest first
+        if abs(s.ratio / split.ratio - 1) > TOL or s.new_end + timedelta(days=AFTER_DAYS) < split.since:
+            continue
+        start = max(split.since, s.old_end - timedelta(days=BEFORE_DAYS))
+        week = min((w for w in weeks if w >= start), default=None)
+        if week is not None and matches(Jump(week, split.ratio), s):
+            return SourceSplit(week, split.ratio)
+    return SourceSplit(split.week_end, split.ratio)
 
 
 def adjust(
