@@ -30,6 +30,8 @@ SEEDED: dict[str, tuple[str, str]] = {
     "pit_upper_fstring.py": ("pipeline/signals/scratch_upper.py", "PIT_READ"),  # review R2-F4
     "pit_repo_variable.py": ("pipeline/db/repo.py", "PIT_READ"),
     "pit_probe_import.py": ("pipeline/lab/scratch_probe.py", "PIT_READ"),
+    "pit_insert_suffix.py": ("pipeline/db/repo.py", "PIT_READ"),  # review R3-F3
+    "pit_samples_key.py": ("pipeline/db/size_guard.py", "PIT_READ"),
     "openai_default_base.py": ("pipeline/llm/providers/scratch_openai.py", "OPENAI_CLIENT"),
     "npm_anthropic.ts": ("web/lib/scratch.ts", "BANNED_NPM_PACKAGE"),
 }

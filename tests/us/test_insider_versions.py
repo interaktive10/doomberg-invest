@@ -63,3 +63,30 @@ def test_india_revision_wins_per_trade_date() -> None:
     first = Ev("Y", "PROMOTER LTD", date(2025, 3, 3), datetime(2025, 3, 5, tzinfo=UTC), "d1", D(10), "promoter_buy")
     revised = replace(first, filed_at=datetime(2025, 3, 9, tzinfo=UTC), source_url="d2", value=D(12))
     assert latest_versions([first, revised]) == [revised]
+
+
+def test_an_amendment_keeps_the_insiders_other_same_day_filings() -> None:
+    """Review R3-F2: one insider files two Form 4s on 03-05 (a $150k lot dated 03-03, a $200k lot dated 03-04); a
+    4/A of that day restates the first lot as $151k. Only the lot it amends is replaced."""
+    filed = datetime(2025, 3, 5, 21, tzinfo=UTC)
+    a = Ev("X", "DOE JANE", date(2025, 3, 3), filed, "f4-a", D(150000))
+    b = Ev("X", "DOE JANE", date(2025, 3, 4), filed, "f4-b", D(200000))
+    fix = replace(a, filed_at=datetime(2025, 3, 20, 21, tzinfo=UTC), source_url="f4a", value=D(151000),
+                  amends=date(2025, 3, 5))  # fmt: skip
+    assert [(e.source_url, e.value) for e in latest_versions([a, b])] == [("f4-a", D(150000)), ("f4-b", D(200000))]
+    assert [(e.source_url, e.value) for e in latest_versions([a, b, fix])] == [("f4a", D(151000)), ("f4-b", D(200000))]
+    again = replace(fix, filed_at=datetime(2025, 3, 25, 21, tzinfo=UTC), source_url="f4a2", value=D(152000))
+    assert [e.source_url for e in latest_versions([a, b, fix, again])] == ["f4a2", "f4-b"]  # the latest amendment
+    other = Ev("X", "DOE JANE", date(2025, 3, 4), filed, "f4-c", D(1))  # a third original the amendment isn't about
+    assert [e.source_url for e in latest_versions([a, b, other, fix])] == ["f4a", "f4-b", "f4-c"]
+
+
+def test_same_day_originals_and_an_amendment_without_a_shared_date() -> None:
+    """With several originals and no shared trade date, the amendment replaces the one nearest in trade date."""
+    filed = datetime(2025, 3, 5, 21, tzinfo=UTC)
+    a = Ev("X", "DOE JANE", date(2025, 3, 1), filed, "f4-a", D(100))
+    b = Ev("X", "DOE JANE", date(2025, 3, 4), filed, "f4-b", D(200))
+    fix = Ev(
+        "X", "DOE JANE", date(2025, 3, 2), datetime(2025, 3, 9, tzinfo=UTC), "f4a", D(101), amends=date(2025, 3, 5)
+    )
+    assert [e.source_url for e in latest_versions([a, b, fix])] == ["f4a", "f4-b"]
