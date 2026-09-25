@@ -133,6 +133,7 @@ CorpEventKind = Literal[
     "rights_issue",
     "index_change",
     "announcement",
+    "acquisition",
 ]
 
 
@@ -251,3 +252,19 @@ class LlmCall(Row):
     tokens_out: int | None = None
     latency_ms: int | None = None
     error: str | None = None
+
+
+class FactRow(Row):
+    """A verified Appendix F fact as a point-in-time reader sees it (pit.AsOf.facts): its document was published
+    before the cutoff."""
+
+    company_id: UUID
+    fact_type: str
+    subject: str
+    subject_key: str
+    value_num: Decimal | None = None
+    unit: str
+    period_end: date | None = None
+    as_of: date
+    counterparty: str | None = None
+    published_at: AwareDatetime

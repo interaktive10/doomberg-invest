@@ -44,7 +44,7 @@ ALLOWED_HOSTS: dict[str, float] = {
     "www.bseindia.com": 3.0,
     "api.bseindia.com": 3.0,
     "stooq.com": 2.0,
-    "api.gdeltproject.org": 1.0,
+    "api.gdeltproject.org": 5.0,  # GDELT asks for at most one request every 5 s
     "api.stlouisfed.org": 0.5,
     "api.eia.gov": 0.5,
     "generativelanguage.googleapis.com": 0.0,

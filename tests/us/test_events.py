@@ -95,3 +95,10 @@ def test_published_days_and_catch_up_planning() -> None:
     assert quarter_listing_url(date(2025, 3, 4)).endswith("/daily-index/2025/QTR1/index.json")
     assert quarters_between(date(2024, 12, 30), date(2025, 1, 2)) == [date(2024, 10, 1), date(2025, 1, 1)]
     assert quarters_between(date(2025, 2, 1), date(2025, 3, 4)) == [date(2025, 1, 1)]
+
+
+def test_item_2_01_is_an_acquisition_event() -> None:
+    """M4 (R4 "share count +10% without an acquisition"): 8-K item 2.01 becomes corp_events(kind='acquisition')."""
+    evs = [(e.kind, e.event_date, e.detail["items"]) for e in filing_events(subs(MRC))[0] if e.kind == "acquisition"]
+    items = ["1.01", "1.02", "2.01", "2.03", "5.02", "5.03", "7.01", "9.01"]
+    assert evs == [("acquisition", date(2024, 10, 31), items)]

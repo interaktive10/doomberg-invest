@@ -24,7 +24,7 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
-from pipeline.db.models import FUNDAMENTAL_COLUMNS, CorpEvent, FundamentalsRow, InsiderEvent, OwnershipRow
+from pipeline.db.models import FUNDAMENTAL_COLUMNS, CorpEvent, FactRow, FundamentalsRow, InsiderEvent, OwnershipRow
 
 _FUNDAMENTALS_COLS = ", ".join(
     ("company_id", "period_end", "fiscal_label", "filed_at", *FUNDAMENTAL_COLUMNS, "currency", "source")
@@ -77,6 +77,33 @@ class AsOf:
             "order by company_id, period_end, filed_at desc"
         )
         return [FundamentalsRow(**r) for r in self._fetch(conn, sql, company_ids)]
+
+    def fundamental_versions(
+        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None
+    ) -> list[FundamentalsRow]:
+        """Every version of every company-quarter filed before the cutoff, oldest filing first. For histories that
+        must themselves be point-in-time (C1's weekly multiples, BRIEF §4.7): the version current at an earlier
+        week is select_as_of() over these rows with that week's cutoff."""
+        sql = (
+            f"select {_FUNDAMENTALS_COLS} from fundamentals_q "  # noqa: S608
+            "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
+            "order by company_id, period_end, filed_at"
+        )
+        return [FundamentalsRow(**r) for r in self._fetch(conn, sql, company_ids)]
+
+    def facts(
+        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None
+    ) -> list[FactRow]:
+        """Verified text facts (Appendix F) whose document was published before the cutoff; `since` bounds as_of."""
+        sql = (
+            "select f.company_id, f.fact_type, f.subject, f.subject_key, f.value_num, f.unit, f.period_end, f.as_of, "
+            "f.counterparty, d.published_at from facts f join documents d on d.id = f.document_id "
+            "where d.published_at < %(cutoff)s and f.verification_status = 'verified' "
+            "and (%(ids)s::uuid[] is null or f.company_id = any(%(ids)s::uuid[])) "
+            "and (%(since)s::date is null or f.as_of >= %(since)s::date) "
+            "order by f.company_id, f.as_of"
+        )
+        return [FactRow(**r) for r in self._fetch(conn, sql, company_ids, since)]
 
     def ownership(self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None) -> list[OwnershipRow]:
         sql = (

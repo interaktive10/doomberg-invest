@@ -53,6 +53,7 @@ from pipeline.india.xbrl import XbrlError
 from pipeline.net.bse import BseClient
 from pipeline.net.http import HttpClient
 from pipeline.net.nse import NseBlocked, NseClient
+from pipeline.prices import benchmarks
 from pipeline.settings import REPO_ROOT, Settings
 
 SHP_API = "corporate-share-holdings-master?index=equities"
@@ -72,6 +73,7 @@ class IndiaWeeklyStats:
     price_source: str = "none"  # NSE | BSE | manual | none
     price_day: str = ""
     prices: int = 0
+    benchmarks: int = 0
     results_listed: int = 0
     results_fetched: int = 0
     fundamentals_rows: int = 0
@@ -366,6 +368,8 @@ def run_weekly(
     stats.errors += notes if source == "none" else []
     stats.price_source, stats.price_day = source, day.isoformat() if day else ""
     stats.prices = write_prices(conn, rows, source, friday) if rows else 0
+    if day is not None and source == "NSE":
+        write_index_closes(conn, nse, day, stats, root)
     capex = {c.nse_symbol for c in repo.companies(conn, market="in", in_universe=True) if c.capex_desk}
     turnover = {r.symbol: r.turnover or 0 for r in rows}
     order = sorted(turnover, key=lambda s: (s not in capex, -turnover[s]))  # capex desk, then by traded value
@@ -375,6 +379,19 @@ def run_weekly(
     stats.nse_stale = nse.stale
     state.save(state_path)
     return stats
+
+
+def write_index_closes(conn: psycopg.Connection[Any], nse: NseClient, day: date, stats: IndiaWeeklyStats,
+                       root: Path) -> None:  # fmt: skip
+    """NIFTY 50 / NIFTY 500 closes for the bhavcopy's trading day (M4 benchmarks, config/context.yaml)."""
+    names = yaml.safe_load((root / "config" / "context.yaml").read_text(encoding="utf-8"))["benchmarks"]["in"]
+    try:
+        rows = benchmarks.india_rows(nse.get(benchmarks.index_close_url(day)), names)
+    except (NseBlocked, httpx.HTTPError) as e:
+        stats.errors.append(f"index closes {day}: {type(e).__name__}: {e}"[:300])
+        return
+    repo.upsert_benchmarks(conn, rows)
+    stats.benchmarks = len(rows)
 
 
 def mark_sources(conn: psycopg.Connection[Any], stats: IndiaWeeklyStats, nse: NseClient) -> None:

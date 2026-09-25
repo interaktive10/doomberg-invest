@@ -28,6 +28,7 @@ from pipeline.net.bse import BseClient
 from pipeline.net.bse import bhavcopy_url as bse_url
 from pipeline.net.http import HttpClient, RateLimiter
 from pipeline.net.nse import NSE_API, NseClient
+from pipeline.prices.benchmarks import index_close_url
 from pipeline.settings import Settings
 
 FIN = Path(__file__).resolve().parents[2] / "fixtures" / "in"
@@ -59,6 +60,7 @@ def weekly_mocks(http: HttpClient) -> None:
     http.register_mock(
         bhavcopy.nse_url(DAY), (FIN / "bhavcopy" / "BhavCopy_NSE_CM_0_0_0_20260605_F_0000.csv.zip").read_bytes()
     )
+    http.register_mock(index_close_url(DAY), (FIN / "indices" / "ind_close_all_05062026.csv").read_bytes())
     http.register_mock(f"{NSE_API}/{listing_path(DAY - timedelta(days=10), DAY, 1)}", kei_listing())
     capex = yaml.safe_load((FIN.parents[1] / "config" / "capex_seed.yaml").read_text(encoding="utf-8"))["india"]
     for e in (e for e in capex if e.get("nse")):  # filing histories for the backfill (capex desk first)
@@ -93,6 +95,9 @@ def test_india_weekly_run(conn: psycopg.Connection[Any], tmp_path: Path) -> None
     priced = {r.symbol if r.symbol in universe else by_isin.get(r.isin) for r in rows} - {None}
     assert (stats.price_source, stats.price_day) == ("NSE", "2026-06-05") and stats.prices == len(priced) == 1812
     assert len(universe) == 2317 - 188
+    # benchmarks (M4): NIFTY 50 / NIFTY 500 for the bhavcopy's trading day, keyed by the week's Friday
+    marks = conn.execute("select symbol, week_end, close from benchmarks_w order by symbol").fetchall()
+    assert marks == [("NIFTY 50", DAY, Decimal("23366.7")), ("NIFTY 500", DAY, Decimal("22465.35"))]
     # a symbol renamed between the securities list and the bhavcopy keeps its ISIN: matched by ISIN
     aeroplane = company(conn, "AEROPLANE")
     renamed = conn.execute("select close from prices_w where company_id = %s and week_end = %s", (aeroplane.id, DAY))

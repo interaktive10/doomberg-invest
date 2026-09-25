@@ -532,3 +532,126 @@ def tracked_run(conn: Conn, kind: str, source: str | None = None) -> Iterator[di
 def record_llm_call(conn: Conn, call: LlmCall) -> None:
     cols = tuple(LlmCall.model_fields)
     conn.execute(_insert("llm_calls", cols, ""), call.model_dump())
+
+
+# ---------------------------------------------------------------- weekly scoring (M4)
+
+WEEKLY_TABLES = ("signal_values", "redflag_values", "context_values", "scores", "shortlists")
+
+
+def clear_week(conn: Conn, week: date) -> None:
+    """A re-run of a week replaces it (a flag that cleared must not linger from the first run)."""
+    for t in WEEKLY_TABLES:
+        conn.execute(_q(f"delete from {t} where week_end = %s"), (week,))  # noqa: S608 — fixed table names
+
+
+def prices(conn: Conn, company_ids: Sequence[UUID], start: date, end: date) -> list[PriceW]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q(
+                "select company_id, week_end, close, adj_close, volume, source from prices_w "
+                "where company_id = any(%s) and week_end between %s and %s order by company_id, week_end"
+            ),
+            (list(company_ids), start, end),
+        )
+        return [PriceW(**r) for r in cur.fetchall()]
+
+
+def benchmark_closes(conn: Conn, symbols: Sequence[str], start: date, end: date) -> list[BenchmarkW]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q(
+                "select symbol, week_end, close from benchmarks_w where symbol = any(%s) "
+                "and week_end between %s and %s order by symbol, week_end"
+            ),
+            (list(symbols), start, end),
+        )
+        return [BenchmarkW(**r) for r in cur.fetchall()]
+
+
+def scores_for_week(conn: Conn, week: date) -> dict[UUID, Score]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q(
+                "select company_id, week_end, evidence, gap, families, bucket, weights_version from scores "
+                "where week_end = %s"
+            ),
+            (week,),
+        )
+        return {r["company_id"]: Score(**r) for r in cur.fetchall()}
+
+
+def recently_shortlisted(conn: Conn, before: date, since: date) -> set[UUID]:
+    rows = conn.execute(
+        _q("select distinct company_id from shortlists where week_end >= %s and week_end < %s"), (since, before)
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def insert_shortlist(conn: Conn, week: date, rows: Sequence[tuple[UUID, Any, Any]]) -> None:
+    """rows: (company_id, evidence, gap) in rank order."""
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q("insert into shortlists (week_end, company_id, rank, evidence, gap) values (%s, %s, %s, %s, %s)"),
+            [(week, cid, i + 1, ev, gap) for i, (cid, ev, gap) in enumerate(rows)],
+        )
+
+
+def upsert_company_metrics(conn: Conn, week: date, metrics: Mapping[UUID, Mapping[str, Any]]) -> None:
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q(
+                "insert into company_metrics (company_id, week_end, metrics) values (%s, %s, %s) "
+                "on conflict (company_id) do update set week_end = excluded.week_end, metrics = excluded.metrics"
+            ),
+            [(cid, week, Jsonb(dict(m))) for cid, m in metrics.items()],
+        )
+
+
+def recent_attention(conn: Conn, week: date, since: date) -> dict[UUID, int]:
+    """The latest GDELT article count per company from C4 rows in [since, week): C4 is re-queried monthly."""
+    rows = conn.execute(
+        _q(
+            "select distinct on (company_id) company_id, (inputs->>'articles_90d')::int from context_values "
+            "where metric_id = 'C4' and week_end >= %s and week_end < %s and inputs ? 'articles_90d' "
+            "order by company_id, week_end desc"
+        ),
+        (since, week),
+    ).fetchall()
+    return {r[0]: int(r[1]) for r in rows}
+
+
+def research_company_ids(conn: Conn) -> set[UUID]:
+    """Companies with a live thesis or position: priced and scored even outside the universe (BRIEF §4.4)."""
+    rows = conn.execute(
+        _q("select distinct company_id from theses where state in ('research', 'thesis', 'position', 'review')")
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def prune_scoring_history(conn: Conn, week: date, keep_from: date, none_from: date) -> dict[str, int]:
+    """docs/SPEC_ISSUES.md 9: signal_values keeps every row for the latest week only; older weeks keep fired rows and
+    the first unfired row after a firing streak, without their inputs (the timeline needs only fired and strength).
+    Unknown red flags and 'none' scores go after the latest week / `none_from`; everything before `keep_from`
+    (3 years, §2.8) goes."""
+    out: dict[str, int] = {}
+    out["signal_values"] = conn.execute(
+        _q(
+            "delete from signal_values s where s.week_end < %(w)s and not s.fired and coalesce(("
+            "select p.fired from signal_values p where p.company_id = s.company_id and p.signal_id = s.signal_id "
+            "and p.week_end < s.week_end order by p.week_end desc limit 1), false) = false"
+        ),
+        {"w": week},
+    ).rowcount
+    out["signal_inputs_dropped"] = conn.execute(  # the timeline needs fired/strength; inputs are for this week
+        _q("update signal_values set inputs = '{}' where week_end < %s and inputs <> '{}'"), (week,)
+    ).rowcount
+    out["redflag_values"] = conn.execute(
+        _q("delete from redflag_values where week_end < %s and inputs->>'status' = 'unknown'"), (week,)
+    ).rowcount
+    none = conn.execute(_q("delete from scores where week_end < %s and bucket = 'none'"), (none_from,))
+    out["scores"] = none.rowcount
+    for t in ("signal_values", "redflag_values", "context_values", "scores", "shortlists"):
+        n = conn.execute(_q(f"delete from {t} where week_end < %s"), (keep_from,)).rowcount  # noqa: S608
+        out[t] = out.get(t, 0) + n
+    return out

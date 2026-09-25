@@ -41,7 +41,7 @@ jobs:
       - run: make guard
       - run: make test
       - name: verify (every milestone up to the latest that has checks)
-        run: make verify-m3
+        run: make verify-m4
       - uses: actions/upload-artifact@v4
         if: always()
         with:

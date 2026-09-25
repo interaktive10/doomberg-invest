@@ -189,3 +189,44 @@ def test_select_as_of_matches_sql_rule() -> None:
     rows = [("q4", datetime(2025, 2, 1, tzinfo=UTC), 1), ("q4", END_OF_W, 2), ("q4", AFTER_W, 3)]
     got = select_as_of(rows, cutoff_for(W), key=lambda r: r[0], filed_at=lambda r: r[1])
     assert [r[2] for r in got] == [2]
+
+
+def test_fundamental_versions_keep_every_version_before_the_cutoff(conn: psycopg.Connection[Any]) -> None:
+    """M4 (C1's point-in-time history): all versions filed before W, none after; select_as_of picks per week."""
+    cid = new_company(conn)
+    q = date(2024, 12, 31)
+    repo.insert_fundamentals(conn, [fq(cid, q, datetime(2025, 2, 1, tzinfo=UTC), "100"),
+                                    fq(cid, q, datetime(2025, 3, 10, tzinfo=UTC), "110"),
+                                    fq(cid, q, AFTER_W, "999")])  # fmt: skip
+    rows = as_of(W).fundamental_versions(conn, [cid])
+    assert [r.revenue for r in rows] == [Decimal(100), Decimal(110)]
+    early = select_as_of(rows, cutoff_for(date(2025, 3, 7)), lambda r: r.period_end, lambda r: r.filed_at)
+    assert [r.revenue for r in early] == [Decimal(100)]
+
+
+def test_facts_need_a_published_document_and_verification(conn: psycopg.Connection[Any]) -> None:
+    cid = new_company(conn)
+
+    def doc(url: str, published: datetime) -> UUID:
+        row = conn.execute(
+            "insert into documents (company_id, kind, url, published_at, sha256, raw_path) "
+            "values (%s, 'press_release', %s, %s, 'x', 'x') returning id",
+            (cid, url, published),
+        ).fetchone()
+        assert row is not None
+        return UUID(str(row[0]))
+
+    def fact(document: UUID, key: str, status: str) -> None:
+        conn.execute(
+            "insert into facts (company_id, document_id, fact_type, subject, subject_key, unit, as_of, quote, "
+            "char_start, char_end, extraction_model, confidence, verification_status) "
+            "values (%s, %s, 'order_win', 'grid order', %s, 'usd', %s, 'a quoted sentence', 0, 17, 'm', 0.9, %s)",
+            (cid, document, key, date(2025, 3, 1), status),
+        )
+
+    before, after = doc("https://example.org/a", END_OF_W), doc("https://example.org/b", AFTER_W)
+    fact(before, "order:a", "verified")
+    fact(before, "order:b", "needs_review")
+    fact(after, "order:c", "verified")
+    assert [f.subject_key for f in as_of(W).facts(conn, [cid])] == ["order:a"]
+    assert {f.subject_key for f in as_of(W + timedelta(days=1)).facts(conn, [cid])} == {"order:a", "order:c"}
