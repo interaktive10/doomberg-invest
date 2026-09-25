@@ -6,8 +6,8 @@ built in memory (seeded) for the Signal Lab tests (M8-01, M8-02).
 - Planted: a quarter of the companies see their order book (RPO) step up 40%. The live S1 fires once the second
   such quarter is filed (order book growth beats revenue growth by >= 10 pp in two quarters, coverage rising). From
   the month after that filing, the stock drifts +2.5% a month for 12 months (the market learns what the filing said).
-- Noise: another quarter of the companies buy back 4% of their shares. The live S5 fires (path A: shares down >= 2%
-  YoY, FCF > 0, net debt flat); the price does nothing.
+- Noise: about a fifth of the companies, never a planted one, buy back 4% of their shares. The live S5 fires (path
+  A: shares down >= 2% YoY, FCF > 0, net debt flat); the price does nothing.
 - Prices: month-end closes 2015-01 to 2019-12, log returns N(0.5%, 8%) a month plus the planted drift.
 - `shift_filed_days` moves every filing of the planted companies later (the leak test, M8-02): S1 then fires after
   the drift, so a point-in-time Lab finds nothing.
@@ -83,6 +83,8 @@ def make(seed: int = 7, n: int = 500, shift_filed_days: int = 0) -> tuple[LabDat
         is_planted, is_noise = rng.random() < 0.25, rng.random() < 0.25
         step = rng.choice(step_quarters) if is_planted else None
         buyback = rng.choice(quarters[12:-4]) if is_noise else None
+        if is_planted:  # disjoint sets: the noise signal carries no planted drift (review R1-F6); the draw above
+            buyback = None  # is still taken, so every other company is unchanged
         shift = shift_filed_days if is_planted else 0
         rows = []
         for i, q in enumerate(quarters):

@@ -24,7 +24,12 @@ def test_13f_runs_before_the_universe_re_seed() -> None:
 
 
 def test_every_pipeline_job_migrates_first() -> None:
-    for name, jobs in (("daily.yml", ("us",)), ("weekly.yml", ("us",)), ("quarterly.yml", ("us",))):
+    for name, jobs in (
+        ("daily.yml", ("us",)),
+        ("weekly.yml", ("us",)),
+        ("quarterly.yml", ("us",)),
+        ("lab.yml", ("lab",)),
+    ):
         for job in jobs:
             runs = [r for r in steps(name, job) if "python -m pipeline" in r]
             assert runs and "pipeline.db.migrate" in runs[0], (name, job)
@@ -40,3 +45,14 @@ def test_size_guard_runs_after_every_weekly_job_that_writes() -> None:
     assert job["if"].startswith("always()") and "needs.check.outputs.db == 'true'" in job["if"]
     runs = [r for r in steps("weekly.yml", "size_guard") if "python -m pipeline" in r]
     assert "pipeline.db.migrate" in runs[0] and runs[-1].endswith("python -m pipeline.db.size_guard")
+
+
+def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
+    """M8 review R1-F5: §2.1 "quarterly: ... Signal Lab re-run" (§11.8): quarterly.yml dispatches lab.yml once the
+    13F step and the universe rebuild are done."""
+    doc = yaml.safe_load((WF / "quarterly.yml").read_text(encoding="utf-8"))
+    lab = doc["jobs"]["lab"]
+    assert lab["needs"] == "us" and doc["permissions"]["actions"] == "write"
+    assert any("gh workflow run lab.yml" in str(s.get("run", "")) for s in lab["steps"])
+    runs = steps("quarterly.yml", "us")
+    assert "pipeline.db.seed" in runs[-1]  # the rebuild is the us job's last step, so the Lab runs on the new universe

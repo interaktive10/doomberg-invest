@@ -35,8 +35,12 @@ def rule(oos: Stat | None, ins: Stat | None, rules: Mapping[str, Any], legacy: b
     t_up, t_down = float(rules["promote_min_t_nw"]), float(rules["demote_max_t_nw"])
     if oos is None or oos.mean is None or oos.t_nw is None:
         return (demote if legacy else neutral), "no out-of-sample events"
-    if oos.mean > 0 and oos.t_nw >= t_up and ins is not None and ins.mean is not None and ins.mean > 0:
-        return promote, f"OOS mean {oos.mean:+.4f}, t_nw {oos.t_nw:.2f} >= {t_up:g}, in-sample {ins.mean:+.4f}"
+    if oos.mean > 0 and oos.t_nw >= t_up:
+        if ins is not None and ins.mean is not None and ins.mean > 0:
+            return promote, f"OOS mean {oos.mean:+.4f}, t_nw {oos.t_nw:.2f} >= {t_up:g}, in-sample {ins.mean:+.4f}"
+        why = "has no events" if ins is None or ins.mean is None else f"mean {ins.mean:+.4f} has the opposite sign"
+        return (demote if legacy else neutral), (f"OOS mean {oos.mean:+.4f}, t_nw {oos.t_nw:.2f} >= {t_up:g}, but "
+                                                 f"in-sample {why}")  # fmt: skip
     if oos.mean < 0 and oos.t_nw <= t_down:
         return demote, f"OOS mean {oos.mean:+.4f}, t_nw {oos.t_nw:.2f} <= {t_down:g}"
     return (demote if legacy else neutral), f"OOS insignificant (mean {oos.mean:+.4f}, t_nw {oos.t_nw:.2f})"
@@ -55,9 +59,11 @@ def propose(stats: Sequence[Stat], weights: Mapping[str, Any], horizon: int) -> 
 
 def render(text: str, proposals: Sequence[Proposal], version: str) -> str:
     """config/weights.yaml with the proposed weights and a new version; comments and layout unchanged."""
+    changes = {(p.section, p.signal_id): p.new for p in proposals if p.new != p.old}
+    if not changes:
+        return text  # nothing to propose: no new version, no PR (lab.yml's "no weight change" branch)
     lines = text.splitlines(keepends=True)
     section = ""
-    changes = {(p.section, p.signal_id): p.new for p in proposals if p.new != p.old}
     for i, line in enumerate(lines):
         top = re.match(r"^(\w+):", line)
         if top:

@@ -77,3 +77,20 @@ def test_the_proposal_commit_touches_only_weights_and_needs_the_label(tmp_path: 
     check = [sys.executable, str(ROOT / "scripts" / "protected_check.py"), "--files", *files]
     assert subprocess.run([*check, "--labels", ""], capture_output=True).returncode == 1
     assert subprocess.run([*check, "--labels", "human-approved"], capture_output=True).returncode == 0
+
+
+def test_render_is_a_no_op_without_weight_changes() -> None:
+    """Review R1-F4: no weight changes -> the file is untouched (no new version, so lab.yml opens no weights PR)."""
+    w = yaml.safe_load(weights_text())
+    unchanged = propose([], w, 12)  # no statistics: every weight keeps its value
+    assert all(p.new == p.old for p in unchanged if p.section == "signals")
+    same = [p for p in unchanged if p.new == p.old]
+    assert render(weights_text(), same, "lab-x") == weights_text()
+
+
+def test_reason_when_the_in_sample_sign_disagrees() -> None:
+    """Review R1-F7: a significant OOS result whose in-sample sign disagrees isn't called insignificant."""
+    new, why = rule(s("S1", "out_of_sample", 0.06, 3.40), s("S1", "in_sample", -0.02, -0.5), RULES, False)
+    assert new == D("1.0") and "insignificant" not in why and "in-sample mean -0.0200 has the opposite sign" in why
+    new, why = rule(s("S1", "out_of_sample", 0.06, 3.40), None, RULES, False)
+    assert new == D("1.0") and "in-sample has no events" in why

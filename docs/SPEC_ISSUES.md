@@ -32,3 +32,12 @@
     - SAST Reg 31 (encumbrance) and Reg 29 (acquisition) disclosures are separate NSE feeds, event by event, with their own dates.
     - No rule in §4.6–4.7 needs event-level pledges. R5 uses the pledged % of the promoter holding (`ownership_q`), and S7-IN a ≥ 5 pp drop in it; both are quarterly.
     - **Decision needed (Manzoor):** keep the quarterly derivation (DEFAULT), or add the SAST feed: one listing request a day plus one file per disclosure, which fits the daily run's NSE budget.
+19. **§4.10.3/§4.10.5 "the Newey-West t-stat (lags = horizon)" over-rejects at the brief's lags** (M8 review R1-F2).
+    With lags as long as a third of the period and events clustered in a few months, the Newey-West variance of a mean
+    excess is noisy and often far below the plain one. On iid noise over an 84-month period (60 events, 2,000 draws),
+    P(|t| >= 2) is 9.4% / 15.3% / 18.6% at lags 12 / 24 / 36 against 4-5% for a floored or plain t; on F-LAB (seeds
+    1-16) the noise signal crosses |t| = 2 in 11 of 32 cells unfloored, 2 of 32 floored. §4.10.5 would then promote or
+    demote weights on chance. Built: t_nw uses max(NW SE, plain SE), so it is never larger than the plain t; the
+    report says so; lab_results.notes keeps the unfloored t (`t_nw_unfloored=`) next to the lower bound. The floor only
+    moves §4.10.5 outcomes toward "insignificant" (weight 1.0; legacy 0). **Decision needed (Manzoor):** keep the floor,
+    or use the unfloored NW t as written.

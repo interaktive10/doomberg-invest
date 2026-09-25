@@ -63,3 +63,12 @@ def test_f_px_jbl_split_week_is_an_exact_two_for_one_drop() -> None:
     bars = parse_csv(csv.read_bytes())
     jumps = price_jumps([(b.week_end, b.close) for b in bars])
     assert [(j.week_end, j.ratio) for j in jumps] == [(bars[150].week_end, D(2))]
+
+
+def test_any_whole_split_ratio_up_to_fifty_and_the_nearest_wins() -> None:
+    """M8 review R1-F1: AAPL's 7:1 (2014), GE's 1:8 (2021) and CMG's 50:1 (2024) are splits too."""
+    assert split_ratio(D("6.9515")) == D(7) and split_ratio(D("0.126")) == D(1) / D(8)
+    assert split_ratio(D("50.4")) == D(50) and split_ratio(D(41)) == D(41)  # the nearest ratio, not the first in 3%
+    assert split_ratio(D("1.8")) is None and split_ratio(D("1.1")) is None and split_ratio(D("60")) is None
+    seven = adjust(closes(10, "7"), list(zip(QUARTERS, (D(100), D(100), D(700)), strict=True)))
+    assert [j.ratio for j in seven.confirmed] == [D(7)] and seven.share_factor(date(2025, 12, 31)) == D(7)

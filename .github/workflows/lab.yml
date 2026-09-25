@@ -48,6 +48,9 @@ jobs:
           else
             echo "::warning::BLOCKED(human): attach the Stooq bulk file d_us_txt.zip to the lab-data-v1 release (BRIEF §2.7)"
           fi
+      - name: Migrations
+        if: steps.prices.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
       - name: Lab run
         if: steps.prices.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.lab.run --market "$MARKET" --workers 4 --propose

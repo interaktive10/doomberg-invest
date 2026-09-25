@@ -62,7 +62,9 @@ def render(info: RunInfo, events: Sequence[Stat], evidence: Sequence[Stat], gap:
         f"{info.company_months} company-months, {info.events} events (first fire per company in 12 months).",
         f"- Periods (by event month): {periods}.",
         "- Excess = forward price return minus the equal-weighted mean of the companies priced at both dates. "
-        "t (NW) is the Newey-West t-stat of the mean excess, lags = horizon months.",
+        "t (NW) is the Newey-West t-stat of the mean excess (lags = horizon months) with its standard error floored "
+        "at the plain standard error, so it is never larger than the plain t (docs/SPEC_ISSUES.md 19); lab_results "
+        "notes keep the unfloored value.",
         "",
         "## Signals",
         *_table(events),
