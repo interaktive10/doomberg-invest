@@ -22,7 +22,7 @@ from pipeline.settings import Settings
 MB = 1024 * 1024
 LIMIT_MB = 400
 SIGNAL_KEEP_YEARS = 3
-FUNDAMENTAL_VERSIONS = 1.4  # rows per company-quarter: restatement versions (F-US measures 1.39; review F10)
+FUNDAMENTAL_VERSIONS = 1.45  # rows per company-quarter: restatement versions (F-US measures 1.418; R2-F1)
 
 Conn = psycopg.Connection[Any]
 

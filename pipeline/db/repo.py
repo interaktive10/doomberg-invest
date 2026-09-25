@@ -292,6 +292,7 @@ _INSIDER_COLS = (
     "currency",
     "planned",
     "source_url",
+    "amends",
 )
 
 

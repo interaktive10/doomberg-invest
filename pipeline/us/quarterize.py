@@ -21,8 +21,8 @@ not yet the year, the last consistent value is kept (and the reason logged).
 
 from __future__ import annotations
 
-from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -36,7 +36,9 @@ YEAR_DAYS = (350, 380)
 Q4_MAX_MULTIPLE = Decimal(3)
 
 Key = tuple[str, date, date]  # ("D", start, end) | ("I", end, end) | ("C", report_end, report_end)
-Timed = tuple[Decimal, datetime]  # a value and the acceptance time of the filing(s) it came from
+# A value with two acceptance times: when a filing last changed it, and the latest filing that reported it (the same
+# value again, e.g. a 10-K repeating last year's figures). Review R2-F1: only the first moves on a repeat.
+Timed = tuple[Decimal, datetime, datetime]
 QuarterEnds = tuple[date | None, date | None, date | None, date | None]
 
 
@@ -76,24 +78,28 @@ class Issue:
     reason: str
 
 
-def _quarter_ends(start: date, end: date | None, durations: set[tuple[date, date]]) -> QuarterEnds:
+def _pick(candidates: Iterable[tuple[date, int]]) -> date | None:
+    """The end most facts report, then the earliest (review R2-F2: picking the first end met while iterating a set
+    made the calendar depend on the process's hash seed)."""
+    best = min(candidates, key=lambda c: (-c[1], c[0]), default=None)
+    return None if best is None else best[0]
+
+
+def _quarter_ends(start: date, end: date | None, durations: Mapping[tuple[date, date], int]) -> QuarterEnds:
     """e1..e4 for a fiscal year starting at `start`: from YTD periods starting at `start`, else by chaining
-    3-month periods. e4 is the year end (None while the year is open)."""
+    3-month periods. e4 is the year end (None while the year is open). `durations` counts the facts per period, so
+    a stray period (CAT's 2011-01-01..2011-03-30 next to the real quarter) loses to the one most facts report."""
     ytd: dict[int, date] = {}
-    for d_start, d_end in durations:
-        if d_start != start:
-            continue
-        days = (d_end - d_start).days
-        for k, band in ((1, QUARTER_DAYS), (2, HALF_DAYS), (3, NINE_DAYS)):
-            if _in(days, band):
-                ytd.setdefault(k, d_end)
+    for k, band in ((1, QUARTER_DAYS), (2, HALF_DAYS), (3, NINE_DAYS)):
+        pick = _pick((e, n) for (s, e), n in durations.items() if s == start and _in((e - s).days, band))
+        if pick is not None:
+            ytd[k] = pick
     ends: list[date | None] = []
     cur: date | None = start
     for k in (1, 2, 3):
         e: date | None = ytd.get(k)
         if e is None and cur is not None:
-            chained = sorted(e2 for s2, e2 in durations if s2 == cur and _in((e2 - s2).days, QUARTER_DAYS))
-            e = chained[0] if chained else None
+            e = _pick((e2, n) for (s2, e2), n in durations.items() if s2 == cur and _in((e2 - s2).days, QUARTER_DAYS))
         if e is not None and end is not None and e > end:
             e = None  # outside a closed year (bad data)
         ends.append(e)
@@ -103,7 +109,7 @@ def _quarter_ends(start: date, end: date | None, durations: set[tuple[date, date
 
 def fiscal_years(facts: Sequence[Fact]) -> list[FiscalYear]:
     """Fiscal years from annual 10-K durations; the year after the last one is open (in progress)."""
-    durations = {(f.start, f.end) for f in facts if f.start is not None}
+    durations = Counter((f.start, f.end) for f in facts if f.start is not None)
     by_end: dict[date, dict[date, int]] = defaultdict(lambda: defaultdict(int))
     for f in facts:
         if f.start is not None and f.form in ANNUAL_FORMS and _in(f.days, YEAR_DAYS):
@@ -156,20 +162,23 @@ def _trailing_zeros(v: Decimal) -> int:
 
 
 class _State:
-    """Latest value per (column, key, alternative, part) as of the facts applied so far, with the acceptance time
-    of the filing it came from. The effective value is the lowest-ranked alternative whose required part (0) is
-    present, summed over its parts; its time is the latest of those parts'. A later value that only differs by
-    rounding keeps the more precise of the two and the earlier time (not a restatement)."""
+    """Latest value per (column, key, alternative, part) as of the facts applied so far, with the time a filing last
+    changed it and the latest time a filing reported it. The effective value is the lowest-ranked alternative whose
+    required part (0) is present, summed over its parts (changed: the latest part's change; reported: the earliest
+    part's latest report). A later value that only differs by rounding keeps the more precise of the two and its
+    change time (not a restatement), and counts as reported again."""
 
     def __init__(self) -> None:
-        self._by: dict[tuple[str, Key], dict[tuple[int, int], tuple[Decimal, datetime]]] = {}
+        self._by: dict[tuple[str, Key], dict[tuple[int, int], Timed]] = {}
 
     def apply(self, column: str, key: Key, rank: int, part: int, val: Decimal, t: datetime) -> None:
         parts = self._by.setdefault((column, key), {})
         old = parts.get((rank, part))
         if old is not None and rounding_equal(old[0], val):
-            val, t = (old[0] if _trailing_zeros(old[0]) <= _trailing_zeros(val) else val), old[1]
-        parts[(rank, part)] = (val, t)
+            precise = old[0] if _trailing_zeros(old[0]) <= _trailing_zeros(val) else val
+            parts[(rank, part)] = (precise, old[1], max(old[2], t))
+            return
+        parts[(rank, part)] = (val, t, t)
 
     def get_t(self, column: str, key: Key) -> Timed | None:
         parts = self._by.get((column, key))
@@ -180,7 +189,7 @@ class _State:
             return None
         best = min(ranks)
         chosen = [vt for (r, _), vt in parts.items() if r == best]
-        return sum((v for v, _ in chosen), Decimal(0)), max(t for _, t in chosen)
+        return sum((v for v, _, _ in chosen), Decimal(0)), max(c for _, c, _ in chosen), min(r for _, _, r in chosen)
 
     def get(self, column: str, key: Key) -> Decimal | None:
         vt = self.get_t(column, key)
@@ -203,10 +212,17 @@ def _q4_check(q4: Decimal, q: list[Decimal]) -> bool:
 
 
 def _consistent(minuend: Timed, subtrahends: Sequence[Timed]) -> bool:
-    """A derived value (YTD difference, Q4 = FY - Q1..Q3) is only computed when the larger period comes from a
-    filing at least as recent as every value subtracted from it. Otherwise a restated quarter would be subtracted
-    from an unrestated year, giving a number no filing reported (review F3)."""
-    return all(minuend[1] >= t for _, t in subtrahends)
+    """A derived value (YTD difference, Q4 = FY - Q1..Q3) is only computed when the larger period was reported (or
+    re-reported unchanged) no earlier than the last change of every value subtracted from it. Otherwise a restated
+    quarter would be subtracted from an unrestated year, giving a number no filing reported (review F3). A filing that
+    repeats the year after the quarter changed confirms the pair (review R2-F1)."""
+    return all(minuend[2] >= changed for _, changed, _ in subtrahends)
+
+
+def _derived(value: Decimal, inputs: Sequence[Timed]) -> Timed:
+    """A difference changes when any input changes; it is never itself a minuend."""
+    t = max(c for _, c, _ in inputs)
+    return value, t, t
 
 
 MIXED = "inputs from different vintages (a later filing restated a subtracted period); kept the last consistent value"
@@ -256,13 +272,13 @@ def _year_values(
                     known = [q.get(j) for j in range(1, k)]
                     if all(v is not None for v in known):
                         subtrahends = [v for v in known if v is not None]
-                        prev = (sum((v for v, _ in subtrahends), Decimal(0)), max(t for _, t in subtrahends))
+                        prev = _derived(sum((v for v, _, _ in subtrahends), Decimal(0)), subtrahends)
                 if ytd is not None and prev is not None:
                     if _consistent(ytd, subtrahends):
-                        direct = (ytd[0] - prev[0], ytd[1])
+                        direct = _derived(ytd[0] - prev[0], [ytd, *subtrahends])
                     else:
                         kept = keep(e, c)
-                        direct = None if kept is None else (kept, ytd[1])
+                        direct = None if kept is None else _derived(kept, [ytd, *subtrahends])
             q[k] = direct
             out[e][c] = None if direct is None else direct[0]
         e4, s4 = ends[3], fy.quarter_start(4)
@@ -278,7 +294,7 @@ def _year_values(
             out[e4][c] = None
             continue
         timed: list[Timed] = [v for v in q123 if v is not None]
-        parts = [v for v, _ in timed]
+        parts = [v for v, _, _ in timed]
         if not _consistent(annual, timed):
             out[e4][c] = keep(e4, c)
             continue

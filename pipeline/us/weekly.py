@@ -34,9 +34,9 @@ from pipeline.us.bulk import JsonSource
 from pipeline.us.companyfacts import Alternative
 from pipeline.us.fundamentals import load_xbrl_map, quarterize_company, write_company
 from pipeline.us.submissions import parse_submissions
-from pipeline.us.universe import UniverseRules, decide, public_float, sector_for_sic
+from pipeline.us.universe import PublicFloat, UniverseRules, decide, public_float, sector_for_sic
 
-QUARTERIZE_VERSION = "1"  # bump when quarterize.py / companyfacts.py change what they produce
+QUARTERIZE_VERSION = "2"  # bump when quarterize.py / companyfacts.py change what they produce (2: review R2-F1/F2)
 
 
 def state_version(xbrl_map: Mapping[str, Sequence[Alternative]]) -> str:
@@ -144,7 +144,7 @@ def _one_company(
     subs = parse_submissions(json.loads(raw_sub), [json.loads(p) for p in submissions.pages(cik)])
     raw_cf = companyfacts.read(f"CIK{cik}.json")
     ttm: Decimal | None = None
-    pf: Decimal | None = None
+    pf: PublicFloat | None = None
     done: dict[str, str] | None = None
     if raw_cf is None:
         stats.no_companyfacts += 1
@@ -153,7 +153,8 @@ def _one_company(
         if not force and prev.get("sha256") == digest:
             stats.unchanged += 1
             ttm = Decimal(prev["ttm_revenue"]) if prev.get("ttm_revenue") else None
-            pf = Decimal(prev["public_float"]) if prev.get("public_float") else None
+            if prev.get("public_float") and prev.get("public_float_date"):
+                pf = PublicFloat(Decimal(prev["public_float"]), date.fromisoformat(prev["public_float_date"]))
         else:
             doc = json.loads(raw_cf)
             result = quarterize_company(doc, subs, xbrl_map, today)
@@ -164,7 +165,8 @@ def _one_company(
             issue_log += [(cik, i.period_end.isoformat(), i.column, i.reason) for i in result.issues]
             ttm, pf = result.ttm_revenue(), public_float(doc)
             done = {"sha256": digest, "ttm_revenue": str(ttm) if ttm is not None else "",
-                    "public_float": str(pf) if pf is not None else ""}  # fmt: skip
+                    "public_float": str(pf.value) if pf is not None else "",
+                    "public_float_date": pf.as_of.isoformat() if pf is not None else ""}  # fmt: skip
     decision = decide(subs, ttm, rules, today, pf)
     repo.update_us_company(
         conn,

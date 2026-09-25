@@ -40,7 +40,7 @@ from pipeline.us.specials import effective_spinoff, html_to_text, parent_candida
 from pipeline.us.submissions import Submissions, end_of_day_utc, parse_submissions
 
 RESCAN_DAYS = 120  # Form 10 registrations usually take 1-4 months to become effective
-RETRY_DAYS = 3  # a day with failed downloads is re-read by the next runs, for this many days (then logged and passed)
+RETRY_RUNS = 3  # a day with failed downloads is read by up to this many runs (then logged and passed; review R2-F5)
 
 
 def submissions_url(cik: str) -> str:
@@ -137,6 +137,7 @@ def run_daily(
                     currency="USD",
                     planned=t.planned,
                     source_url=r.url,
+                    amends=f4.original_date if f4.document_type.startswith("4/A") else None,
                 )
             )
     repo.insert_insider_events(conn, insiders)
@@ -242,17 +243,43 @@ def _spinoff_event(
     )
 
 
-def load_last_day(path: Path | None) -> date | None:
+def _state(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
-        return None
-    v = json.loads(path.read_text(encoding="utf-8")).get("last_day")
+        return {}
+    state: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return state
+
+
+def load_last_day(path: Path | None) -> date | None:
+    v = _state(path).get("last_day")
     return date.fromisoformat(v) if v else None
 
 
-def save_last_day(path: Path | None, day: date) -> None:
+def save_last_day(path: Path | None, day: date, held: date | None = None, attempts: int = 0) -> None:
+    """The cursor, plus the day being retried (if any) and how many runs have read it."""
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"last_day": day.isoformat()}), encoding="utf-8")
+        state: dict[str, Any] = {"last_day": day.isoformat()}
+        if held is not None:
+            state |= {"held_day": held.isoformat(), "attempts": attempts}
+        path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def listed_days(client: HttpClient, first: date, today: date, errors: list[str]) -> list[date]:
+    """Published days from the quarters' index.json listings. SEC creates a new quarter's listing hours into its
+    first day (the 01:30 UTC run on July 1 finds 403), so a missing listing for today's quarter is simply "nothing
+    published yet" (review R2-F6); a missing earlier listing is logged and skipped."""
+    out: list[date] = []
+    quarters = quarters_between(min(first, today), today)
+    for q in quarters:
+        try:
+            out += published_days(json.loads(client.get_bytes(quarter_listing_url(q))))
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code not in (403, 404):
+                raise
+            if q != quarters[-1]:
+                errors.append(f"daily-index listing {q:%Y} Q{(q.month - 1) // 3 + 1}: HTTP {e.response.status_code}")
+    return [d for d in out if d <= today]
 
 
 def run_catch_up(
@@ -262,21 +289,36 @@ def run_catch_up(
     isn't published yet; it is picked up by the next run instead of being skipped as a 'holiday').
 
     Each day is committed before the cursor moves past it. A day with failed downloads holds the cursor, so the next
-    run reads it again (inserts are idempotent); after RETRY_DAYS the cursor moves on and the errors stay logged."""
+    run reads it again (inserts are idempotent). Retries are counted in runs, not calendar days: Friday's index is
+    first read on Tuesday (review R2-F5). After RETRY_RUNS reads the cursor moves on and the errors stay logged."""
+    state = _state(day_path)
     last = load_last_day(day_path)
+    held_day = date.fromisoformat(state["held_day"]) if state.get("held_day") else None
+    attempts = int(state.get("attempts", 0))
     first = (last + timedelta(days=1)) if last else today - timedelta(days=7)
-    published: list[date] = []
-    for q in quarters_between(min(first, today), today):
-        published += published_days(json.loads(client.get_bytes(quarter_listing_url(q))))
+    listing_errors: list[str] = []
+    published = listed_days(client, first, today, listing_errors)
     out: list[DailyStats] = []
-    held = False
-    for day in days_to_process([d for d in published if d <= today], last):
+    held: date | None = None
+    for day in days_to_process(published, last):
         with conn.transaction():
             stats = run_daily(conn, client, day, pending_path)
         out.append(stats)
-        held = held or (stats.retry > 0 and (today - day).days <= RETRY_DAYS)
-        if not held:
-            save_last_day(day_path, day)
+        if held is not None:
+            continue  # read, but the cursor waits for the held day
+        if stats.retry > 0:
+            tries = attempts + 1 if held_day == day else 1
+            if tries < RETRY_RUNS:
+                held, attempts = day, tries
+                continue
+            stats.errors.append(f"{day}: downloads still failing after {tries} runs; moving on")
+        last = day
+    if listing_errors:
+        out.insert(0, DailyStats(f"listings as of {today}", errors=listing_errors))
+    if last is None and held is not None:
+        last = held - timedelta(days=1)  # a first run that holds its first day still remembers the attempt
+    if last is not None:
+        save_last_day(day_path, last, held, attempts if held else 0)
     return out
 
 
