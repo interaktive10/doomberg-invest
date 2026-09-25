@@ -5,6 +5,7 @@ filing indexes, and India announcement triage (P-07)."""
 
 from __future__ import annotations
 
+import itertools
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -125,7 +126,8 @@ def submissions(cik: str) -> bytes:
                        "filings": {"recent": recent, "files": []}}).encode()  # fmt: skip
 
 
-def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+def nimbus(conn: psycopg.Connection[Any], tmp_path: Path) -> HttpClient:
+    """A capex-desk company with a 10-Q and an 8-K (EX-99.1 press release) filed in the last days."""
     conn.execute("insert into companies (market, name, cik, ticker, fiscal_year_end, capex_desk) values "
                  "('us', 'Nimbus Compute Corp.', %s, 'NMBS', '0630', true)", (CIKS["NMBS"],))  # fmt: skip
     http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
@@ -138,6 +140,11 @@ def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any]
              'ex991.htm">ex991.htm</a></td><td>EX-99.1</td></tr></table>')  # fmt: skip
     http.register_mock(f"{arch}/000099900126000102/0000999001-26-000102-index.htm", index.encode())
     http.register_mock(f"{arch}/000099900126000102/ex991.htm", (SYN / "nmbs_pr_guidance.htm").read_bytes())
+    return http
+
+
+def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    http = nimbus(conn, tmp_path)
     stats = run.run(conn, date(2026, 9, 25), router(), http, None, tmp_path)
     assert stats.queued_filings == 2 and stats.extracted == 2 and stats.errors == [], stats
     statuses = dict(conn.execute("select form_type, status from filings").fetchall())
@@ -146,6 +153,20 @@ def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any]
     assert kinds == {"10-Q", "EX-99.1"} and stats.facts_verified == 4 + 2
     again = run.run(conn, date(2026, 9, 26), router(), http, None, tmp_path)
     assert again.queued_filings == 0 and again.documents == 0  # nothing new: nothing re-read
+
+
+def test_the_time_budget_stops_between_documents(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """BRIEF §2.5's minutes budget: no document starts after `minutes`; the rest stays queued for the next run."""
+    http = nimbus(conn, tmp_path)
+    ticks = itertools.count(0, 300)  # every look at the clock is 5 minutes later
+    stats = run.run(
+        conn, date(2026, 9, 25), router(), http, None, tmp_path, minutes=8, clock=lambda: float(next(ticks))
+    )
+    assert stats.stopped == "time budget (8 min)" and stats.extracted == 1
+    statuses = sorted(r[0] for r in conn.execute("select status from filings").fetchall())
+    assert statuses == ["extracted", "new"]
+    later = run.run(conn, date(2026, 9, 26), router(), http, None, tmp_path)
+    assert later.extracted == 1 and later.stopped is None
 
 
 def test_india_announcements_are_triaged_once(conn: psycopg.Connection[Any]) -> None:

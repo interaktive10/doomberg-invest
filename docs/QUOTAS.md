@@ -10,6 +10,13 @@ provider as unavailable (items stay `deferred`).
 | Groq | console.groq.com → Settings → Limits (per-model table) | same three, for the model in `providers.groq.models` | — |
 | OpenRouter | openrouter.ai → Settings / Keys; `GET https://openrouter.ai/api/v1/key` with the key returns the key's current limit and usage. `:free` models have their own per-day cap, which depends on account credit status | `requests_per_minute`, `requests_per_day` | — |
 
+Other settings in `config/quotas.yaml`:
+- `routing`: the provider order per prompt. A 429 blocks a provider until its Retry-After (else the next UTC day), and the next one is tried.
+- `work_order`: which companies' documents are read first (capex desk, then the candidate shortlist, then the rest).
+- `text_daily_limits.documents_per_day`: the daily text run's cap. While it is `null`, the run reads at most 40 documents a day. The daily job also starts no document after 8 minutes (`pipeline/facts/run.py --minutes`, BRIEF §2.5 budget).
+
+Today's usage is read back from `llm_calls`, so re-running a job the same day doesn't overspend a daily quota.
+
 Rules (BRIEF §2.6):
 - No credit card on any provider. Nothing can bill by accident, and exhaustion means `deferred`, never spend.
 - Record the date you copied the numbers. Re-check them each quarter (§11.8) or whenever `llm_calls` shows repeated 429s.
@@ -21,5 +28,5 @@ Non-LLM sources (documented fair-use limits, enforced in `pipeline/net/http.py`)
 | SEC EDGAR | ≤ 8 req/s, declared `SEC_USER_AGENT` | SEC fair-access policy (10 req/s max); BRIEF §2.7 |
 | NSE / BSE | 1 request per 3 s, cookie warm-up | BRIEF §4.3; old Doomberg measured about 3-4/min/IP (`docs/DOOMBERG_AUDIT.md` §4) |
 | Stooq | 1 request per 2 s, ≤ 400 symbols/week | BRIEF §2.7 |
-| GDELT DOC 2.0 | 1 req/s, candidates only | BRIEF §2.7 |
-| FRED / EIA | 2 req/s | free keys; BRIEF §2.7 |
+| GDELT DOC 2.0 | 1 request per 5 s (GDELT's own limit), ≤ 100 new queries a week, candidates only | BRIEF §2.7; DECISIONS.log (M4 C4) |
+| FRED / EIA | 2 req/s; EIA: one monthly series a week (planned generator additions, 5 years) | free keys; BRIEF §2.7 |

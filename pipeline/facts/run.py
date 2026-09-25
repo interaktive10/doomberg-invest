@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -52,6 +53,7 @@ from pipeline.us.submissions import parse_submissions
 SHORTLIST = 100
 TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
+TIME_BUDGET_MIN = 8.0  # the daily text job's share of BRIEF §2.5's 1,200 minutes a month
 LINK_BATCH = 20
 RANK = {"capex_desk": 0, "candidate_shortlist": 1, "other": 2}
 SKIP_TRIAGE = (
@@ -379,8 +381,12 @@ def _llm_log(conn: psycopg.Connection[Any]) -> Callable[[CallRecord], None]:
 
 
 def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClient, nse: NseClient | None,
-        raw_root: Path, documents_per_day: int | None = None) -> TextStats:  # fmt: skip
+        raw_root: Path, documents_per_day: int | None = None, minutes: float | None = None,
+        clock: Callable[[], float] = time.monotonic) -> TextStats:  # fmt: skip
+    """`minutes`: no document starts after this much time (BRIEF §2.5: the daily run's minutes budget); a document
+    is read whole or not at all, so the rest waits for the next day."""
     stats = TextStats(day.isoformat())
+    deadline = None if minutes is None else clock() + 60 * minutes
     all_companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
     ranks = scope(conn, list(all_companies.values()))
     stats.scope = len(ranks)
@@ -435,6 +441,9 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
         if done >= limit:
             stats.stopped = f"daily document limit ({limit})"
             break
+        if deadline is not None and clock() >= deadline:
+            stats.stopped = f"time budget ({minutes:g} min)"
+            break
         if router.exhausted("P-01"):
             stats.stopped = "every provider is out for today"
             break
@@ -461,6 +470,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--day", type=date.fromisoformat, default=datetime.now(UTC).date())
+    ap.add_argument("--minutes", type=float, default=TIME_BUDGET_MIN, help="no document starts after this")
     a = ap.parse_args(argv)
     settings = Settings.from_env()
     quotas = Quotas.load()
@@ -473,7 +483,7 @@ def main(argv: list[str] | None = None) -> int:
             print("text: no provider quota is set in config/quotas.yaml (BRIEF §11.3); nothing to do")
             tracked.update({"skipped": "quotas not set"})
             return 0
-        stats = run(conn, a.day, router, http, nse, settings.cache_dir / "raw", quotas.documents_per_day)
+        stats = run(conn, a.day, router, http, nse, settings.cache_dir / "raw", quotas.documents_per_day, a.minutes)
         tracked.update(asdict(stats))
     print(f"text {a.day}: {stats.extracted} documents extracted, {stats.deferred} deferred, "
           f"{stats.facts_verified} verified facts, {stats.facts_review} for review, {stats.links} links; "

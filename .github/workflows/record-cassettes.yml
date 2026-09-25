@@ -1,0 +1,57 @@
+name: record-cassettes
+# BRIEF §2.5, §9 (manual): run the F-SYN corpus through the real free-tier providers (the keys below, the quotas in
+# config/quotas.yaml) and record every request/response as a cassette (pipeline/llm/cassettes/, MANIFEST.sha256), so
+# M5-01 scores recall and precision offline. The cassettes arrive as a PR (never hand-edited; CLAUDE.md). A PR opened
+# with the workflow token starts no CI run: push to it, or close and reopen it, to run the checks.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: record-cassettes
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Record F-SYN (P-01) with the free-tier providers
+        id: record
+        run: |
+          if [ -z "$GEMINI_API_KEY$GROQ_API_KEY$OPENROUTER_API_KEY" ]; then
+            echo "::warning::BLOCKED(key): set GEMINI_API_KEY or GROQ_API_KEY (BRIEF §2.4, §11.3)"
+            exit 0
+          fi
+          uv run --frozen python -m pipeline.facts.evaluate --record \
+            || echo "::warning::F-SYN is below M5-01's thresholds on these answers; the cassettes are recorded anyway"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - name: Open a PR with the cassettes
+        if: steps.record.outputs.ok == 'true'
+        run: |
+          if [ -z "$(git status --porcelain -- pipeline/llm/cassettes)" ]; then
+            echo "no new cassettes"; exit 0
+          fi
+          git config user.name "doomberg-cassettes"
+          git config user.email "doomberg-cassettes@users.noreply.github.com"
+          branch="cassettes/$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          git add pipeline/llm/cassettes
+          git commit -m "Record F-SYN cassettes (run ${GITHUB_RUN_ID})"
+          git push -u origin HEAD
+          gh pr create --title "Record F-SYN cassettes (run ${GITHUB_RUN_ID})" \
+            --body "Recorded by record-cassettes.yml with the free-tier providers (BRIEF §9); M5-01 replays them."

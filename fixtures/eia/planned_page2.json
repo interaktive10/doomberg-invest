@@ -1,0 +1,28 @@
+{
+ "response": {
+  "total": "5",
+  "dateFormat": "YYYY-MM",
+  "frequency": "monthly",
+  "data": [
+   {
+    "period": "2026-07",
+    "stateid": "VA",
+    "status": "T",
+    "technology": "Batteries",
+    "nameplate-capacity-mw": null
+   },
+   {
+    "period": "2026-08",
+    "stateid": "GA",
+    "status": "L",
+    "technology": "Nuclear",
+    "nameplate-capacity-mw": "1114"
+   }
+  ],
+  "description": "Inventory of operable and proposed generators (EIA-860M)"
+ },
+ "request": {
+  "command": "/v2/electricity/operating-generator-capacity/data/"
+ },
+ "apiVersion": "2.1.8"
+}

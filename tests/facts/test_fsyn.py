@@ -34,7 +34,9 @@ def test_the_corpus_is_the_generators_output(truth: dict[str, object]) -> None:
     sys.modules["make_synthetic"] = mod  # dataclasses resolve their module while the file runs
     spec.loader.exec_module(mod)
     built = mod.build(7)
-    assert sorted(built["docs"]) == sorted(p.name for p in SYN.iterdir() if p.name != "ground_truth.json")
+    assert sorted(built["docs"]) == sorted(
+        p.name for p in SYN.iterdir() if p.name not in {"ground_truth.json", "README.md"}
+    )
     for name, body in built["docs"].items():
         assert (SYN / name).read_bytes() == body, name
     kinds = sorted(d["kind"] for d in truth["documents"])  # type: ignore[index]
