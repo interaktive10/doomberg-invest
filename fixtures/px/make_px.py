@@ -27,9 +27,11 @@ def series(symbol: str, start: float) -> str:
         day = LAST - timedelta(weeks=WEEKS - 1 - i)
         if i % 26 == 25:
             day -= timedelta(days=1)  # a holiday week ends on Thursday, as Stooq dates it
-        price *= 1 + rnd.gauss(0.002, 0.03)
+        move = rnd.gauss(0.002, 0.03)
         if symbol == "jbl.us" and i == 150:
-            price /= 2  # an unadjusted 2:1 split
+            price /= 2  # an unadjusted 2:1 split, exactly half the week before (no market move on top)
+        else:
+            price *= 1 + move
         o, h, low = price * 0.99, price * 1.02, price * 0.97
         vol = "" if symbol.startswith("^") else f",{rnd.randint(1_000_000, 90_000_000)}"
         rows.append(f"{day.isoformat()},{o:.2f},{h:.2f},{low:.2f},{price:.2f}{vol}")
