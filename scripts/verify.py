@@ -55,6 +55,19 @@ def _needs_universe_snapshots() -> str | None:
     return None
 
 
+def _needs_database() -> str | None:
+    """M1+ checks need the local PostgreSQL (cloud sessions: scripts/session_start.sh; CI: the postgres service)."""
+    url = os.environ.get("DATABASE_URL", "postgresql://doom:doom@localhost:5432/doom")
+    probe = ["uv", "run", "--frozen", "python", "-c", "import psycopg, sys; psycopg.connect(sys.argv[1]).close()", url]
+    p = subprocess.run(probe, cwd=ROOT, capture_output=True, text=True)
+    if p.returncode != 0:
+        return (
+            "human:PostgreSQL not reachable at DATABASE_URL, or psycopg not installed "
+            "(`make setup`, then `bash scripts/session_start.sh`)"
+        )
+    return None
+
+
 def _needs_old_repo() -> str | None:
     old = Path(os.environ.get("DOOMBERG_REPO", ROOT.parent / "doomberg"))
     if not (old / ".git").exists():
@@ -96,6 +109,40 @@ CHECKS: list[Check] = [
         "m0",
         "protected-path check fails without the human-approved label (synthetic diff)",
         [*PYTEST, "tests/guard/test_protected.py"],
+    ),
+    Check(
+        "M1-01",
+        "m1",
+        "migrations run from zero twice (re-run is a no-op; changed or failing migrations are rejected)",
+        [*PYTEST, "tests/db/test_migrate.py"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M1-02",
+        "m1",
+        "rows filed after W are invisible to as_of(W) (tests try to cheat)",
+        [*PYTEST, "tests/db/test_pit.py", "tests/db/test_repo.py"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M1-03",
+        "m1",
+        "RLS on every table; anon/authenticated queries fail; local roles mirror Supabase",
+        [*PYTEST, "tests/db/test_rls.py", "tests/db/test_display_views.py"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M1-04",
+        "m1",
+        "projected size for 7,000 companies x 60 quarters < 400 MB (estimator test)",
+        [*PYTEST, "tests/db/test_size.py", "tests/db/test_seed.py"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M1-05",
+        "m1",
+        "guard passes on the migrations",
+        ["bash", "-c", "uv run --frozen python scripts/guard.py --paths db/migrations/*.sql"],
     ),
 ]
 

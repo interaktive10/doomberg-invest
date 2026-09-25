@@ -18,6 +18,17 @@ jobs:
     timeout-minutes: 15
     env:
       MOCK_EXTERNALS: "true"
+      DATABASE_URL: postgresql://doom:doom@localhost:5432/doom
+    services:
+      postgres:            # BRIEF §2.2: PostgreSQL 16 for dev/test (Supabase in production)
+        image: postgres:16
+        env:
+          POSTGRES_USER: doom
+          POSTGRES_PASSWORD: doom
+          POSTGRES_DB: doom
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U doom" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -30,7 +41,7 @@ jobs:
       - run: make guard
       - run: make test
       - name: verify (every milestone up to the latest that has checks)
-        run: make verify-m0
+        run: make verify-m1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
