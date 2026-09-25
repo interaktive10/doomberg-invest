@@ -110,7 +110,7 @@ def run_weekly(
         with issues_path.open("w", encoding="utf-8", newline="") as fh:
             w = csv.writer(fh)
             w.writerow(["cik", "period_end", "column", "reason"])
-            w.writerows(issue_log)
+            w.writerows(sorted(issue_log))  # the same file in every process (a quarter can have two reasons)
     for *_, reason in issue_log:
         key = re.sub(r"-?\d[\d.,E+-]*", "#", reason)
         stats.issue_counts[key] = stats.issue_counts.get(key, 0) + 1

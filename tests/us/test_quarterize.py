@@ -188,3 +188,41 @@ def test_quarter_ends_pick_the_most_reported_period_deterministically() -> None:
     assert _quarter_ends(start, date(2011, 12, 31), stray)[0] == date(2011, 3, 31)
     tie = Counter({(start, date(2011, 3, 30)): 2, (start, date(2011, 3, 31)): 2})
     assert _quarter_ends(start, None, tie)[0] == date(2011, 3, 30)  # a tie goes to the earlier end
+
+
+def registrant_fact(start: date | None, end: date, val: int, t: datetime, accn: str, form: str = "10-Q") -> Fact:
+    return Fact("revenue", 0, 0, start, end, D(val), accn, form, 2025, "FY" if form == "10-K" else "Q3", t)
+
+
+def test_a_new_registrants_first_10q_gets_its_own_year() -> None:
+    """Review R3-F1: an IPO's first 10-Q (a Q3, with the prior-year Q3 and 9-month comparatives, and no 10-K yet)
+    gives the current Q3 a row in the current year and the comparative one in the prior year. The open year used to
+    be anchored on the earliest 3-month period (last year's), so this year's quarters got no rows."""
+    t = datetime(2025, 11, 10, tzinfo=UTC)
+    facts = [registrant_fact(date(2025, 7, 1), date(2025, 9, 30), 300, t, "ipo1"),
+             registrant_fact(date(2024, 7, 1), date(2024, 9, 30), 200, t, "ipo1"),
+             registrant_fact(date(2025, 1, 1), date(2025, 9, 30), 800, t, "ipo1"),
+             registrant_fact(date(2024, 1, 1), date(2024, 9, 30), 600, t, "ipo1")]  # fmt: skip
+    lat = latest(quarterize(facts, {"ipo1": date(2025, 9, 30)})[0])
+    assert (lat[date(2025, 9, 30)].fiscal_label, lat[date(2025, 9, 30)].values["revenue"]) == ("FY2025Q3", D(300))
+    assert (lat[date(2024, 9, 30)].fiscal_label, lat[date(2024, 9, 30)].values["revenue"]) == ("FY2024Q3", D(200))
+    assert lat[date(2025, 9, 30)].filed_at == t
+
+
+def test_a_registrant_year_without_its_first_quarter_keeps_q2() -> None:
+    """Review R3-F1: a year whose Q1 was never filed (Figma: listed in July) keeps its 3-month Q2 values, before and
+    after the first 10-K; Q1's end is the day before Q2's 3-month period starts."""
+    t1, t2 = datetime(2025, 8, 20, tzinfo=UTC), datetime(2026, 2, 18, tzinfo=UTC)
+    q2 = [registrant_fact(date(2025, 4, 1), date(2025, 6, 30), 150, t1, "q2"),
+          registrant_fact(date(2024, 4, 1), date(2024, 6, 30), 120, t1, "q2"),
+          registrant_fact(date(2025, 1, 1), date(2025, 6, 30), 280, t1, "q2"),
+          registrant_fact(date(2024, 1, 1), date(2024, 6, 30), 230, t1, "q2")]  # fmt: skip
+    report = {"q2": date(2025, 6, 30), "k": date(2025, 12, 31)}
+    lat = latest(quarterize(q2, report)[0])
+    assert {e: (r.fiscal_label, r.values["revenue"]) for e, r in lat.items()} == {
+        date(2024, 6, 30): ("FY2024Q2", D(120)), date(2025, 6, 30): ("FY2025Q2", D(150))}  # fmt: skip
+    ten_k = [registrant_fact(date(2025, 1, 1), date(2025, 12, 31), 1100, t2, "k", "10-K"),
+             registrant_fact(date(2024, 1, 1), date(2024, 12, 31), 900, t2, "k", "10-K")]  # fmt: skip
+    lat = latest(quarterize([*q2, *ten_k], report)[0])
+    assert lat[date(2024, 6, 30)].values["revenue"] == D(120) and lat[date(2025, 6, 30)].values["revenue"] == D(150)
+    assert lat[date(2025, 6, 30)].filed_at == t1  # unchanged by the 10-K: no back-dated version
