@@ -50,7 +50,7 @@ from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
 from pipeline.net.stooq import StooqClient, StooqUnavailable
 from pipeline.prices import benchmarks as bench
-from pipeline.prices.splits import Adjusted, SourceSplit, adjust, rebased
+from pipeline.prices.splits import Adjusted, SourceSplit, adjust, date_source_split, rebased
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals import context, redflags, registry, reverse_dcf, s01_orderbook
 from pipeline.signals.base import CapexView, Ctx, Event, Fact, Holding, Insider, SectorView, months_before, num
@@ -319,7 +319,11 @@ def ingest_us_prices(
     imports: Path,
     stats: ScoresStats,
     history_years: int,
+    shares: Mapping[UUID, Sequence[tuple[date, Decimal]]] | None = None,
 ) -> None:
+    """shares: each company's share-count history as of the week (shares_history), to date a split the source shows
+    after a gap in the stored prices (splits.date_source_split)."""
+    shares = shares or {}
     start = week - timedelta(days=365 * history_years)
     done = repo.priced_at(conn, [c.id for c in targets if c.id is not None], week)
     for c in targets:
@@ -350,7 +354,8 @@ def ingest_us_prices(
         stored = [(p.week_end, p.close) for p in repo.prices(conn, [c.id], start, week)]
         split = rebased(stored, [(r.week_end, r.close) for r in rows])
         repo.upsert_prices(conn, rows)
-        if split is not None:
+        if split is not None:  # after a gap: a filing may have reported it already (M4 review R3-F1)
+            split = date_source_split(split, shares.get(c.id, ()), [r.week_end for r in rows])
             repo.mark_price_split(conn, c.id, split.week_end, split.ratio)
             stats.source_splits.append(f"{c.ticker} {split.week_end} x{split.ratio}")
 
@@ -561,14 +566,16 @@ def run(
             ),
             key=lambda sc: -sc.evidence.score,
         )
+        targets = us[: max(0, stooq_limit - len(us_bench))]
         ingest_us_prices(
             conn,
             stooq,
-            [sc.company for sc in us[: max(0, stooq_limit - len(us_bench))]],
+            [sc.company for sc in targets],
             week,
             imports or root / "imports" / "us_prices",
             stats,
             int(cfgs.context["c1"]["history_years"]),
+            {sc.company.id: shares_history(sc.series) for sc in targets if sc.company.id is not None},
         )
         mark_stooq(conn, stats)
 

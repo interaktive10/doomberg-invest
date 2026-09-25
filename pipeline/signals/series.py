@@ -76,6 +76,7 @@ class Series:
         self.quarters = sorted(quarters, key=lambda q: q.end)
         self.market = market
         self._tax_default = tax_default or TAX_DEFAULT
+        self._splits: list[Any] | None = None  # share_splits(), computed once (R4, S5 and the screener ask ~9 times)
 
     @classmethod
     def from_rows(cls, rows: Sequence[Any], market: str) -> Series:
@@ -211,13 +212,15 @@ class Series:
         counts, pipeline.prices.splits): India's counts (paid-up capital / face value) are never adjusted for them."""
         from pipeline.prices.splits import share_splits
 
-        history = []
-        for k in range(len(self.quarters) - 1, -1, -1):
-            v, _ = self.shares(k)
-            q = self.at(k)
-            if v is not None and q is not None:
-                history.append((q.end, v))
-        return share_splits(history)
+        if self._splits is None:
+            history = []
+            for k in range(len(self.quarters) - 1, -1, -1):
+                v, _ = self.shares(k)
+                q = self.at(k)
+                if v is not None and q is not None:
+                    history.append((q.end, v))
+            self._splits = share_splits(history)
+        return self._splits
 
     def split_adjusted_shares(self, lag: int = 0) -> tuple[Decimal | None, str]:
         """The share count at `lag` on the latest quarter's basis: a 1:1 bonus or a face-value split multiplies
