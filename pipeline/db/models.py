@@ -146,6 +146,21 @@ class CorpEvent(Row):
     source_url: str
 
 
+class FilingRow(Row):
+    """Appendix F.2 `filings`: a filing queued for text extraction (M5)."""
+
+    company_id: UUID
+    accession_no: str
+    form_type: str
+    items: list[str] = Field(default_factory=list)
+    filed_at: AwareDatetime
+    accepted_at: AwareDatetime | None = None
+    period_of_report: date | None = None
+    primary_doc_url: str
+    index_url: str
+    status: Literal["new", "fetched", "normalized", "extracted", "verified", "skipped", "failed"] = "new"
+
+
 class PriceW(Row):
     company_id: UUID
     week_end: date

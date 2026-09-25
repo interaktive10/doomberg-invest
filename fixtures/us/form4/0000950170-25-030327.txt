@@ -1,0 +1,157 @@
+<SEC-DOCUMENT>0000950170-25-030327.txt : 20250303
+<SEC-HEADER>0000950170-25-030327.hdr.sgml : 20250303
+<ACCEPTANCE-DATETIME>20250303060105
+ACCESSION NUMBER:		0000950170-25-030327
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20250227
+FILED AS OF DATE:		20250303
+DATE AS OF CHANGE:		20250303
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			Ziegler James
+		CENTRAL INDEX KEY:			0002035113
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	000-20859
+		FILM NUMBER:		25693508
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O GERON CORPORATION
+		STREET 2:		919 EAST HILLSDALE BOULEVARD, SUITE 250
+		CITY:			FOSTER CITY
+		STATE:			CA
+		ZIP:			94404
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			GERON CORP
+		CENTRAL INDEX KEY:			0000886744
+		STANDARD INDUSTRIAL CLASSIFICATION:	PHARMACEUTICAL PREPARATIONS [2834]
+		ORGANIZATION NAME:           	03 Life Sciences
+		IRS NUMBER:				752287752
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		919 EAST HILLSDALE BOULEVARD
+		STREET 2:		SUITE 250
+		CITY:			FOSTER CITY
+		STATE:			CA
+		ZIP:			94404
+		BUSINESS PHONE:		6504737700
+
+	MAIL ADDRESS:	
+		STREET 1:		919 EAST HILLSDALE BOULEVARD
+		STREET 2:		SUITE 250
+		CITY:			FOSTER CITY
+		STATE:			CA
+		ZIP:			94404
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	GERON CORPORATION
+		DATE OF NAME CHANGE:	19960521
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>ownership.xml
+<DESCRIPTION>4
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0508</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2025-02-27</periodOfReport>
+
+    <issuer>
+        <issuerCik>0000886744</issuerCik>
+        <issuerName>GERON CORP</issuerName>
+        <issuerTradingSymbol>GERN</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0002035113</rptOwnerCik>
+            <rptOwnerName>Ziegler James</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerStreet1>C/O GERON CORPORATION</rptOwnerStreet1>
+            <rptOwnerStreet2>919 E HILLSDALE BLVD. SUITE 250</rptOwnerStreet2>
+            <rptOwnerCity>FOSTER CITY</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>94404</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>false</isDirector>
+            <isOfficer>true</isOfficer>
+            <isTenPercentOwner>false</isTenPercentOwner>
+            <isOther>false</isOther>
+            <officerTitle>EVP,  Chief Commercial Officer</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>false</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2025-02-27</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+                <footnoteId id="F1"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>100000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>1.6</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>100000</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">The reported transaction represents the open market purchase of 100,000 shares at an executed price of $1.60 per share.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>/s/ Scott A. Samuels for James Ziegler</signatureName>
+        <signatureDate>2025-03-03</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

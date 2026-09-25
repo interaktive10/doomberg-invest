@@ -1,0 +1,200 @@
+<SEC-DOCUMENT>0000950170-25-055869.txt : 20250418
+<SEC-HEADER>0000950170-25-055869.hdr.sgml : 20250418
+<ACCEPTANCE-DATETIME>20250418161229
+ACCESSION NUMBER:		0000950170-25-055869
+CONFORMED SUBMISSION TYPE:	4/A
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20250227
+FILED AS OF DATE:		20250418
+DATE AS OF CHANGE:		20250418
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			TEAGUE AJ
+		CENTRAL INDEX KEY:			0001183251
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-38090
+		FILM NUMBER:		25850539
+
+	MAIL ADDRESS:	
+		STREET 1:		1100 LOUISIANA 10TH FLOOR
+		CITY:			HOUSTON
+		STATE:			TX
+		ZIP:			77002
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Solaris Energy Infrastructure, Inc.
+		CENTRAL INDEX KEY:			0001697500
+		STANDARD INDUSTRIAL CLASSIFICATION:	OIL & GAS FILED MACHINERY & EQUIPMENT [3533]
+		ORGANIZATION NAME:           	01 Energy & Transportation
+		EIN:				000000000
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		9651 KATY FREEWAY
+		STREET 2:		SUITE 300
+		CITY:			HOUSTON
+		STATE:			TX
+		ZIP:			77024
+		BUSINESS PHONE:		(281)501-3070
+
+	MAIL ADDRESS:	
+		STREET 1:		9651 KATY FREEWAY
+		STREET 2:		SUITE 300
+		CITY:			HOUSTON
+		STATE:			TX
+		ZIP:			77024
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Solaris Oilfield Infrastructure, Inc.
+		DATE OF NAME CHANGE:	20170207
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4/A
+<SEQUENCE>1
+<FILENAME>ownership.xml
+<DESCRIPTION>4/A
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0508</schemaVersion>
+
+    <documentType>4/A</documentType>
+
+    <periodOfReport>2025-02-27</periodOfReport>
+
+    <dateOfOriginalSubmission>2025-02-28</dateOfOriginalSubmission>
+
+    <issuer>
+        <issuerCik>0001697500</issuerCik>
+        <issuerName>Solaris Energy Infrastructure, Inc.</issuerName>
+        <issuerTradingSymbol>SEI</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001183251</rptOwnerCik>
+            <rptOwnerName>TEAGUE AJ</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerStreet1>9651 KATY FREEWAY SUITE 300</rptOwnerStreet1>
+            <rptOwnerStreet2></rptOwnerStreet2>
+            <rptOwnerCity>HOUSTON</rptOwnerCity>
+            <rptOwnerState>TX</rptOwnerState>
+            <rptOwnerZipCode>77024</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>true</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>false</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>false</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class A Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2025-02-27</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>2000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>32.378</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>94459</value>
+                    <footnoteId id="F1"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                    <footnoteId id="F2"/>
+                    <footnoteId id="F3"/>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class A Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2025-02-28</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>2000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>32.107</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>2000</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                    <footnoteId id="F2"/>
+                    <footnoteId id="F3"/>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Spouse</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">Includes 12,372 shares of Class A common stock subject to previously granted Restricted Stock Awards that remain subject to vesting.</footnote>
+        <footnote id="F2">On February 28, 2025, the reporting person filed a Form 4 (the &quot;Original Form 4&quot;) with the U.S. Securities and Exchange Commission (the &quot;SEC&quot;). On March 10, 2025, the reporting person filed with the SEC an amendment on Form 4/A (the &quot;First Amendment&quot;) solely to correct an administrative error which misreported the purchases of a collective 4,000 shares of Class A common stock using the transaction code of &quot;A&quot; when in fact this was an open market purchase with transaction code of &quot;P,&quot; however, each of the Original Form 4 and the First Amendment also mistakenly reported that the reporting person's spouse indirectly held 96,459 shares of Class A common stock.</footnote>
+        <footnote id="F3">(Continued from footnote 2) This second amendment on Form 4/A (this &quot;Second Amendment&quot;) is being filed to correct the ownership in both the Original Form 4 and First Amendment to show that the reporting person (i) directly holds 94,459 shares of Class A common stock following the reporting person's purchase of 2,000 shares of Class A common stock in an open market purchase on February 27, 2025 and (ii) indirectly owns 2,000 shares of Class A common stock following the purchase of 2,000 shares of Class A common stock in an open market purchase on February 28, 2025 by the reporting person's spouse.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>/s/ Christopher M. Powell, Attorney-in-Fact</signatureName>
+        <signatureDate>2025-04-18</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

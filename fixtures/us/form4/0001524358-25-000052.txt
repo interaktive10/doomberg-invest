@@ -1,0 +1,160 @@
+<SEC-DOCUMENT>0001524358-25-000052.txt : 20250304
+<SEC-HEADER>0001524358-25-000052.hdr.sgml : 20250304
+<ACCEPTANCE-DATETIME>20250304162634
+ACCESSION NUMBER:		0001524358-25-000052
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20250304
+FILED AS OF DATE:		20250304
+DATE AS OF CHANGE:		20250304
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			ANDREWS CHARLES ELLIOTT
+		CENTRAL INDEX KEY:			0001215150
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-35219
+		FILM NUMBER:		25704983
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O H&R BLOCK
+		STREET 2:		ONE H&R BLOCK WAY
+		CITY:			KANSAS CITY
+		STATE:			MO
+		ZIP:			64105
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			MARRIOTT VACATIONS WORLDWIDE Corp
+		CENTRAL INDEX KEY:			0001524358
+		STANDARD INDUSTRIAL CLASSIFICATION:	REAL ESTATE AGENTS & MANAGERS (FOR OTHERS) [6531]
+		ORGANIZATION NAME:           	05 Real Estate & Construction
+		IRS NUMBER:				452598330
+		STATE OF INCORPORATION:			X1
+		FISCAL YEAR END:			1231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		7812 PALM PARKWAY
+		CITY:			ORLANDO
+		STATE:			FL
+		ZIP:			32836
+		BUSINESS PHONE:		407-206-6000
+
+	MAIL ADDRESS:	
+		STREET 1:		7812 PALM PARKWAY
+		CITY:			ORLANDO
+		STATE:			FL
+		ZIP:			32836
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Marriott Vacations Worldwide Corp
+		DATE OF NAME CHANGE:	20110627
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>wk-form4_1741123587.xml
+<DESCRIPTION>FORM 4
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0508</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2025-03-04</periodOfReport>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0001524358</issuerCik>
+        <issuerName>MARRIOTT VACATIONS WORLDWIDE Corp</issuerName>
+        <issuerTradingSymbol>VAC</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001215150</rptOwnerCik>
+            <rptOwnerName>ANDREWS CHARLES ELLIOTT</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerStreet1>7812 PALM PARKWAY</rptOwnerStreet1>
+            <rptOwnerStreet2></rptOwnerStreet2>
+            <rptOwnerCity>ORLANDO</rptOwnerCity>
+            <rptOwnerState>FL</rptOwnerState>
+            <rptOwnerZipCode>32836</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>1</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>0</isTenPercentOwner>
+            <isOther>0</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2025-03-04</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F1"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>1620</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>71.82</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>28144</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <derivativeTable></derivativeTable>
+
+    <footnotes>
+        <footnote id="F1">Open market purchase.</footnote>
+    </footnotes>
+
+    <remarks></remarks>
+
+    <ownerSignature>
+        <signatureName>/s/ James H Hunter, IV Attorney-In-Fact</signatureName>
+        <signatureDate>2025-03-04</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
