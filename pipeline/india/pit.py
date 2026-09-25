@@ -11,6 +11,8 @@ Kept: promoter / promoter-group trades in equity shares:
 - everything else (off-market and inter-se transfers, gifts, ESOPs, invocations by lenders, trades by directors,
   employees and relatives who are not in the promoter group) is not kept: none is a promoter's market decision.
 A revised disclosure is stored as filed; S7 counts one trade per (person, date, kind), the latest filing winning.
+Each line keeps its identity (`line`, the line's XBRL context), so two identical lines in one disclosure (two equal
+same-day purchases) stay two trades (review F5 on M3).
 Times on NSE are IST; filed_at is the exchange's broadcast time in UTC.
 """
 
@@ -123,6 +125,7 @@ class PitTrade:
     mode: str  # Market Purchase, Market Sale, Off Market, Pledge Creation, …
     date_from: date | None
     date_to: date | None
+    line: str = ""  # the disclosure line's context id: unique within the filing
 
     @property
     def promoter(self) -> bool:
@@ -167,7 +170,7 @@ def parse_disclosure(raw: bytes | str) -> list[PitTrade]:
             if f.context.dims:  # one context per disclosure line
                 lines[f.context.id][name] = f.value.strip()
     out: list[PitTrade] = []
-    for _, v in sorted(lines.items()):
+    for line, v in sorted(lines.items()):
         out.append(
             PitTrade(
                 symbol=symbol,
@@ -181,6 +184,7 @@ def parse_disclosure(raw: bytes | str) -> list[PitTrade]:
                 mode=v.get("ModeOfAcquisitionOrDisposal", ""),
                 date_from=_date(v.get("DateOfAllotmentAdviceOrAcquisitionOfSharesOrSaleOfSharesSpecifyFromDate")),
                 date_to=_date(v.get("DateOfAllotmentAdviceOrAcquisitionOfSharesOrSaleOfSharesSpecifyToDate")),
+                line=line,
             )
         )
     return out

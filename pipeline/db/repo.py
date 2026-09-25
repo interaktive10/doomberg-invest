@@ -260,8 +260,17 @@ def company_ids_by(conn: Conn, key: str) -> dict[str, UUID]:
 _FUND_COLS = ("company_id", "period_end", "fiscal_label", "filed_at", *FUNDAMENTAL_COLUMNS, "currency", "source")
 
 
-def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow]) -> None:
-    upd = _set_excluded(c for c in _FUND_COLS if c not in ("company_id", "period_end", "filed_at"))
+def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow], fill_only: bool = False) -> None:
+    """Upsert row versions by (company, period_end, filed_at). fill_only (India): a stored version is never given
+    fewer values, since a null in the new row keeps the stored value (review F1 on M3)."""
+    cols = [c for c in _FUND_COLS if c not in ("company_id", "period_end", "filed_at")]
+    if fill_only:
+        upd = ", ".join(
+            f"{c} = coalesce(excluded.{c}, fundamentals_q.{c})" if c in FUNDAMENTAL_COLUMNS else f"{c} = excluded.{c}"
+            for c in cols
+        )
+    else:
+        upd = _set_excluded(cols)
     with conn.cursor() as cur:
         cur.executemany(
             _insert(
@@ -293,7 +302,12 @@ _OWN_COLS = (
 )
 
 
+MANUAL_OWNERSHIP = "manual_csv"  # promoter % only, from an NSE page CSV (pipeline/india/manual_import.py)
+
+
 def upsert_ownership(conn: Conn, rows: Sequence[OwnershipRow]) -> None:
+    """One row per company and quarter: a later filing replaces it. A manual CSV row (promoter % only) never
+    replaces a full row, and the full row of the same filing replaces it."""
     upd = _set_excluded(c for c in _OWN_COLS if c not in ("company_id", "quarter_end"))
     with conn.cursor() as cur:
         cur.executemany(
@@ -301,9 +315,12 @@ def upsert_ownership(conn: Conn, rows: Sequence[OwnershipRow]) -> None:
                 "ownership_q",
                 _OWN_COLS,
                 f"on conflict (company_id, quarter_end) do update set {upd} "
-                "where excluded.filed_at > ownership_q.filed_at",
+                "where (excluded.source <> %(manual)s and (excluded.filed_at > ownership_q.filed_at "
+                "or (excluded.filed_at = ownership_q.filed_at and ownership_q.source = %(manual)s))) "
+                "or (excluded.source = %(manual)s and ownership_q.source = %(manual)s "
+                "and excluded.filed_at > ownership_q.filed_at)",
             ),
-            [r.model_dump() for r in rows],
+            [{**r.model_dump(), "manual": MANUAL_OWNERSHIP} for r in rows],
         )
 
 
@@ -320,12 +337,13 @@ _INSIDER_COLS = (
     "planned",
     "source_url",
     "amends",
+    "line",
 )
 
 
 def insert_insider_events(conn: Conn, rows: Sequence[InsiderEvent]) -> None:
-    """Rows already stored (same company, person, date, kind, shares, value, source) are skipped by a unique
-    index."""
+    """Rows already stored (same company, person, date, kind, shares, value, source and line) are skipped by a
+    unique index."""
     with conn.cursor() as cur:
         cur.executemany(
             _insert("insider_events", _INSIDER_COLS, "on conflict do nothing"),

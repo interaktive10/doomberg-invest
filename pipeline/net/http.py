@@ -1,7 +1,8 @@
 """The one HTTP client for the pipeline (BRIEF §2.3, §2.7, §4.3).
 
 - Domain allowlist: any host not listed raises DomainNotAllowed before a socket opens.
-- Per-host minimum interval between requests (SEC <= 8 req/s, NSE 1 per 3 s, Stooq 1 per 2 s, ...).
+- Minimum interval between requests per site (SEC <= 8 req/s, NSE 1 per 3 s, Stooq 1 per 2 s, ...). A site's hosts
+  share one limit: www.nseindia.com and nsearchives.nseindia.com are one NSE (review F6 on M3).
 - Optional on-disk cache keyed by URL.
 - MOCK_EXTERNALS=true: no network at all; requests are served from registered mock responses, or raise.
 
@@ -33,7 +34,7 @@ class MockNotRegistered(Exception):
     """MOCK_EXTERNALS is on and no mock response matches the URL."""
 
 
-# host -> minimum seconds between requests to that host (BRIEF §2.7 fair-access rules).
+# host -> minimum seconds between requests to that host's site (BRIEF §2.7 fair-access rules; see rate_key).
 ALLOWED_HOSTS: dict[str, float] = {
     "www.sec.gov": 0.125,
     "data.sec.gov": 0.125,
@@ -63,6 +64,11 @@ def host_of(url: str) -> str:
     return (urlsplit(url).hostname or "").lower()
 
 
+def rate_key(host: str) -> str:
+    """The site a host belongs to (its last two labels): hosts of one site share one rate limit."""
+    return ".".join(host.split(".")[-2:])
+
+
 def check_allowed(url: str) -> str:
     scheme = urlsplit(url).scheme
     host = host_of(url)
@@ -79,14 +85,14 @@ class RateLimiter:
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def wait(self, host: str) -> None:
-        interval = ALLOWED_HOSTS[host]
+        interval, key = ALLOWED_HOSTS[host], rate_key(host)
         with self._lock:
             now = self.clock()
-            last = self._last.get(host)
+            last = self._last.get(key)
             if last is not None and now - last < interval:
                 self.sleep(interval - (now - last))
                 now = self.clock()
-            self._last[host] = now
+            self._last[key] = now
 
 
 @dataclass

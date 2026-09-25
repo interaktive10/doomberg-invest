@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import psycopg
 
 from pipeline.db import size_guard
+from pipeline.db.pit import as_of
 
 from .conftest import new_company
 
@@ -64,3 +65,28 @@ def test_probe_sql_has_no_bare_percent() -> None:
     assert {t: bool(bare.search(sql)) for t, sql in size_guard._SAMPLES.items()} == dict.fromkeys(
         size_guard._SAMPLES, False
     )
+
+
+def test_announcements_projection_fits_with_the_quarterly_tables(conn: psycopg.Connection[Any]) -> None:
+    """Review F8 (M3): NSE announcements are kept 120 days; at the live rate (~650 a day) they fit with the quarterly
+    tables under the 400 MB guard."""
+    ann = size_guard.project_corp_events(conn)
+    assert ann.target_rows == 650 * 120 and 300 < ann.bytes_per_row < 2000
+    total = sum(p.projected_mb for p in size_guard.project(conn)) + ann.projected_mb
+    assert total < size_guard.LIMIT_MB, round(total, 1)
+    assert conn.execute("select count(*) from corp_events").fetchone() == (0,)  # measured on a temp copy
+
+
+def test_prune_keeps_120_days_of_announcements_and_every_other_event(conn: psycopg.Connection[Any]) -> None:
+    cid = new_company(conn, market="in")
+    today = date(2026, 9, 26)
+    for d, kind in ((today - timedelta(days=121), "announcement"), (today - timedelta(days=119), "announcement"),
+                    (today - timedelta(days=400), "auditor_change")):  # fmt: skip
+        conn.execute(
+            "insert into corp_events (company_id, event_date, filed_at, kind, detail, source_url) "
+            "values (%s, %s, %s, %s, '{}', %s)",
+            (cid, d, datetime.combine(d, time(8), UTC), kind, f"https://nsearchives.nseindia.com/corporate/{d}.pdf"),
+        )
+    assert size_guard.prune_announcements(conn, today) == 1
+    assert sorted(e.kind for e in as_of(today).corp_events(conn, [cid])) == ["announcement", "auditor_change"]
+    assert size_guard.enforce(conn, today).pruned_announcements == 0

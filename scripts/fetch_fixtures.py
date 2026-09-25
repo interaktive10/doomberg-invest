@@ -336,6 +336,12 @@ F_IN_FILES: list[tuple[str, str]] = [
     ("pit/pit.csv", "https://www.nseindia.com/api/corporates-pit-gg?index=equities&csv=true"),
     ("pit/Insider_Trading.xml", "https://nsearchives.nseindia.com/content/RSS/Insider_Trading.xml"),
     ("announcements/announcements.json", "https://www.nseindia.com/api/corporate-announcements?index=equities"),
+    # the pages' "Download (.csv)" files, the manual import's input (review F4 on M3)
+    ("announcements/announcements_2026-09-19.csv",
+     "https://www.nseindia.com/api/corporate-announcements?index=equities&from_date=19-09-2026&to_date=19-09-2026"
+     "&csv=true"),
+    ("shareholding/shareholding_page.csv",
+     "https://www.nseindia.com/api/corporate-share-holdings-master?index=equities&csv=true"),
     *((f"pit/disclosures/{u.rsplit('/', 1)[-1]}", u) for u in (  # every 170th disclosure of the PIT index
         f"{F_IN_ARCH}/IT_22933_WebXMLFile_20260925_132011105.xml",  # SINCLAIR
         f"{F_IN_ARCH}/IT_23163_WebXMLFile_20260919_124927843.xml",  # AQYLON
@@ -357,6 +363,17 @@ F_IN_FILES: list[tuple[str, str]] = [
     )),
 ]  # fmt: skip
 F_IN_KEEP_SHP = {"KEI", "JSWSTEEL", "JPPOWER"}  # the shareholding listing is trimmed to these
+# the shareholding page's CSV is trimmed to these companies plus every 100th row (it has names, not symbols)
+F_IN_KEEP_SHP_NAMES = {"KEI Industries Limited", "JSW Steel Limited", "Jaiprakash Power Ventures Limited",
+                       "Bhageria Industries Limited"}  # fmt: skip
+
+
+def trim_shareholding_csv(body: bytes) -> bytes:
+    lines = body.decode("utf-8-sig").splitlines(keepends=True)
+    keep = [
+        x for n, x in enumerate(lines[1:], 1) if n % 100 == 0 or x.split('","')[0].strip('"') in F_IN_KEEP_SHP_NAMES
+    ]
+    return ("\ufeff" + lines[0] + "".join(keep)).encode()
 
 
 def fetch_f_in(client: HttpClient, cooldown_s: float = 600.0, rounds: int = 4) -> list[str]:
@@ -380,6 +397,8 @@ def fetch_f_in(client: HttpClient, cooldown_s: float = 600.0, rounds: int = 4) -
             if dest.name == "index.json" and dest.parent.name == "shareholding":
                 rows = [r for r in json.loads(body) if r.get("symbol") in F_IN_KEEP_SHP]
                 body = (json.dumps(rows, indent=1) + "\n").encode()
+            if dest.name == "shareholding_page.csv":
+                body = trim_shareholding_csv(body)
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(body)
             print(f"F-IN {dest.relative_to(ROOT)}: {len(body):,} bytes")

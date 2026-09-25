@@ -131,7 +131,7 @@ def parse_listing(raw: bytes | str) -> list[ShpListing]:
                 filed,
                 url,
                 str(r.get("recordId") or ""),
-                str(r.get("revisedData") or "N").upper() == "Y",
+                str(r.get("revisedData") or "N").strip().upper() in ("Y", "REVISED"),  # NSE sends "Revised"
             )
         )
     return out

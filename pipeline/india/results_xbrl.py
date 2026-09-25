@@ -161,6 +161,7 @@ class IndiaRow:
     filed_at: datetime
     basis: Basis
     values: dict[str, Decimal | None]
+    fy_start: date | None = None  # the row's financial year: its inputs are that year's filings only
 
 
 @dataclass
@@ -212,7 +213,7 @@ def build_rows(filings: Sequence[Filed]) -> Build:
             if all(v is None for v in vals.values()) or last_emitted.get(p) == vals:
                 continue
             last_emitted[p] = vals
-            out.rows.append(IndiaRow(p, x.fiscal_label, f.filed_at, x.basis, vals))
+            out.rows.append(IndiaRow(p, x.fiscal_label, f.filed_at, x.basis, vals, x.fy_start))
     out.rows.sort(key=lambda r: (r.period_end, r.filed_at))
     return out
 
@@ -241,15 +242,17 @@ def listing_path(day_from: date, day_to: date, page: int = 1) -> str:
             f"&page={page}&size={PAGE_SIZE}")  # fmt: skip
 
 
-def parse_listing(raw: bytes | str) -> tuple[list[ResultsListing], int]:
-    """Rows of one page and the total count across pages."""
+def parse_listing(raw: bytes | str) -> tuple[list[ResultsListing], int, int]:
+    """The usable rows of one page, the total count across pages, and the page's row count (usable or not: paging
+    counts every row)."""
     import json
 
     from pipeline.india.announcements import ist_to_utc
 
     doc = json.loads(raw)
+    data = doc.get("data", [])
     out: list[ResultsListing] = []
-    for r in doc.get("data", []):
+    for r in data:
         url = str(r.get("xbrl") or "")
         if not url.startswith("https://") or not url.lower().endswith(".xml") or not r.get("symbol"):
             continue
@@ -264,7 +267,7 @@ def parse_listing(raw: bytes | str) -> tuple[list[ResultsListing], int]:
                 xbrl_url=url,
             )
         )
-    return out, int(doc.get("totalCount") or len(out))
+    return out, int(doc.get("totalCount") or len(data)), len(data)
 
 
 def preferred(listing: Sequence[ResultsListing]) -> list[ResultsListing]:

@@ -29,6 +29,18 @@ def test_promoter_purchases_are_detected() -> None:
     assert next(b for b in buys if b[0] == "BHAGERIA")[2] == "Promoter Group"
 
 
+def test_identical_lines_of_one_disclosure_stay_two_trades() -> None:
+    """Review F5: CSLFINANCE's disclosure has two equal same-day purchases (holdings 434,686 -> 439,686 -> 444,686);
+    each line keeps its identity, so both are stored."""
+    csl = [t for t in trades() if t.symbol == "CSLFINANCE"]
+    assert [(t.line, t.person, t.shares, t.value, t.event_date) for t in csl] == [
+        ("Disclosure1", "Rohit Gupta HUF", D(5000), D(1200000), date(2026, 9, 1)),
+        ("Disclosure2", "Rohit Gupta HUF", D(5000), D(1200000), date(2026, 9, 1)),
+    ]
+    assert all(len({t.line for t in parse_disclosure(p.read_bytes())}) == len(parse_disclosure(p.read_bytes()))
+               for p in (FIN / "pit" / "disclosures").glob("*.xml"))  # fmt: skip
+
+
 def test_everything_else_is_told_apart() -> None:
     kinds = {(t.symbol, t.mode): t.kind for t in trades()}
     assert kinds[("GNA", "Market Sale")] == "promoter_sell"

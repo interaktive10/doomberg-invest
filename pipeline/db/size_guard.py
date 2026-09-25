@@ -1,9 +1,10 @@
 """Storage guard for the Supabase free tier (BRIEF §2.8, §8 M1-04, M9-03). `python -m pipeline.db.size_guard`.
 
-- `enforce()`: prune signal_values older than 3 years, then fail (exit 1) if the database is above 400 MB.
+- `enforce()`: prune signal_values older than 3 years and NSE announcements older than 120 days, then fail (exit 1)
+  if the database is above 400 MB.
 - `project()`: measure real bytes per row (heap + indexes + TOAST) on temp copies of the tables, then extrapolate
   to a target size, e.g. 7,000 companies x 60 quarters (M1-04). Temp tables vanish with the session and never
-  touch real rows.
+  touch real rows. `project_corp_events()`: the announcements kept at the measured daily rate (review F8 on M3).
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from pipeline.settings import Settings
 MB = 1024 * 1024
 LIMIT_MB = 400
 SIGNAL_KEEP_YEARS = 3
+ANNOUNCEMENT_KEEP_DAYS = 120  # NSE announcements: P-07 triage input and the last quarter's evidence (M5, M6)
+ANNOUNCEMENTS_PER_DAY = 650  # every EQ company: ~800 a weekday, ~170 a weekend day (live NSE counts, 2026-09)
 FUNDAMENTAL_VERSIONS = 1.45  # rows per company-quarter: restatement versions (F-US measures 1.418; R2-F1)
 
 Conn = psycopg.Connection[Any]
@@ -48,12 +51,20 @@ def prune_signal_values(conn: Conn, today: date, keep_years: int = SIGNAL_KEEP_Y
     return cur.rowcount
 
 
+def prune_announcements(conn: Conn, today: date, keep_days: int = ANNOUNCEMENT_KEEP_DAYS) -> int:
+    """Delete announcement events older than `keep_days` (migration 0006's function: only pit.py names the table in
+    a query)."""
+    row = conn.execute("select prune_announcements(%s)", (today - timedelta(days=keep_days),)).fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
 @dataclass(frozen=True)
 class SizeReport:
     database_mb: float
     limit_mb: int
     pruned_signal_rows: int
     largest: list[tuple[str, float]]
+    pruned_announcements: int = 0
 
     @property
     def ok(self) -> bool:
@@ -61,13 +72,16 @@ class SizeReport:
 
 
 def enforce(conn: Conn, today: date | None = None, limit_mb: int = LIMIT_MB) -> SizeReport:
-    pruned = prune_signal_values(conn, today or datetime.now(UTC).date())
+    day = today or datetime.now(UTC).date()
+    pruned = prune_signal_values(conn, day)
+    announcements = prune_announcements(conn, day)
     sizes = table_bytes(conn)
     return SizeReport(
         database_mb=database_bytes(conn) / MB,
         limit_mb=limit_mb,
         pruned_signal_rows=pruned,
         largest=[(t, b / MB) for t, b in list(sizes.items())[:5]],
+        pruned_announcements=announcements,
     )
 
 
@@ -86,7 +100,7 @@ class TableProjection:
         return self.bytes_per_row * self.target_rows / MB
 
 
-_PROBE_TABLES = ("fundamentals_q", "ownership_q", "companies", "signal_values")
+_PROBE_TABLES = ("fundamentals_q", "ownership_q", "companies", "signal_values", "corp_events")
 
 # Sample rows for each probe. %(n)s = sample companies (or rows), %(q)s = quarters. Every numeric column carries a
 # 12-significant-digit value, the worst case for numeric storage, so real (sparser) data is smaller.
@@ -122,6 +136,19 @@ _SAMPLES: dict[str, str] = {
         "select gen_random_uuid(), date '2025-01-03' + mod(i, 52) * 7, 'S' || (mod(i, 12) + 1), false, 0, "
         "jsonb_build_object('q', '2025Q3', 'g_ob', 0.1834, 'g_rev', 0.0712, 'ob_cov', 1.42, 'ob_cov_ya', 1.31, "
         "'periods', jsonb_build_array('2024Q3', '2025Q3')) "
+        "from generate_series(1, %(n)s) i"
+    ),
+    # An NSE announcement as the daily run stores it; the text is longer than the live average (137 characters).
+    "corp_events": (
+        "(company_id, event_date, filed_at, kind, detail, source_url) "
+        "select gen_random_uuid(), date '2026-01-01' + mod(i, 120), "
+        "timestamptz '2026-01-01 08:00:00+00' + mod(i, 120) * interval '1 day', 'announcement', "
+        "jsonb_build_object('category', 'Analysts/Institutional Investor Meet/Con. Call Updates', 'text', "
+        "'Example Industrial Holdings Limited has informed the Exchange about the schedule of an analyst meet on "
+        "September 22, 2026 and the earnings call for the quarter ended June 30, 2026.', 'seq_id', "
+        "(106000000 + i)::text, 'has_xbrl', false), "
+        "'https://nsearchives.nseindia.com/corporate/EXAMPLEIND_' || lpad(i::text, 8, '0') || "
+        "'_19092026231951_Intimation.pdf' "
         "from generate_series(1, %(n)s) i"
     ),
 }
@@ -172,6 +199,14 @@ def project_signal_values(conn: Conn, companies: int = 7000, weeks: int = 52 * S
     return TableProjection("signal_values", sample, _measure(conn, "signal_values", sample), companies * 12 * weeks)
 
 
+def project_corp_events(
+    conn: Conn, per_day: int = ANNOUNCEMENTS_PER_DAY, keep_days: int = ANNOUNCEMENT_KEEP_DAYS
+) -> TableProjection:
+    """corp_events at steady state: `keep_days` of India announcements at `per_day` (US events are a few a day)."""
+    sample = 5000
+    return TableProjection("corp_events", sample, _measure(conn, "corp_events", sample), per_day * keep_days)
+
+
 def _fmt(p: TableProjection) -> str:
     return f"{p.table:15} {p.bytes_per_row:7.1f} B/row x {p.target_rows:>10,} rows = {p.projected_mb:8.1f} MB"
 
@@ -184,10 +219,11 @@ def main(argv: list[str] | None = None) -> int:
     url = a.database_url or Settings.from_env().database_url
     with psycopg.connect(url) as conn:
         if a.project:
-            rows = project(conn)
+            rows = [*project(conn), project_corp_events(conn)]
             for p in rows:
                 print(_fmt(p))
-            print(f"quarterly tables total: {sum(p.projected_mb for p in rows):.1f} MB (limit {LIMIT_MB} MB)")
+            total = sum(p.projected_mb for p in rows)
+            print(f"quarterly tables + announcements total: {total:.1f} MB (limit {LIMIT_MB} MB)")
             print(_fmt(project_signal_values(conn)))
             conn.rollback()
             return 0
@@ -195,7 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         conn.commit()
     print(
         f"size_guard: {report.database_mb:.1f} MB of {report.limit_mb} MB; pruned {report.pruned_signal_rows} "
-        f"signal_values rows; largest: " + ", ".join(f"{t} {mb:.1f} MB" for t, mb in report.largest)
+        f"signal_values rows and {report.pruned_announcements} announcements; largest: "
+        + ", ".join(f"{t} {mb:.1f} MB" for t, mb in report.largest)
     )
     return 0 if report.ok else 1
 
