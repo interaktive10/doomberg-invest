@@ -14,7 +14,7 @@ ID, FAMILY = "S5", "fundamentals"
 
 def compute(ctx: Ctx) -> SignalResult:
     c, s = ctx.section("s5_capital_discipline"), ctx.series
-    sh = {k: s.shares(k) for k in (0, 4, 8, 12)}
+    sh = {k: s.split_adjusted_shares(k) for k in (0, 4, 8, 12)}  # bonus issues and splits aren't dilution
     source = sh[0][1]
     latest = growth(sh[0][0], sh[4][0]) if s.year_back_ok(0) else None
     if latest is None:

@@ -76,6 +76,7 @@ class Series:
         self.quarters = sorted(quarters, key=lambda q: q.end)
         self.market = market
         self._tax_default = tax_default or TAX_DEFAULT
+        self._splits: list[Any] | None = None  # share_splits(), computed once (R4, S5 and the screener ask ~9 times)
 
     @classmethod
     def from_rows(cls, rows: Sequence[Any], market: str) -> Series:
@@ -205,6 +206,40 @@ class Series:
         """Diluted weighted shares where reported (US), else shares outstanding (India: paid-up / face value)."""
         d = self.value("diluted_shares", lag)
         return (d, "diluted_shares") if d is not None else (self.point("shares_outstanding", lag), "shares_outstanding")
+
+    def share_splits(self) -> list[Any]:
+        """Share-count changes that are splits, bonus issues or consolidations (a split ratio between consecutive
+        counts, pipeline.prices.splits): India's counts (paid-up capital / face value) are never adjusted for them."""
+        from pipeline.prices.splits import share_splits
+
+        if self._splits is None:
+            history = []
+            for k in range(len(self.quarters) - 1, -1, -1):
+                v, _ = self.shares(k)
+                q = self.at(k)
+                if v is not None and q is not None:
+                    history.append((q.end, v))
+            self._splits = share_splits(history)
+        return self._splits
+
+    def split_adjusted_shares(self, lag: int = 0) -> tuple[Decimal | None, str]:
+        """The share count at `lag` on the latest quarter's basis: a 1:1 bonus or a face-value split multiplies
+        every earlier count by its ratio, so neither reads as dilution (M4 review R2-F1). No price is used."""
+        v, source = self.shares(lag)
+        q = self.at(lag)
+        if v is None or q is None:
+            return v, source
+        f = Decimal(1)
+        for sp in self.share_splits():
+            if sp.old_end >= q.end:
+                f *= sp.ratio
+        return v * f, source
+
+    def shares_yoy(self, lag: int = 0) -> Decimal | None:
+        """Split-adjusted share-count change against a year earlier (None without a year back)."""
+        if not self.year_back_ok(lag):
+            return None
+        return growth(self.split_adjusted_shares(lag)[0], self.split_adjusted_shares(lag + 4)[0])
 
     def year_back_ok(self, lag: int = 0) -> bool:
         """The quarter at lag + 4 is about a year before the one at lag (330-400 days): with a quarter missing, the

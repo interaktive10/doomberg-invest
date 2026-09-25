@@ -1,7 +1,8 @@
 name: daily
 # BRIEF §2.1 "daily", §2.5: SEC events for the previous business day (Form 4 purchases, 8-K items 4.01 / 1.01 /
 # 2.03, NT filings, spin-offs) and NSE announcements + insider-trading disclosures; then (M5) the text facts of the
-# capex desk, the shortlist and live theses through the free-tier LLM router (8 minutes a day at most).
+# capex desk, the shortlist and live theses through the free-tier LLM router (no document starts after 4 minutes,
+# so the whole workflow stays ~8 minutes: docs/SPEC_ISSUES.md 29).
 # Also the Supabase keep-alive (§2.9): a free project pauses without activity.
 on:
   schedule:
@@ -117,4 +118,4 @@ jobs:
       - run: uv sync --frozen --no-dev
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: Text facts, diffs and links (P-01, P-02, P-03); India announcement triage (P-07)
-        run: uv run --frozen python -m pipeline.facts.run --minutes 8 ${DAY:+--day "$DAY"}
+        run: uv run --frozen python -m pipeline.facts.run --minutes 4 ${DAY:+--day "$DAY"}

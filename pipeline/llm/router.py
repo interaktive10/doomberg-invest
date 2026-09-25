@@ -156,6 +156,9 @@ class Router:
     # ------------------------------------------------------------------ the call
 
     def call(self, data: PromptInput) -> Done | Deferred:
+        if not isinstance(data, PromptInput):  # a row, a dict, a tuple: never (M5 review R1-F6)
+            t = type(data)
+            raise privacy.PrivacyViolation(f"input: {t.__module__}.{t.__qualname__} is not a PromptInput (BRIEF §2.6)")
         privacy.check(data)
         spec = PROMPTS[data.prompt_id]
         variables = data.variables()

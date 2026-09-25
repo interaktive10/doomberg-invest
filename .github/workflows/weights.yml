@@ -1,0 +1,50 @@
+name: weights
+# BRIEF §3 weights_versions, §1.7, §4.10.5: config/weights.yaml changes only through a PR with the human-approved
+# label. When one lands on main, the version it carries is recorded as approved, at merge time. A Lab proposal's row
+# is approved only if the merged weights equal the proposed ones; an edited proposal fails here until its version is
+# bumped (M8 review R2-F3). The weekly scores run records the version the same way before it writes a score.
+on:
+  push:
+    branches: [main]
+    paths: [config/weights.yaml]
+  workflow_dispatch:
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      db: ${{ steps.secrets.outputs.db }}
+    steps:
+      - id: secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -n "$DATABASE_URL" ]; then echo "db=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
+
+  weights:
+    needs: check
+    # approvals come from main only: a dispatch on another branch records nothing
+    if: needs.check.outputs.db == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Record and approve the weights version on main
+        run: uv run --frozen python -m pipeline.db.weights

@@ -8,7 +8,6 @@ It runs only from Monday 06:00 UTC after the week's Friday, and only when the we
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -17,12 +16,13 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+from pydantic import ValidationError
 
-from pipeline.db import repo, thesis_repo
+from pipeline.db import facts_repo, repo, thesis_repo
 from pipeline.llm.router import Deferred, Router
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.thesis import validate as v
-from pipeline.thesis.evidence_pack import CardInput
+from pipeline.thesis.evidence_pack import CardInput, EvidencePack
 from pipeline.thesis.ingest import ingest_card
 from pipeline.thesis.render import render
 
@@ -88,10 +88,14 @@ def write_cards(
 
 def _one(conn: psycopg.Connection[Any], router: Router, key: str, pack: Mapping[str, Any], words: Sequence[str],
          stats: FallbackStats) -> None:  # fmt: skip
-    text = json.dumps(pack, ensure_ascii=False, sort_keys=True)
+    try:
+        model = EvidencePack.model_validate(pack)  # the schema first: P-04 reads only a valid pack (M6 R1-F4)
+    except ValidationError as e:
+        stats.failed[key] = [f"pack: not a valid evidence pack: {e}"[:500]]
+        return
     errors: list[str] = []
     for _ in range(ATTEMPTS):
-        answer = router.call(CardInput(text))
+        answer = router.call(CardInput(model))
         if isinstance(answer, Deferred):
             stats.deferred.append(key)
             return
@@ -125,8 +129,10 @@ def main(argv: list[str] | None = None) -> int:
     if not quotas.configured():
         print("thesis fallback: no provider quota is set in config/quotas.yaml (BRIEF §11.3); nothing to do")
         return 0
-    router = Router(providers(HttpClient(settings), settings, quotas), quotas)
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "thesis_fallback", "llm") as tracked:
+        router = facts_repo.logged_router(
+            conn, providers(HttpClient(settings), settings, quotas), quotas, datetime.now(UTC).date()
+        )  # llm_calls rows, the day's shared budget (R1-F9)
         stats = write_cards(conn, router, week)
         tracked.update({"week": week, "ran": stats.ran, "reason": stats.reason, "written": stats.written,
                         "deferred": stats.deferred,

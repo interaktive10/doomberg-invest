@@ -31,6 +31,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("thesis-fallback.yml", ("fallback",)),
         ("quarterly.yml", ("us",)),
         ("lab.yml", ("lab",)),
+        ("weights.yml", ("weights",)),
     ):
         for job in jobs:
             runs = [r for r in steps(name, job) if "python -m pipeline" in r]
@@ -54,7 +55,8 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     13F step and the universe rebuild are done."""
     doc = yaml.safe_load((WF / "quarterly.yml").read_text(encoding="utf-8"))
     lab = doc["jobs"]["lab"]
-    assert lab["needs"] == "us" and doc["permissions"]["actions"] == "write"
+    assert lab["needs"] == "us" and lab["permissions"] == {"actions": "write"}
+    assert "actions" not in doc["permissions"]  # only the dispatching job's token can (least privilege)
     assert any("gh workflow run lab.yml" in str(s.get("run", "")) for s in lab["steps"])
     runs = steps("quarterly.yml", "us")
     assert "pipeline.db.seed" in runs[-1]  # the rebuild is the us job's last step, so the Lab runs on the new universe
@@ -62,14 +64,15 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
 
 def test_text_facts_run_daily_after_the_event_jobs_within_the_minutes_budget() -> None:
     """M5 (BRIEF §2.1 daily "capex-desk filings -> text facts", §2.5 budget): the text job follows the SEC and NSE
-    event jobs (P-07 reads their announcements), has the free-tier keys, and stops starting documents at 8 minutes."""
+    event jobs (P-07 reads their announcements), has the free-tier keys, and stops starting documents at 4 minutes, so
+    daily.yml stays within §2.5's ~8 minutes (M5 review R1-F8; docs/SPEC_ISSUES.md 29)."""
     doc = yaml.safe_load((WF / "daily.yml").read_text(encoding="utf-8"))
     job = doc["jobs"]["text"]
     assert set(job["needs"]) == {"check", "us", "india"} and job["if"].startswith("always()")
     assert {"GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"} <= set(job["env"])
     assert "ANTHROPIC_API_KEY" not in job["env"] and "OPENAI_API_KEY" not in job["env"]
     run = steps("daily.yml", "text")[-1]
-    assert "python -m pipeline.facts.run" in run and "--minutes 8" in run
+    assert "python -m pipeline.facts.run" in run and "--minutes 4" in run
 
 
 def test_the_capex_index_runs_before_scores_and_the_brief_after() -> None:
@@ -92,24 +95,65 @@ def test_cassettes_are_recorded_by_hand_into_a_pr() -> None:
     assert "gh pr create" in runs and "git add -A" not in runs and "git add ." not in runs
 
 
-def test_the_weekly_thesis_job_evaluates_queues_commits_then_publishes() -> None:
-    """M6 (BRIEF §4.9 step 1, §4.12): kill criteria see this week's rows, the queue is committed to main for the
-    Sunday routine, and the digest issue follows (it lists this week's triggered criteria)."""
+def test_the_weekly_thesis_job_evaluates_then_queues() -> None:
+    """M6 (BRIEF §4.9 step 1): kill criteria see this week's rows, then the queue is written and committed to main
+    for the Sunday routine."""
     doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
     job = doc["jobs"]["thesis"]
     assert set(job["needs"]) == {"check", "scores", "capex_brief"} and "needs.scores.result == 'success'" in job["if"]
-    assert job["permissions"] == {"contents": "write", "issues": "write"}
+    assert job["permissions"] == {"contents": "write"}
     runs = [r for r in steps("weekly.yml", "thesis") if r]
-    order = [next(i for i, r in enumerate(runs) if key in r) for key in
-             ("pipeline.thesis.kill_criteria", "pipeline.thesis.queue", "git push origin HEAD:main",
-              "pipeline.digest.weekly")]  # fmt: skip
+    keys = ("pipeline.thesis.kill_criteria", "pipeline.thesis.queue", "git push origin HEAD:refs/heads/main")
+    order = [next(i for i, r in enumerate(runs) if key in r) for key in keys]
     assert order == sorted(order)
+
+
+def test_the_queue_commit_is_main_only_and_stages_the_queue_alone() -> None:
+    """M6 review R1-F5 (queue_commit): the commit step runs only on refs/heads/main, stages data/thesis_queue/ alone,
+    and pushes on top of a freshly fetched origin/main, rebasing and retrying when main moved."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    step = next(s for s in doc["jobs"]["thesis"]["steps"] if "git push" in str(s.get("run", "")))
+    run = step["run"]
+    assert step["if"] == "github.ref == 'refs/heads/main'"
+    assert "git add -- data/thesis_queue" in run and "git add -A" not in run and "git add ." not in run
+    assert 'git commit -m "Thesis queue $(date -u +%G-W%V)" -- data/thesis_queue' in run
+    fetch, rebase, push = (run.index(x) for x in ("git fetch --no-tags origin main", "git rebase --autostash "
+                                                   "origin/main", "git push origin HEAD:refs/heads/main"))  # fmt: skip
+    assert fetch < rebase < push and "for attempt in 1 2 3" in run
+
+
+def test_the_digest_always_runs() -> None:
+    """M6 review R1-F6 (digest_always): the digest is its own job, run every week whatever scores, the thesis job
+    or the queue push did (those are the weeks source health matters)."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    job = doc["jobs"]["digest"]
+    assert job["if"] == "always() && needs.check.outputs.db == 'true'"
+    assert job["permissions"] == {"contents": "read", "issues": "write"}
+    assert steps("weekly.yml", "digest")[-1].endswith("python -m pipeline.digest.weekly")
+    assert not any("pipeline.digest" in r for r in steps("weekly.yml", "thesis"))
 
 
 def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> None:
     ingest_doc = yaml.safe_load((WF / "thesis-ingest.yml").read_text(encoding="utf-8"))
     assert ingest_doc[True]["push"]["paths"] == ["data/thesis_cards/**"]
-    assert '--event "$GITHUB_EVENT_PATH"' in steps("thesis-ingest.yml", "ingest")[-1]
+    assert '--changed "$RUNNER_TEMP/changed.txt"' in steps("thesis-ingest.yml", "ingest")[-1]
+    # M6 review R1-F4: main's code and queue; only the pushed cards come from the pushed commit
+    checkout = ingest_doc["jobs"]["ingest"]["steps"][0]
+    assert checkout["with"]["ref"] == "${{ github.event.repository.default_branch }}"
+    assert 'git checkout "$SHA" -- data/thesis_cards' in "\n".join(steps("thesis-ingest.yml", "ingest"))
     fallback = yaml.safe_load((WF / "thesis-fallback.yml").read_text(encoding="utf-8"))
     assert fallback[True]["schedule"] == [{"cron": "0 6 * * 1"}]  # BRIEF §2.5
     assert steps("thesis-fallback.yml", "fallback")[-1].endswith("python -m pipeline.thesis.fallback_writer")
+
+
+def test_weights_approval_runs_when_weights_change_on_main() -> None:
+    """M8 review R2-F3: a push to main that changes config/weights.yaml (a merged human-approved PR) records and
+    approves its version at merge time, from main only; the weekly scores run records it too before it writes a
+    score (tests/db/test_lab_run.py)."""
+    doc = yaml.safe_load((WF / "weights.yml").read_text(encoding="utf-8"))
+    on = doc[True]  # PyYAML reads the `on:` key as the boolean True
+    assert on["push"] == {"branches": ["main"], "paths": ["config/weights.yaml"]}
+    job = doc["jobs"]["weights"]
+    assert "github.ref == 'refs/heads/main'" in job["if"] and doc["permissions"] == {"contents": "read"}
+    runs = [r for r in steps("weights.yml", "weights") if "python -m pipeline" in r]
+    assert runs[0].endswith("python -m pipeline.db.migrate") and runs[-1].endswith("python -m pipeline.db.weights")

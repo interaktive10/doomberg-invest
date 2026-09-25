@@ -4,8 +4,8 @@
   `capex_desk` from config/capex_seed.yaml (India: verified symbols only). Companies that left a snapshot are
   marked out of the universe, never deleted. M2/M3 apply the remaining universe rules (§1.3) on top.
   A snapshot below its M0-05 floor (config/universe_*.yaml) is refused before anything is written.
-- weights_versions: the version in config/weights.yaml (immutable once written; a Lab proposal's row, written by
-  the Lab run with its reasons, is marked approved once its PR has merged).
+- weights_versions: the version in config/weights.yaml (pipeline.db.weights: immutable once written; a Lab
+  proposal's row, written by the Lab run with its reasons, is approved once its PR has merged unedited).
 - source_health: one row per external source, so staleness is visible from the first run (§2.7).
 Idempotent: re-running changes nothing.
 """
@@ -22,7 +22,8 @@ import psycopg
 import yaml
 
 from pipeline.db import repo
-from pipeline.db.models import Company, WeightsVersion
+from pipeline.db.models import Company
+from pipeline.db.weights import record_weights_in_use
 from pipeline.india.securities import NseSecurity
 from pipeline.india.securities import load_snapshot as load_nse
 from pipeline.settings import REPO_ROOT, Settings
@@ -77,31 +78,6 @@ def capex_sets(seed: dict[str, Any]) -> tuple[set[str], set[str]]:
     return us, india
 
 
-INITIAL_VERSION = "w0-equal"
-INITIAL_REASON = "initial weights from config/weights.yaml (BRIEF §1.7: equal; legacy L* at 0)"
-MERGED_BY = "human-approved PR"
-
-
-def record_weights_in_use(conn: psycopg.Connection[Any], w: dict[str, Any]) -> bool:
-    """The version in config/weights.yaml. The initial one is the brief's; any later one arrived through a PR with the
-    human-approved label (BRIEF §4.10.5): a Lab proposal already has its row (reasons, approved_by null), which is
-    marked approved now; a version with no row gets one saying how it came in (M8 review R1-F3)."""
-    version = str(w["version"])
-    initial = version == INITIAL_VERSION
-    inserted = repo.insert_weights_version(
-        conn,
-        WeightsVersion(
-            version=version,
-            weights={k: v for k, v in w.items() if k != "version"},
-            reason=INITIAL_REASON if initial else "config/weights.yaml changed through a human-approved PR",
-            approved_by="brief" if initial else MERGED_BY,
-        ),
-    )
-    if not inserted and not initial:
-        repo.approve_weights_version(conn, version, MERGED_BY)
-    return inserted
-
-
 def seed(conn: psycopg.Connection[Any], root: Path = REPO_ROOT) -> SeedReport:
     capex_us, capex_in = capex_sets(yaml.safe_load((root / "config" / "capex_seed.yaml").read_text(encoding="utf-8")))
     us = us_companies(load_sec(root / "data" / "universe" / "us_tickers_exchange.json"), capex_us)
@@ -120,9 +96,10 @@ def seed(conn: psycopg.Connection[Any], root: Path = REPO_ROOT) -> SeedReport:
         in_out = repo.mark_missing_out_of_universe(
             conn, "in", [c.nse_symbol for c in india if c.nse_symbol], repo.SNAPSHOT_OUT["in"]
         )
-        w: dict[str, Any] = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
-        inserted = record_weights_in_use(conn, w)
         repo.ensure_sources(conn, SOURCES)
+    w: dict[str, Any] = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
+    with conn.transaction():  # apart: a weights mismatch doesn't undo the universe rebuild (M8 review R3 idea)
+        inserted = record_weights_in_use(conn, w)
     return SeedReport(
         us=len(us),
         india=len(india),

@@ -117,6 +117,115 @@ def test_a_deferred_document_is_read_the_next_day(conn: psycopg.Connection[Any],
     assert conn.execute("select count(*) from facts").fetchone() == (5,)
 
 
+class PartialQuote:
+    """F-SYN's oracle, plus the stock-price move quoted in part ("rose 23% during the quarter") with neutral labels."""
+
+    name = "gemini"
+
+    def __init__(self) -> None:
+        self.inner = MultiOracle(TRUTH)
+
+    def available(self) -> bool:
+        return True
+
+    def complete(self, req: Any) -> Any:
+        from pipeline.llm.providers.base import Completion
+
+        c = self.inner.complete(req)
+        if req.prompt_id != "P-01" or "rose 23% during the quarter" not in req.user:
+            return c
+        extra = {"fact_type": "price_increase", "subject": "price increase", "subject_key": "price_increase:quarter",
+                 "value": 23, "value_low": None, "value_high": None, "unit": "percent", "currency": None,
+                 "scale_word": None, "period_label": None, "as_of": None, "counterparty": None, "location": None,
+                 "withdrawn": False, "quote": "rose 23% during the quarter", "confidence": 0.9}  # fmt: skip
+        return Completion({**c.content, "facts": [*c.content.get("facts", []), extra]}, c.tokens_in, c.tokens_out)
+
+
+def test_a_partial_price_quote_is_not_stored(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R2-F1: VOLT's 10-Q with a P-01 answer that quotes only "rose 23% during the quarter" as a price
+    increase: Verify-1 reads the sentence (a stock-price move) and stores no such fact, so S9 has nothing to count."""
+    cos = add_companies(conn)
+    job = next(j for j in jobs(cos) if j.url.endswith("volt_10q.htm"))
+    stats = run.TextStats("2026-07-30")
+    router = Router({"gemini": PartialQuote()}, quotas(["gemini"], rpd=10_000), FakeClock())
+    assert run.process(conn, job, fetch, router, tmp_path, stats) == "extracted"
+    assert conn.execute("select count(*) from facts where value_num = 23 or fact_type = 'price_increase'"
+                        ).fetchone() == (0,)  # fmt: skip
+    assert conn.execute("select count(*) from facts").fetchone() == (5,) and stats.rejected.get("V1-TYPE", 0) >= 1
+
+
+class NoRiskTags:
+    """F-SYN's oracle, but P-03 is rate-limited for the day."""
+
+    name = "gemini"
+
+    def __init__(self) -> None:
+        self.inner = MultiOracle(TRUTH)
+
+    def available(self) -> bool:
+        return True
+
+    def complete(self, req: Any) -> Any:
+        from pipeline.llm.providers.base import RateLimited
+
+        if req.prompt_id == "P-03":
+            raise RateLimited("gemini: 429")
+        return self.inner.complete(req)
+
+
+def test_a_deferred_risk_diff_is_done_the_next_day(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R2-F3: KYST's 2026 10-K is read while P-03 is rate-limited: the document stays deferred (its facts
+    stored), and the next day's run stores the risk diff once without storing the facts again."""
+    cos = add_companies(conn)
+    old, new = (next(j for j in jobs(cos) if j.url.endswith(f)) for f in ("kyst_10k_2025_risk.htm",
+                                                                          "kyst_10k_2026_risk.htm"))  # fmt: skip
+    stats = run.TextStats("2026-09-25")
+    assert run.process(conn, old, fetch, router(), tmp_path, stats) == "extracted"
+    limited = Router({"gemini": NoRiskTags()}, quotas(["gemini"], rpd=10_000), FakeClock())
+    assert run.process(conn, new, fetch, limited, tmp_path, stats) == "deferred"
+    facts = conn.execute("select count(*) from facts").fetchone()
+    assert [d["url"] for d in facts_repo.deferred_documents(conn)] == [new.url]
+    assert conn.execute("select count(*) from risk_changes").fetchone() == (0,)
+    assert run.process(conn, new, fetch, router(), tmp_path, stats) == "extracted"
+    assert conn.execute("select count(*) from risk_changes where change_kind = 'added'").fetchone() == (1,)
+    assert conn.execute("select count(*) from facts").fetchone() == facts  # the facts once
+
+
+ARCH = "https://www.sec.gov/Archives/edgar/data/999001"
+
+
+@pytest.mark.parametrize(
+    ("broken", "day1"),
+    [
+        (f"{ARCH}/000099900126000102/0000999001-26-000102-index.htm", {"10-Q": "extracted", "8-K": "new"}),
+        (f"{ARCH}/000099900126000101/nmbs-10q.htm", {"10-Q": "new", "8-K": "extracted"}),
+    ],
+    ids=["503-on-the-8-k-index", "503-on-the-10-q"],
+)
+def test_a_503_is_read_again_the_next_day(conn: psycopg.Connection[Any], tmp_path: Path, broken: str,
+                                          day1: dict[str, str]) -> None:  # fmt: skip
+    """M5 review R2-F4: one transient fetch error leaves the filing `new`; the next day reads it, and the run ends
+    with both documents and all 6 facts (as without the error)."""
+    http = nimbus(conn, tmp_path)
+    http.register_error(broken, 503)
+    first = run.run(conn, date(2026, 9, 25), router(), http, None, tmp_path)
+    assert dict(conn.execute("select form_type, status from filings").fetchall()) == day1 and first.errors
+    run.run(conn, date(2026, 9, 26), router(), http, None, tmp_path)
+    assert dict(conn.execute("select form_type, status from filings").fetchall()) == {"10-Q": "extracted",
+                                                                                      "8-K": "extracted"}  # fmt: skip
+    kinds = {r[0] for r in conn.execute("select kind from documents").fetchall()}
+    assert kinds == {"10-Q", "EX-99.1"}
+    assert conn.execute("select count(*) from facts where verification_status = 'verified'").fetchone() == (6,)
+
+
+def test_a_filing_that_keeps_failing_ends_as_failed() -> None:
+    """R2-F4: retries are bounded: past RETRY_DAYS a filing whose documents can't be fetched is `failed`."""
+    assert run.filing_status(["retry"], expired=False) == "new"
+    assert run.filing_status(["retry"], expired=True) == "failed"
+    assert run.filing_status(["retry", "extracted"], expired=True) == "extracted"
+    assert run.filing_status(["deferred"], expired=True) == "new"  # a rate limit always waits for the next day
+
+
 def submissions(cik: str) -> bytes:
     recent = {"accessionNumber": ["0000999001-26-000101", "0000999001-26-000102"], "form": ["10-Q", "8-K"],
               "filingDate": ["2026-09-10", "2026-09-15"], "reportDate": ["2026-06-30", "2026-09-15"],
@@ -155,6 +264,34 @@ def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any]
     assert again.queued_filings == 0 and again.documents == 0  # nothing new: nothing re-read
 
 
+def test_a_deferred_filing_is_read_once_the_next_day(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R1-F2: on day 1 every provider is rate-limited, so the 10-Q defers and its filing stays new; on day 2
+    each document is read once (not from the deferred list and again from its filing): one fact row per distinct
+    fact, no "reaffirmed" diff between two facts of one document, and the P-01 requests of a clean single run."""
+    http = nimbus(conn, tmp_path)
+    with conn.transaction(force_rollback=True):
+        clean = MultiOracle(TRUTH)
+        run.run(conn, date(2026, 9, 26), Router({"gemini": clean}, quotas(["gemini"], rpd=10_000), FakeClock()),
+                http, None, tmp_path)  # fmt: skip
+        expected = sorted(r.user for r in clean.requests if r.prompt_id == "P-01")
+    first = run.run(conn, date(2026, 9, 25), router(fail=True), http, None, tmp_path)
+    assert first.deferred >= 1 and conn.execute("select count(*) from facts").fetchone() == (0,)
+    oracle = MultiOracle(TRUTH)
+    second = run.run(conn, date(2026, 9, 26), Router({"gemini": oracle}, quotas(["gemini"], rpd=10_000),
+                                                       FakeClock()), http, None, tmp_path)  # fmt: skip
+    assert second.errors == [] and second.extracted == 2, second
+    rows = conn.execute("select count(*), count(distinct (document_id, subject_key, value_num, value_low, value_high)) "
+                        "from facts").fetchone()  # fmt: skip
+    assert rows is not None and rows[0] == rows[1] and rows[0] > 0
+    same_doc = conn.execute("select count(*) from diffs d join facts a on a.id = d.new_fact_id join facts b on "
+                            "b.id = d.prev_fact_id where d.change_kind = 'reaffirmed' and a.document_id = "
+                            "b.document_id").fetchone()  # fmt: skip
+    assert same_doc == (0,)
+    assert sorted(r.user for r in oracle.requests if r.prompt_id == "P-01") == expected
+    statuses = dict(conn.execute("select form_type, status from filings").fetchall())
+    assert statuses == {"10-Q": "extracted", "8-K": "extracted"}
+
+
 def test_the_time_budget_stops_between_documents(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     """BRIEF §2.5's minutes budget: no document starts after `minutes`; the rest stays queued for the next run."""
     http = nimbus(conn, tmp_path)
@@ -188,4 +325,159 @@ def test_india_announcements_are_triaged_once(conn: psycopg.Connection[Any]) -> 
     assert stats.triaged == 1 and [j.url for j in pdfs] == [events[0].source_url] and pdfs[0].via_nse
     row = conn.execute("select categories, read_pdf from announcement_triage").fetchone()
     assert row == (["order_win"], True)
-    assert run.triage_announcements(conn, router(), in_scope, date(2026, 9, 25), stats) == [] and stats.triaged == 1
+    again = run.triage_announcements(conn, router(), in_scope, date(2026, 9, 25), stats)
+    # not triaged again; its PDF is offered until it has been read (run() drops URLs already read; M5 review R2-F4)
+    assert [j.url for j in again] == [events[0].source_url] and stats.triaged == 1
+
+
+class RupeesWithoutCurrency:
+    """F-SYN's oracle, but its P-01 answers leave `currency` null for rupee amounts (P-01's schema allows it)."""
+
+    name = "gemini"
+
+    def __init__(self) -> None:
+        self.inner = MultiOracle(TRUTH)
+
+    def available(self) -> bool:
+        return True
+
+    def complete(self, req: Any) -> Any:
+        from pipeline.llm.providers.base import Completion
+
+        c = self.inner.complete(req)
+        if req.prompt_id != "P-01":
+            return c
+        facts = [{**f, "currency": None} if f.get("currency") == "INR" else f for f in c.content.get("facts", [])]
+        return Completion({**c.content, "facts": facts}, c.tokens_in, c.tokens_out)
+
+
+def test_a_rupee_order_without_a_currency_goes_to_review(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R3-F1: ARVL's Rs 371 crore order, answered with no currency, is needs_review (never $3.7B verified):
+    no diff, and ARVL's S9 stays quiet."""
+    from pipeline.signals import weekly
+
+    cos = add_companies(conn)
+    job = next(j for j in jobs(cos) if j.url.endswith("arvl_pr_order.htm"))
+    r = Router({"gemini": RupeesWithoutCurrency()}, quotas(["gemini"], rpd=10_000), FakeClock())
+    assert run.process(conn, job, fetch, r, tmp_path, run.TextStats("2026-09-18")) == "extracted"
+    status, notes = conn.execute("select verification_status, verification_notes from facts where fact_type = "
+                                 "'order_win'").fetchone()  # fmt: skip
+    assert status == "needs_review" and "currency" in notes
+    assert conn.execute("select count(*) from diffs where subject_key like 'order_win:%'").fetchone() == (0,)
+    weekly.run(conn, date(2026, 9, 18), http=None)
+    s9 = conn.execute("select v.fired from signal_values v join companies c on c.id = v.company_id where c.nse_symbol "
+                      "= 'ARVL' and v.week_end = '2026-09-18' and v.signal_id = 'S9'").fetchone()  # fmt: skip
+    assert s9 is None or s9[0] is False
+
+
+DATED_EPS_OLD = "Diluted earnings per share were $1.87, up 14% from a year ago."
+DATED_EPS_NEW = (
+    "Diluted earnings per share were $1.87 for the quarter ended September 30, 2026, up 14% from a year ago."
+)
+
+
+class EpsPart:
+    """F-SYN's oracle, plus the EPS move quoted in part ("up 14% from a year ago") as a price increase."""
+
+    name = "gemini"
+
+    def __init__(self) -> None:
+        self.inner = MultiOracle(TRUTH)
+
+    def available(self) -> bool:
+        return True
+
+    def complete(self, req: Any) -> Any:
+        from pipeline.llm.providers.base import Completion
+
+        c = self.inner.complete(req)
+        if req.prompt_id != "P-01" or "up 14% from a year ago" not in req.user:
+            return c
+        extra = {"fact_type": "price_increase", "subject": "increase", "subject_key": "price_increase:year",
+                 "value": 14, "value_low": None, "value_high": None, "unit": "percent", "currency": None,
+                 "scale_word": None, "period_label": None, "as_of": None, "counterparty": None, "location": None,
+                 "withdrawn": False, "quote": "up 14% from a year ago", "confidence": 0.9}  # fmt: skip
+        return Completion({**c.content, "facts": [*c.content.get("facts", []), extra]}, c.tokens_in, c.tokens_out)
+
+
+def test_a_dated_eps_sentence_stores_no_price_increase(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R3 (R2-F1): the 10-Q's EPS sentence written with its period's date ("..., 2026, up 14% from a year
+    ago") and quoted in part stores no price_increase fact."""
+
+    def dated(job: run.DocJob) -> bytes:
+        return fetch(job).replace(DATED_EPS_OLD.encode(), DATED_EPS_NEW.encode())
+
+    cos = add_companies(conn)
+    job = next(j for j in jobs(cos) if j.url.endswith("nmbs_10q_q1.htm"))
+    assert DATED_EPS_NEW.encode() in dated(job)
+    r = Router({"gemini": EpsPart()}, quotas(["gemini"], rpd=10_000), FakeClock())
+    stats = run.TextStats("2026-10-28")
+    assert run.process(conn, job, dated, r, tmp_path, stats) == "extracted"
+    assert conn.execute("select count(*) from facts where fact_type = 'price_increase'").fetchone() == (0,)
+    assert stats.rejected.get("V1-TYPE", 0) >= 1
+
+
+class FlakyNse:
+    def __init__(self) -> None:
+        self.down = True
+        self.calls: list[str] = []
+
+    def get(self, url: str) -> bytes:
+        from pipeline.net.nse import NseBlocked
+
+        self.calls.append(url)
+        if self.down:
+            raise NseBlocked("403 three times")
+        return (SYN / "nmbs_investor_day.pdf").read_bytes()
+
+
+def test_an_announcement_pdf_is_fetched_again_after_the_weekend(conn: psycopg.Connection[Any],
+                                                                 tmp_path: Path) -> None:  # fmt: skip
+    """M5 review R3 (R2-F4, India): a Friday announcement triaged read_pdf on Saturday, whose PDF fetch fails, is
+    read on Tuesday (daily.yml doesn't run on Sunday or Monday); a PDF triaged more than RETRY_DAYS ago isn't offered
+    again."""
+    conn.execute("insert into companies (market, name, nse_symbol, isin, fiscal_year_end, capex_desk) values "
+                 "('in', 'Aravalli Cables Limited', 'ARVL', 'INE000A01010', '0331', true)")  # fmt: skip
+    arvl = next(c for c in repo.companies(conn) if c.nse_symbol == "ARVL")
+    assert arvl.id is not None
+    pdf = "https://nsearchives.nseindia.com/corporate/ARVL_18092026.pdf"
+    repo.insert_corp_events(conn, [CorpEvent(
+        company_id=arvl.id, event_date=date(2026, 9, 18), filed_at=datetime(2026, 9, 18, 12, tzinfo=UTC),
+        kind="announcement", detail={"category": "Award of Order", "text": "Order for HV cables."}, source_url=pdf,
+    )])  # fmt: skip
+    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    nse = FlakyNse()
+    run.run(conn, date(2026, 9, 19), router(), http, nse, tmp_path)  # type: ignore[arg-type]
+    assert nse.calls == [pdf] and conn.execute("select count(*) from documents").fetchone() == (0,)
+    nse.down = False
+    run.run(conn, date(2026, 9, 22), router(), http, nse, tmp_path)  # type: ignore[arg-type]
+    assert conn.execute("select kind, url from documents").fetchall() == [("press_release", pdf)]
+    stats = run.TextStats("x")
+    assert [j.url for j in run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 22), stats)] == [pdf]
+    conn.execute("update announcement_triage set created_at = '2026-09-01 00:00+00'")  # triaged > RETRY_DAYS ago
+    assert run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 22), run.TextStats("x")) == []
+
+
+def test_a_previous_filing_fetch_error_defers_the_risk_diff(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R3-F2: a 503 on the previous 10-K leaves the new one `deferred` (facts stored); the next day's run
+    stores its risk diff once and no fact twice."""
+    import httpx
+
+    cos = add_companies(conn)
+    old, new = (next(j for j in jobs(cos) if j.url.endswith(f)) for f in ("kyst_10k_2025_risk.htm",
+                                                                          "kyst_10k_2026_risk.htm"))  # fmt: skip
+    stats = run.TextStats(date.today().isoformat())
+    assert run.process(conn, old, fetch, router(), tmp_path, stats) == "extracted"
+
+    def flaky(job: run.DocJob) -> bytes:
+        if job.url == old.url:
+            raise httpx.HTTPStatusError("503", request=httpx.Request("GET", job.url), response=httpx.Response(503))
+        return fetch(job)
+
+    assert run.process(conn, new, flaky, router(), tmp_path, stats) == "deferred"
+    facts = conn.execute("select count(*) from facts").fetchone()
+    assert [d["url"] for d in facts_repo.deferred_documents(conn)] == [new.url]
+    assert conn.execute("select count(*) from risk_changes").fetchone() == (0,)
+    assert run.process(conn, new, fetch, router(), tmp_path, stats) == "extracted"
+    assert conn.execute("select count(*) from risk_changes where change_kind = 'added'").fetchone() == (1,)
+    assert conn.execute("select count(*) from facts").fetchone() == facts

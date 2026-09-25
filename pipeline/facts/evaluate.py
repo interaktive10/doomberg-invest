@@ -6,7 +6,8 @@ A stored fact matches a planted one of the same document and type when the value
 with numbers), or when one quote contains the other (for a fact without numbers).
 
 `python -m pipeline.facts.evaluate --replay` scores the committed cassettes (M5-01: recall >= 95%, precision >=
-98%; exit 1 below). `--record` runs the real free-tier providers and records cassettes (record-cassettes.yml).
+98%; exit 1 below). `--record` runs the real free-tier providers and records cassettes (record-cassettes.yml): F-SYN's
+P-01 corpus and the P-02, P-03, P-06 and P-07 samples (pipeline.facts.samples); both modes run the samples too.
 """
 
 from __future__ import annotations
@@ -155,9 +156,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         router = Router({n: cassettes.Recorder(p) for n, p in live.items()}, quotas)
     truth = load_truth()
     report = score(run_corpus(router, truth=truth), truth)
+    from pipeline.facts.samples import run_samples  # P-02, P-03, P-06, P-07 (M5 review R1-F7)
+    from pipeline.llm.router import Done
+
+    samples = run_samples(router, SYN, truth)
     if a.record:
         cassettes.write_manifest()
     print(report.summary())
+    print("samples: " + ", ".join(f"{pid} {sum(isinstance(r, Done) for r in rs)}/{len(rs)}"
+                                  for pid, rs in samples.items()))  # fmt: skip
     for line in report.misses + [f"extra: {e}" for e in report.extras]:
         print(f"  {line}")
     return 0 if report.recall >= MIN_RECALL and report.precision >= MIN_PRECISION and not report.deferred else 1

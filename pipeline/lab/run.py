@@ -34,6 +34,7 @@ from pipeline.lab.events import events, signal_ids
 from pipeline.lab.prices import add_months, month_end, month_ends, read_bulk
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals import weekly as live
+from pipeline.us.universe import UniverseRules, structural
 
 BLOCKED_EXIT = 3
 
@@ -63,11 +64,39 @@ def _by_company[R: _Row](rows: Iterable[R]) -> dict[UUID, list[R]]:
     return out
 
 
-def load(conn: psycopg.Connection[Any], market: str, prices: Path, today: date) -> panel.LabData:
-    """Companies of the market with a price file, and every row the panel reads (point in time later, per month)."""
+def population(market: str, root: Path = REPO_ROOT) -> panel.Population | None:
+    """The §1.3 rules the panel applies month by month (M8 review R2-F1). US: a 10-K/10-Q within the universe's
+    filing lookback and TTM revenue at its floor, as known at each month-end. India: none (NSE's EQ list and the
+    ASM/GSM lists have no history; docs/DECISIONS.log)."""
+    if market != "us":
+        return None
+    rules = UniverseRules.load(root)
+    return panel.Population(filing_days=rules.filing_lookback_days, min_ttm_revenue=rules.min_ttm_revenue_usd)
+
+
+def describe(market: str, pop: panel.Population | None, left_out: int) -> str:
+    if pop is None:
+        return (f"every {market.upper()} company with a price file (the universe's surveillance lists have no "
+                "history, so they aren't applied)")  # fmt: skip
+    floor = "" if pop.min_ttm_revenue is None else f" and TTM revenue of at least ${pop.min_ttm_revenue / 10**6:,.0f}M"
+    return (f"the §1.3 universe as of each month-end: {left_out} companies with a structural exclusion (SPAC, fund, "
+            f"royalty/grantor trust, foreign private issuer, no listed common stock or no public common equity) are "
+            f"left out, and each month keeps the companies with a 10-K/10-Q filed in the last {pop.filing_days} "
+            f"days{floor}, as known then "
+            "(never today's universe flag). Listing status and market cap aren't applied (today's listing would add "
+            "survivorship bias; market cap is a candidate-stage rule)")  # fmt: skip
+
+
+def load(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, root: Path = REPO_ROOT
+         ) -> panel.LabData:  # fmt: skip
+    """Companies of the market with a price file, less the structural exclusions (they give no rows, events or
+    members of the excess average), and every row the panel reads (point in time later, per month)."""
     companies = [c for c in repo.companies(conn, market=market) if c.id is not None and c.ticker]
-    bars = read_bulk(prices, [c.ticker for c in companies if c.ticker])
-    companies = [c for c in companies if c.ticker in bars]
+    rules = UniverseRules.load(root) if market == "us" else None
+    kept = [c for c in companies if rules is None or structural(c.sic, c.excluded_reason, rules) is None]
+    left_out = len(companies) - len(kept)
+    bars = read_bulk(prices, [c.ticker for c in kept if c.ticker])
+    companies = [c for c in kept if c.ticker in bars]
     ids = [c.id for c in companies if c.id is not None]
     snap = as_of(today)
     return panel.LabData(
@@ -79,6 +108,7 @@ def load(conn: psycopg.Connection[Any], market: str, prices: Path, today: date) 
         insiders=_by_company(snap.insider_events(conn, ids)),
         events=_by_company(snap.corp_events(conn, ids)),
         facts=_by_company(snap.facts(conn, ids)),
+        left_out=left_out,
     )
 
 
@@ -139,10 +169,12 @@ def run(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, r
     """The report text, the proposals, the panel and the signal statistics (lab_results are written)."""
     cfg = lab_config(root)
     horizons = [int(h) for h in cfg["horizons_months"]]
-    data = load(conn, market, prices, today)
+    data = load(conn, market, prices, today, root)
     months = month_ends(date.fromisoformat(str(cfg["start"])), add_months(month_end(today), -1))
     cfgs = live.Configs.load(root)
-    rows = panel.build(data, months, cfgs, horizons, panel.Options(c1_min_months=int(cfg["c1_min_months"])), workers)
+    pop = population(market, root)
+    opts = panel.Options(c1_min_months=int(cfg["c1_min_months"]), population=pop)
+    rows = panel.build(data, months, cfgs, horizons, opts, workers)
     evts = events(rows, int(cfg["event_window_months"]))
     periods = evaluate.period_bounds(cfg["periods"])
     k = int(cfg["deciles"])
@@ -151,16 +183,23 @@ def run(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, r
     repo.insert_lab_results(conn, results([*ev_stats, *evid, *gp], market))
     weights = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
     props = proposals.propose(ev_stats, weights, int(cfg["proposal_horizon_months"]))
-    info = report.RunInfo(market, months[0], months[-1], len(data.companies), len(rows), len(evts), periods,
-                          f"Stooq bulk daily file {prices.name}")  # fmt: skip
+    info = report.RunInfo(market, months[0], months[-1], len({r.company_id for r in rows}), len(rows), len(evts),
+                          periods, f"Stooq bulk daily file {prices.name}",
+                          describe(market, pop, data.left_out))  # fmt: skip
     return report.render(info, ev_stats, evid, gp, props), props, rows, ev_stats
+
+
+def version_for(now: datetime) -> str:
+    """One version per Lab run (two runs on a day don't share one; M8 review R2-F3)."""
+    return f"lab-{now:%Y-%m-%dT%H%M%SZ}"
 
 
 def record_proposal(
     conn: psycopg.Connection[Any], proposed: dict[str, Any], changed: Sequence[proposals.Proposal]
 ) -> bool:
     """weights_versions gets the proposed version with the §4.10.5 reason of every changed weight, not yet approved;
-    the seed marks it approved once config/weights.yaml carries it (merged with the human-approved label)."""
+    pipeline.db.weights approves it once main's config/weights.yaml carries it with the same weights (merged with the
+    human-approved label; weights.yml and the weekly scores run). False if the version already exists."""
     reason = "Signal Lab §4.10.5 proposals: " + "; ".join(
         f"{p.section}.{p.signal_id} {p.old} -> {p.new} ({p.reason})" for p in changed
     )
@@ -191,15 +230,15 @@ def main(argv: list[str] | None = None) -> int:
     if reason:
         print(f"lab: {reason}")
         return BLOCKED_EXIT
-    today = datetime.now(UTC).date()
+    now = datetime.now(UTC)
     settings = Settings.from_env()
     path = REPO_ROOT / "config" / "weights.yaml"
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "lab") as tracked:
-        text, props, rows, stats = run(conn, a.market, a.prices, today, workers=a.workers)
+        text, props, rows, stats = run(conn, a.market, a.prices, now.date(), workers=a.workers)
         changed = [p for p in props if p.new != p.old]
-        after = proposals.render(path.read_text(encoding="utf-8"), props, f"lab-{today}")
-        if a.propose and changed:
-            record_proposal(conn, yaml.safe_load(after), changed)
+        after = proposals.render(path.read_text(encoding="utf-8"), props, version_for(now))
+        if a.propose and changed and not record_proposal(conn, yaml.safe_load(after), changed):
+            raise RuntimeError(f"weights version {version_for(now)} already exists; re-run the Lab")
         tracked.update({"company_months": len(rows), "stats": len(stats), "weight_changes": len(changed)})
     a.report.write_text(text, encoding="utf-8")
     write_panel(rows, a.panel_out, [int(h) for h in cfg["horizons_months"]])

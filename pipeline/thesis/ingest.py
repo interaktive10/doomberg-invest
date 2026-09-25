@@ -3,7 +3,11 @@ the pushed weeks is validated again against its pack and upserted into `theses` 
 with its kill criteria. One generated card per company and week: a re-run replaces a card still in `research` and
 leaves one Manzoor already moved on alone (idempotent; M6-03). A card that fails validation is not ingested.
 
-`python -m pipeline.thesis.ingest --event "$GITHUB_EVENT_PATH"` (the weeks come from the push's changed paths) or
+The push supplies cards only (M6 review R1-F4): thesis-ingest.yml runs main's code against main's queue files, with
+only data/thesis_cards/** taken from the pushed commit, and a push that changed any other path (a queue file, code)
+ingests nothing. `card_md` is always the rendering of the validated JSON, never a pushed .md (R1-F7).
+
+`python -m pipeline.thesis.ingest --changed changed.txt` (the push's changed paths, one per line) or
 `--week 2026-W38`."""
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ import re
 import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -22,7 +26,7 @@ from uuid import UUID
 
 import psycopg
 
-from pipeline.db import repo, thesis_repo
+from pipeline.db import facts_repo, repo, thesis_repo
 from pipeline.llm.router import Router
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.thesis import validate as v
@@ -30,6 +34,15 @@ from pipeline.thesis.evidence_pack import values_by_id
 from pipeline.thesis.render import render, title_for
 
 CARD_PATH = re.compile(r"^data/thesis_cards/(?P<week>\d{4}-W\d{2})/[^/]+\.(?:json|md)$")
+
+
+def outside_cards(paths: Iterable[str]) -> list[str]:
+    """Changed paths a card push may not touch (anything but data/thesis_cards/<week>/<key>.json|.md)."""
+    return sorted({p for p in paths if p.strip() and not CARD_PATH.match(p.strip())})
+
+
+def weeks_of(paths: Iterable[str]) -> list[str]:
+    return sorted({m.group("week") for p in paths if (m := CARD_PATH.match(p.strip()))})
 
 
 @dataclass
@@ -92,8 +105,7 @@ def ingest_week(conn: psycopg.Connection[Any], week: str, root: Path = REPO_ROOT
             continue
         path = v.cards_dir(week, root) / name
         card = json.loads(path.read_text(encoding="utf-8"))
-        md_path = path.with_suffix(".md")
-        md = md_path.read_text(encoding="utf-8") if md_path.exists() else render(card, title_for(path, root))
+        md = render(card, title_for(path, root))  # the validated JSON, never a pushed .md (M6 review R1-F7)
         _, written = ingest_card(conn, card, pack, md, "routine", res)
         (stats.ingested if written else stats.unchanged).append(f"{week}/{name}")
     return stats
@@ -111,6 +123,19 @@ def ingest(conn: psycopg.Connection[Any], weeks: Iterable[str], root: Path = REP
     return stats
 
 
+def from_changed(conn: psycopg.Connection[Any], paths: Iterable[str], root: Path = REPO_ROOT,
+                 router: Router | None = None) -> IngestStats:  # fmt: skip
+    """A push's changed paths (thesis-ingest.yml): cards only, else nothing is ingested (M6 review R1-F4)."""
+    paths = [p.strip() for p in paths if p.strip()]
+    bad = outside_cards(paths)
+    if bad:
+        stats = IngestStats()
+        stats.rejected["push"] = [f"changed paths outside data/thesis_cards/**: {', '.join(bad[:10])}; a card push "
+                                  "may carry cards only (BRIEF §4.9, Appendix G)"]  # fmt: skip
+        return stats
+    return ingest(conn, weeks_of(paths), root, router)
+
+
 def main(argv: list[str] | None = None) -> int:
     from pipeline.llm.clients import providers
     from pipeline.llm.quotas import Quotas
@@ -118,15 +143,17 @@ def main(argv: list[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument("--event", type=Path, help="the GitHub push event JSON (GITHUB_EVENT_PATH)")
+    src.add_argument("--changed", type=Path, help="the push's changed paths, one per line (thesis-ingest.yml)")
     src.add_argument("--week", help="an ISO week, e.g. 2026-W38")
     a = ap.parse_args(argv)
-    weeks = [a.week] if a.week else weeks_from_event(json.loads(a.event.read_text(encoding="utf-8")))
+    paths = a.changed.read_text(encoding="utf-8").splitlines() if a.changed else []
+    weeks = weeks_of(paths) if a.changed else [a.week]
     settings = Settings.from_env()
     quotas = Quotas.load()
-    router = Router(providers(HttpClient(settings), settings, quotas), quotas) if quotas.configured() else None
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "thesis_ingest") as tracked:
-        stats = ingest(conn, weeks, router=router)
+        router = (facts_repo.logged_router(conn, providers(HttpClient(settings), settings, quotas), quotas,
+                                           datetime.now(UTC).date()) if quotas.configured() else None)  # fmt: skip
+        stats = from_changed(conn, paths, router=router) if a.changed else ingest(conn, weeks, router=router)
         tracked.update({"weeks": stats.weeks, "ingested": stats.ingested, "unchanged": stats.unchanged,
                         "errors": [f"{k}: {'; '.join(e)}"[:300] for k, e in stats.rejected.items()]})  # fmt: skip
     print(f"thesis ingest {', '.join(weeks) or '(no card changes)'}: {len(stats.ingested)} ingested, "

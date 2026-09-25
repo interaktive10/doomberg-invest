@@ -2,6 +2,8 @@ name: thesis-ingest
 # BRIEF §4.9 step 3, §2.5 (<= 3 min): on a push touching data/thesis_cards/** (the Sunday routine pushes its branch,
 # Appendix G), validate the pushed weeks' cards again and upsert them into `theses` (state research, author routine)
 # with their kill criteria. With the free LLM keys, P-05 re-checks the sentences without numbers.
+# The push supplies cards only (M6 review R1-F4): the job runs main's code against main's queue files, takes only
+# data/thesis_cards/** from the pushed commit, and ingests nothing when the push changed any other path.
 on:
   push:
     paths:
@@ -25,6 +27,23 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}  # main's code and main's queue files
+          fetch-depth: 0
+      - name: The pushed cards (data/thesis_cards/** only) and the paths the push changed
+        env:
+          SHA: ${{ github.sha }}
+          BEFORE: ${{ github.event.before }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          git fetch --no-tags origin "$SHA"
+          if [ "$GITHUB_REF" = "refs/heads/$DEFAULT" ] && [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            git diff --name-only "$BEFORE" "$SHA" > "$RUNNER_TEMP/changed.txt"
+          else
+            git diff --name-only "origin/$DEFAULT...$SHA" > "$RUNNER_TEMP/changed.txt"
+          fi
+          git checkout "$SHA" -- data/thesis_cards
+          cat "$RUNNER_TEMP/changed.txt"
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -39,4 +58,4 @@ jobs:
         run: uv run --frozen python -m pipeline.db.migrate
       - name: Validate and ingest the pushed cards
         if: steps.db.outputs.ok == 'true'
-        run: uv run --frozen python -m pipeline.thesis.ingest --event "$GITHUB_EVENT_PATH"
+        run: uv run --frozen python -m pipeline.thesis.ingest --changed "$RUNNER_TEMP/changed.txt"

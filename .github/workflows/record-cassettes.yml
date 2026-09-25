@@ -30,7 +30,7 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
-      - name: Record F-SYN (P-01) with the free-tier providers
+      - name: Record F-SYN (P-01), the P-02, P-03, P-06, P-07 samples and fallback P-04 with P-05
         id: record
         run: |
           if [ -z "$GEMINI_API_KEY$GROQ_API_KEY$OPENROUTER_API_KEY" ]; then
@@ -39,6 +39,8 @@ jobs:
           fi
           uv run --frozen python -m pipeline.facts.evaluate --record \
             || echo "::warning::F-SYN is below M5-01's thresholds on these answers; the cassettes are recorded anyway"
+          uv run --frozen python -m pipeline.thesis.samples --record \
+            || echo "::warning::the recorded P-04 card fails validation; the cassettes are recorded anyway"
           echo "ok=true" >> "$GITHUB_OUTPUT"
       - name: Open a PR with the cassettes
         if: steps.record.outputs.ok == 'true'

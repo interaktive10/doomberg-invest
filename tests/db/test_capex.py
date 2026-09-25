@@ -18,7 +18,12 @@ from pipeline.capex import desk
 from pipeline.capex import run as capex
 from pipeline.db import facts_repo, repo
 from pipeline.db.models import CorpEvent
+from pipeline.facts.canonical import canonical
+from pipeline.facts.process import normalize
+from pipeline.llm.providers.base import Completion, Request
+from pipeline.llm.router import Router
 from tests.db.test_facts_pipeline import router
+from tests.llm.conftest import FakeClock, quotas
 
 WEEK = date(2026, 9, 25)
 
@@ -55,7 +60,7 @@ def test_memberships_count_only_after_confirmation(conn: psycopg.Connection[Any]
     assert facts_repo.propose_membership(conn, cid, "grid", "p06", "{}", "EHV cables for utilities")
     assert facts_repo.propose_membership(conn, cid, "power_equipment", "p06", "{}", "substation equipment")
     assert desk.load_views(conn, WEEK, repo.companies(conn)) == {}  # proposals don't count
-    facts_repo.decide_membership(conn, cid, "grid", "confirmed")
+    facts_repo.decide_membership(conn, cid, "grid", "confirmed", at=datetime(2026, 9, 20, tzinfo=UTC))
     with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
         facts_repo.decide_membership(conn, cid, "power_equipment", "rejected")  # a rejection needs a reason
     facts_repo.decide_membership(conn, cid, "power_equipment", "rejected", "cables, not transformers")
@@ -66,13 +71,46 @@ def test_memberships_count_only_after_confirmation(conn: psycopg.Connection[Any]
     assert list(views[cid].categories) == ["grid"]
 
 
+def test_a_membership_counts_from_the_week_it_was_confirmed(conn: psycopg.Connection[Any]) -> None:
+    """M5 review R1-F5: a confirmation made on 2026-09-25 doesn't reach back into June's S11 view (point in time),
+    and counts from its own week."""
+    cid = company(conn, "in", "Aravalli Cables Limited", "ARVL")
+    facts_repo.propose_membership(conn, cid, "grid", "p06", "{}", "EHV cables for utilities")
+    facts_repo.decide_membership(conn, cid, "grid", "confirmed", at=datetime(2026, 9, 25, 13, 51, tzinfo=UTC))
+    assert desk.load_views(conn, date(2026, 6, 26), repo.companies(conn)) == {}
+    assert desk.load_views(conn, date(2026, 9, 18), repo.companies(conn)) == {}
+    assert list(desk.load_views(conn, WEEK, repo.companies(conn))[cid].categories) == ["grid"]
+
+
+def test_eia_values_count_from_their_release(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R1-F5: EIA publishes month M's 860M inventory late in month M+1, so its value is filed under the
+    end of M+1; a re-run of an earlier week doesn't read a later release."""
+    from pipeline.capex import eia
+    from pipeline.net.http import HttpClient
+    from pipeline.settings import Settings
+
+    fix = Path(__file__).resolve().parents[2] / "fixtures" / "eia"
+    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    start = WEEK - timedelta(days=365 * capex.EIA_YEARS)
+    http.register_mock(eia.url("k3y", f"{start:%Y-%m}", f"{WEEK:%Y-%m}", 0), (fix / "planned_page1.json").read_bytes())
+    http.register_mock(eia.url("k3y", f"{start:%Y-%m}", f"{WEEK:%Y-%m}", eia.PAGE),
+                       (fix / "planned_page2.json").read_bytes())  # fmt: skip
+    capex.ingest_eia(conn, http, "k3y", WEEK, capex.CapexStats(WEEK.isoformat()))
+    rows = conn.execute("select week_end, value, detail->>'month' from capex_inputs "
+                        "where input_id = 'eia_planned_additions_mw' order by 1").fetchall()  # fmt: skip
+    assert rows == [(date(2026, 7, 31), D("370.5"), "2026-06"), (date(2026, 8, 31), D(1100), "2026-07"),
+                    (date(2026, 9, 30), D(1114), "2026-08")]  # fmt: skip
+    seen = facts_repo.capex_input_history(conn, "eia_planned_additions_mw", date(2026, 1, 1), date(2026, 8, 28))
+    assert len(seen) == 1  # as of 2026-08-28 only June's value (published in July) was out
+
+
 def test_s11_view_has_the_index_the_distance_and_export_exposure(conn: psycopg.Connection[Any]) -> None:
     msft = company(conn, "us", "MICROSOFT CORP", "MSFT", "0000789019", capex_desk=True)
     volt = company(conn, "us", "Voltara Grid Systems, Inc.", "VOLT", "0000999002")
     arvl = company(conn, "in", "Aravalli Cables Limited", "ARVL")
     for cid, cat in ((volt, "grid"), (arvl, "grid")):
         facts_repo.propose_membership(conn, cid, cat, "industry_map", "test")
-        facts_repo.decide_membership(conn, cid, cat, "confirmed")
+        facts_repo.decide_membership(conn, cid, cat, "confirmed", at=datetime(2026, 9, 20, tzinfo=UTC))
     facts_repo.upsert_capex_index(conn, WEEK, [{"category": "grid", "value": D("0.8"), "direction": "rising",
                                                 "input_growth": D("0.35"), "inputs": {}}])  # fmt: skip
     t0 = datetime(2026, 1, 5, tzinfo=UTC)
@@ -88,6 +126,7 @@ def test_s11_view_has_the_index_the_distance_and_export_exposure(conn: psycopg.C
     e_volt = facts_repo.upsert_entity(conn, "Voltara Grid Systems", "voltara grid systems", "company")
     facts_repo.link_fact(conn, fids["link:microsoft"], volt, e_msft, "customer")
     facts_repo.link_fact(conn, fids["link:voltara"], arvl, e_volt, "customer")
+    conn.execute("update links set first_seen_at = %s", (datetime(2026, 1, 6, tzinfo=UTC),))  # not the wall clock
     views = desk.load_views(conn, WEEK, repo.companies(conn))
     assert views[volt].graph_distance == 1 and views[arvl].graph_distance == 2 and msft not in views
     assert views[arvl].direction == {"grid": "rising"} and views[arvl].input_growth == {"grid": D("0.35")}
@@ -153,9 +192,68 @@ def test_p06_proposes_grounded_memberships_and_an_export_fact(conn: psycopg.Conn
     assert (tmp_path / "raw" / "ARVL" / "profile" / "20260925.txt").exists()  # the P-06 text is kept on the runner
 
 
+class Scripted:
+    """A provider with one fixed answer."""
+
+    name = "gemini"
+
+    def __init__(self, answer: dict[str, Any]) -> None:
+        self.answer = answer
+        self.requests: list[Request] = []
+
+    def available(self) -> bool:
+        return True
+
+    def complete(self, req: Request) -> Completion:
+        self.requests.append(req)
+        return Completion(self.answer)
+
+
+def test_p06_quotes_are_grounded_in_the_canonical_text(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R1-F3: the announcement has CRLF and double spaces, and the model quotes it with single spaces.
+    Every membership and fact of the P-06 document is its canonical text at the stored offsets (M5-02), and a quote
+    found only past the 30,000 characters P-06 was sent is dropped."""
+    arvl = company(conn, "in", "Aravalli Cables Limited", "ARVL")
+    body = ("Aravalli Cables has received an export order for extra-high voltage cables  and substation\r\n"
+            "equipment for a data center.\r\n\r\nExports were 35%  of revenue in FY2026."
+            + " The company makes cables for many industries." * 800
+            + " Our transformer factory supplies substations in Europe.")  # fmt: skip
+    repo.insert_corp_events(conn, [CorpEvent(
+        company_id=arvl, event_date=date(2026, 9, 18), filed_at=datetime(2026, 9, 18, 10, tzinfo=UTC),
+        kind="announcement", source_url="https://nsearchives.nseindia.com/corporate/ARVL_2.pdf",
+        detail={"category": "Award of Order", "text": body})])  # fmt: skip
+    answer = {
+        "categories": [
+            {"category": "grid", "quote": "extra-high voltage cables and substation equipment for a data center",
+             "confidence": 0.9},
+            {"category": "power_equipment", "quote": "Our transformer factory supplies substations in Europe.",
+             "confidence": 0.9},  # only past the 30,000 characters sent
+        ],
+        "export_exposure": {"share_pct": 35, "overseas_order_book": None,
+                            "quote": "Exports were 35% of revenue in FY2026."},
+    }  # fmt: skip
+    provider = Scripted(answer)
+    stats = capex.CapexStats(WEEK.isoformat())
+    capex.cross_border(conn, Router({"gemini": provider}, quotas(["gemini"], rpd=100), FakeClock()), None,
+                       repo.companies(conn), {arvl}, WEEK, desk.config(), tmp_path, stats)  # fmt: skip
+    doc = conn.execute("select id, url, raw_path from documents where url like 'nse-profile:%'").fetchone()
+    assert doc is not None
+    text = normalize(doc[1], Path(doc[2]).read_bytes()).text
+    assert len(text) > 30_000 and "\r" not in provider.requests[0].user and "  " not in provider.requests[0].user
+    rows = conn.execute(
+        "select quote, char_start, char_end from facts where document_id = %(d)s union all "
+        "select quote, char_start, char_end from capex_memberships where document_id = %(d)s",
+        {"d": doc[0]},
+    ).fetchall()
+    assert len(rows) == 2 and stats.p06_dropped == 1  # the grid membership and the export fact
+    for quote, start, end in rows:
+        assert text[start:end] == quote and canonical(quote) == quote
+
+
 def test_the_weekly_brief(conn: psycopg.Connection[Any]) -> None:
     cid = company(conn, "in", "Aravalli Cables Limited", "ARVL")
     facts_repo.propose_membership(conn, cid, "grid", "p06", "{}", "EHV cables and substation equipment")
+    conn.execute("update capex_memberships set proposed_at = %s", (datetime(2026, 9, 23, 2, tzinfo=UTC),))
     facts_repo.upsert_capex_index(conn, WEEK - timedelta(days=7), [{"category": "grid", "value": D("0.2"),
                                   "direction": "flat", "input_growth": D("0.1"), "inputs": {}}])  # fmt: skip
     facts_repo.upsert_capex_index(conn, WEEK, [{"category": "grid", "value": D("0.7"), "direction": "rising",
@@ -165,3 +263,34 @@ def test_the_weekly_brief(conn: psycopg.Connection[Any]) -> None:
     assert "| grid | +0.70σ | rising | +0.20σ flat |" in text
     assert "- Aravalli Cables Limited → grid: “EHV cables and substation equipment”" in text
     assert "### Most material new facts" in text and "### S11 capex propagation" in text
+
+
+def test_the_brief_names_each_change_once(conn: psycopg.Connection[Any]) -> None:
+    """M5 review R1-F13: a new fact's note already says "new: …", so the brief doesn't print "new: new:"."""
+    cid = company(conn, "us", "Voltara Grid Systems, Inc.", "VOLT", "0000999002")
+    doc = document(conn, cid, "https://www.sec.gov/v2.htm", datetime(2026, 9, 22, tzinfo=UTC))
+    fact(conn, cid, doc, "backlog", "backlog:total", D(80) * 10**9, "usd", date(2026, 9, 22))
+    (fid,) = conn.execute("select id from facts where document_id = %s", (doc,)).fetchone() or (None,)
+    conn.execute(
+        "insert into diffs (company_id, subject_key, new_fact_id, change_kind, computed_note, created_at) "
+        "values (%s, 'backlog:total', %s, 'new', 'new: $80.0B', '2026-09-22 02:00+00')",
+        (cid, fid),
+    )
+    text = capex.brief(conn, WEEK)
+    assert "new: new:" not in text and "backlog `backlog:total` · new: $80.0B —" in text
+
+
+def test_an_item_is_in_one_weeks_brief(conn: psycopg.Connection[Any]) -> None:
+    """M5 review R2-F6: a diff made by Saturday's daily run (01:35 UTC, after week 2026-09-25's cutoff) is in the
+    next week's brief only."""
+    cid = company(conn, "us", "Voltara Grid Systems, Inc.", "VOLT", "0000999002")
+    doc = document(conn, cid, "https://www.sec.gov/v3.htm", datetime(2026, 9, 25, 22, tzinfo=UTC))
+    fact(conn, cid, doc, "backlog", "backlog:total", D(90) * 10**9, "usd", date(2026, 9, 25))
+    (fid,) = conn.execute("select id from facts where document_id = %s", (doc,)).fetchone() or (None,)
+    conn.execute(
+        "insert into diffs (company_id, subject_key, new_fact_id, change_kind, computed_note, created_at) "
+        "values (%s, 'backlog:total', %s, 'new', 'new: $90.0B', '2026-09-26 01:35+00')",
+        (cid, fid),
+    )
+    assert "new: $90.0B" not in capex.brief(conn, WEEK)
+    assert "new: $90.0B" in capex.brief(conn, WEEK + timedelta(days=7))
