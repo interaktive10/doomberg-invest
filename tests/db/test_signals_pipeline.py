@@ -100,12 +100,14 @@ def test_signals_as_of_w_are_identical_whether_or_not_later_filings_exist(conn: 
 
 def mock_http(tmp_path: Path) -> HttpClient:
     http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
-    for sym in ("pwr.us", "jbl.us", "xlk.us"):
+    for sym in ("pwr.us", "jbl.us", "cat.us", "xlk.us"):
         http.register_mock(csv_url(sym), (FIX / "px" / f"{sym}_w.csv").read_bytes())
     http.register_mock(csv_url("^spx"), (FIX / "px" / "_spx_w.csv").read_bytes())
     http.register_mock(timeline_url(build_query("QUANTA SERVICES, INC.", "PWR", "us")),
                        (FIX / "gdelt" / "timeline_pwr.json").read_bytes())  # fmt: skip
     http.register_mock(timeline_url(build_query("JABIL INC", "JBL", "us")), (FIX / "gdelt" / "empty.json").read_bytes())
+    http.register_mock(timeline_url(build_query("CATERPILLAR INC", "CAT", "us")),
+                       (FIX / "gdelt" / "empty.json").read_bytes())  # fmt: skip
     return http
 
 
@@ -128,7 +130,8 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     thesis(conn, jbl)
     stats = weekly.run(conn, week, http=mock_http(tmp_path), imports=tmp_path / "imports")
 
-    assert stats.companies == 4 and stats.stage >= 2 and stats.stooq_ok >= 2 and stats.gdelt_queried >= 2
+    # the candidate stage: PWR and JBL by their theses, CAT by its Evidence (50: S1 fired)
+    assert stats.companies == 4 and stats.stage == 3 and stats.stooq_ok == 3 and stats.gdelt_queried == 3
     n_signals = conn.execute("select count(*) from signal_values where week_end = %s", (week,)).fetchone()
     assert n_signals == (4 * 12,)
     prices = conn.execute("select count(*), min(week_end), max(week_end) from prices_w where company_id = %s", (pwr,))
@@ -138,11 +141,13 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     assert any(j.startswith("JBL ") for j in stats.unconfirmed_jumps)
     unadjusted = conn.execute("select count(*) from prices_w where company_id = %s and adj_close <> close", (jbl,))
     assert unadjusted.fetchone() == (0,)
-    # context: C1-C4 rows for the staged companies; GDELT counts (180 for PWR, 0 for JBL) ranked within the set
+    # context: C1-C4 rows for the staged companies; GDELT counts (180 for PWR, 0 for JBL and CAT) ranked within the
+    # set
     ctx = dict(conn.execute("select metric_id, inputs from context_values where company_id = %s and week_end = %s",
                             (pwr, week)).fetchall())  # fmt: skip
     assert set(ctx) == {"C1", "C2", "C3", "C4"}
-    assert ctx["C4"]["articles_90d"] == 180 and ctx["C4"]["score"] == 25.0  # above JBL's 0 -> pct 75
+    assert ctx["C4"]["articles_90d"] == 180 and ctx["C4"]["population"] == 3
+    assert ctx["C4"]["score"] == round(100 - 100 * (2 + 0.5) / 3, 6)  # above two zeros -> pct 83.3, score 16.7
     assert ctx["C3"]["population"] >= 3  # PWR, JBL and the benchmarks (^spx, XLK)
     score = conn.execute("select gap, bucket, weights_version from scores where company_id = %s and week_end = %s",
                          (pwr, week)).fetchone()  # fmt: skip
@@ -153,10 +158,10 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     # a re-run of the same week replaces its rows
     weekly.run(conn, week, http=mock_http(tmp_path), imports=tmp_path / "imports")
     assert conn.execute("select count(*) from scores where week_end = %s", (week,)).fetchone() == (4,)
-    assert conn.execute("select count(*) from context_values where week_end = %s", (week,)).fetchone() == (8,)
+    assert conn.execute("select count(*) from context_values where week_end = %s", (week,)).fetchone() == (12,)
     # the next week reuses the GDELT counts (under 28 days old) instead of asking again
     nxt = weekly.run(conn, week + timedelta(days=7), http=mock_http(tmp_path), imports=tmp_path / "imports")
-    assert (nxt.gdelt_queried, nxt.gdelt_reused) == (0, 2)
+    assert (nxt.gdelt_queried, nxt.gdelt_reused) == (0, 3)
 
 
 def test_manual_price_import_when_stooq_fails(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
