@@ -323,6 +323,23 @@ def test_backfill_reads_every_page_of_a_company_history(tmp_path: Path) -> None:
     assert {q["basis"] for q in state.results_queue} == {"consolidated"}
 
 
+def test_backfill_encodes_an_ampersand_symbol(tmp_path: Path) -> None:
+    """Review R3-F1: M&M, GVT&D (capex desk) and six other EQ symbols contain `&`; unencoded, it ends the symbol
+    parameter and NSE answers with an empty history. The history is served only at the encoded URL."""
+    assert "&symbol=GVT%26D&page=1&" in company_listing_path("GVT&D")
+    http, nse = clients(tmp_path)
+    rows = [{"seq_Id": str(i), "symbol": "GVT&D", "qe_Date": qe, "consolidated": "Consolidated",
+             "type_Sub": "Original", "creation_Date": "03-Aug-2026 20:48:35",
+             "xbrl": f"{ARCHIVE}/INTEGRATED_FILING_INDAS_{700 + i}_WEB.xml"}
+            for i, qe in enumerate(("30-JUN-2026", "31-MAR-2026", "31-DEC-2025"))]  # fmt: skip
+    http.register_mock(f"{NSE_API}/{company_listing_path('GVT&D', 1)}",
+                       json.dumps({"data": rows, "totalCount": 3}).encode())  # fmt: skip
+    state, stats = State(), IndiaWeeklyStats("2026-10-02")
+    weekly.queue_backfill(nse, state, {"GVT&D": uuid4()}, ["GVT&D"], 1, date(2026, 10, 2), stats)
+    assert [q["period_end"] for q in state.results_queue] == ["2026-06-30", "2026-03-31", "2025-12-31"]
+    assert stats.errors == [] and http.calls[-1] == f"{NSE_API}/{company_listing_path('GVT&D', 1)}"  # after warm-up
+
+
 def test_a_failed_history_page_leaves_the_company_for_next_week(tmp_path: Path) -> None:
     """A history read that stops early (page 2 fails) queues nothing and retries the company next week."""
     http, nse = clients(tmp_path)

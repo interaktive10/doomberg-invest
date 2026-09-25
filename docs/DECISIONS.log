@@ -116,3 +116,4 @@
 2026-09-25 M3 review R2-F1: weekly.yml gains a size_guard job after every writing job (us, india; M4 adds scores), run also when one failed (always(), DATABASE_URL set): the 120-day announcement prune and the 400 MB check run every week (BRIEF §2.8).
 2026-09-25 M3 review R2-F2: the backfill reads a company's results history page by page (&page=N&size=50, up to totalCount; NSE serves 20 rows when unpaged), through the same pager as the dated listing; an incomplete read queues nothing and the company is retried next week.
 2026-09-25 M8: the Stooq bulk file's release is `lab-data-v1` (BRIEF §11.5), in config/lab.yaml, lab.yml, the BLOCKED message and verify M8-05.
+2026-09-25 M3 review R3-F1: the per-company results history URL-encodes the symbol (M&M, GVT&D and six other EQ symbols contain '&', which ended the parameter; NSE then answered with an empty history).
