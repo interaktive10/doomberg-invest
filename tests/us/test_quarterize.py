@@ -87,6 +87,14 @@ def test_a_restated_year_recomputes_the_derived_q4() -> None:
     assert [(r.filed_at, r.values["revenue"]) for r in q4] == [(T3, D(130)), (T5, D(135))]  # 470 - 105 - 110 - 120
 
 
+def test_a_year_reconfirmed_after_a_restated_quarter_recomputes_q4() -> None:
+    """Review R2-F1: the next 10-K repeats last year's FY unchanged after a 10-Q restated Q1. The repeat confirms
+    the pair, so Q4 = 460 - 105 - 110 - 120; before the repeat, the pair is mixed and Q4 keeps 130."""
+    facts = [*base_year(), fact("revenue", *Q[0], 105, T4), fact("revenue", *FY, 460, T5)]
+    q4 = [r for r in quarterize(facts, REPORT)[0] if r.period_end == Q[3][1]]
+    assert [(r.filed_at, r.values["revenue"]) for r in q4] == [(T3, D(130)), (T5, D(125))]
+
+
 def test_ytd_difference_waits_for_a_consistent_vintage() -> None:
     """Apple's FY2017 Q2 CFO: YTD6 (original 10-Q) minus a Q1 restated by the next year's 10-Q is no filing's
     number; the restated YTD6 from the next Q2 10-Q gives the consistent one."""
@@ -166,3 +174,17 @@ def test_ttm_revenue_is_a_lower_bound_for_a_new_registrant() -> None:
     assert ttm_revenue([]) == (None, False)
     stale = [row(date(2022, 3, 31), 50), row(date(2024, 3, 31), 60)]  # only the recent quarter counts
     assert ttm_revenue(stale) == (D(60), True)
+
+
+def test_quarter_ends_pick_the_most_reported_period_deterministically() -> None:
+    """Review R2-F2: a stray period next to the real quarter, and ties, resolve the same way in every process."""
+    from collections import Counter
+
+    from pipeline.us.quarterize import _quarter_ends
+
+    start = date(2011, 1, 1)
+    stray = Counter({(start, date(2011, 3, 30)): 1, (start, date(2011, 3, 31)): 7, (start, date(2011, 6, 30)): 7,
+                     (start, date(2011, 9, 30)): 7})  # fmt: skip
+    assert _quarter_ends(start, date(2011, 12, 31), stray)[0] == date(2011, 3, 31)
+    tie = Counter({(start, date(2011, 3, 30)): 2, (start, date(2011, 3, 31)): 2})
+    assert _quarter_ends(start, None, tie)[0] == date(2011, 3, 30)  # a tie goes to the earlier end

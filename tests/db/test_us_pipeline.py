@@ -195,19 +195,25 @@ class NotYet(HttpClient):
         return super().get_bytes(url, use_cache=use_cache, timeout=timeout)
 
 
-def test_catch_up_rereads_a_day_whose_index_is_not_there_yet(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """Review F2: a listed weekday whose index answers 403 isn't a holiday. It holds the cursor and the next run reads
-    it; a day that keeps failing is passed after RETRY_DAYS with the error logged."""
-    from pipeline.us.daily import RETRY_DAYS, load_last_day, run_catch_up, save_last_day
+def catch_up_client(tmp_path: Path) -> NotYet:
     from pipeline.us.events import quarter_listing_url
 
-    add(conn, "0000886744", "GERON CORP")
-    quidel = add(conn, "0001906324", "QuidelOrtho Corp")
     client = NotYet(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
     client.mocks = daily_client(tmp_path).mocks
     client.register_mock(
         quarter_listing_url(date(2025, 3, 1)), (FIX / "events" / "daily-index-2025-QTR1.json").read_bytes()
     )
+    return client
+
+
+def test_catch_up_rereads_a_day_whose_index_is_not_there_yet(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """Review F2: a listed weekday whose index answers 403 isn't a holiday. It holds the cursor and the next run reads
+    it; a day that keeps failing is passed after RETRY_RUNS runs with the error logged."""
+    from pipeline.us.daily import RETRY_RUNS, load_last_day, run_catch_up, save_last_day
+
+    add(conn, "0000886744", "GERON CORP")
+    quidel = add(conn, "0001906324", "QuidelOrtho Corp")
+    client = catch_up_client(tmp_path)
     client.missing = {master_index_url(date(2025, 3, 4))}
     day_state, pending = tmp_path / "day.json", tmp_path / "pending.json"
     save_last_day(day_state, date(2025, 2, 28))
@@ -223,9 +229,50 @@ def test_catch_up_rereads_a_day_whose_index_is_not_there_yet(conn: psycopg.Conne
 
     save_last_day(day_state, date(2025, 3, 3))
     client.missing = {master_index_url(date(2025, 3, 4))}
-    late = date(2025, 3, 4) + timedelta(days=RETRY_DAYS + 1)
-    assert [s.retry for s in run_catch_up(conn, client, late, pending, day_state)] == [1]
-    assert load_last_day(day_state) == date(2025, 3, 4)  # passed, with the error in the run's stats
+    for run in range(1, RETRY_RUNS + 1):
+        stats = run_catch_up(conn, client, date(2025, 3, 20), pending, day_state)
+        assert [s.retry for s in stats] == [1]
+        held = run < RETRY_RUNS
+        assert load_last_day(day_state) == (date(2025, 3, 3) if held else date(2025, 3, 4)), run
+    assert "moving on" in stats[0].errors[-1]  # passed after the last run, with the error in the run's stats
+
+
+def test_catch_up_retries_a_failed_download_by_runs_not_days(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """Review R2-F5: Friday's index is first read on Tuesday, 4 days later. A Form 4 that fails to download on that
+    first read still holds the cursor, and the next run stores the purchase."""
+    from pipeline.us.daily import load_last_day, run_catch_up, save_last_day
+
+    geron = add(conn, "0000886744", "GERON CORP")
+    client = catch_up_client(tmp_path)
+    form4 = "https://www.sec.gov/Archives/edgar/data/886744/0000950170-25-030327.txt"
+    client.missing = {form4}
+    day_state, pending = tmp_path / "day.json", tmp_path / "pending.json"
+    save_last_day(day_state, date(2025, 2, 28))
+    today = date(2025, 3, 11)  # a week after 03-03: a calendar-day window would already have given up
+    first = run_catch_up(conn, client, today, pending, day_state)
+    assert [(s.day, s.purchases, s.retry) for s in first] == [("2025-03-03", 2, 1), ("2025-03-04", 0, 0)]
+    assert load_last_day(day_state) == date(2025, 2, 28)  # held at the day before the failed one
+    client.missing = set()
+    second = run_catch_up(conn, client, today, pending, day_state)
+    assert [(s.day, s.retry) for s in second] == [("2025-03-03", 0), ("2025-03-04", 0)]
+    assert load_last_day(day_state) == date(2025, 3, 4)
+    assert len(as_of(date(2025, 3, 5)).insider_events(conn, [geron])) == 3
+
+
+def test_catch_up_on_the_first_day_of_a_quarter(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """Review R2-F6: at 01:30 UTC on a quarter's first day SEC hasn't created its listing (403). The run reads the
+    previous quarter's remaining days and returns."""
+    from pipeline.us.daily import load_last_day, run_catch_up, save_last_day
+    from pipeline.us.events import quarter_listing_url
+
+    add(conn, "0001906324", "QuidelOrtho Corp")
+    client = catch_up_client(tmp_path)
+    client.missing = {quarter_listing_url(date(2025, 4, 1))}
+    day_state, pending = tmp_path / "day.json", tmp_path / "pending.json"
+    save_last_day(day_state, date(2025, 3, 3))
+    stats = run_catch_up(conn, client, date(2025, 4, 1), pending, day_state)
+    assert [s.day for s in stats] == ["2025-03-04"] and stats[0].corp_events == 1
+    assert load_last_day(day_state) == date(2025, 3, 4)
 
 
 def test_companies_outside_the_universe_are_ignored(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
@@ -451,8 +498,8 @@ def test_form4_amendment_counts_once_and_the_original_stays_visible_before_it(co
 
     def events(filed_at: datetime, url: str) -> list[InsiderEvent]:
         return [InsiderEvent(company_id=cid, event_date=t.date, filed_at=filed_at, person=amended.person or "unknown",
-                             kind="open_market_buy", shares=t.shares, value=t.value, currency="USD", source_url=url)
-                for t in amended.purchases()]  # fmt: skip
+                             kind="open_market_buy", shares=t.shares, value=t.value, currency="USD", source_url=url,
+                             amends=amended.original_date) for t in amended.purchases()]  # fmt: skip
 
     first = datetime(2025, 3, 10, 21, tzinfo=UTC)  # the first amendment, which the fixture's 4/A restates
     repo.insert_insider_events(conn, events(first, "https://www.sec.gov/first-4a.txt"))
@@ -460,6 +507,7 @@ def test_form4_amendment_counts_once_and_the_original_stays_visible_before_it(co
     before = as_of(amended.accepted_at - timedelta(seconds=1)).insider_events(conn, [cid])  # as_of(t) includes t
     after = as_of(amended.accepted_at).insider_events(conn, [cid])
     assert len(after) == 2 * len(before) and len(before) == len(amended.purchases()) > 0  # history is kept
+    assert {e.amends for e in after} == {date(2025, 2, 28)}  # both amend the Form 4 filed 2025-02-28
     assert {e.source_url for e in latest_versions(before)} == {"https://www.sec.gov/first-4a.txt"}
     kept = latest_versions(after)
     assert len(kept) == len(before) and {e.source_url for e in kept} == {"https://www.sec.gov/second-4a.txt"}

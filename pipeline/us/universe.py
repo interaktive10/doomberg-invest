@@ -94,14 +94,25 @@ class UniverseDecision:
 PREFERRED_TICKER = re.compile(r"-P[A-Z]?$")  # SEC tickers of preferred series: SCE-PB, CMS-PB; not BRK-B, BF-B
 
 
-def public_float(companyfacts: Mapping[str, Any]) -> Decimal | None:
+@dataclass(frozen=True)
+class PublicFloat:
+    value: Decimal
+    as_of: date  # the measurement date (the last day of the second fiscal quarter)
+
+
+def public_float(companyfacts: Mapping[str, Any]) -> PublicFloat | None:
     """dei:EntityPublicFloat from the latest 10-K (None when never reported, e.g. a new registrant)."""
     units = companyfacts.get("facts", {}).get("dei", {}).get("EntityPublicFloat", {}).get("units", {})
-    rows = [r for r in units.get("USD", []) if str(r.get("form", "")).startswith("10-K")]
+    rows = [r for r in units.get("USD", []) if str(r.get("form", "")).startswith("10-K") and r.get("end")]
     if not rows:
         return None
     latest = max(rows, key=lambda r: (str(r.get("filed", "")), str(r.get("end", ""))))
-    return Decimal(str(latest["val"]))
+    return PublicFloat(Decimal(str(latest["val"])), date.fromisoformat(str(latest["end"])))
+
+
+def reporting_on(subs: Submissions, day: date) -> bool:
+    """Had the filer already filed a 10-K or 10-Q by `day`?"""
+    return any(f.form.removesuffix("/A") in ("10-K", "10-Q") and f.filing_date <= day for f in subs.filings)
 
 
 def decide(
@@ -109,16 +120,18 @@ def decide(
     ttm_revenue: Decimal | None,
     rules: UniverseRules,
     today: date,
-    float_usd: Decimal | None = None,
+    pf: PublicFloat | None = None,
 ) -> UniverseDecision:
     """First failing rule wins, so the stored reason is the most basic one. "Common stock listed" (§1.3, review
-    F6): a filer whose listed tickers are all preferred series, or whose latest 10-K reports a public float of 0
-    (a wholly-owned subsidiary with listed preferred shares or notes), is out."""
+    F6): a filer whose listed tickers are all preferred series is out, and so is one whose latest 10-K reports a
+    public float of 0 while it was already a reporting company on the float date (a wholly-owned subsidiary with
+    listed preferred shares or notes). An IPO or spin-off listed after the float date also reports 0 in its first
+    10-K; it stays in (review R2-F3)."""
     if not any(e.lower() in rules.exchanges for e in subs.exchanges):
         return UniverseDecision(False, "not listed on NYSE/Nasdaq")
     if subs.tickers and all(PREFERRED_TICKER.search(t) for t in subs.tickers):
         return UniverseDecision(False, "no common stock listed (preferred series only)")
-    if float_usd is not None and float_usd <= 0:
+    if pf is not None and pf.value <= 0 and reporting_on(subs, pf.as_of):
         return UniverseDecision(False, "no public common equity (10-K public float 0)")
     sic = subs.sic or ""
     if sic in rules.spac_sic:

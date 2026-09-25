@@ -122,6 +122,7 @@ class InsiderEvent(Row):
     currency: str | None = None
     planned: bool = False
     source_url: str
+    amends: date | None = None  # a Form 4/A: the filing date of the Form 4 it amends (review R2-F7)
 
 
 CorpEventKind = Literal[

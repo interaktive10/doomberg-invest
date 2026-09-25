@@ -17,7 +17,7 @@ def test_projection_7000_companies_60_quarters_under_400mb(conn: psycopg.Connect
     rows = size_guard.project(conn, companies=7000, quarters=60)
     total = sum(p.projected_mb for p in rows)
     by_table = {p.table: p for p in rows}
-    assert by_table["fundamentals_q"].target_rows == 588_000  # 1.4 versions per company-quarter (review F10)
+    assert by_table["fundamentals_q"].target_rows == 609_000  # 1.45 versions per company-quarter (review R2-F1)
     # BRIEF §2.8 expects ~150 MB for fundamentals_q with indexes (one version); a measurement far off means a broken
     # probe.
     assert 80 < by_table["fundamentals_q"].projected_mb < 400
