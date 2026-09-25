@@ -13,6 +13,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Literal
 
+from pipeline.india.announcements import is_acquisition
 from pipeline.signals.base import Ctx, Event, Fact, months_before, num
 from pipeline.signals.s04_earnings_quality import sloan
 from pipeline.signals.series import Series, growth
@@ -33,32 +34,46 @@ def _dec(section: Mapping[str, Any], key: str) -> Decimal:
     return Decimal(str(section[key]))
 
 
+def _hard(section: Mapping[str, Any]) -> bool:
+    """A flag's (or an R5 sub-check's) `type` in config/redflags.yaml: hard excludes, soft subtracts."""
+    return str(section["type"]) == "hard"
+
+
+def surveillance_list(reason: str | None) -> str | None:
+    """The list named in an India surveillance reason ("surveillance: ASM long-term stage I" -> "ASM")."""
+    if not reason or not reason.startswith("surveillance:"):
+        return None
+    words = reason.removeprefix("surveillance:").split()
+    return words[0] if words else None
+
+
 def r1(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
     """Sloan accruals >= 10% of assets, or CFO/NI < 0.5 with positive NI."""
     s = ctx.series
     ni, cfo, sl = s.ttm("net_income"), s.ttm("cfo"), sloan(s, 0)
     if ni is None or cfo is None:
-        return FlagResult("R1", "unknown", False, {"missing": ["ttm_net_income" if ni is None else "ttm_cfo"]})
+        return FlagResult("R1", "unknown", _hard(c), {"missing": ["ttm_net_income" if ni is None else "ttm_cfo"]})
     ratio = cfo / ni if ni > 0 else None
     inputs = {"sloan": num(sl), "cfo_to_ni": num(ratio)}
     hit = (sl is not None and sl >= _dec(c, "sloan_min")) or (ratio is not None and ratio < _dec(c, "cfo_ni_max"))
     if not hit and sl is None and ratio is None:
-        return FlagResult("R1", "unknown", False, {"missing": ["sloan"], **inputs})
-    return FlagResult("R1", "fired" if hit else "clear", False, inputs)
+        return FlagResult("R1", "unknown", _hard(c), {"missing": ["sloan"], **inputs})
+    return FlagResult("R1", "fired" if hit else "clear", _hard(c), inputs)
 
 
 def r2(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
     """Receivables growth - revenue growth >= 20 pp YoY (receivables at the quarter end vs TTM revenue)."""
     s = ctx.series
-    g_rec, g_rev = growth(s.point("receivables", 0), s.point("receivables", 4)), s.ttm_yoy("revenue", 0)
+    g_rec = growth(s.point("receivables", 0), s.point("receivables", 4)) if s.year_back_ok(0) else None
+    g_rev = s.ttm_yoy("revenue", 0)
     if g_rec is None or g_rev is None:
         return FlagResult(
-            "R2", "unknown", False, {"missing": ["receivables_growth" if g_rec is None else "revenue_growth"]}
+            "R2", "unknown", _hard(c), {"missing": ["receivables_growth" if g_rec is None else "revenue_growth"]}
         )
     gap_pp = (g_rec - g_rev) * 100
     inputs = {"receivables_growth": num(g_rec), "revenue_growth": num(g_rev), "gap_pp": num(gap_pp)}
     return FlagResult(
-        "R2", "fired" if gap_pp >= _dec(c, "receivables_minus_revenue_growth_pp") else "clear", False, inputs
+        "R2", "fired" if gap_pp >= _dec(c, "receivables_minus_revenue_growth_pp") else "clear", _hard(c), inputs
     )
 
 
@@ -78,17 +93,19 @@ def r3(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
     )
     text = governance(ctx.facts, list(c["text_types"]), since, ctx.week)
     inputs = {"events": events, "text": text}
-    return FlagResult("R3", "fired" if events or text else "clear", True, inputs)
+    return FlagResult("R3", "fired" if events or text else "clear", _hard(c), inputs)
 
 
 def acquisition(events: Sequence[Event], since: date, until: date) -> list[str]:
-    """US 8-K item 2.01 (completion of an acquisition), or an Indian announcement that mentions one."""
+    """US 8-K item 2.01 (completion of an acquisition), or an Indian acquisition announcement (stored also as kind
+    'acquisition', which outlives the 120-day announcement prune; announcements.is_acquisition leaves out takeover-code
+    disclosures and new subsidiaries, M4 review R1-F5)."""
     out = []
     for e in events:
         if not since <= e.event_date <= until:
             continue
-        text = f"{e.detail.get('category', '')} {e.detail.get('text', '')}".lower()
-        if e.kind == "acquisition" or (e.kind == "announcement" and ("acqui" in text or "amalgamat" in text)):
+        category, text = str(e.detail.get("category", "")), str(e.detail.get("text", ""))
+        if e.kind == "acquisition" or (e.kind == "announcement" and is_acquisition(category, text)):
             out.append(f"{e.kind}:{e.event_date}")
     return sorted(set(out))
 
@@ -97,17 +114,18 @@ def r4(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
     """Share count +10% YoY without an acquisition."""
     s = ctx.series
     (now, source), (then, _) = s.shares(0), s.shares(4)
-    g = growth(now, then)
+    g = growth(now, then) if s.year_back_ok(0) else None
     if g is None:
-        return FlagResult("R4", "unknown", False, {"missing": ["share_count_yoy"]})
+        return FlagResult("R4", "unknown", _hard(c), {"missing": ["share_count_yoy"]})
     deals = acquisition(ctx.events, months_before(ctx.week, 12), ctx.week) if c.get("unless_acquisition", True) else []
     inputs = {"share_change_yoy": num(g), "shares_source": source, "acquisitions": deals}
-    return FlagResult("R4", "fired" if g >= _dec(c, "share_growth_min") and not deals else "clear", False, inputs)
+    return FlagResult("R4", "fired" if g >= _dec(c, "share_growth_min") and not deals else "clear", _hard(c), inputs)
 
 
 def r5(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult | None:
     """India only: promoter pledge >= 20% of the promoter holding (hard); on ASM/GSM (hard); related-party revenue
-    >= 10% of revenue when disclosed (soft)."""
+    >= 10% of revenue when disclosed (soft). Each check's hardness and the surveillance lists are read from config;
+    the flag is hard when any check that fired is hard."""
     if ctx.market != "in":
         return None
     pledged = [h for h in sorted(ctx.ownership, key=lambda h: h.quarter_end) if h.promoter_pledged_pct is not None]
@@ -117,11 +135,11 @@ def r5(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult | None:
     hits: list[str] = []
     if pct is not None and pct >= _dec(c["pledge"], "min_pledged_pct_of_promoter"):
         hits.append("pledge")
-    if ctx.surveillance:
+    if surveillance_list(ctx.surveillance) in {str(x) for x in c["surveillance"]["lists"]}:
         hits.append("surveillance")
-    hard = bool(hits)
     if rpt is not None and rpt >= _dec(c["related_party"], "min_rpt_revenue_pct"):
         hits.append("related_party")
+    hard = any(_hard(c[h]) for h in hits)
     inputs = {"pledged_pct_of_promoter": num(pct), "surveillance": ctx.surveillance, "rpt_revenue_pct": num(rpt),
               "hits": hits}  # fmt: skip
     if hits:
@@ -139,12 +157,14 @@ def r6(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
     nds = [s.net_debt(k) for k in lags]
     fcfs = [s.fcf(k) for k in lags[:-1]]
     if any(v is None for v in nds) or any(v is None for v in fcfs):
-        return FlagResult("R6", "unknown", False, {"missing": ["net_debt" if any(v is None for v in nds) else "fcf"]})
+        return FlagResult(
+            "R6", "unknown", _hard(c), {"missing": ["net_debt" if any(v is None for v in nds) else "fcf"]}
+        )
     rising = all((a or 0) > (b or 0) for a, b in zip(nds, nds[1:], strict=False))
     burning = all((f or 0) < 0 for f in fcfs)
     s1 = bool(ctx.fired.get(str(c.get("unless_signal", "S1"))))
     inputs = {"net_debt": [num(v) for v in nds], "fcf": [num(v) for v in fcfs], "s1": s1}
-    return FlagResult("R6", "fired" if rising and burning and not s1 else "clear", False, inputs)
+    return FlagResult("R6", "fired" if rising and burning and not s1 else "clear", _hard(c), inputs)
 
 
 def compute_all(ctx: Ctx, cfg: Mapping[str, Any]) -> list[FlagResult]:

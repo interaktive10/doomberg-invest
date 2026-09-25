@@ -4,8 +4,9 @@ Point-in-time tables (fundamentals_q, ownership_q, insider_events, corp_events) 
 through pipeline.db.pit.as_of(). Writes are idempotent so a re-run of a weekly job doesn't duplicate rows:
 - fundamentals_q: keyed by (company, period_end, filed_at). A restatement has a later filed_at, so it's a new row
   and the old version stays (BRIEF §4.1.4). Re-ingesting the same filing overwrites that version only.
-- ownership_q: keyed by (company, quarter_end) as §3 defines it. A revision replaces the row only when it's filed
-  later; as_of() before the revision then sees no row for that quarter (a gap, never a look-ahead).
+- ownership_q: keyed by (company, quarter_end, filed_at) (migration 0008, M4 review R1-F2): a revised pattern is a
+  new version and as_of() picks the latest version filed by its cutoff. Re-ingesting the same filing overwrites that
+  version.
 - insider_events / corp_events: unique natural-key indexes (db/migrations/0002) make re-inserts no-ops.
 """
 
@@ -14,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -23,6 +25,7 @@ from psycopg.types.json import Jsonb
 
 from pipeline.db.models import (
     FUNDAMENTAL_COLUMNS,
+    MANUAL_OWNERSHIP,
     BenchmarkW,
     Company,
     ContextValue,
@@ -305,23 +308,18 @@ _OWN_COLS = (
 )
 
 
-MANUAL_OWNERSHIP = "manual_csv"  # promoter % only, from an NSE page CSV (pipeline/india/manual_import.py)
-
-
 def upsert_ownership(conn: Conn, rows: Sequence[OwnershipRow]) -> None:
-    """One row per company and quarter: a later filing replaces it. A manual CSV row (promoter % only) never
-    replaces a full row, and the full row of the same filing replaces it."""
-    upd = _set_excluded(c for c in _OWN_COLS if c not in ("company_id", "quarter_end"))
+    """One row per company, quarter and filing time: a later filing is a new version (as_of() picks the latest one
+    filed by its cutoff). For the same filing time, a full row replaces anything and a manual CSV row (promoter %
+    only) replaces only a manual row, so it never replaces a full one; as_of() also prefers a full version."""
+    upd = _set_excluded(c for c in _OWN_COLS if c not in ("company_id", "quarter_end", "filed_at"))
     with conn.cursor() as cur:
         cur.executemany(
             _insert(
                 "ownership_q",
                 _OWN_COLS,
-                f"on conflict (company_id, quarter_end) do update set {upd} "
-                "where (excluded.source <> %(manual)s and (excluded.filed_at > ownership_q.filed_at "
-                "or (excluded.filed_at = ownership_q.filed_at and ownership_q.source = %(manual)s))) "
-                "or (excluded.source = %(manual)s and ownership_q.source = %(manual)s "
-                "and excluded.filed_at > ownership_q.filed_at)",
+                f"on conflict (company_id, quarter_end, filed_at) do update set {upd} "
+                "where excluded.source <> %(manual)s or ownership_q.source = %(manual)s",
             ),
             [{**r.model_dump(), "manual": MANUAL_OWNERSHIP} for r in rows],
         )
@@ -376,6 +374,29 @@ def upsert_prices(conn: Conn, rows: Sequence[PriceW]) -> None:
             _insert("prices_w", cols, f"on conflict (company_id, week_end) do update set {_set_excluded(cols[2:])}"),
             [r.model_dump() for r in rows],
         )
+
+
+def mark_price_split(conn: Conn, company_id: UUID, week_end: date, ratio: Decimal) -> None:
+    """A split a split-adjusted source showed (pipeline.prices.splits.rebased), on its first week on the new basis."""
+    conn.execute(
+        _q("update prices_w set split_ratio = %s where company_id = %s and week_end = %s"),
+        (ratio, company_id, week_end),
+    )
+
+
+def priced_at(conn: Conn, company_ids: Sequence[UUID], week: date) -> set[UUID]:
+    """Companies that already have a price for `week` (a re-run of the week doesn't download them again)."""
+    rows = conn.execute(
+        _q("select company_id from prices_w where company_id = any(%s) and week_end = %s"), (list(company_ids), week)
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def benchmarks_at(conn: Conn, symbols: Sequence[str], week: date) -> set[str]:
+    rows = conn.execute(
+        _q("select symbol from benchmarks_w where symbol = any(%s) and week_end = %s"), (list(symbols), week)
+    ).fetchall()
+    return {str(r[0]) for r in rows}
 
 
 def upsert_benchmarks(conn: Conn, rows: Sequence[BenchmarkW]) -> None:
@@ -584,7 +605,7 @@ def prices(conn: Conn, company_ids: Sequence[UUID], start: date, end: date) -> l
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             _q(
-                "select company_id, week_end, close, adj_close, volume, source from prices_w "
+                "select company_id, week_end, close, adj_close, volume, source, split_ratio from prices_w "
                 "where company_id = any(%s) and week_end between %s and %s order by company_id, week_end"
             ),
             (list(company_ids), start, end),

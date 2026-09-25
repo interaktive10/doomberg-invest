@@ -23,6 +23,7 @@ from pipeline.signals.series import ZERO, Series
 
 HUNDRED = Decimal(100)
 C1_MIN_WEEKS = 52  # a year of weekly history before C1 means anything
+RETURN_START_SLACK_DAYS = 14  # C3: the start close may be up to two weeks older than exactly `weeks` back
 
 
 def percentile_rank(x: Decimal, population: Sequence[Decimal]) -> Decimal:
@@ -34,15 +35,16 @@ def percentile_rank(x: Decimal, population: Sequence[Decimal]) -> Decimal:
 
 
 def enterprise_value(market_cap: Decimal | None, debt: Decimal | None, cash: Decimal | None) -> Decimal | None:
-    """A missing debt figure counts as none (as for invested capital); cash must be known."""
-    if market_cap is None or cash is None:
+    """Market cap + debt - cash; unknown debt (Series.debt: not reported within a year though the filer reports
+    debt) makes EV unknown, never debt-free (M4 review R1-F1)."""
+    if market_cap is None or cash is None or debt is None:
         return None
-    return market_cap + (debt or ZERO) - cash
+    return market_cap + debt - cash
 
 
 def multiples(s: Series, market_cap: Decimal | None) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
     """(EV, EV/Sales_TTM, EV/EBIT_TTM) at the latest quarter; EV/EBIT only for EBIT > 0."""
-    ev = enterprise_value(market_cap, s.point("total_debt", 0), s.point("cash", 0))
+    ev = enterprise_value(market_cap, s.debt(0), s.point("cash", 0))
     rev, ebit = s.ttm("revenue", 0), s.ttm("op_income", 0)
     if ev is None:
         return None, None, None
@@ -93,11 +95,13 @@ def c4(count: int | None, population: Sequence[int]) -> Metric:
     return Metric(Decimal(count), pct, HUNDRED - pct, {"articles_90d": count, "population": len(population)})
 
 
-def return_52w(closes: Sequence[tuple[date, Decimal]], week: date) -> Decimal | None:
-    """adj_close at `week` over the adj_close ~52 weeks earlier (the latest week <= week - 364 days, within 14)."""
+def return_52w(closes: Sequence[tuple[date, Decimal]], week: date, weeks: int = 52) -> Decimal | None:
+    """adj_close at `week` over the adj_close `weeks` earlier (config/context.yaml c3_runup.lookback_weeks): the
+    latest week <= week - 7 x weeks days, within RETURN_START_SLACK_DAYS."""
     by = sorted(closes)
+    back = 7 * weeks
     now = [c for d, c in by if d <= week and (week - d).days <= 7]
-    start = [c for d, c in by if d <= week - timedelta(days=364) and (week - d).days <= 364 + 14]
+    start = [c for d, c in by if d <= week - timedelta(days=back) and (week - d).days <= back + RETURN_START_SLACK_DAYS]
     if not now or not start or start[-1] <= 0:
         return None
     return now[-1] / start[-1] - 1

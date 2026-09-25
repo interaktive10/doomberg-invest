@@ -25,7 +25,7 @@ import httpx
 import psycopg
 
 from pipeline.db import repo
-from pipeline.db.models import CorpEvent, InsiderEvent
+from pipeline.db.models import CorpEvent, CorpEventKind, InsiderEvent
 from pipeline.india import announcements, manual_import, pit
 from pipeline.india.announcements import Announcement
 from pipeline.india.xbrl import XbrlError
@@ -80,19 +80,19 @@ class DailyState:
 
 
 def _events(items: list[Announcement], ids: dict[str, Any]) -> list[CorpEvent]:
-    return [
-        CorpEvent(
-            company_id=ids[a.symbol],
-            event_date=a.event_date,
-            filed_at=a.filed_at,
-            kind="announcement",
-            detail={"category": a.category, "text": a.text, "seq_id": a.seq_id, "has_xbrl": a.has_xbrl},
-            source_url=a.pdf_url
-            or f"{ANNOUNCEMENTS_PAGE}#{a.seq_id or a.symbol + a.filed_at.strftime('%Y%m%dT%H%M%S')}",
-        )
-        for a in items
-        if a.symbol in ids
-    ]
+    """Each announcement as a corp_event; one that announces an acquisition also as kind 'acquisition' (R4's
+    exception), which isn't pruned with the announcements after 120 days (M4 review R1-F5)."""
+    out = []
+    for a in items:
+        if a.symbol not in ids:
+            continue
+        url = a.pdf_url or f"{ANNOUNCEMENTS_PAGE}#{a.seq_id or a.symbol + a.filed_at.strftime('%Y%m%dT%H%M%S')}"
+        detail = {"category": a.category, "text": a.text, "seq_id": a.seq_id, "has_xbrl": a.has_xbrl}
+        kinds: tuple[CorpEventKind, ...] = ("announcement", "acquisition") if announcements.is_acquisition(
+            a.category, a.text) else ("announcement",)  # fmt: skip
+        out += [CorpEvent(company_id=ids[a.symbol], event_date=a.event_date, filed_at=a.filed_at, kind=k,
+                          detail=detail, source_url=url) for k in kinds]  # fmt: skip
+    return out
 
 
 def ingest_announcements(

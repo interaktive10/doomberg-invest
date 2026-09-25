@@ -40,12 +40,14 @@ def compute(ctx: Ctx) -> SignalResult:
     gaps: list[Decimal] = []
     detail: dict[str, object] = {"source": source}
     for k in range(int(c["consecutive_quarters"])):
-        g_ob, g_rev = growth(ob(k), ob(k + 4)), s.ttm_yoy("revenue", k)
+        g_ob = growth(ob(k), ob(k + 4)) if s.year_back_ok(k) else None
+        g_rev = s.ttm_yoy("revenue", k)
         if g_ob is None or g_rev is None:
             return missing("order_book_growth" if g_ob is None else "ttm_revenue_growth", lag=k, **detail)
         gaps.append(g_ob - g_rev)
         detail[f"g_ob_{k}"], detail[f"g_rev_{k}"] = num(g_ob), num(g_rev)
-    cov_now, cov_then = ratio(ob(0), s.ttm("revenue", 0)), ratio(ob(4), s.ttm("revenue", 4))
+    cov_now = ratio(ob(0), s.ttm("revenue", 0))
+    cov_then = ratio(ob(4), s.ttm("revenue", 4)) if s.year_back_ok(0) else None
     if cov_now is None or cov_then is None:
         return missing("coverage", **detail)
     inputs = {**detail, "gaps": [num(g) for g in gaps], "coverage": num(cov_now), "coverage_year_ago": num(cov_then)}

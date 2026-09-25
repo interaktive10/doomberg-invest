@@ -16,6 +16,10 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+import yaml
+
+from pipeline.settings import REPO_ROOT
+
 ZERO = Decimal(0)
 ONE = Decimal(1)
 HALF_YEARLY_FLOWS = frozenset({"cfo", "capex"})
@@ -26,6 +30,13 @@ COLUMNS = (
     "diluted_shares", "shares_outstanding",
 )  # fmt: skip
 QUARTER_GAP_DAYS = 100  # consecutive quarter ends are ~91 days apart; more means a gap in the history
+# BRIEF §4.6 shared definitions, from config/signals.yaml `shared` (protected; M4 review R1-F9: read, not restated)
+SHARED = yaml.safe_load((REPO_ROOT / "config" / "signals.yaml").read_text(encoding="utf-8"))["shared"]
+TAX_CLIP = tuple(Decimal(str(x)) for x in SHARED["tax_rate_clip"])
+TAX_DEFAULT = {str(k): Decimal(str(v)) for k, v in SHARED["tax_rate_default"].items()}
+IC_FLOOR = Decimal(str(SHARED["ic_floor_pct_assets"]))
+ROIC_IC_QUARTERS = int(SHARED["roic_ic_mean_quarters"])
+DEBT_CARRY_QUARTERS = 4  # a missing debt figure reads the last one reported within a year (M4 review R1-F1)
 
 
 @dataclass(frozen=True)
@@ -64,7 +75,7 @@ class Series:
     def __init__(self, quarters: Iterable[Quarter], market: str, tax_default: Mapping[str, Decimal] | None = None):
         self.quarters = sorted(quarters, key=lambda q: q.end)
         self.market = market
-        self._tax_default = tax_default or {"us": Decimal("0.21"), "in": Decimal("0.25")}
+        self._tax_default = tax_default or TAX_DEFAULT
 
     @classmethod
     def from_rows(cls, rows: Sequence[Any], market: str) -> Series:
@@ -133,22 +144,39 @@ class Series:
         tax, pretax = self.ttm("tax_expense", lag), self.ttm("pretax_income", lag)
         if tax is None or pretax is None or pretax <= 0:
             return self._tax_default[self.market]
-        return clip(tax / pretax, Decimal("0.10"), Decimal("0.35"))
+        return clip(tax / pretax, TAX_CLIP[0], TAX_CLIP[1])
 
     def nopat(self, lag: int = 0) -> Decimal | None:
         op = self.ttm("op_income", lag)
         return None if op is None else op * (1 - self.tax_rate(lag))
 
-    def invested_capital(self, lag: int = 0) -> Decimal | None:
-        """IC = total_debt + equity - cash, floored at 0.05 x total_assets. A missing debt figure counts as no
-        debt (filers without borrowings report no debt concept); equity, cash and assets must be known."""
-        equity, cash, assets = self.point("equity", lag), self.point("cash", lag), self.point("total_assets", lag)
-        if equity is None or cash is None or assets is None:
-            return None
-        debt = self.point("total_debt", lag) or ZERO
-        return max(debt + equity - cash, Decimal("0.05") * assets)
+    def debt(self, lag: int = 0) -> Decimal | None:
+        """total_debt at `lag`: as reported there; else the latest figure reported in the year before (filers such
+        as CAT and ORCL tag debt only in their 10-Ks, so a 10-Q quarter reads the last 10-K's figure); zero only for
+        a filer with no debt figure anywhere in its history (no borrowings, no debt concept); otherwise unknown
+        (M4 review R1-F1: a missing figure is never read as zero debt)."""
+        v = self.point("total_debt", lag)
+        now = self.at(lag)
+        if v is not None or now is None:
+            return v
+        for k in range(lag + 1, lag + 1 + DEBT_CARRY_QUARTERS):
+            q = self.at(k)
+            if q is None or (now.end - q.end).days > 400:
+                break
+            if q.get("total_debt") is not None:
+                return q.get("total_debt")
+        return ZERO if all(q.get("total_debt") is None for q in self.quarters) else None
 
-    def mean_ic(self, lag: int = 0, n: int = 4) -> Decimal | None:
+    def invested_capital(self, lag: int = 0) -> Decimal | None:
+        """IC = total_debt + equity - cash, floored at 0.05 x total_assets; debt as `debt()` reads it (unknown debt
+        -> unknown IC); equity, cash and assets must be known."""
+        equity, cash, assets = self.point("equity", lag), self.point("cash", lag), self.point("total_assets", lag)
+        debt = self.debt(lag)
+        if equity is None or cash is None or assets is None or debt is None:
+            return None
+        return max(debt + equity - cash, IC_FLOOR * assets)
+
+    def mean_ic(self, lag: int = 0, n: int = ROIC_IC_QUARTERS) -> Decimal | None:
         ics = [self.invested_capital(k) for k in range(lag, lag + n) if self.at(k) is not None]
         known = [v for v in ics if v is not None]
         return sum(known, ZERO) / len(known) if known else None
@@ -161,8 +189,8 @@ class Series:
         return None if rev is None or rev <= 0 else ratio(self.ttm("op_income", lag), rev)
 
     def net_debt(self, lag: int = 0) -> Decimal | None:
-        """ND = total_debt - cash; unknown when debt isn't reported (signals on leverage need the real figure)."""
-        debt, cash = self.point("total_debt", lag), self.point("cash", lag)
+        """ND = total_debt - cash, with debt as `debt()` reads it (the same rule as invested capital and EV)."""
+        debt, cash = self.debt(lag), self.point("cash", lag)
         return None if debt is None or cash is None else debt - cash
 
     def fcf(self, lag: int = 0) -> Decimal | None:
@@ -178,12 +206,20 @@ class Series:
         d = self.value("diluted_shares", lag)
         return (d, "diluted_shares") if d is not None else (self.point("shares_outstanding", lag), "shares_outstanding")
 
-    def quarterly_yoy(self, col: str, lag: int = 0) -> Decimal | None:
-        """A single quarter against the same quarter a year earlier (lag + 4, which must be ~1 year back)."""
+    def year_back_ok(self, lag: int = 0) -> bool:
+        """The quarter at lag + 4 is about a year before the one at lag (330-400 days): with a quarter missing, the
+        row four places back is 15 months back and a YoY on it is wrong (M4 review R1-F8)."""
         now, then = self.at(lag), self.at(lag + 4)
-        if now is None or then is None or not 330 <= (now.end - then.end).days <= 400:
+        return now is not None and then is not None and 330 <= (now.end - then.end).days <= 400
+
+    def quarterly_yoy(self, col: str, lag: int = 0) -> Decimal | None:
+        """A single quarter against the same quarter a year earlier."""
+        if not self.year_back_ok(lag):
             return None
+        now, then = self.at(lag), self.at(lag + 4)
+        assert now is not None and then is not None
         return growth(now.get(col), then.get(col))
 
     def ttm_yoy(self, col: str, lag: int = 0) -> Decimal | None:
-        return growth(self.ttm(col, lag), self.ttm(col, lag + 4))
+        """TTM against the TTM a year earlier (the two windows must end about a year apart)."""
+        return growth(self.ttm(col, lag), self.ttm(col, lag + 4)) if self.year_back_ok(lag) else None

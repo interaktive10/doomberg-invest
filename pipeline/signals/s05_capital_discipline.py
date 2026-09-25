@@ -16,7 +16,7 @@ def compute(ctx: Ctx) -> SignalResult:
     c, s = ctx.section("s5_capital_discipline"), ctx.series
     sh = {k: s.shares(k) for k in (0, 4, 8, 12)}
     source = sh[0][1]
-    latest = growth(sh[0][0], sh[4][0])
+    latest = growth(sh[0][0], sh[4][0]) if s.year_back_ok(0) else None
     if latest is None:
         return missing("share_count_yoy", shares_source=source)
     inputs: dict[str, object] = {"shares_source": source, "share_change_yoy": num(latest)}
@@ -30,7 +30,8 @@ def compute(ctx: Ctx) -> SignalResult:
             strengths.append(clip(-latest / cfg_dec(c, "a_strength_divisor"), ZERO, Decimal(1)))
             inputs["path_a"] = True
 
-    prior = [growth(sh[4 * (k + 1)][0], sh[4 * (k + 2)][0]) for k in range(int(c["b_prior_years"]))]
+    prior = [growth(sh[4 * (k + 1)][0], sh[4 * (k + 2)][0]) if s.year_back_ok(4 * (k + 1)) else None
+             for k in range(int(c["b_prior_years"]))]  # fmt: skip
     inputs["share_change_prior_years"] = [num(g) for g in prior]
     if all(g is not None and g >= cfg_dec(c, "b_min_prior_dilution") for g in prior):
         if latest <= cfg_dec(c, "b_max_latest_change"):

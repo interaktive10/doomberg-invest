@@ -192,3 +192,27 @@ def test_aapl_share_basis_covers_the_2014_split() -> None:
     company = Company(id=cid, market="us", name="Apple Inc.", ticker="AAPL")
     feed = panel.Feed(company, panel.LabData("us", [company], {cid: rows}, {cid: []}))
     assert feed._factor(date(2013, 12, 31)) == 28 and feed._factor(date(2020, 9, 26)) == 1
+
+
+def test_ownership_revised_later_replays_the_version_current_each_month() -> None:
+    """M4 review R1-F2 in the Lab: the loader reads every ownership version (as_of().ownership() keeps one per
+    quarter), and each month sees the version as_of(month-end) would return, never a later revision."""
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from pipeline.db.models import Company, OwnershipRow
+    from pipeline.db.pit import cutoff_for
+
+    cid = uuid4()
+    company = Company(id=cid, market="in", name="Revised Ltd", nse_symbol="RVSD")
+    q = date(2026, 6, 30)
+    first = OwnershipRow(company_id=cid, quarter_end=q, filed_at=datetime(2026, 7, 20, tzinfo=UTC),
+                         fii_pct=Decimal(10), dii_pct=Decimal(2), source="nse_shp")  # fmt: skip
+    revised = first.model_copy(update={"filed_at": datetime(2026, 10, 1, tzinfo=UTC), "fii_pct": Decimal(20)})
+    feed = panel.Feed(company, panel.LabData("in", [company], {cid: []}, {cid: []}, {cid: [first, revised]}))
+
+    def fii(m: date) -> list[Decimal | None]:
+        return [h.fii_pct for h in feed.batch(m, cutoff_for(m)).ownership[cid]]
+
+    assert fii(date(2026, 6, 30)) == [] and fii(date(2026, 8, 31)) == [Decimal(10)]
+    assert fii(date(2026, 10, 31)) == [Decimal(20)]  # one row per quarter, the revision once it was filed

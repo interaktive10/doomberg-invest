@@ -91,6 +91,9 @@ class FundamentalsRow(Row):
     source: Literal["sec_xbrl", "nse_xbrl", "bse_xbrl", "manual"]
 
 
+MANUAL_OWNERSHIP = "manual_csv"  # promoter % only, from an NSE page CSV (pipeline/india/manual_import.py)
+
+
 class OwnershipRow(Row):
     company_id: UUID
     quarter_end: date
@@ -171,6 +174,7 @@ class PriceW(Row):
     adj_close: Decimal | None = None
     volume: Decimal | None = None
     source: str
+    split_ratio: Decimal | None = None  # read only: set by repo.mark_price_split, never by upsert_prices
 
 
 class BenchmarkW(Row):

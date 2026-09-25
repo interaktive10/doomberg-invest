@@ -7,7 +7,7 @@ from decimal import Decimal as D
 from pathlib import Path
 
 from pipeline.net.stooq import parse_csv
-from pipeline.prices.splits import adjust, price_jumps, split_ratio
+from pipeline.prices.splits import SourceSplit, adjust, price_jumps, rebased, split_ratio
 
 FRIDAYS = [date(2026, 1, 2) + timedelta(weeks=i) for i in range(20)]
 
@@ -72,3 +72,38 @@ def test_any_whole_split_ratio_up_to_fifty_and_the_nearest_wins() -> None:
     assert split_ratio(D("1.8")) is None and split_ratio(D("1.1")) is None and split_ratio(D("60")) is None
     seven = adjust(closes(10, "7"), list(zip(QUARTERS, (D(100), D(100), D(700)), strict=True)))
     assert [j.ratio for j in seven.confirmed] == [D(7)] and seven.share_factor(date(2025, 12, 31)) == D(7)
+
+
+# ---------------------------------------------------------------- a split-adjusted source (M4 review R1-F6)
+
+NVDA_SHARES = D("2460000000")  # the pre-split count the last 10-Q reported
+
+
+def test_adjusted_source_rebased_history_is_a_split_before_any_filing_shows_it() -> None:
+    """Stooq re-adjusts its whole history for a 10:1 split: every stored close is 10x the fresh one. Until the next
+    10-Q reports the new count, market cap is price x the pre-split count x 10, never price x the pre-split count."""
+    stored = [(d, D(1200)) for d in FRIDAYS[:19]]
+    fresh = [(d, D(120)) for d in FRIDAYS]  # the split took effect in the new week
+    split = rebased(stored, fresh)
+    assert split == SourceSplit(FRIDAYS[19], D(10))
+    shares = [(q, NVDA_SHARES) for q in QUARTERS[:2]]
+    a = adjust(fresh, shares, [split])
+    assert a.pending == [split] and a.confirmed == [] and a.unconfirmed == []
+    assert a.adj_close[FRIDAYS[19]] * NVDA_SHARES * a.share_factor(QUARTERS[1]) == D("2.952E12")
+    # the June 10-Q reports the post-split count: the share split confirms it, and the factor isn't applied twice
+    later = adjust(fresh, [*shares, (QUARTERS[2], NVDA_SHARES * 10)], [split])
+    assert later.pending == [] and later.share_factor(QUARTERS[2]) == 1 and later.share_factor(QUARTERS[1]) == 10
+
+
+def test_adjusted_source_lagging_or_corrected_histories() -> None:
+    # the source priced two weeks after the split before re-adjusting: those weeks already agree
+    stored = [(d, D(1200) if i < 17 else D(120)) for i, d in enumerate(FRIDAYS[:19])]
+    assert rebased(stored, [(d, D(120)) for d in FRIDAYS]) == SourceSplit(FRIDAYS[17], D(10))
+    # a 1:8 consolidation: the old closes were an eighth of the new ones
+    assert rebased([(d, D(10)) for d in FRIDAYS[:19]], [(d, D(80)) for d in FRIDAYS]) == SourceSplit(
+        FRIDAYS[19], D(1) / D(8)
+    )
+    fresh = [(d, D(100)) for d in FRIDAYS]
+    assert rebased([(d, D("100.4")) for d in FRIDAYS[:19]], fresh) is None  # a dividend re-adjustment
+    assert rebased([(d, D(100) if i != 7 else D(200)) for i, d in enumerate(FRIDAYS)], fresh) is None  # a fix
+    assert rebased([], fresh) is None and rebased(fresh, fresh) is None

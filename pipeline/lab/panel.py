@@ -30,7 +30,7 @@ from typing import Any
 from uuid import UUID
 
 from pipeline.db.models import Company, CorpEvent, FactRow, FundamentalsRow, InsiderEvent, OwnershipRow
-from pipeline.db.pit import cutoff_for
+from pipeline.db.pit import cutoff_for, ownership_as_of
 from pipeline.lab import legacy_doomberg as legacy
 from pipeline.lab.prices import MonthBar, add_months
 from pipeline.prices.splits import share_splits
@@ -121,7 +121,7 @@ class Feed:
         since_fact = m - timedelta(days=365 * live.FACT_YEARS)
         return live.Batch(
             {cid: list(self._latest.values())},
-            {cid: [live.holding(o) for o in self._own.upto(cutoff)]},
+            {cid: [live.holding(o) for o in ownership_as_of(self._own.upto(cutoff), cutoff)]},
             {cid: [live.insider(i) for i in self._ins.upto(cutoff) if i.event_date >= since_ins]},
             {cid: [live.event(e) for e in self._evs.upto(cutoff) if e.event_date >= since_ev]},
             {cid: [live.fact(x) for x in self._facts.upto(cutoff) if x.as_of >= since_fact]},
