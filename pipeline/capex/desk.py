@@ -36,11 +36,14 @@ def anchors(companies: Sequence[Company], cfg: Mapping[str, Any]) -> dict[UUID, 
 
 def load_views(conn: psycopg.Connection[Any], week: date, companies: Sequence[Company],
                cfg: Mapping[str, Any] | None = None) -> dict[UUID, CapexView]:  # fmt: skip
-    """CapexView for every company with a confirmed membership (the rest get S11's empty view)."""
+    """CapexView for every company with a membership confirmed before the week's cutoff (the rest get S11's empty
+    view): a confirmation made later doesn't reach back (point in time, M5 review R1-F5)."""
     cfg = cfg or config()
     confirmed: dict[UUID, list[str]] = defaultdict(list)
+    cutoff = cutoff_for(week)
     for m in facts_repo.memberships(conn, "confirmed"):
-        confirmed[m["company_id"]].append(m["category"])
+        if m["decided_at"] is not None and m["decided_at"] < cutoff:
+            confirmed[m["company_id"]].append(m["category"])
     if not confirmed:
         return {}
     index = {r["category"]: (r["direction"], r["input_growth"]) for r in facts_repo.capex_index(conn, week)}

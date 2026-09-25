@@ -4,7 +4,7 @@
 | V1-QUOTE  | the quote is grounded in its chunk; the stored quote is text[start:end]      | failed (not stored)     |
 | V1-NUM    | every numeric field is a number in the quote (numbers.match)                 | failed                  |
 | V1-UNIT   | the unit agrees with the quote's tokens ("MW" <-> mw, "$" <-> usd, ...)      | failed                  |
-| V1-TYPE   | allowed type; no share-price facts; subject_key valid                        | failed / needs_review   |
+| V1-TYPE   | allowed type; no share-price facts (labels or quote); subject_key valid      | failed / needs_review   |
 | V1-PERIOD | period resolvable and plausible                                              | needs_review            |
 | V1-XBRL   | |value - XBRL| <= 0.5% for the same concept and period                       | needs_review (mismatch) |
 | V1-CONF   | confidence >= 0.70                                                           | needs_review            |
@@ -29,14 +29,26 @@ from pipeline.facts.ground import grounded_quote
 from pipeline.facts.periods import Period, period_slug, resolve
 
 MIN_CONFIDENCE = Decimal("0.70")
+PLAUSIBLE_DAYS = 3653  # V1-PERIOD "plausible": a period ending more than 10 years from as_of goes to review
 XBRL_TOLERANCE = Decimal("0.005")
 PRICE_SUBJECT = re.compile(
     r"\b(?:share|stock)\s+price|price\s+target|market\s+cap(?:italization)?|dividends?|repurchases?|buybacks?|"
     r"stock\s+performance|analysts?\b|ratings?\b|valuation\b|per\s+(?:diluted\s+)?share\b|\bEPS\b",
     re.I,
 )
+# The same topics in the grounded quote itself: the model's subject and key are its own labels, so a stock-price
+# move, EPS or a buyback labelled "price increase" or "purchase commitment" is caught from the text (M5 review R1-F1)
+PRICE_QUOTE = re.compile(
+    r"\b(?:share|stock)\s+price|price\s+target|market\s+cap(?:italization)?\b|\bdividends?\b|"
+    r"\b(?:share|stock)\s+(?:repurchase|buyback)s?\b|\brepurchase\s+(?:program|plan|authorization)|\bbuybacks?\b|"
+    r"\b(?:stock|shares)\s+(?:rose|fell|gained|lost|jumped|dropped|declined|climbed|traded|closed|performance)\b|"
+    r"\banalysts?\b|\b(?:upgraded|downgraded)\b|\bearnings\s+per\s+(?:diluted\s+)?share\b|\bper\s+diluted\s+"
+    r"share\b|\bEPS\b",
+    re.I,
+)
 PER_SHARE_AFTER = re.compile(r"^\s*(?:per|a)\s+(?:diluted\s+)?share\b", re.I)
-PER_SHARE_BEFORE = re.compile(r"(?:\bper\s+(?:diluted\s+)?share|\bEPS)\b[^.;]{0,40}$", re.I)
+# up to 40 characters back within the clause; a decimal point ("$1.87") doesn't end it (M5 review R1-F1)
+PER_SHARE_BEFORE = re.compile(r"(?:\bper\s+(?:diluted\s+)?share|\bEPS)\b(?:[^.;]|\.(?=\d)){0,40}$", re.I)
 UNIT_OF = {"mw": "mw", "gw": "gw", "mwh": "mwh", "percent": "percent", "months": "months", "weeks": "weeks",
            "years": "years", "sq_ft": "sq_ft"}  # fmt: skip
 PERIOD_REQUIRED = frozenset({"capex_guidance", "capex_reported"})
@@ -111,7 +123,7 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
     if g is None:
         return Rejected("V1-QUOTE", "quote not found in the chunk (exact, then whitespace/punctuation-insensitive)")
     start, end, quote = g
-    if PRICE_SUBJECT.search(p.subject) or PRICE_SUBJECT.search(p.subject_key):
+    if PRICE_SUBJECT.search(p.subject) or PRICE_SUBJECT.search(p.subject_key) or PRICE_QUOTE.search(quote):
         return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
     review: dict[str, str] = {}
 
@@ -153,6 +165,8 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
     period: Period | None = resolve(p.period_label, doc.fye, as_of)
     if p.period_label and period is None:
         review["period"] = f"period {p.period_label!r} not resolvable"
+    elif period is not None and abs((period.end - as_of).days) > PLAUSIBLE_DAYS:
+        review["period"] = f"period {p.period_label!r} ends {period.end}, more than 10 years from {as_of}"
     elif p.fact_type in PERIOD_REQUIRED and period is None:
         review["period"] = "capex guidance/reported needs a period"
     elif p.fact_type in GUIDANCE and period is not None and period.end < doc.published and not p.withdrawn:
@@ -177,7 +191,8 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
 
     c = Candidate(
         fact_type=p.fact_type, subject=p.subject, subject_key=key, value_num=value, value_low=low, value_high=high,
-        unit=p.unit, currency="USD" if any(m.currency == "usd" for m in matched.values()) else p.currency,
+        unit=p.unit if matched else "other",  # a unit with no number in the quote says nothing (M5 review R1-F9)
+        currency="USD" if any(m.currency == "usd" for m in matched.values()) else p.currency,
         scale_word=scale_word, period_label=p.period_label, period_start=period.start if period else None,
         period_end=period.end if period else None, as_of=as_of, counterparty=p.counterparty, location=p.location,
         quote=quote, char_start=start, char_end=end, section=chunk.section, page=chunk.page,

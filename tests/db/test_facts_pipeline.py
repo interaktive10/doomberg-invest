@@ -155,6 +155,34 @@ def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any]
     assert again.queued_filings == 0 and again.documents == 0  # nothing new: nothing re-read
 
 
+def test_a_deferred_filing_is_read_once_the_next_day(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M5 review R1-F2: on day 1 every provider is rate-limited, so the 10-Q defers and its filing stays new; on day 2
+    each document is read once (not from the deferred list and again from its filing): one fact row per distinct
+    fact, no "reaffirmed" diff between two facts of one document, and the P-01 requests of a clean single run."""
+    http = nimbus(conn, tmp_path)
+    with conn.transaction(force_rollback=True):
+        clean = MultiOracle(TRUTH)
+        run.run(conn, date(2026, 9, 26), Router({"gemini": clean}, quotas(["gemini"], rpd=10_000), FakeClock()),
+                http, None, tmp_path)  # fmt: skip
+        expected = sorted(r.user for r in clean.requests if r.prompt_id == "P-01")
+    first = run.run(conn, date(2026, 9, 25), router(fail=True), http, None, tmp_path)
+    assert first.deferred >= 1 and conn.execute("select count(*) from facts").fetchone() == (0,)
+    oracle = MultiOracle(TRUTH)
+    second = run.run(conn, date(2026, 9, 26), Router({"gemini": oracle}, quotas(["gemini"], rpd=10_000),
+                                                       FakeClock()), http, None, tmp_path)  # fmt: skip
+    assert second.errors == [] and second.extracted == 2, second
+    rows = conn.execute("select count(*), count(distinct (document_id, subject_key, value_num, value_low, value_high)) "
+                        "from facts").fetchone()  # fmt: skip
+    assert rows is not None and rows[0] == rows[1] and rows[0] > 0
+    same_doc = conn.execute("select count(*) from diffs d join facts a on a.id = d.new_fact_id join facts b on "
+                            "b.id = d.prev_fact_id where d.change_kind = 'reaffirmed' and a.document_id = "
+                            "b.document_id").fetchone()  # fmt: skip
+    assert same_doc == (0,)
+    assert sorted(r.user for r in oracle.requests if r.prompt_id == "P-01") == expected
+    statuses = dict(conn.execute("select form_type, status from filings").fetchall())
+    assert statuses == {"10-Q": "extracted", "8-K": "extracted"}
+
+
 def test_the_time_budget_stops_between_documents(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     """BRIEF §2.5's minutes budget: no document starts after `minutes`; the rest stays queued for the next run."""
     http = nimbus(conn, tmp_path)

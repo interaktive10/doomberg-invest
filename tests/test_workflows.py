@@ -62,14 +62,15 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
 
 def test_text_facts_run_daily_after_the_event_jobs_within_the_minutes_budget() -> None:
     """M5 (BRIEF §2.1 daily "capex-desk filings -> text facts", §2.5 budget): the text job follows the SEC and NSE
-    event jobs (P-07 reads their announcements), has the free-tier keys, and stops starting documents at 8 minutes."""
+    event jobs (P-07 reads their announcements), has the free-tier keys, and stops starting documents at 4 minutes, so
+    daily.yml stays within §2.5's ~8 minutes (M5 review R1-F8; docs/SPEC_ISSUES.md 29)."""
     doc = yaml.safe_load((WF / "daily.yml").read_text(encoding="utf-8"))
     job = doc["jobs"]["text"]
     assert set(job["needs"]) == {"check", "us", "india"} and job["if"].startswith("always()")
     assert {"GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"} <= set(job["env"])
     assert "ANTHROPIC_API_KEY" not in job["env"] and "OPENAI_API_KEY" not in job["env"]
     run = steps("daily.yml", "text")[-1]
-    assert "python -m pipeline.facts.run" in run and "--minutes 8" in run
+    assert "python -m pipeline.facts.run" in run and "--minutes 4" in run
 
 
 def test_the_capex_index_runs_before_scores_and_the_brief_after() -> None:

@@ -303,13 +303,15 @@ def propose_membership(
     return bool(row and row[0])
 
 
-def decide_membership(conn: Conn, company_id: UUID, category: str, status: str, reason: str | None = None) -> None:
+def decide_membership(conn: Conn, company_id: UUID, category: str, status: str, reason: str | None = None,
+                      at: datetime | None = None) -> None:  # fmt: skip
     """Manzoor's confirmation or rejection (the web app calls this through its server action; a rejection needs a
-    reason, enforced by the table)."""
+    reason, enforced by the table). decided_at is now unless `at` is given; S11 counts a confirmation from the week
+    it was made (desk.load_views)."""
     conn.execute(
-        _q("update capex_memberships set status = %s, decided_at = now(), decision_reason = %s "
+        _q("update capex_memberships set status = %s, decided_at = coalesce(%s, now()), decision_reason = %s "
            "where company_id = %s and category = %s"),
-        (status, reason, company_id, category),
+        (status, at, reason, company_id, category),
     )  # fmt: skip
 
 

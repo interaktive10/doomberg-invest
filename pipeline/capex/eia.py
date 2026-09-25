@@ -41,6 +41,13 @@ def url(key: str, start: str, end: str, offset: int = 0) -> str:
     return f"{API}?{urlencode(params)}"
 
 
+def available(month: date) -> date:
+    """The month end from which a report month's value counts (point in time, M5 review R1-F5): EIA publishes the
+    860M inventory for month M near the end of month M+1, so the value is filed under the end of M+1."""
+    y, m = month.year + month.month // 12, month.month % 12 + 1
+    return date(y, m, calendar.monthrange(y, m)[1])
+
+
 def month_end(period: str) -> date:
     y, m = (int(x) for x in period.split("-")[:2])
     return date(y, m, calendar.monthrange(y, m)[1])
@@ -80,4 +87,6 @@ def planned_additions(http: HttpClient, key: str, start: date, end: date) -> lis
         seen += n
         if n == 0 or seen >= total:
             break
+    else:  # the newest months would be missing (sorted oldest first): fail loudly (M5 review R1 idea)
+        raise EiaError(f"EIA returned more than {MAX_PAGES * PAGE} rows; raise MAX_PAGES")
     return sorted(months.items())
