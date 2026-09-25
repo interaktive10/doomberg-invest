@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
+from urllib.parse import quote
 
 import yaml
 
@@ -243,8 +244,9 @@ def listing_path(day_from: date, day_to: date, page: int = 1) -> str:
 
 
 def company_listing_path(symbol: str, page: int = 1) -> str:
-    """One company's filing history, newest first (unpaged, NSE returns only the first 20 rows; review R2-F2 on M3)."""
-    return f"{LISTING_API}&symbol={symbol}&page={page}&size={PAGE_SIZE}"
+    """One company's filing history, newest first (unpaged, NSE returns only the first 20 rows; review R2-F2 on M3).
+    The symbol is URL-encoded: M&M or GVT&D would otherwise end the query parameter at the `&` (review R3-F1)."""
+    return f"{LISTING_API}&symbol={quote(symbol, safe='')}&page={page}&size={PAGE_SIZE}"
 
 
 def parse_listing(raw: bytes | str) -> tuple[list[ResultsListing], int, int]:
