@@ -1,11 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { redirectTo } from "@/lib/redirect";
 import { authClient } from "@/lib/supabase/server";
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   const supabase = await authClient();
   await supabase.auth.signOut();
-  const url = request.nextUrl.clone();
-  url.pathname = "/login";
-  url.search = "";
-  return NextResponse.redirect(url, { status: 303 });
+  return redirectTo("/login", 303);
 }
