@@ -284,3 +284,117 @@ def test_a_multi_year_range_is_no_single_period(label: str) -> None:
     assert resolve(label, "1231") is None
     fy = resolve("FY2025-26", "0331")
     assert fy is not None and (fy.start, fy.end) == (date(2025, 4, 1), date(2026, 3, 31))
+
+
+RUPEES = ("The company received an order worth Rs 450 crore from a US data center developer.\n\n"
+          "Arvl won an order of ₹371 crore.")  # fmt: skip
+
+
+@pytest.mark.parametrize("currency", [None, "USD"])
+@pytest.mark.parametrize("unit", ["usd", "other"])
+@pytest.mark.parametrize(
+    ("quote", "value"),
+    [("The company received an order worth Rs 450 crore", D(450)), ("Arvl won an order of ₹371 crore", D(371))],
+    ids=["rs", "rupee-sign"],
+)
+def test_a_rupee_amount_goes_to_review_whatever_the_model_says(quote: str, value: D, unit: str,
+                                                               currency: str | None) -> None:  # fmt: skip
+    """M5 review R3-F1: the quote's own currency decides; a null or "USD" answer can't make rupees dollars."""
+    doc = DocContext("press_release", date(2026, 9, 21), "0331", RUPEES)
+    r = ok(verify(prop(fact_type="order_win", subject="order", subject_key="order_win:india_order", value=value,
+                       unit=unit, currency=currency, scale_word=None, period_label=None, quote=quote),
+                  Chunk(RUPEES, 0, "body"), doc))  # fmt: skip
+    assert r.verification_status == "needs_review" and "currency" in r.verification_notes, r
+
+
+DATED_PRICE = (
+    "Diluted earnings per share were $1.87 for the quarter ended September 30, 2026, up 14% from a year ago. "
+    "Diluted earnings per share for the three months ended September 30, 2026 were $1.87, an increase of 14% from "
+    "the prior-year period. Our stock price was $48.20 on June 30, 2026, up 23% from a year earlier. Our share price "
+    "closed the quarter at $1,234.50, up 23% from a year earlier. Our shares have gained 23% this year. Our stock has "
+    "risen 23% since the start of the year. Total return to shareholders was 23% in 2026. We returned $3.1 billion to "
+    "shareholders through dividends and share repurchases."
+)
+
+
+@pytest.mark.parametrize(
+    ("quote", "value", "fact"),
+    [
+        ("up 14% from a year ago", D(14), "price"),
+        ("an increase of 14% from the prior-year period", D(14), "price"),
+        ("up 23% from a year earlier", D(23), "price"),
+        ("Our shares have gained 23% this year.", D(23), "price"),
+        ("Our stock has risen 23% since the start of the year.", D(23), "price"),
+        ("Total return to shareholders was 23% in 2026.", D(23), "price"),
+        ("We returned $3.1 billion to shareholders through dividends and share repurchases.", D("3.1"), "buyback"),
+    ],
+    ids=["eps-dated", "eps-increase-of", "stock-dated", "shares-gained", "stock-has-risen", "return-to-holders",
+         "returned-to-holders"],
+)  # fmt: skip
+def test_dated_and_other_share_price_sentences_are_not_stored(quote: str, value: D, fact: str) -> None:
+    """M5 review R3 (R2-F1 still open): a comma inside a date or a number doesn't cut the sentence, a modifier clause
+    is judged with everything before it, and "has risen", "have gained", "return to shareholders" are price topics."""
+    doc = DocContext("10-Q", date(2026, 10, 28), "0630", DATED_PRICE)
+    if fact == "price":
+        change = {"fact_type": "price_increase", "subject": "increase", "subject_key": "price_increase:year",
+                  "unit": "percent", "currency": None, "scale_word": None}  # fmt: skip
+    else:
+        change = {"fact_type": "commitment_purchase", "subject": "purchase commitment",
+                  "subject_key": "purchase_obligations:total", "unit": "usd", "currency": "USD",
+                  "scale_word": "billion"}  # fmt: skip
+    r = verify(prop(value=value, period_label=None, quote=quote, **change), Chunk(DATED_PRICE, 0, "mdna"), doc)
+    assert not (isinstance(r, Candidate) and r.verification_status == "verified"), r
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"fact_type": "backlog", "subject": "backlog", "subject_key": "backlog:total", "value": D("13.2"),
+         "period_label": None, "quote": "Backlog was $13.2 billion, up 14% from a year ago."},
+        {"fact_type": "backlog", "subject": "backlog", "subject_key": "backlog:total", "value": D("13.2"),
+         "period_label": None, "quote": "backlog of $13.2 billion",
+         "text": "Diluted EPS of $2.10, backlog of $13.2 billion and capital expenditures of $4.5 billion."},
+        {"fact_type": "price_increase", "subject": "cooling units", "subject_key": "price_increase:cooling_units",
+         "value": D(11), "unit": "percent", "currency": None, "scale_word": None, "period_label": None,
+         "quote": "Effective January 1, the company will raise list prices on data center cooling units by 11%."},
+    ],
+    ids=["backlog-up-14", "backlog-after-eps", "list-prices"],
+)  # fmt: skip
+def test_business_facts_next_to_eps_or_dates_are_kept(change: dict[str, Any]) -> None:
+    """M5 review R3-F3: the per-share check reads the number's own clause; a real price increase names a price."""
+    text = str(change.pop("text", change["quote"]))
+    doc = DocContext("10-Q", date(2026, 10, 28), "0630", text)
+    r = ok(verify(prop(**change), Chunk(text, 0, "mdna"), doc))
+    assert r.verification_status == "verified", r
+    eps = verify(
+        prop(
+            fact_type="capex_reported",
+            subject="capital expenditures",
+            subject_key="capex_reported:q1",
+            value=D("1.87"),
+            scale_word=None,
+            quote="Diluted earnings per share were $1.87.",
+        ),
+        CHUNK,
+        DOC,
+    )
+    assert isinstance(eps, Rejected) and eps.check == "V1-TYPE"  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("label", "fye", "expected"),
+    [
+        ("fiscal 2026 through 2028", "1231", None),
+        ("fiscal 2026 to 2028", "1231", None),
+        ("FY2026-FY2028", "1231", None),
+        ("FY26-27", "0331", (date(2026, 4, 1), date(2027, 3, 31))),
+        ("fiscal 2026-2027", "1231", None),
+        ("FY2026-27", "1231", None),
+        ("FY2025-26", "0331", (date(2025, 4, 1), date(2026, 3, 31))),
+    ],
+)
+def test_multi_year_and_indian_labels(label: str, fye: str, expected: tuple[date, date] | None) -> None:
+    """M5 review R3-F4: a multi-year plan is no single period, "FY26-27" is FY2027 for a March year end, and a
+    calendar-year company's fiscal year doesn't span two years."""
+    p = resolve(label, fye)
+    assert (None if p is None else (p.start, p.end)) == expected
