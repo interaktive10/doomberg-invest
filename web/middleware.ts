@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAllowed } from "@/lib/allowlist";
-import { redirectTo } from "@/lib/redirect";
+import { toLogin } from "@/lib/redirect";
 
 // BRIEF §6 "Auth: Supabase magic link for APP_ALLOWED_EMAIL only": every page but the sign-in flow needs a session
 // whose email is the allowed one. The pages and server actions check again (lib/auth.ts requireUser).
@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
   const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
   if (PUBLIC.some((p) => path === p || path.startsWith(`${p}/`))) return response;
-  if (!isAllowed(data.user?.email, process.env.APP_ALLOWED_EMAIL)) return redirectTo("/login");
+  if (!isAllowed(data.user?.email, process.env.APP_ALLOWED_EMAIL)) return toLogin(request);
   return response;
 }
 

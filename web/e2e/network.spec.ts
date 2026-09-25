@@ -17,7 +17,7 @@ test("no LLM calls, from the browser or the server", async ({ page }) => {
   expect((await page.request.get("/screener/export?min_evidence=10")).ok()).toBe(true);
 
   const hosts = [...new Set(requests.filter((u) => u.startsWith("http")).map((u) => new URL(u).host))];
-  expect(hosts).toEqual(["127.0.0.1:3000"]);
+  expect(hosts).toEqual(["localhost:3000"]);
 
   const log = readFileSync("e2e/.net-log.jsonl", "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { host: string; port: number | null });
   expect(log.length).toBeGreaterThan(0); // the hook saw the Supabase calls

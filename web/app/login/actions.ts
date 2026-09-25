@@ -11,7 +11,7 @@ export async function sendLink(form: FormData): Promise<void> {
   const email = normalizeEmail(String(form.get("email") ?? ""));
   if (isAllowed(email, env().APP_ALLOWED_EMAIL)) {
     const h = await headers();
-    const origin = h.get("origin") ?? `http://${h.get("host") ?? "127.0.0.1:3000"}`;
+    const origin = h.get("origin") ?? `http://${h.get("host") ?? "localhost:3000"}`;
     const supabase = await authClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,

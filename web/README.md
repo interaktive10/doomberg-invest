@@ -21,7 +21,8 @@ In Supabase → Authentication:
 
 ## Commands
 
-- `pnpm install`, then `pnpm dev` (http://127.0.0.1:3000)
+- `pnpm install`, then `pnpm dev`, and open http://localhost:3000 (not 127.0.0.1: Next names a loopback host
+  localhost in the middleware's redirects, so the session cookie must be set for localhost)
 - `pnpm typecheck`, `pnpm test` (Vitest), `pnpm build`
 - `pnpm e2e` (Playwright): needs `supabase start` at the repo root, the migrations
   (`uv run python -m pipeline.db.migrate --database-url <DB_URL>`), `scripts/seed_e2e.py` and `pnpm build`.
