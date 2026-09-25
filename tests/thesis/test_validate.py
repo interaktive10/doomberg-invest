@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from decimal import Decimal as D
 from pathlib import Path
 from typing import Any
@@ -120,19 +121,30 @@ class FakeRouter:
         return Deferred("every provider is out") if self.answer is None else Done(self.answer, "fake", "m")
 
 
-def test_p05_checks_sentences_without_numbers() -> None:
+def test_p05_checks_every_fact_and_why_mispriced_item() -> None:
+    """M6 review R3-F1: P-05 runs on every fact and why-mispriced item the code checks pass, figures or not, with
+    the quotes of the cited facts and the cited items with their labels."""
     card = copy.deepcopy(GOOD)
     card["facts"][3]["text"] = "A hyperscale cloud provider placed a large multi-year order [f:6f1c2a52-3b1e-4c43-" \
                                "9e59-3d1b1f0a0002]."  # fmt: skip
     ok = FakeRouter({"supported": True, "unsupported_parts": [], "reason": "stated"})
-    assert check(card, ok).ok and len(ok.inputs) == 1  # the only fact or why-mispriced sentence without numbers
-    assert ok.inputs[0].sentence == "A hyperscale cloud provider placed a large multi-year order."
-    assert ok.inputs[0].quotes and "$600 million" in ok.inputs[0].quotes[0]
+    assert check(card, ok).ok and len(ok.inputs) == 6  # 5 facts and 1 why-mispriced item
+    order = next(x for x in ok.inputs if x.sentence == "A hyperscale cloud provider placed a large multi-year order.")
+    assert order.quotes and "$600 million" in order.quotes[0]
+    revenue = ok.inputs[0]
+    assert revenue.sentence.startswith("Revenue rose to $1.25 billion") and revenue.quotes == ()
+    assert any(c.startswith("m:revenue:2025-06-30: ") and '"name": "revenue"' in c and '"period_end": "2025-06-30"' in c
+               for c in revenue.computed)  # fmt: skip
+    move = "revenue from 2025-06-30 to 2026-06-30: difference 270000000, change 0.2755, ratio 1.2755"
+    assert move in revenue.computed
+    signal = ok.inputs[4].computed[0]
+    assert signal.startswith("s:S1: ") and '"g_ob": 0.4483' in signal and '"strength": "0.82"' in signal
     no = FakeRouter({"supported": False, "unsupported_parts": ["large"], "reason": "the size is not stated"})
-    assert any("P-05 finds it unsupported" in e for e in check(card, no).errors)
+    assert sum("P-05 finds it unsupported" in e for e in check(card, no).errors) == 6
     out = FakeRouter(None)
     r = check(card, out)
     assert r.ok and any("not checked" in w for w in r.warnings)
+    assert check(card).warnings == ["claim support (P-05) not checked: no provider (thesis-ingest.yml checks again)"]
 
 
 # ---------------------------------------------------------------- M6 review round 1
@@ -354,3 +366,269 @@ def test_period_phrasing_is_a_label(good: str, bad: str) -> None:
     assert with_fact(good, [], 0).ok, with_fact(good, [], 0).errors
     wrong = good.replace("$1.25 billion", bad) if bad.startswith("$") else good.replace("24.1%", bad)
     assert any(repr(bad.lstrip("$")) in e for e in with_fact(wrong, [], 0).errors)
+
+
+# ---------------------------------------------------------------- M6 review round 3
+
+F_CAPEX = "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001"
+PLAIN = re.compile(r"\s+([.,;:!?])")
+
+
+class SentenceRouter:
+    """P-05 that finds one sentence unsupported (the one under test) and every other supported."""
+
+    def __init__(self, bad: str | None) -> None:
+        self.bad = None if bad is None else PLAIN.sub(r"\1", v.CITE.sub("", bad)).strip()
+        self.seen: list[str] = []
+
+    def call(self, data: Any) -> Done:
+        self.seen.append(data.sentence)
+        supported = data.sentence != self.bad
+        return Done({"supported": supported, "unsupported_parts": [] if supported else [data.sentence],
+                     "reason": "stated" if supported else "not what the cited items say"}, "fake", "m")  # fmt: skip
+
+
+def item_result(text: str, index: int, section: str = "facts", router: Any = None, pack: Any = None) -> v.Result:
+    card = copy.deepcopy(GOOD)
+    card[section][index] = {"text": text, "cites": []}
+    return v.validate(card, pack or PACK, HYPE, router)
+
+
+REVERSED = [f"Revenue was $980 million, down from $1.25 billion a year earlier {REV}.",
+            f"Revenue was $980 million versus $1.25 billion a year earlier {REV}."]  # fmt: skip
+WRONG_WAY = [
+    f"Revenue was $1.25 billion, down from $980 million a year earlier {REV}.",
+    f"Revenue fell to $1.25 billion {REV}.",
+    f"Revenue declined year over year by 27.6% to $1.25 billion {REV}.",
+    f"Revenue fell sharply, by 27.6%, to $1.25 billion {REV}.",
+    f"Revenue slid 27.6% to $1.25 billion {REV}.",
+    f"Nimbus reported a drop in revenue of 27.6% to $1.25 billion {REV}.",
+]
+WRONG_SIZE = [(f"Revenue grew by a third to $1.25 billion from $980 million {REV}.", 0),
+              (f"Remaining performance obligations grew tenfold to $4.2 billion {RPO}.", 1)]  # fmt: skip
+WRONG_ITEM = [
+    (f"A hyperscale cloud provider placed a $1.8 billion multi-year order [{F_CAPEX}].", 3),
+    ("Revenue was $4.2 billion in the June 2026 quarter [m:rpo:2026-06-30].", 0),
+    ("Revenue was $980 million in the June 2026 quarter [m:revenue:2025-06-30].", 0),
+    ("Backlog grew 82% while revenue grew 28% [s:S1].", 4),
+]
+
+
+@pytest.mark.parametrize("text", REVERSED + WRONG_WAY)
+def test_claims_beyond_figures_offline(text: str) -> None:
+    """M6 review R3-F1: every figure is a pack value, but the period order or the direction is wrong ("X, down from
+    Y", "X versus Y", "fell to X", a fall word anywhere in the figure's clause); code rejects it without a provider."""
+    r = item_result(text, 0)
+    assert not r.ok and r.errors, text
+
+
+@pytest.mark.parametrize(("text", "index"), [(t, 0) for t in REVERSED + WRONG_WAY] + WRONG_SIZE + WRONG_ITEM)
+def test_claims_beyond_figures_with_a_router(text: str, index: int) -> None:
+    """R3-F1: with a router, P-05 sees fact and why-mispriced sentences with figures too; one it finds unsupported
+    rejects the card, whether or not the code caught it first."""
+    router = SentenceRouter(text)
+    r = item_result(text, index, router=router)
+    assert not r.ok, text
+    caught_by_code = any("P-05" not in e for e in r.errors)
+    assert caught_by_code or any("P-05 finds it unsupported" in e for e in r.errors), r.errors
+
+
+def test_claims_beyond_figures_wrong_size_is_caught_by_code() -> None:
+    """R3-F1: "grew by a third" and "tenfold" name a ratio of two cited periods, so code checks them."""
+    for text, index in WRONG_SIZE:
+        assert any("matches no ratio" in e for e in item_result(text, index).errors), text
+
+
+@pytest.mark.parametrize(
+    ("text", "index"),
+    [
+        (f"Revenue was $1.25 billion, up from $980 million a year earlier {REV}.", 0),
+        (f"Revenue was $1.25 billion versus $980 million a year earlier {REV}.", 0),
+        (f"Revenue was $980 million a year earlier versus $1.25 billion in the June 2026 quarter {REV}.", 0),
+        (f"Revenue rose to $1.25 billion {REV}.", 0),
+        (f"Revenue grew year over year by 27.6% to $1.25 billion {REV}.", 0),
+        (f"Revenue rose 27.6% to $1.25 billion from $980 million a year earlier {REV}.", 0),
+        (f"Revenue rose from $980 million a year earlier to $1.25 billion, up 27.6% {REV}.", 0),
+        (f"Remaining performance obligations reached $4.2 billion, 44.8% higher {RPO}.", 1),
+        (f"Costs fell, while revenue rose 27.6% to $1.25 billion {REV}.", 0),
+        (f"Despite a decline in margins, revenue grew 27.6% {REV}.", 0),
+    ],
+)
+def test_claims_beyond_figures_true_ones_still_pass(text: str, index: int) -> None:
+    """R3-F1: correct moves pass offline and with a router that supports them."""
+    assert item_result(text, index).ok, item_result(text, index).errors
+    router = SentenceRouter(None)
+    assert item_result(text, index, router=router).ok and len(router.seen) == 6
+
+
+def test_claims_beyond_figures_good_card_with_a_router() -> None:
+    router = SentenceRouter(None)
+    assert check(GOOD, router).ok and len(router.seen) == 6
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Revenue under U.S. GAAP was $1.25 billion in the June 2026 quarter [m:revenue:2026-06-30].",
+        f"Nimbus Compute Corp. (NMBS) received a $600 million multi-year order from a hyperscale cloud provider "
+        f"[{F_ORDER}].",
+        f"Nimbus Compute Inc. (Nasdaq: NMBS) received a $600 million multi-year order from a hyperscale cloud provider "
+        f"[{F_ORDER}].",
+        f"Nimbus Compute Corp. Chief Executive Jane Doe said a hyperscale cloud provider placed a $600 million "
+        f"multi-year order [{F_ORDER}].",
+        f"The U.S. Department of Energy is not the customer; a hyperscale cloud provider placed a $600 million "
+        f"multi-year order [{F_ORDER}].",
+        f"A hyperscale cloud provider placed a $600 million multi-year order, payable in U.S. Dollars [{F_ORDER}].",
+    ],
+    ids=["us-gaap", "corp-ticker", "inc-exchange", "corp-title", "us-department", "us-dollars"],
+)
+def test_abbreviation_both_ways_keeps_good_sentences(text: str) -> None:
+    """M6 review R3-F2: after an abbreviation a sentence ends only before a word that opens sentences."""
+    r = with_fact(text, [], 0 if text.startswith("Revenue") else 3)
+    assert r.ok, r.errors
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Nimbus's chairman is John Smith Jr. The customer placed a $600 million multi-year order [{F_ORDER}].",
+        f"Nimbus was founded by Robert Chen Sr. {ORDER}",
+        f"Nimbus's key supplier is ASML Holding N.V. {ORDER}",
+        f"Nimbus's largest rival is Atos S.A. {ORDER}",
+        f"Nimbus will dominate the AI server market in the E.U. {ORDER}",
+        f"Nimbus is the favorite stock on Wall St. {ORDER}",
+        f"Nimbus will dominate AI servers\u2026 {ORDER}",
+    ],
+    ids=["jr", "sr", "n-v", "s-a", "e-u", "st", "ellipsis"],
+)
+def test_abbreviation_both_ways_rejects_uncited_sentences(text: str) -> None:
+    r = with_fact(text)
+    assert any("sentence cites no pack id" in e for e in r.errors), r.errors
+
+
+def inr_pack() -> dict[str, Any]:
+    """F-CARD's pack with its money metrics in rupees (unit inr, values x 10)."""
+    pack = copy.deepcopy(PACK)
+    for m in pack["metrics"]:
+        if m["unit"] == "usd":
+            m["unit"], m["value"] = "inr", str(D(m["value"]) * 10)
+    return pack
+
+
+@pytest.mark.parametrize(
+    ("text", "pack"),
+    [
+        ("Revenue was Rs 1.25 billion in the June 2026 quarter [m:revenue:2026-06-30].", "usd"),
+        ("Revenue was 1.25 billion euros in the June 2026 quarter [m:revenue:2026-06-30].", "usd"),
+        ("Nimbus had $212 million of diluted shares [m:diluted_shares:2026-06-30].", "usd"),
+        ("Revenue was $12.5 billion in the June 2026 quarter [m:revenue:2026-06-30].", "inr"),
+        ("Revenue was C$1.25 billion in the June 2026 quarter [m:revenue:2026-06-30].", "usd"),
+    ],
+    ids=["rupees-for-dollars", "euros", "dollars-for-shares", "dollars-for-rupees", "canadian-dollars"],
+)
+def test_currency_and_unit_are_checked(text: str, pack: str) -> None:
+    """M6 review R3-F3: an amount with a currency equals cited money in that currency."""
+    r = item_result(text, 0, pack=inr_pack() if pack == "inr" else PACK)
+    assert any(e.startswith("facts[0]: number") for e in r.errors), r.errors
+
+
+@pytest.mark.parametrize(
+    ("text", "pack"),
+    [
+        ("Revenue was \u20b91,250 crore in the June 2026 quarter [m:revenue:2026-06-30].", "inr"),
+        ("Revenue was Rs 1,250 crore in the June 2026 quarter [m:revenue:2026-06-30].", "inr"),
+        ("Revenue was 1.25 billion in the June 2026 quarter [m:revenue:2026-06-30].", "usd"),
+        ("Nimbus had 212 million diluted shares [m:diluted_shares:2026-06-30].", "usd"),
+        ("Revenue was US$1.25 billion in the June 2026 quarter [m:revenue:2026-06-30].", "usd"),
+    ],
+    ids=["rupee-sign-crore", "rs-crore", "no-currency", "share-count", "us-dollars"],
+)
+def test_currency_and_unit_that_match_pass(text: str, pack: str) -> None:
+    r = item_result(text, 0, pack=inr_pack() if pack == "inr" else PACK)
+    assert not [e for e in r.errors if e.startswith("facts[0]")], r.errors
+
+
+@pytest.mark.parametrize(
+    ("text", "index"),
+    [
+        (f"In Q2 1200 servers shipped under the order [{F_ORDER}].", 3),
+        (f"The order covers 2000 AI servers [{F_ORDER}].", 3),
+        (f"Nimbus has deployed 2000 GPUs for the customer [{F_ORDER}].", 3),
+        ("The order-book signal S1 fired with strength .95 [s:S1].", 4),
+        (f"Revenue rose .5% to $1.25 billion {REV}.", 0),
+    ],
+    ids=["q2-1200", "2000-ai-servers", "2000-gpus", "leading-point", "leading-point-percent"],
+)
+def test_masked_figures_residue_is_checked(text: str, index: int) -> None:
+    """M6 review R3-F4: a number after a quarter label or before a capital is a figure unless it reads as a year,
+    and a leading point is parsed."""
+    r = with_fact(text, [], index)
+    assert any("matches no cited pack value" in e for e in r.errors), r.errors
+
+
+@pytest.mark.parametrize("text", ["In Q2 2026 Nimbus shipped", "Q2 2026 revenue", "In Q2 2026, revenue", "H1 2026",
+                                  "2Q 2026", "2Q2026"])  # fmt: skip
+def test_masked_figures_quarter_years_still_read_as_labels(text: str) -> None:
+    assert v.sentence_numbers(text, (1996, 2041)) == [], text
+
+
+@pytest.mark.parametrize(
+    ("good", "bad", "section"),
+    [
+        ("Trailing 12-month revenue grew 24.1% [m:revenue_ttm_yoy].", "34.1%", "facts"),
+        ("The Evidence score is 62.5 out of 100 [c:evidence].", "72.5", "facts"),
+        ("The Evidence score is 62.5/100 [c:evidence].", "72.5", "why_mispriced"),
+        ("The expectations gap is 6 percentage points: the price implies 12% growth and the evidence 18% [c:C2].",
+         "7 percentage points", "why_mispriced"),
+    ],
+    ids=["trailing-12-month", "out-of-100", "slash-100", "percentage-points"],
+)  # fmt: skip
+def test_common_phrasing_is_accepted_and_checked(good: str, bad: str, section: str) -> None:
+    """M6 review R3-F5: period names, scales and percentage points read as written; the figures stay checked."""
+    assert item_result(good, 0, section).ok, item_result(good, 0, section).errors
+    written = {"34.1%": "24.1%", "72.5": "62.5", "7 percentage points": "6 percentage points"}[bad]
+    wrong = item_result(good.replace(written, bad), 0, section)
+    assert any(f"number {bad!r}" in e for e in wrong.errors), wrong.errors
+
+
+def falling_pack() -> dict[str, Any]:
+    """F-CARD's pack with revenue falling from $1.25 billion to $980 million."""
+    pack = copy.deepcopy(PACK)
+    swap = {"m:revenue:2025-06-30": "1250000000", "m:revenue:2026-06-30": "980000000"}
+    for m in pack["metrics"]:
+        m["value"] = swap.get(m["id"], m["value"])
+    return pack
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Revenue was $980 million, down from $1.25 billion a year earlier {REV}.",
+        f"Revenue was $980 million versus $1.25 billion a year earlier {REV}.",
+        f"Revenue fell to $980 million {REV}.",
+        f"Revenue declined year over year by 21.6% to $980 million {REV}.",
+        f"Revenue fell sharply, by 21.6%, to $980 million {REV}.",
+        f"Revenue slid 21.6% to $980 million {REV}.",
+        f"Nimbus reported a drop in revenue of 21.6% to $980 million {REV}.",
+        f"Revenue decreased $270 million, or 21.6%, to $980 million {REV}.",
+    ],
+)
+def test_claims_beyond_figures_true_falls_pass(text: str) -> None:
+    """R3-F1: the same wordings pass where revenue did fall (the checks read the move, not the words alone)."""
+    r = item_result(text, 0, pack=falling_pack())
+    assert r.ok, r.errors
+
+
+@pytest.mark.parametrize(
+    ("text", "section"),
+    [
+        ("The price implies 12% growth, down from the 18% the evidence supports [c:C2].", "why_mispriced"),
+        (f"Nimbus cut prices, lifting revenue to $1.25 billion {REV}.", "facts"),
+        (f"Lower costs and higher volumes lifted revenue to $1.25 billion {REV}.", "facts"),
+        (f"Prices held while revenue rose 27.6% to $1.25 billion {REV}.", "facts"),
+    ],
+)
+def test_claims_beyond_figures_only_movement_verbs_govern(text: str, section: str) -> None:
+    """R3-F1: a noun, a comparative or a verb with another object doesn't give a later figure its direction."""
+    r = item_result(text, 0, section)
+    assert r.ok, r.errors

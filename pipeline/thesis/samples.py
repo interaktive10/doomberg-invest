@@ -1,9 +1,9 @@
 """P-04 and P-05 samples for record-cassettes.yml (BRIEF §9: "... P-05, ... and fallback P-04"; M6 review R1-F13).
 
-P-04 writes a card for F-CARD's pack (fixtures/card/pack.json), and validate.py sends every number-free sentence of
-it to P-05. `python -m pipeline.thesis.samples --record` calls the free-tier providers through cassette recorders;
-`--replay` runs the same on the committed cassettes and exits 2 while no P-04 cassette is recorded (verify M6-04:
-BLOCKED(key) until then), 1 when the replayed card fails validation.
+P-04 writes a card for F-CARD's pack (fixtures/card/pack.json), and validate.py sends each of its fact and
+why-mispriced items to P-05 (M6 review R3-F1). `python -m pipeline.thesis.samples --record` calls the free-tier
+providers through cassette recorders; `--replay` runs the same on the committed cassettes and exits 2 while no P-04
+cassette is recorded (verify M6-04: BLOCKED(key) until then), 1 when the replayed card fails validation.
 """
 
 from __future__ import annotations
