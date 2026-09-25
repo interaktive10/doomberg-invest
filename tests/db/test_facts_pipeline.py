@@ -132,10 +132,10 @@ def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any]
     arch = "https://www.sec.gov/Archives/edgar/data/999001"
     http.register_mock(submissions_url(CIKS["NMBS"]), submissions(CIKS["NMBS"]))
     http.register_mock(f"{arch}/000099900126000101/nmbs-10q.htm", (SYN / "nmbs_10q_q1.htm").read_bytes())
-    index = (f'<table><tr><th>Seq</th><th>Description</th><th>Document</th><th>Type</th></tr><tr><td>1</td><td>8-K</td>'
-             f'<td><a href="/Archives/edgar/data/999001/000099900126000102/nmbs-8k.htm">nmbs-8k.htm</a></td><td>8-K</td>'
-             f'</tr><tr><td>2</td><td>PRESS RELEASE</td><td><a href="/Archives/edgar/data/999001/000099900126000102/'
-             f'ex991.htm">ex991.htm</a></td><td>EX-99.1</td></tr></table>')  # fmt: skip
+    index = ('<table><tr><th>Seq</th><th>Description</th><th>Document</th><th>Type</th></tr><tr><td>1</td><td>8-K</td>'
+             '<td><a href="/Archives/edgar/data/999001/000099900126000102/nmbs-8k.htm">nmbs-8k.htm</a></td><td>8-K</td>'
+             '</tr><tr><td>2</td><td>PRESS RELEASE</td><td><a href="/Archives/edgar/data/999001/000099900126000102/'
+             'ex991.htm">ex991.htm</a></td><td>EX-99.1</td></tr></table>')  # fmt: skip
     http.register_mock(f"{arch}/000099900126000102/0000999001-26-000102-index.htm", index.encode())
     http.register_mock(f"{arch}/000099900126000102/ex991.htm", (SYN / "nmbs_pr_guidance.htm").read_bytes())
     stats = run.run(conn, date(2026, 9, 25), router(), http, None, tmp_path)

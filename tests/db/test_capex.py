@@ -17,7 +17,7 @@ import pytest
 from pipeline.capex import desk
 from pipeline.capex import run as capex
 from pipeline.db import facts_repo, repo
-from pipeline.db.models import Company, CorpEvent
+from pipeline.db.models import CorpEvent
 from tests.db.test_facts_pipeline import router
 
 WEEK = date(2026, 9, 25)
@@ -26,9 +26,10 @@ WEEK = date(2026, 9, 25)
 def company(conn: psycopg.Connection[Any], market: str, name: str, ticker: str, cik: str | None = None,
             capex_desk: bool = True) -> UUID:  # fmt: skip
     col = "ticker" if market == "us" else "nse_symbol"
+    fye = "1231" if market == "us" else "0331"
     row = conn.execute(f"insert into companies (market, name, cik, {col}, capex_desk, fiscal_year_end) "  # noqa: S608
                        "values (%s, %s, %s, %s, %s, %s) returning id",
-                       (market, name, cik, ticker, capex_desk, "1231" if market == "us" else "0331")).fetchone()  # fmt: skip
+                       (market, name, cik, ticker, capex_desk, fye)).fetchone()  # fmt: skip
     assert row is not None
     cid: UUID = row[0]
     return cid

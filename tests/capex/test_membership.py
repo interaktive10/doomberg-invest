@@ -30,7 +30,8 @@ def test_grounded_categories_are_kept_and_the_rest_dropped() -> None:
             {"category": "space_launch", "quote": "We manufacture extra-high-voltage power cables", "confidence": 0.9},
             {"category": "construction", "quote": " ".join(["word"] * 61), "confidence": 0.9},
         ],
-        "export_exposure": {"share_pct": 35, "overseas_order_book": None, "quote": "Exports were 35% of revenue in FY2026."},
+        "export_exposure": {"share_pct": 35, "overseas_order_book": None,
+                            "quote": "Exports were 35% of revenue in FY2026."},
     }  # fmt: skip
     r = parse(answer, TEXT, CATS)
     assert [g.category for g in r.categories] == ["grid"]
