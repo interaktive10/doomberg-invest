@@ -50,7 +50,7 @@ jobs:
       - run: pnpm test
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.118.0  # docs/VERSIONS.md (M7 review R1-F15)
       - name: local Supabase stack (Postgres, Auth, PostgREST, mail)
         working-directory: .
         run: |

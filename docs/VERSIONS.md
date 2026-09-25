@@ -38,6 +38,7 @@ Pinned in `uv.lock` (Python) and `web/pnpm-lock.yaml` (web, from M7). Regenerate
 | @supabase/ssr / supabase-js / zod | 0.6.1 / 2.117.2 / 3.25.76 |
 | Recharts / Cytoscape / react-markdown / remark-gfm | 2.15.4 / 3.34.3 / 10.1.0 / 4.0.1 |
 | Playwright / @axe-core/playwright / Vitest | 1.63.0 / 4.13.0 / 3.2.7 |
+| Supabase CLI (web.yml's local stack) | 2.118.0 (images: postgres 17.6.1.171, gotrue v2.197.0, postgrest v16.3, kong 2.8.1, mailpit v1.30.2) |
 | PostgreSQL (dev) | 16, pre-installed in cloud sessions |
 
 The web versions are what `pnpm install` resolved from `web/package.json`'s ranges in CI on 2026-09-25 (web.yml prints
