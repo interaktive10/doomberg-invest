@@ -18,8 +18,11 @@ ORDINAL = {"first": 1, "second": 2, "third": 3, "fourth": 4, "1st": 1, "2nd": 2,
 _QUARTER = [
     re.compile(rf"\bQ([1-4])\s*(?:FY|fiscal(?:\s+year)?)?\s*{_Y}\b", re.I),
     re.compile(rf"\b([1-4])Q\s*(?:FY)?\s*{_Y}\b", re.I),
-    re.compile(rf"\b(first|second|third|fourth|1st|2nd|3rd|4th)\s+(?:fiscal\s+)?quarter\s+(?:of\s+)?"
-               rf"(?:fiscal\s+(?:year\s+)?|FY\s*)?{_Y}\b", re.I),  # fmt: skip
+    re.compile(
+        rf"\b(first|second|third|fourth|1st|2nd|3rd|4th)\s+(?:fiscal\s+)?quarter\s+(?:of\s+)?"
+        rf"(?:fiscal\s+(?:year\s+)?|FY\s*)?{_Y}\b",
+        re.I,
+    ),  # fmt: skip
 ]
 _HALF = re.compile(rf"\b(?:H([12])|(first|second)\s+half)\s*(?:of\s+)?(?:FY|fiscal(?:\s+year)?)?\s*{_Y}\b", re.I)
 _CALENDAR = re.compile(rf"\b(?:calendar(?:\s+year)?|CY)\s*{_Y}\b", re.I)

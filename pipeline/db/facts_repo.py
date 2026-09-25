@@ -40,9 +40,9 @@ def _rows(conn: Conn, sql: str, params: Sequence[Any] | Mapping[str, Any] = ()) 
 def llm_usage(conn: Conn, day: date) -> dict[str, tuple[int, int]]:
     """provider -> (requests, tokens) logged since the start of `day` (UTC), so every run shares the day's quota."""
     start = datetime.combine(day, time.min, UTC)
-    rows = _rows(conn, "select provider, count(*) as n, coalesce(sum(coalesce(tokens_in, 0) + coalesce(tokens_out, 0)), 0) "
-                       "as t from llm_calls where created_at >= %s and created_at < %s group by provider",
-                 (start, start + timedelta(days=1)))  # fmt: skip
+    sql = ("select provider, count(*) as n, coalesce(sum(coalesce(tokens_in, 0) + coalesce(tokens_out, 0)), 0) as t "
+           "from llm_calls where created_at >= %s and created_at < %s group by provider")  # fmt: skip
+    rows = _rows(conn, sql, (start, start + timedelta(days=1)))
     return {r["provider"]: (int(r["n"]), int(r["t"])) for r in rows}
 
 
@@ -51,8 +51,8 @@ def record_llm_calls(conn: Conn, calls: Iterable[LlmCall]) -> None:
     rows = [c.model_dump() for c in calls]
     if rows:
         with conn.cursor() as cur:
-            cur.executemany(_q(f"insert into llm_calls ({', '.join(cols)}) values ({', '.join(f'%({c})s' for c in cols)})"),
-                            rows)  # fmt: skip
+            values = ", ".join(f"%({c})s" for c in cols)
+            cur.executemany(_q(f"insert into llm_calls ({', '.join(cols)}) values ({values})"), rows)  # noqa: S608
 
 
 # ---------------------------------------------------------------- filings and documents
@@ -90,8 +90,20 @@ def upsert_document(
             "text_chars = excluded.text_chars, section_map = excluded.section_map, page_map = excluded.page_map, "
             "status = excluded.status returning id"
         ),
-        (company_id, filing_id, kind, url, title, published_at, sha256, raw_path, text_chars,
-         Jsonb(list(section_map)), Jsonb(list(page_map)), status),  # fmt: skip
+        (
+            company_id,
+            filing_id,
+            kind,
+            url,
+            title,
+            published_at,
+            sha256,
+            raw_path,
+            text_chars,
+            Jsonb(list(section_map)),
+            Jsonb(list(page_map)),
+            status,
+        ),  # fmt: skip
     ).fetchone()
     assert row is not None
     doc_id: UUID = row[0]
@@ -134,13 +146,11 @@ _FACT_COLS = ("fact_type", "subject", "subject_key", "value_num", "value_low", "
               "verification_status", "withdrawn")  # fmt: skip
 
 
-def insert_facts(
-    conn: Conn, company_id: UUID, document_id: UUID, facts: Sequence[tuple[Candidate, str]]
-) -> list[UUID]:
+def insert_facts(conn: Conn, company_id: UUID, document_id: UUID, facts: Sequence[tuple[Candidate, str]]) -> list[UUID]:
     """Insert a document's facts (verified and needs_review). Returns their ids in order."""
     ids: list[UUID] = []
     cols = ("company_id", "document_id", *_FACT_COLS, "extraction_model", "verification_notes")
-    sql = _q(f"insert into facts ({', '.join(cols)}) values ({', '.join(['%s'] * len(cols))}) returning id")
+    sql = _q(f"insert into facts ({', '.join(cols)}) values ({', '.join(['%s'] * len(cols))}) returning id")  # noqa: S608
     for c, model in facts:
         vals = [company_id, document_id, *(getattr(c, k) for k in _FACT_COLS), model, Jsonb(c.verification_notes)]
         row = conn.execute(sql, vals).fetchone()
@@ -161,7 +171,9 @@ class StoredFact:
     as_of: date
 
 
-def prior_verified(conn: Conn, company_id: UUID, subject_key: str, as_of: date, exclude: Sequence[UUID]) -> StoredFact | None:
+def prior_verified(
+    conn: Conn, company_id: UUID, subject_key: str, as_of: date, exclude: Sequence[UUID]
+) -> StoredFact | None:
     """The latest verified fact of the same company and key before (or on) `as_of`, other than `exclude`."""
     rows = _rows(
         conn,
@@ -181,7 +193,9 @@ def insert_diff(conn: Conn, company_id: UUID, subject_key: str, prev_id: UUID | 
         (company_id, subject_key, prev_id, new_id, d.change_kind, d.delta_abs, d.delta_pct, d.computed_note),
     )  # fmt: skip
     if prev_id is not None:
-        conn.execute(_q("update facts set superseded_by = %s where id = %s and superseded_by is null"), (new_id, prev_id))
+        conn.execute(
+            _q("update facts set superseded_by = %s where id = %s and superseded_by is null"), (new_id, prev_id)
+        )
 
 
 def unlinked_facts(conn: Conn, limit: int = 200) -> list[dict[str, Any]]:
@@ -227,9 +241,9 @@ def insert_risk_changes(conn: Conn, rows: Sequence[Mapping[str, Any]]) -> None:
     for r in rows:
         conn.execute(
             _q("insert into risk_changes (company_id, from_document_id, to_document_id, change_kind, text_before, "
-               "text_after, similarity, topic_tags, char_start, char_end) values (%(company_id)s, %(from_document_id)s, "
-               "%(to_document_id)s, %(change_kind)s, %(text_before)s, %(text_after)s, %(similarity)s, %(topic_tags)s, "
-               "%(char_start)s, %(char_end)s)"),
+               "text_after, similarity, topic_tags, char_start, char_end) values (%(company_id)s, "
+               "%(from_document_id)s, %(to_document_id)s, %(change_kind)s, %(text_before)s, %(text_after)s, "
+               "%(similarity)s, %(topic_tags)s, %(char_start)s, %(char_end)s)"),
             dict(r),
         )  # fmt: skip
 
@@ -267,13 +281,24 @@ def propose_membership(
 ) -> bool:  # fmt: skip
     """A new proposal (True), or refresh the evidence of one still proposed. Decided rows are never touched."""
     row = conn.execute(
-        _q("insert into capex_memberships (company_id, category, source, evidence, quote, document_id, char_start, "
-           "char_end, confidence) values (%s, %s, %s, %s, %s, %s, %s, %s, %s) on conflict (company_id, category) do "
-           "update set evidence = excluded.evidence, quote = excluded.quote, document_id = excluded.document_id, "
-           "char_start = excluded.char_start, char_end = excluded.char_end, confidence = excluded.confidence "
-           "where capex_memberships.status = 'proposed' returning (xmax = 0) as inserted"),
-        (company_id, category, source, evidence, quote, document_id, span[0] if span else None,
-         span[1] if span else None, confidence),  # fmt: skip
+        _q(
+            "insert into capex_memberships (company_id, category, source, evidence, quote, document_id, char_start, "
+            "char_end, confidence) values (%s, %s, %s, %s, %s, %s, %s, %s, %s) on conflict (company_id, category) do "
+            "update set evidence = excluded.evidence, quote = excluded.quote, document_id = excluded.document_id, "
+            "char_start = excluded.char_start, char_end = excluded.char_end, confidence = excluded.confidence "
+            "where capex_memberships.status = 'proposed' returning (xmax = 0) as inserted"
+        ),
+        (
+            company_id,
+            category,
+            source,
+            evidence,
+            quote,
+            document_id,
+            span[0] if span else None,
+            span[1] if span else None,
+            confidence,
+        ),  # fmt: skip
     ).fetchone()
     return bool(row and row[0])
 

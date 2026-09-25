@@ -128,7 +128,8 @@ def _ranges(quote: str, nums: list[Parsed]) -> list[Parsed]:
         between = _CURRENCY_BEFORE.sub("", quote[a.end : b.start])  # "$70 billion to $75 billion"
         if not _RANGE.fullmatch(between + " ") and not _RANGE.fullmatch(between):
             continue
-        if between.strip().lower() == "and" and not _BETWEEN.search(quote[max(0, a.start - 8) : a.start]):
+        before = _CURRENCY_BEFORE.sub("", quote[max(0, a.start - 14) : a.start])  # "between $70 and $75 billion"
+        if between.strip().lower() == "and" and not _BETWEEN.search(before):
             continue
         a2 = replace(a, range_with=i + 1,
                      scale=a.scale if a.scale_word else b.scale, scale_word=a.scale_word or b.scale_word,

@@ -53,7 +53,8 @@ class ProviderError(Exception):
 
 
 class Provider(Protocol):
-    name: str
+    @property
+    def name(self) -> str: ...
 
     def available(self) -> bool: ...
 

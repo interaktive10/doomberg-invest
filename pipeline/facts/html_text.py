@@ -174,8 +174,10 @@ _SEP = r"\s*[.:\-–—]?\s*"
 ITEM_HEADINGS: list[tuple[str, re.Pattern[str]]] = [
     ("risk_factors", re.compile(rf"^item\s*1a{_SEP}risk\s+factors\b", re.I)),
     ("mdna", re.compile(rf"^item\s*[72]{_SEP}management[’']?s\s+discussion\s+and\s+analysis\b", re.I)),
-    ("financial_statements", re.compile(rf"^item\s*[81]{_SEP}(?:consolidated\s+|condensed\s+)*financial\s+statements\b",
-                                        re.I)),  # fmt: skip
+    (
+        "financial_statements",
+        re.compile(rf"^item\s*[81]{_SEP}(?:consolidated\s+|condensed\s+)*financial\s+statements\b", re.I),
+    ),  # fmt: skip
     ("other_item", re.compile(rf"^item\s*\d{{1,2}}[a-c]?{_SEP}\S", re.I)),
 ]
 NOTE_TOPICS = ("commitments", "contingencies", "leases", "revenue", "debt", "subsequent events")

@@ -32,10 +32,11 @@ MIN_CONFIDENCE = Decimal("0.70")
 XBRL_TOLERANCE = Decimal("0.005")
 PRICE_SUBJECT = re.compile(
     r"\b(?:share|stock)\s+price|price\s+target|market\s+cap(?:italization)?|dividends?|repurchases?|buybacks?|"
-    r"stock\s+performance|analysts?\b|ratings?\b|valuation\b",
+    r"stock\s+performance|analysts?\b|ratings?\b|valuation\b|per\s+(?:diluted\s+)?share\b|\bEPS\b",
     re.I,
 )
-PER_SHARE = re.compile(r"^\s*(?:per|a)\s+(?:diluted\s+)?share\b", re.I)
+PER_SHARE_AFTER = re.compile(r"^\s*(?:per|a)\s+(?:diluted\s+)?share\b", re.I)
+PER_SHARE_BEFORE = re.compile(r"(?:\bper\s+(?:diluted\s+)?share|\bEPS)\b[^.;]{0,40}$", re.I)
 UNIT_OF = {"mw": "mw", "gw": "gw", "mwh": "mwh", "percent": "percent", "months": "months", "weeks": "weeks",
            "years": "years", "sq_ft": "sq_ft"}  # fmt: skip
 PERIOD_REQUIRED = frozenset({"capex_guidance", "capex_reported"})
@@ -124,18 +125,19 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
         if m is None:
             return Rejected("V1-NUM", f"{name}={v} is not a number in the quote")
         matched[name] = m
-    for name, m in matched.items():
+    for m in matched.values():
         if not _unit_ok(p.unit, m, quote):
-            return Rejected("V1-UNIT", f"unit {p.unit} disagrees with the quote around {quote[m.start:m.end]!r}")
-        if PER_SHARE.match(quote[m.end :]):
+            return Rejected("V1-UNIT", f"unit {p.unit} disagrees with the quote around {quote[m.start : m.end]!r}")
+        if PER_SHARE_AFTER.match(quote[m.end :]) or PER_SHARE_BEFORE.search(quote[: m.start]):
             return Rejected("V1-TYPE", "a per-share amount is a price field")
-        if m.currency not in (None, "usd"):
+        if m.currency is not None and m.currency != "usd":
             review["currency"] = f"{m.currency.upper()} amount: v1 stores USD only"
     if p.currency and p.currency.strip().upper() not in {"USD", "US$", "$"}:
         review["currency"] = f"{p.currency} amount: v1 stores USD only"
 
     low = matched["value_low"].value if "value_low" in matched else None
     high = matched["value_high"].value if "value_high" in matched else None
+    value: Decimal | None
     if "value" in matched:
         value = matched["value"].value
     elif low is not None and high is not None:

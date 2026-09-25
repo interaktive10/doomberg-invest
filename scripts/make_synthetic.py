@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """F-SYN (BRIEF §9): 12 fictional-company documents with planted facts and a ground truth. Seed 7.
 
-Documents (fixtures/syn/): 4 press releases (EX-99.1 HTML and an India announcement), 4 10-Q-style HTML filings (a table of contents, an
-inline-XBRL hidden header, MD&A, notes on revenue/RPO, leases, commitments and debt), 2 versions of a 10-K's risk
-factors (Item 1A), and 2 investor-presentation PDFs. Every planted fact is one sentence written once into its
-document; ground_truth.json lists each with its type, key, value (scaled), unit and the exact quote. Each document
-also carries distractors P-01 must not return (share repurchases, dividends, EPS, stock price, analyst ratings).
+Documents (fixtures/syn/): 4 press releases (EX-99.1 HTML and an India announcement), 4 10-Q-style HTML filings (a
+table of contents, an inline-XBRL hidden header, MD&A, notes on revenue/RPO, leases, commitments and debt), 2
+versions of a 10-K's risk factors (Item 1A), and 2 investor-presentation PDFs. Every planted fact is one sentence
+written once into its document; ground_truth.json lists each with its type, key, value (scaled), unit and the exact
+quote. Each document also carries distractors P-01 must not return (share repurchases, dividends, EPS, stock price,
+analyst ratings).
 
 The numbers vary with the seed; the sentence templates don't. `python scripts/make_synthetic.py` rewrites the files
 (deterministic: same seed, same bytes)."""
@@ -100,113 +101,242 @@ def facts_for(rnd: random.Random) -> dict[str, list[Planted]]:
     guid_hi = guid_lo + 5
     return {
         "nmbs_10q_q1.htm": [
-            Planted("capex_guidance", "capex_guidance:FY2027", "usd",
-                    f"We expect capital expenditures of approximately ${fmt(capex_q1)} billion in fiscal 2027, "
-                    "driven by data center capacity for AI workloads.",
-                    value=b(capex_q1), written={"value": fmt(capex_q1), "scale_word": "billion"},
-                    period_label="fiscal 2027"),
-            Planted("capex_reported", "capex_reported:Q1FY2027", "usd",
-                    f"Capital expenditures were ${fmt(capex_rep)} billion in the first quarter of fiscal 2027, "
-                    "primarily for servers, network equipment and data center construction.",
-                    value=b(capex_rep), written={"value": fmt(capex_rep), "scale_word": "billion"},
-                    period_label="first quarter of fiscal 2027"),
-            Planted("rpo", "rpo:total", "usd",
-                    f"Remaining performance obligations were ${fmt(rpo)} billion as of September 30, 2026, "
-                    "reflecting multi-year commitments for AI infrastructure and data center services.",
-                    value=b(rpo), written={"value": fmt(rpo), "scale_word": "billion"}),
-            Planted("commitment_lease", "lease_not_commenced:total", "usd",
-                    f"We have additional data center leases that have not yet commenced with future lease payments "
-                    f"of ${fmt(lease)} billion.", value=b(lease), written={"value": fmt(lease), "scale_word": "billion"}),
+            Planted(
+                "capex_guidance",
+                "capex_guidance:FY2027",
+                "usd",
+                f"We expect capital expenditures of approximately ${fmt(capex_q1)} billion in fiscal 2027, "
+                "driven by data center capacity for AI workloads.",
+                value=b(capex_q1),
+                written={"value": fmt(capex_q1), "scale_word": "billion"},
+                period_label="fiscal 2027",
+            ),
+            Planted(
+                "capex_reported",
+                "capex_reported:Q1FY2027",
+                "usd",
+                f"Capital expenditures were ${fmt(capex_rep)} billion in the first quarter of fiscal 2027, "
+                "primarily for servers, network equipment and data center construction.",
+                value=b(capex_rep),
+                written={"value": fmt(capex_rep), "scale_word": "billion"},
+                period_label="first quarter of fiscal 2027",
+            ),
+            Planted(
+                "rpo",
+                "rpo:total",
+                "usd",
+                f"Remaining performance obligations were ${fmt(rpo)} billion as of September 30, 2026, "
+                "reflecting multi-year commitments for AI infrastructure and data center services.",
+                value=b(rpo),
+                written={"value": fmt(rpo), "scale_word": "billion"},
+            ),
+            Planted(
+                "commitment_lease",
+                "lease_not_commenced:total",
+                "usd",
+                f"We have additional data center leases that have not yet commenced with future lease payments "
+                f"of ${fmt(lease)} billion.",
+                value=b(lease),
+                written={"value": fmt(lease), "scale_word": "billion"},
+            ),
         ],
         "nmbs_10q_q2.htm": [
-            Planted("capex_guidance", "capex_guidance:FY2027", "usd",
-                    f"We now expect capital expenditures of approximately ${fmt(capex_q2)} billion in fiscal 2027, "
-                    "an increase from our prior outlook due to accelerating AI demand.",
-                    value=b(capex_q2), written={"value": fmt(capex_q2), "scale_word": "billion"},
-                    period_label="fiscal 2027"),
-            Planted("commitment_purchase", "purchase_obligations:total", "usd",
-                    f"Purchase obligations for compute capacity and network equipment totaled ${fmt(purchase)} "
-                    "billion, most of which we expect to pay within two years.",
-                    value=b(purchase), written={"value": fmt(purchase), "scale_word": "billion"}),
-            Planted("capacity_addition", "capacity:mw:site_ohio_campus", "mw",
-                    f"We plan to add {mw_new} MW of data center capacity at our Ohio campus by the end of calendar 2027.",
-                    value=str(mw_new), written={"value": str(mw_new), "scale_word": None}),
+            Planted(
+                "capex_guidance",
+                "capex_guidance:FY2027",
+                "usd",
+                f"We now expect capital expenditures of approximately ${fmt(capex_q2)} billion in fiscal 2027, "
+                "an increase from our prior outlook due to accelerating AI demand.",
+                value=b(capex_q2),
+                written={"value": fmt(capex_q2), "scale_word": "billion"},
+                period_label="fiscal 2027",
+            ),
+            Planted(
+                "commitment_purchase",
+                "purchase_obligations:total",
+                "usd",
+                f"Purchase obligations for compute capacity and network equipment totaled ${fmt(purchase)} "
+                "billion, most of which we expect to pay within two years.",
+                value=b(purchase),
+                written={"value": fmt(purchase), "scale_word": "billion"},
+            ),
+            Planted(
+                "capacity_addition",
+                "capacity:mw:site_ohio_campus",
+                "mw",
+                f"We plan to add {mw_new} MW of data center capacity at our Ohio campus by the end of calendar 2027.",
+                value=str(mw_new),
+                written={"value": str(mw_new), "scale_word": None},
+            ),
         ],
         "volt_10q.htm": [
-            Planted("backlog", "backlog:total", "usd",
-                    f"Total backlog reached ${fmt(backlog)} billion at quarter end, a record for the company.",
-                    value=b(backlog), written={"value": fmt(backlog), "scale_word": "billion"}),
-            Planted("backlog", "backlog:data_center", "usd",
-                    f"Backlog from data center customers was ${fmt(backlog_dc)} billion, up from the prior year.",
-                    value=b(backlog_dc), written={"value": fmt(backlog_dc), "scale_word": "billion"}),
-            Planted("lead_time", "lead_time:large_power_transformers", "weeks",
-                    f"Lead times for large power transformers extended to {lead_tx} weeks during the quarter.",
-                    value=str(lead_tx), written={"value": str(lead_tx), "scale_word": None}),
-            Planted("customer_concentration", "customer_concentration:top1", "percent",
-                    f"Our largest customer, a hyperscale data center operator, accounted for {top1}% of revenue in "
-                    "the quarter.", value=str(top1), written={"value": str(top1), "scale_word": None}),
-            Planted("supply_link", "link:nimbus_compute", "other",
-                    "We entered into a multi-year agreement to supply power transformers and switchgear to Nimbus "
-                    "Compute for its AI data center campuses.", counterparty="Nimbus Compute"),
+            Planted(
+                "backlog",
+                "backlog:total",
+                "usd",
+                f"Total backlog reached ${fmt(backlog)} billion at quarter end, a record for the company.",
+                value=b(backlog),
+                written={"value": fmt(backlog), "scale_word": "billion"},
+            ),
+            Planted(
+                "backlog",
+                "backlog:data_center",
+                "usd",
+                f"Backlog from data center customers was ${fmt(backlog_dc)} billion, up from the prior year.",
+                value=b(backlog_dc),
+                written={"value": fmt(backlog_dc), "scale_word": "billion"},
+            ),
+            Planted(
+                "lead_time",
+                "lead_time:large_power_transformers",
+                "weeks",
+                f"Lead times for large power transformers extended to {lead_tx} weeks during the quarter.",
+                value=str(lead_tx),
+                written={"value": str(lead_tx), "scale_word": None},
+            ),
+            Planted(
+                "customer_concentration",
+                "customer_concentration:top1",
+                "percent",
+                f"Our largest customer, a hyperscale data center operator, accounted for {top1}% of revenue in "
+                "the quarter.",
+                value=str(top1),
+                written={"value": str(top1), "scale_word": None},
+            ),
+            Planted(
+                "supply_link",
+                "link:nimbus_compute",
+                "other",
+                "We entered into a multi-year agreement to supply power transformers and switchgear to Nimbus "
+                "Compute for its AI data center campuses.",
+                counterparty="Nimbus Compute",
+            ),
         ],
         "kyst_10q.htm": [
-            Planted("utility_load", "large_load:pipeline_gw", "gw",
-                    f"Our large-load interconnection pipeline, mostly data center requests, grew to {fmt(load_gw)} GW "
-                    "as of June 30, 2026.", value=fmt(load_gw), written={"value": fmt(load_gw), "scale_word": None}),
-            Planted("commitment_ppa", "ppa:nimbus_compute:ohio", "mw",
-                    f"We signed a 15-year power purchase agreement with Nimbus Compute for {ppa_mw} MW to serve its "
-                    "Ohio data center campus.", value=str(ppa_mw), written={"value": str(ppa_mw), "scale_word": None},
-                    counterparty="Nimbus Compute"),
+            Planted(
+                "utility_load",
+                "large_load:pipeline_gw",
+                "gw",
+                f"Our large-load interconnection pipeline, mostly data center requests, grew to {fmt(load_gw)} GW "
+                "as of June 30, 2026.",
+                value=fmt(load_gw),
+                written={"value": fmt(load_gw), "scale_word": None},
+            ),
+            Planted(
+                "commitment_ppa",
+                "ppa:nimbus_compute:ohio",
+                "mw",
+                f"We signed a 15-year power purchase agreement with Nimbus Compute for {ppa_mw} MW to serve its "
+                "Ohio data center campus.",
+                value=str(ppa_mw),
+                written={"value": str(ppa_mw), "scale_word": None},
+                counterparty="Nimbus Compute",
+            ),
         ],
         "clst_pr_order.htm": [
-            Planted("order_win", "order_win:nimbus_cooling", "usd",
-                    f"Coolstream Thermal received an order valued at ${fmt(order_m)} million from Nimbus Compute for "
-                    "liquid cooling systems for AI data centers.",
-                    value=m(order_m), written={"value": fmt(order_m), "scale_word": "million"},
-                    counterparty="Nimbus Compute"),
-            Planted("price_increase", "price_increase:cooling_units", "percent",
-                    f"Effective January 1, the company will raise list prices on data center cooling units by "
-                    f"{price_pct}%.", value=str(price_pct), written={"value": str(price_pct), "scale_word": None}),
+            Planted(
+                "order_win",
+                "order_win:nimbus_cooling",
+                "usd",
+                f"Coolstream Thermal received an order valued at ${fmt(order_m)} million from Nimbus Compute for "
+                "liquid cooling systems for AI data centers.",
+                value=m(order_m),
+                written={"value": fmt(order_m), "scale_word": "million"},
+                counterparty="Nimbus Compute",
+            ),
+            Planted(
+                "price_increase",
+                "price_increase:cooling_units",
+                "percent",
+                f"Effective January 1, the company will raise list prices on data center cooling units by "
+                f"{price_pct}%.",
+                value=str(price_pct),
+                written={"value": str(price_pct), "scale_word": None},
+            ),
         ],
         "volt_pr_plant.htm": [
-            Planted("capacity_addition", "capacity:sq_ft:texas_transformer_plant", "sq_ft",
-                    f"Voltara will build a {cap_sqft:,} square foot transformer factory in Texas to expand capacity "
-                    "for grid and data center customers.",
-                    value=str(cap_sqft), written={"value": f"{cap_sqft}", "scale_word": None}),
-            Planted("lead_time", "lead_time:switchgear", "weeks",
-                    f"Current lead times for medium-voltage switchgear are {lead_sg} weeks.",
-                    value=str(lead_sg), written={"value": str(lead_sg), "scale_word": None}),
+            Planted(
+                "capacity_addition",
+                "capacity:sq_ft:texas_transformer_plant",
+                "sq_ft",
+                f"Voltara will build a {cap_sqft:,} square foot transformer factory in Texas to expand capacity "
+                "for grid and data center customers.",
+                value=str(cap_sqft),
+                written={"value": f"{cap_sqft}", "scale_word": None},
+            ),
+            Planted(
+                "lead_time",
+                "lead_time:switchgear",
+                "weeks",
+                f"Current lead times for medium-voltage switchgear are {lead_sg} weeks.",
+                value=str(lead_sg),
+                written={"value": str(lead_sg), "scale_word": None},
+            ),
         ],
         "nmbs_pr_guidance.htm": [
-            Planted("capex_guidance", "capex_guidance:FY2028", "usd",
-                    f"For fiscal 2028, Nimbus expects capital expenditures of ${fmt(guid_lo)} billion to "
-                    f"${fmt(guid_hi)} billion.", low=b(guid_lo), high=b(guid_hi),
-                    written={"value_low": fmt(guid_lo), "value_high": fmt(guid_hi), "scale_word": "billion"},
-                    value=str((Decimal(b(guid_lo)) + Decimal(b(guid_hi))) / 2), period_label="fiscal 2028"),
-            Planted("new_segment", "new_segment:ai_infrastructure", "other",
-                    "Beginning next quarter, Nimbus will report AI Infrastructure Services as a new reportable segment."),
+            Planted(
+                "capex_guidance",
+                "capex_guidance:FY2028",
+                "usd",
+                f"For fiscal 2028, Nimbus expects capital expenditures of ${fmt(guid_lo)} billion to "
+                f"${fmt(guid_hi)} billion.",
+                low=b(guid_lo),
+                high=b(guid_hi),
+                written={"value_low": fmt(guid_lo), "value_high": fmt(guid_hi), "scale_word": "billion"},
+                value=str((Decimal(b(guid_lo)) + Decimal(b(guid_hi))) / 2),
+                period_label="fiscal 2028",
+            ),
+            Planted(
+                "new_segment",
+                "new_segment:ai_infrastructure",
+                "other",
+                "Beginning next quarter, Nimbus will report AI Infrastructure Services as a new reportable segment.",
+            ),
         ],
         "arvl_pr_order.htm": [
-            Planted("order_win", "order_win:us_data_center_cables", "usd",
-                    f"Aravalli Cables has received an export order worth Rs {inr_cr} crore for high-voltage cables for "
-                    "a data center project in the United States.",
-                    value=str(inr_cr * 10**7), written={"value": str(inr_cr), "scale_word": None},
-                    currency="INR", status="needs_review"),
-            Planted("export_exposure", "export_exposure:share_pct", "percent",
-                    f"Exports accounted for {export_pct}% of revenue in the first half of fiscal 2027.",
-                    value=str(export_pct), written={"value": str(export_pct), "scale_word": None}),
+            Planted(
+                "order_win",
+                "order_win:us_data_center_cables",
+                "usd",
+                f"Aravalli Cables has received an export order worth Rs {inr_cr} crore for high-voltage cables for "
+                "a data center project in the United States.",
+                value=str(inr_cr * 10**7),
+                written={"value": str(inr_cr), "scale_word": None},
+                currency="INR",
+                status="needs_review",
+            ),
+            Planted(
+                "export_exposure",
+                "export_exposure:share_pct",
+                "percent",
+                f"Exports accounted for {export_pct}% of revenue in the first half of fiscal 2027.",
+                value=str(export_pct),
+                written={"value": str(export_pct), "scale_word": None},
+            ),
         ],
         "kyst_10k_2025_risk.htm": [],
         "kyst_10k_2026_risk.htm": [],
         "nmbs_investor_day.pdf": [
-            Planted("capacity_addition", "capacity:gw:global_ai_campuses", "gw",
-                    "We plan to bring 2.4 GW of new AI data center capacity online across our global campuses by 2028.",
-                    value="2.4", written={"value": "2.4", "scale_word": None}),
+            Planted(
+                "capacity_addition",
+                "capacity:gw:global_ai_campuses",
+                "gw",
+                "We plan to bring 2.4 GW of new AI data center capacity online across our global campuses by 2028.",
+                value="2.4",
+                written={"value": "2.4", "scale_word": None},
+            ),
         ],
         "volt_investor_pres.pdf": [
-            Planted("lead_time", "lead_time:gas_turbines", "months",
-                    "Customers now face lead times of 30 to 36 months for large gas turbines.",
-                    low="30", high="36", value="33", written={"value_low": "30", "value_high": "36", "scale_word": None}),
+            Planted(
+                "lead_time",
+                "lead_time:gas_turbines",
+                "months",
+                "Customers now face lead times of 30 to 36 months for large gas turbines.",
+                low="30",
+                high="36",
+                value="33",
+                written={"value_low": "30", "value_high": "36", "scale_word": None},
+            ),
         ],
     }
 
@@ -223,14 +353,16 @@ def ten_q(title: str, company: str, mdna: list[str], notes: list[tuple[str, list
            "<tr><td>Item 2.</td><td>Management's Discussion and Analysis</td><td>18</td></tr>"
            "<tr><td>Item 1A.</td><td>Risk Factors</td><td>31</td></tr></table>")  # fmt: skip
     hidden = ('<div style="display:none"><ix:header><ix:hidden><ix:nonNumeric name="dei:EntityRegistrantName">'
-              f"{escape(company)}</ix:nonNumeric><ix:nonFraction name=\"us-gaap:Revenues\">{rnd.randint(10**9, 9 * 10**9)}"
-              "</ix:nonFraction></ix:hidden></ix:header></div>")  # fmt: skip
-    parts = [f"<html><head><title>{escape(title)}</title><style>p {{ font-family: serif; }}</style></head><body>",
+              f"{escape(company)}</ix:nonNumeric><ix:nonFraction name=\"us-gaap:Revenues\">"
+              f"{rnd.randint(10**9, 9 * 10**9)}</ix:nonFraction></ix:hidden></ix:header></div>")  # fmt: skip
+    head = f"<html><head><title>{escape(title)}</title><style>p {{ font-family: serif; }}</style></head><body>"
+    parts = [head,
              hidden, f"<p><b>{escape(company)}</b></p>", para(f"FORM 10-Q · {title}"), toc,
              "<p>PART I — FINANCIAL INFORMATION</p>", "<p>Item 1. Financial Statements</p>"]  # fmt: skip
     parts.append("<table><tr><th>(in millions)</th><th>Three months ended</th></tr>"
                  f"<tr><td>Revenue</td><td>$</td><td>{rnd.randint(4000, 9000):,}</td></tr>"
-                 f"<tr><td>Operating income</td><td>$</td><td>{rnd.randint(800, 2000):,}</td></tr></table>")  # fmt: skip
+                 f"<tr><td>Operating income</td><td>$</td><td>{rnd.randint(800, 2000):,}</td></tr>"
+                 "</table>")  # fmt: skip
     for k, (title_n, body) in enumerate(notes, start=3):
         parts.append(f"<p><b>Note {k} — {escape(title_n)}</b></p>")
         parts += [para(s) for s in body]
@@ -279,9 +411,9 @@ def risk_section(version: int) -> str:
                    "lead times for transformers now exceed two years, which could delay the interconnection of data "
                    "center loads and increase our capital expenditures.")  # fmt: skip
         del base[2]
-        base.insert(1, "A significant share of our expected load growth comes from data center customers whose demand "
-                       "for AI computing may not materialize as forecast, which could leave us with stranded generation "
-                       "and transmission investments.")  # fmt: skip
+        base.insert(1, "A significant share of our expected load growth comes from data center customers whose "
+                       "demand for AI computing may not materialize as forecast, which could leave us with stranded "
+                       "generation and transmission investments.")  # fmt: skip
     parts = ["<html><head><title>Form 10-K</title></head><body>", "<p>Keystone Power &amp; Light Co.</p>",
              "<p>PART I</p>", "<p>Item 1. Business</p>",
              para("We are a regulated electric utility serving customers across three states."),
@@ -343,7 +475,7 @@ def wrap(text: str, width: int = 100) -> list[str]:
 
 
 def build(seed: int = SEED) -> dict[str, Any]:
-    rnd = random.Random(seed)
+    rnd = random.Random(seed)  # noqa: S311 — fixture data, not security
     planted = facts_for(rnd)
     q = {name: [p.quote for p in facts] for name, facts in planted.items()}
     docs: dict[str, bytes] = {}
@@ -360,22 +492,35 @@ def build(seed: int = SEED) -> dict[str, Any]:
                                  [FILLER[2], q["volt_10q.htm"][0], q["volt_10q.htm"][1], q["volt_10q.htm"][2],
                                   DISTRACTORS[3], q["volt_10q.htm"][3], q["volt_10q.htm"][4]],
                                  [("Debt", [FILLER[3]])], rnd).encode()  # fmt: skip
-    docs["kyst_10q.htm"] = ten_q("Quarter ended June 30, 2026", COMPANIES["KYST"]["name"],
-                                 [FILLER[0], q["kyst_10q.htm"][0], FILLER[2]],
-                                 [("Commitments and Contingencies", [q["kyst_10q.htm"][1], FILLER[3]])], rnd).encode()
+    docs["kyst_10q.htm"] = ten_q(
+        "Quarter ended June 30, 2026",
+        COMPANIES["KYST"]["name"],
+        [FILLER[0], q["kyst_10q.htm"][0], FILLER[2]],
+        [("Commitments and Contingencies", [q["kyst_10q.htm"][1], FILLER[3]])],
+        rnd,
+    ).encode()
     docs["clst_pr_order.htm"] = press_release(
-        "Coolstream Thermal Wins Liquid Cooling Order for AI Data Centers", COMPANIES["CLST"]["name"], "BOSTON",
-        [q["clst_pr_order.htm"][0], FILLER[0], q["clst_pr_order.htm"][1], DISTRACTORS[1]]).encode()
+        "Coolstream Thermal Wins Liquid Cooling Order for AI Data Centers",
+        COMPANIES["CLST"]["name"],
+        "BOSTON",
+        [q["clst_pr_order.htm"][0], FILLER[0], q["clst_pr_order.htm"][1], DISTRACTORS[1]],
+    ).encode()
     docs["volt_pr_plant.htm"] = press_release(
-        "Voltara to Build Transformer Factory in Texas", COMPANIES["VOLT"]["name"], "HOUSTON",
-        [q["volt_pr_plant.htm"][0], FILLER[2], q["volt_pr_plant.htm"][1], DISTRACTORS[0]]).encode()
+        "Voltara to Build Transformer Factory in Texas",
+        COMPANIES["VOLT"]["name"],
+        "HOUSTON",
+        [q["volt_pr_plant.htm"][0], FILLER[2], q["volt_pr_plant.htm"][1], DISTRACTORS[0]],
+    ).encode()
     docs["nmbs_pr_guidance.htm"] = press_release(
         "Nimbus Compute Reports Results and Issues Fiscal 2028 Outlook", COMPANIES["NMBS"]["name"], "SEATTLE",
         [FILLER[0], q["nmbs_pr_guidance.htm"][0], q["nmbs_pr_guidance.htm"][1], DISTRACTORS[2],
          DISTRACTORS[3]]).encode()  # fmt: skip
     docs["arvl_pr_order.htm"] = press_release(
-        "Aravalli Cables Bags Export Order for US Data Center", COMPANIES["ARVL"]["name"], "JAIPUR",
-        [q["arvl_pr_order.htm"][0], q["arvl_pr_order.htm"][1], FILLER[2]]).encode()
+        "Aravalli Cables Bags Export Order for US Data Center",
+        COMPANIES["ARVL"]["name"],
+        "JAIPUR",
+        [q["arvl_pr_order.htm"][0], q["arvl_pr_order.htm"][1], FILLER[2]],
+    ).encode()
     docs["kyst_10k_2025_risk.htm"] = risk_section(1).encode()
     docs["kyst_10k_2026_risk.htm"] = risk_section(2).encode()
     docs["nmbs_investor_day.pdf"] = pdf([
@@ -408,12 +553,21 @@ def build(seed: int = SEED) -> dict[str, Any]:
         "companies": COMPANIES,
         "distractors": DISTRACTORS,
         "documents": [
-            {"file": name, "ticker": meta[name][0], "kind": meta[name][1], "published_at": meta[name][2],
-             "title": meta[name][3], "facts": [p.__dict__ for p in planted[name]]}
+            {
+                "file": name,
+                "ticker": meta[name][0],
+                "kind": meta[name][1],
+                "published_at": meta[name][2],
+                "title": meta[name][3],
+                "facts": [p.__dict__ for p in planted[name]],
+            }
             for name in sorted(docs)
         ],
-        "risk_changes": {"from": "kyst_10k_2025_risk.htm", "to": "kyst_10k_2026_risk.htm",
-                         "expected": {"added": 1, "removed": 1}},  # fmt: skip
+        "risk_changes": {
+            "from": "kyst_10k_2025_risk.htm",
+            "to": "kyst_10k_2026_risk.htm",
+            "expected": {"added": 1, "removed": 1},
+        },  # fmt: skip
     }
     return {"docs": docs, "truth": truth}
 

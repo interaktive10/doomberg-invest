@@ -6,7 +6,8 @@
 - Chunks are at most MAX_TOKENS tokens (4 characters a token) with OVERLAP_TOKENS of overlap, cut at a paragraph,
   line or sentence end when one is near; each carries its absolute char_start in the canonical text.
 - Prefilter: the number of keyword hits from config/terms.yaml; only chunks scoring >= min_score (3) go to P-01.
-  All-caps keywords (AI, MW, GW, GPU) match case-sensitively, the rest case-insensitively, on word boundaries.
+  All-caps keywords (AI, MW, GW, GPU) match case-sensitively, the rest case-insensitively, on word boundaries, with
+  an optional plural ending ("leases", "transformers", "GPUs").
 """
 
 from __future__ import annotations
@@ -78,7 +79,11 @@ def select(kind: str, text: str, section_map: Sequence[Mapping[str, Any]],
             for s in sorted(spans, key=lambda s: int(s["char_start"])):
                 out += split(text, int(s["char_start"]), int(s["char_end"]), str(s["name"]))
             return out
-        return split(text, 0, len(text))
+        out, pos = [], 0  # no MD&A heading found: the whole document except its risk factors (the risk diff's)
+        for s in sorted((s for s in section_map if s["name"] == "risk_factors"), key=lambda s: int(s["char_start"])):
+            out += split(text, pos, int(s["char_start"]))
+            pos = max(pos, int(s["char_end"]))
+        return out + split(text, pos, len(text))
     if kind == "presentation" and page_map:
         out = []
         for p in page_map:
@@ -93,7 +98,7 @@ def _terms(root: Path = REPO_ROOT) -> tuple[int, tuple[re.Pattern[str], ...]]:
     pats = []
     for kw in doc["keywords"]:
         flags = 0 if kw.isupper() else re.I
-        pats.append(re.compile(rf"(?<!\w){re.escape(kw)}(?!\w)", flags))
+        pats.append(re.compile(rf"(?<!\w){re.escape(kw)}(?:s|es)?(?!\w)", flags))  # plurals count: "leases"
     return int(doc["min_score"]), tuple(pats)
 
 

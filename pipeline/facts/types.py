@@ -17,7 +17,9 @@ FACT_TYPES: dict[str, str] = {
     "customer_concentration": "Stated share of revenue from the largest customers",
     "supply_link": "A named customer/supplier/partner relationship tied to AI infrastructure",
     "utility_load": "Utility large-load or data-center pipeline (GW, requests, contracts)",
-    "risk_factor_change": "Added, removed or modified risk-factor paragraphs on AI, data centers, power or supply chain",
+    "risk_factor_change": (
+        "Added, removed or modified risk-factor paragraphs on AI, data centers, power or supply chain"
+    ),
     # BRIEF §1.9 general types
     "order_win": "A stated order or contract win with value, customer or segment",
     "customer_win": "A new named customer or program",

@@ -56,8 +56,10 @@ class EntityInput(PromptInput):
     candidates: tuple[tuple[str, str], ...]  # (id, name)
 
     def variables(self) -> dict[str, str]:
-        return {"names": json.dumps(list(self.names), ensure_ascii=False),
-                "candidates": json.dumps([{"id": i, "name": n} for i, n in self.candidates], ensure_ascii=False)}
+        return {
+            "names": json.dumps(list(self.names), ensure_ascii=False),
+            "candidates": json.dumps([{"id": i, "name": n} for i, n in self.candidates], ensure_ascii=False),
+        }
 
     def schema(self) -> dict[str, Any]:
         item = obj({"name": {"type": "string"}, "candidate_id": nullable("string"),
@@ -83,6 +85,6 @@ def parse(content: dict[str, Any], names: Sequence[str], allowed: set[str]) -> d
         if not isinstance(m, dict) or m.get("name") not in wanted:
             continue
         cid = m.get("candidate_id")
-        kind = m.get("kind") if m.get("kind") in KINDS else "other"
+        kind = str(m["kind"]) if m.get("kind") in KINDS else "other"
         out[str(m["name"])] = Match(str(m["name"]), cid if isinstance(cid, str) and cid in allowed else None, kind)
     return out

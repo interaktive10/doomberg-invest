@@ -95,7 +95,7 @@ def quote(c: Change) -> tuple[str, int | None, int | None]:
         olds = [s[2] for s in _sentences(c.old)]
         sents.sort(key=lambda s: max((fuzz.token_set_ratio(s[2], o) for o in olds), default=0))
     start, end, text = sents[0]
-    m = re.match(r"(?:\S+\s+){%d}\S+" % (QUOTE_WORDS - 1), text)
+    m = re.match(rf"(?:\S+\s+){{{QUOTE_WORDS - 1}}}\S+", text)
     if m is not None:
         text, end = text[: m.end()], start + m.end()
     if c.kind == "removed":
@@ -109,11 +109,15 @@ class RiskTagInput(PromptInput):
     items: tuple[tuple[str, str], ...]  # (id, paragraph text)
 
     def variables(self) -> dict[str, str]:
-        return {"tags": json.dumps(list(TAGS)),
-                "id_text_list": json.dumps([{"id": i, "text": t} for i, t in self.items], ensure_ascii=False)}
+        return {
+            "tags": json.dumps(list(TAGS)),
+            "id_text_list": json.dumps([{"id": i, "text": t} for i, t in self.items], ensure_ascii=False),
+        }
 
     def schema(self) -> dict[str, Any]:
-        item = obj({"id": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string", "enum": list(TAGS)}}})
+        item = obj(
+            {"id": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string", "enum": list(TAGS)}}}
+        )
         return obj({"items": {"type": "array", "items": item}})
 
 
