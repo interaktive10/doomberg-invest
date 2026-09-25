@@ -87,13 +87,16 @@ def test_india_weekly_run(conn: psycopg.Connection[Any], tmp_path: Path) -> None
     kei = company(conn, "KEI")
     assert kei.in_universe and kei.capex_desk and kei.id is not None
     # prices: NSE bhavcopy closes for universe companies
-    universe = {c.nse_symbol for c in repo.companies(conn, market="in", in_universe=True)}
-    traded = {
-        r.symbol
-        for r in bhavcopy.parse((FIN / "bhavcopy" / "BhavCopy_NSE_CM_0_0_0_20260605_F_0000.csv.zip").read_bytes()).rows
-    }
-    assert (stats.price_source, stats.price_day) == ("NSE", "2026-06-05") and stats.prices == len(universe & traded)
-    assert len(universe) == 2317 - 188 and stats.prices > 2000
+    members = repo.companies(conn, market="in", in_universe=True)
+    universe, by_isin = {c.nse_symbol for c in members}, {c.isin: c.nse_symbol for c in members}
+    rows = bhavcopy.parse((FIN / "bhavcopy" / "BhavCopy_NSE_CM_0_0_0_20260605_F_0000.csv.zip").read_bytes()).rows
+    priced = {r.symbol if r.symbol in universe else by_isin.get(r.isin) for r in rows} - {None}
+    assert (stats.price_source, stats.price_day) == ("NSE", "2026-06-05") and stats.prices == len(priced) == 1812
+    assert len(universe) == 2317 - 188
+    # a symbol renamed between the securities list and the bhavcopy keeps its ISIN: matched by ISIN
+    aeroplane = company(conn, "AEROPLANE")
+    renamed = conn.execute("select close from prices_w where company_id = %s and week_end = %s", (aeroplane.id, DAY))
+    assert renamed.fetchone() == (next(r.close for r in rows if r.symbol == "AMIRCHAND"),)
     close = conn.execute("select close, source from prices_w where company_id = %s and week_end = %s", (kei.id, DAY))
     assert close.fetchone() == (Decimal("5335.50"), "nse_bhavcopy")
     # results -> fundamentals_q (M3-02): the expected rows, visible only once filed
