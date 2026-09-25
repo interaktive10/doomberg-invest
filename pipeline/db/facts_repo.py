@@ -132,6 +132,14 @@ def document_status(conn: Conn, urls: Sequence[str]) -> dict[str, tuple[UUID, st
     return {r["url"]: (r["id"], r["status"]) for r in rows}
 
 
+def document_created_at(conn: Conn, doc_id: UUID) -> datetime:
+    """When the document was first stored (a retry window counts from here, not from its publication)."""
+    row = conn.execute(_q("select created_at from documents where id = %s"), (doc_id,)).fetchone()
+    assert row is not None
+    created: datetime = row[0]
+    return created
+
+
 def document_has_facts(conn: Conn, document_id: UUID) -> bool:
     row = conn.execute(_q("select exists (select 1 from facts where document_id = %s)"), (document_id,)).fetchone()
     return bool(row and row[0])
@@ -269,10 +277,10 @@ def insert_risk_changes(conn: Conn, rows: Sequence[Mapping[str, Any]]) -> None:
 # ---------------------------------------------------------------- India announcement triage (P-07)
 
 
-def triaged_pdf(conn: Conn, event_ids: Sequence[UUID]) -> set[UUID]:
-    """Announcements already triaged as read_pdf (their PDF is fetched again while it hasn't been read)."""
-    rows = _rows(conn, "select event_id from announcement_triage where read_pdf and event_id = any(%s)",
-                 (list(event_ids),))  # fmt: skip
+def triaged_pdf(conn: Conn, event_ids: Sequence[UUID], since: datetime) -> set[UUID]:
+    """Announcements triaged as read_pdf since `since` (their PDF is fetched again while it hasn't been read)."""
+    rows = _rows(conn, "select event_id from announcement_triage where read_pdf and event_id = any(%s) "
+                       "and created_at >= %s", (list(event_ids), since))  # fmt: skip
     return {r["event_id"] for r in rows}
 
 

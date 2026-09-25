@@ -186,7 +186,8 @@ def store_facts(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, facts:
 def risk_changes(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, norm: Normalized,
                  fetch: Callable[[DocJob], bytes], router: Router, stats: TextStats) -> bool:  # fmt: skip
     """Item 1A against the same company's previous document of the same form (Appendix F.6). False when P-03 was
-    deferred: the document is read again the next day, for its risk diff only (M5 review R2-F3)."""
+    deferred, or the previous document couldn't be fetched within RETRY_DAYS of this one: the document is read again
+    the next day, for its risk diff only (M5 review R2-F3, R3-F2)."""
     assert job.company.id is not None
     new_rf = next((s for s in norm.section_map if s["name"] == "risk_factors"), None)
     prev = facts_repo.previous_document(conn, job.company.id, job.kind, job.published_at)
@@ -194,7 +195,11 @@ def risk_changes(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, norm:
         return True
     try:
         old = normalize(prev["url"], fetch(DocJob(job.company, job.kind, prev["url"], "", prev["published_at"])))
-    except (httpx.HTTPError, NseBlocked, ValueError) as e:
+    except (httpx.HTTPError, NseBlocked) as e:  # a transient error: the diff waits for another day (M5 review R3-F2)
+        stats.errors.append(f"risk diff {prev['url']}: {type(e).__name__}"[:200])
+        first = facts_repo.document_created_at(conn, doc_id).date()
+        return (date.fromisoformat(stats.day) - first).days > RETRY_DAYS  # give up RETRY_DAYS after it was stored
+    except ValueError as e:  # the previous document is broken: there is no diff to make
         stats.errors.append(f"risk diff {prev['url']}: {type(e).__name__}"[:200])
         return True
     old_rf = next((s for s in old.section_map if s["name"] == "risk_factors"), None)
@@ -325,18 +330,21 @@ def triage_announcements(conn: psycopg.Connection[Any], router: Router, companie
     ids = [cid for cid, c in companies.items() if c.market == "in"]
     if not ids:
         return []
-    events = [e for e in as_of(day).corp_events(conn, ids, since=day - timedelta(days=TRIAGE_DAYS))
+    events = [e for e in as_of(day).corp_events(conn, ids, since=day - timedelta(days=TRIAGE_DAYS + RETRY_DAYS))
               if e.kind == "announcement" and e.id is not None]  # fmt: skip
+    recent = day - timedelta(days=TRIAGE_DAYS)
     done = facts_repo.triaged(conn, [e.id for e in events if e.id is not None])
-    pdf = facts_repo.triaged_pdf(conn, [e.id for e in events if e.id is not None])
+    first = day - timedelta(days=RETRY_DAYS)
+    pdf = facts_repo.triaged_pdf(conn, [e.id for e in events if e.id is not None],
+                                 datetime(first.year, first.month, first.day, tzinfo=UTC))  # fmt: skip
     jobs = []
     for e in events:
         assert e.id is not None
         title = str(e.detail.get("category") or "")
-        if e.id in pdf and e.source_url.lower().endswith(".pdf"):  # triaged earlier: its PDF until it's read
+        if e.id in pdf and e.source_url.lower().endswith(".pdf"):  # triaged in the last RETRY_DAYS: its PDF until read
             jobs.append(DocJob(companies[e.company_id], "press_release", e.source_url, title, e.filed_at, None, True))
-            continue  # (the caller drops a URL already read; a failed fetch left none: M5 review R2-F4)
-        if e.id in done or any(s in title.lower() for s in SKIP_TRIAGE):
+            continue  # (the caller drops a URL already read; a failed fetch left none: M5 review R2-F4, R3)
+        if e.event_date < recent or e.id in done or any(s in title.lower() for s in SKIP_TRIAGE):
             continue
         if router.exhausted("P-07"):
             stats.triage_deferred += 1

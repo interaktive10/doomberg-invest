@@ -15,7 +15,9 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-_Y = r"'?(\d{4}(?:\s*[-\u2013/]\s*'?\d{2}(?:\d{2})?)?|\d{2})"  # 2027, '27, 27, or India's 2025-26 (-> 2026)
+# 2027, '27, 27, India's 2025-26 or 25-26 (-> 2026), or a multi-year span ("2026 through 2028", "FY2026-FY2028")
+_RANGE = r"(?:\s*[-\u2013/]\s*|\s+(?:through|thru|to)\s+)(?:FY\s?|fiscal\s+(?:year\s+)?)?'?\d{2}(?:\d{2})?"
+_Y = rf"'?(\d{{4}}(?:{_RANGE})?|\d{{2}}(?:{_RANGE})?)"
 ORDINAL = {"first": 1, "second": 2, "third": 3, "fourth": 4, "1st": 1, "2nd": 2, "3rd": 3, "4th": 4}
 _QUARTER = [
     re.compile(rf"\bQ([1-4])\s*(?:FY|fiscal(?:\s+year)?)?\s*{_Y}\b", re.I),
@@ -55,12 +57,18 @@ class Period:
     end: date
 
 
+_SPLIT = re.compile(r"\s*[-\u2013/]\s*|\s+(?:through|thru|to)\s+", re.I)
+
+
 def _year(s: str) -> int | None:
-    """2027, '27 and 27 -> 2027. An Indian range names the year it ends in (2025-26 -> 2026, 1999-2000 -> 2000); a
-    range of more than one year ("2026-2028", a multi-year plan) is no single period: None (M5 review R2-F5)."""
-    parts = re.split(r"\s*[-\u2013/]\s*", s.strip())
+    """2027, '27 and 27 -> 2027. An Indian range names the year it ends in (2025-26 and 25-26 -> 2026, 1999-2000 ->
+    2000); a range of more than one year ("2026-2028", "2026 through 2028", a multi-year plan) is no single period:
+    None (M5 review R2-F5, R3-F4)."""
+    parts = _SPLIT.split(s.strip())
     if len(parts) == 2:
-        first, last = int(parts[0].lstrip("'")), parts[1].lstrip("'")
+        first = int(parts[0].lstrip("'"))
+        first = 2000 + first if first < 100 else first
+        last = re.sub(r"^(?:FY\s?|fiscal\s+(?:year\s+)?)", "", parts[1], flags=re.I).lstrip("'")
         if len(last) == 4:
             end = int(last)
         else:
@@ -72,8 +80,14 @@ def _year(s: str) -> int | None:
 
 
 def _fy(s: str, fye: str | None) -> Period | None:
+    """A fiscal year from its label; a two-year span ("FY2025-26") only for a year that ends before December, so it
+    spans two calendar years (a calendar-year company's "FY2026-27" is no single year; M5 review R3-F4)."""
     y = _year(s)
-    return None if y is None else fiscal_year(y, fye)
+    if y is None:
+        return None
+    if _SPLIT.search(s.strip()) and (fye is None or fye[:2] == "12"):
+        return None
+    return fiscal_year(y, fye)
 
 
 def _date(m: re.Match[str]) -> date | None:
