@@ -1,0 +1,18 @@
+# Signal Lab settings (BRIEF §4.10; lab.yml, manual; US first). Not a protected file: the weights the Lab proposes
+# are (config/weights.yaml, changed only through a PR with the human-approved label).
+start: 2010-01-31                 # first month-end of the panel (§4.10.1)
+horizons_months: [12, 24, 36]     # forward total price returns (no dividends in v1; §7 caveat 3)
+periods:                          # by event month (§4.10.3)
+  in_sample: [2012-01, 2018-12]
+  out_of_sample: [2019-01, 2025-12]
+event_window_months: 12           # only the first fire per company within a rolling 12 months is an event (§4.10.2)
+deciles: 10                       # Evidence and Gap score deciles (§4.10.3)
+c1_min_months: 12                 # C1 needs a year of month-end multiples (the weekly run's 52 weeks)
+proposal_horizon_months: 12       # the horizon the §4.10.5 weight rule reads
+markets:
+  us: true
+  in: false                       # §4.10.7: enabled after 8 quarters of collected India data
+india_min_quarters: 8
+prices:                           # the Stooq bulk daily file, downloaded manually once (it has a CAPTCHA; §2.7)
+  release_tag: lab-data           # a private GitHub release of this repository holds it
+  asset: d_us_txt.zip

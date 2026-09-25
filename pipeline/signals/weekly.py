@@ -21,6 +21,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from statistics import median
+from types import ModuleType
 from typing import Any
 from uuid import UUID
 
@@ -29,7 +30,19 @@ import psycopg
 import yaml
 
 from pipeline.db import repo
-from pipeline.db.models import Company, ContextValue, FundamentalsRow, PriceW, RedflagValue, Score, SignalValue
+from pipeline.db.models import (
+    Company,
+    ContextValue,
+    CorpEvent,
+    FactRow,
+    FundamentalsRow,
+    InsiderEvent,
+    OwnershipRow,
+    PriceW,
+    RedflagValue,
+    Score,
+    SignalValue,
+)
 from pipeline.db.pit import as_of, cutoff_for, select_as_of
 from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
@@ -124,37 +137,42 @@ class Batch:
     facts: dict[UUID, list[Fact]]
 
 
+INSIDER_DAYS = 100  # S7's windows (60 and 90 days) plus room
+
+
+def holding(o: OwnershipRow) -> Holding:
+    return Holding(o.quarter_end, o.inst_holders, o.fii_pct, o.dii_pct, o.promoter_pct, o.promoter_pledged_pct)
+
+
+def insider(i: InsiderEvent) -> Insider:
+    return Insider(str(i.company_id), i.person, i.event_date, i.filed_at, i.kind, i.value, i.planned, i.source_url,
+                   i.currency, i.amends)  # fmt: skip
+
+
+def event(e: CorpEvent) -> Event:
+    return Event(e.kind, e.event_date, e.detail)
+
+
+def fact(x: FactRow) -> Fact:
+    return Fact(x.fact_type, x.subject_key, x.as_of, x.value_num, x.unit, x.subject, x.period_end, x.counterparty)
+
+
 def load_batch(conn: psycopg.Connection[Any], week: date, ids: Sequence[UUID], full: bool) -> Batch:
+    """One batch's inputs as of W. The Signal Lab builds the same Batch from its own point-in-time cursors with the
+    converters above (pipeline/lab/panel.py)."""
     snap = as_of(week)
     b = Batch(defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list))
     for f in snap.fundamentals(conn, ids):
         b.rows[f.company_id].append(f)
     for o in snap.ownership(conn, ids):
-        b.ownership[o.company_id].append(
-            Holding(o.quarter_end, o.inst_holders, o.fii_pct, o.dii_pct, o.promoter_pct, o.promoter_pledged_pct)
-        )
+        b.ownership[o.company_id].append(holding(o))
     for x in snap.facts(conn, ids, since=week - timedelta(days=365 * FACT_YEARS)):
-        b.facts[x.company_id].append(
-            Fact(x.fact_type, x.subject_key, x.as_of, x.value_num, x.unit, x.subject, x.period_end, x.counterparty)
-        )
+        b.facts[x.company_id].append(fact(x))
     if full:
-        for i in snap.insider_events(conn, ids, since=week - timedelta(days=100)):
-            b.insiders[i.company_id].append(
-                Insider(
-                    str(i.company_id),
-                    i.person,
-                    i.event_date,
-                    i.filed_at,
-                    i.kind,
-                    i.value,
-                    i.planned,
-                    i.source_url,
-                    i.currency,
-                    i.amends,
-                )
-            )
+        for i in snap.insider_events(conn, ids, since=week - timedelta(days=INSIDER_DAYS)):
+            b.insiders[i.company_id].append(insider(i))
         for e in snap.corp_events(conn, ids, since=week - timedelta(days=31 * EVENT_MONTHS)):
-            b.events[e.company_id].append(Event(e.kind, e.event_date, e.detail))
+            b.events[e.company_id].append(event(e))
     return b
 
 
@@ -248,8 +266,9 @@ def company_metrics(s: Series) -> dict[str, Any]:
 
 
 def score_company(
-    c: Company, s: Series, b: Batch, cfgs: Configs, cross: CrossSection, week: date
-) -> tuple[dict[str, Any], list[redflags.FlagResult], Scored]:
+    c: Company, s: Series, b: Batch, cfgs: Configs, cross: CrossSection, week: date,
+    modules: Sequence[ModuleType] = registry.SIGNALS,
+) -> tuple[dict[str, Any], list[redflags.FlagResult], Scored]:  # fmt: skip
     assert c.id is not None
     symbol = (c.ticker if c.market == "us" else c.nse_symbol) or ""
     surveillance = c.excluded_reason if (c.excluded_reason or "").startswith("surveillance") else None
@@ -269,7 +288,7 @@ def score_company(
         capex=CapexView(),
         surveillance=surveillance,
     )
-    results = registry.evaluate(ctx)
+    results = registry.evaluate(ctx, modules)
     fired = {k: v.fired for k, v in results.items()}
     flags = redflags.compute_all(replace(ctx, fired=fired), cfgs.flags)
     soft = sum(1 for f in flags if f.status == "fired" and not f.hard)

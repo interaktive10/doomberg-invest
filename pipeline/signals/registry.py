@@ -3,6 +3,7 @@ after them; every signal sees the fired flags of the ones before it."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from types import ModuleType
 
@@ -29,9 +30,10 @@ SIGNALS: tuple[ModuleType, ...] = (
 FAMILY = {m.ID: m.FAMILY for m in SIGNALS}
 
 
-def evaluate(ctx: Ctx) -> dict[str, SignalResult]:
+def evaluate(ctx: Ctx, modules: Sequence[ModuleType] = SIGNALS) -> dict[str, SignalResult]:
+    """All twelve signals, or a subset in the same order (the Signal Lab's fast checks)."""
     out: dict[str, SignalResult] = {}
-    for m in SIGNALS:
+    for m in modules:
         r: SignalResult = m.compute(replace(ctx, fired={k: v.fired for k, v in out.items()}))
         out[m.ID] = r
     return out
