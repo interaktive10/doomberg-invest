@@ -50,10 +50,37 @@ def test_tax_rate_clip_and_default() -> None:
 
 def test_invested_capital_floor_and_missing_debt() -> None:
     s = Series([q(ENDS[0], equity="100", cash="1000", total_assets="10000", total_debt=None)], "us")
-    assert s.invested_capital() == D(500)  # 100 - 1000 floored at 0.05 x 10000; no debt concept counts as none
-    assert s.net_debt() is None  # but leverage rules need a real debt figure
+    assert s.invested_capital() == D(500)  # 100 - 1000 floored at 0.05 x 10000; no debt concept anywhere: none
+    assert s.net_debt() == D(-1000)  # the same rule for leverage: net cash
     none = Series([q(ENDS[0], equity=None, cash="1", total_assets="10")], "us")
     assert none.invested_capital() is None
+
+
+def test_unreported_debt_is_the_last_reported_figure_never_zero() -> None:
+    """M4 review R1-F1: CAT and ORCL tag debt only in 10-Ks. A 10-Q quarter without a debt figure reads the last one
+    reported within a year; IC, net debt and EV use it (ORCL's IC isn't $30B instead of $160B)."""
+    from pipeline.signals import context
+
+    base = {"equity": "100", "cash": "50", "total_assets": "1000", "revenue": "100", "op_income": "20"}
+    rows = [q(e, **base, total_debt="500" if i == 1 else None) for i, e in enumerate(ENDS)]  # the 10-K is lag 3
+    s = Series(rows, "us")
+    assert s.debt(0) == D(500) and s.invested_capital(0) == D(550) and s.net_debt(0) == D(450)
+    ev, _, _ = context.multiples(s, D(1000))
+    assert ev == D(1450)  # 1000 + 500 - 50, not 1000 - 50
+    stale = Series([q(date(2022, 3, 31), **base, total_debt="500"), *[q(e, **base) for e in ENDS]], "us")
+    assert stale.debt(0) is None and stale.invested_capital(0) is None  # reported, but not within a year
+    assert context.multiples(stale, D(1000)) == (None, None, None)
+    never = Series([q(e, **base) for e in ENDS], "us")
+    assert never.debt(0) == D(0) and context.multiples(never, D(1000))[0] == D(950)  # no borrowings: no debt
+
+
+def test_year_back_comparisons_need_a_year_back() -> None:
+    """M4 review R1-F8: with a quarter missing, the row four back is 15 months back: no YoY."""
+    ends = [date(2024, 6, 30), date(2024, 9, 30), date(2024, 12, 31), date(2025, 3, 31),  # 2025-06-30 missing
+            date(2025, 9, 30), date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]  # fmt: skip
+    s = Series([q(e, revenue="100" if e < date(2025, 9, 30) else "200", receivables="10") for e in ends], "us")
+    assert not s.year_back_ok(0) and s.ttm_yoy("revenue") is None and s.quarterly_yoy("revenue") is None
+    assert Series([q(e, revenue="100") for e in ENDS], "us").year_back_ok(0)  # 2026-03-31 vs 2025-03-31
 
 
 def test_roic_uses_mean_ic_over_four_quarters() -> None:

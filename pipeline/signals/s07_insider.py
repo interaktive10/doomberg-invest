@@ -26,9 +26,12 @@ def cluster_strength(n: int, total: Decimal, threshold: Decimal, c: Mapping[str,
 
 
 def _window(ctx: Ctx, kind: str, days: int) -> list[Insider]:
+    """Amendments are collapsed first, then the planned and window filters apply to what the latest versions say: a
+    Form 4/A that ticks the 10b5-1 box, or moves the trade date out of the window, removes the buy (M4 review
+    R1-F4)."""
     start = ctx.week - timedelta(days=days)
-    evs = [e for e in ctx.insiders if e.kind == kind and not e.planned and start < e.event_date <= ctx.week]
-    return latest_versions(evs)
+    evs = latest_versions(e for e in ctx.insiders if e.kind == kind)
+    return [e for e in evs if not e.planned and start < e.event_date <= ctx.week]
 
 
 def compute(ctx: Ctx) -> SignalResult:

@@ -407,9 +407,11 @@ def test_manual_ownership_never_replaces_a_full_row(conn: psycopg.Connection[Any
     manual = OwnershipRow(company_id=cid, quarter_end=date(2026, 6, 30), filed_at=t, promoter_pct=Decimal("35.0000"),
                           source="manual_csv")  # fmt: skip
     repo.upsert_ownership(conn, [full])
-    repo.upsert_ownership(conn, [manual.model_copy(update={"filed_at": t + timedelta(days=1)})])
-    row = conn.execute("select fii_pct, source from ownership_q where company_id = %s", (cid,)).fetchone()
-    assert row == (Decimal("27.3200"), "nse_shp")
+    repo.upsert_ownership(conn, [manual, manual.model_copy(update={"filed_at": t + timedelta(days=1)})])
+    same = conn.execute("select fii_pct, source from ownership_q where company_id = %s and filed_at = %s", (cid, t))
+    assert same.fetchall() == [(Decimal("27.3200"), "nse_shp")]  # the same filing: the full row stays
+    seen = as_of(date(2026, 7, 24)).ownership(conn, [cid])  # a later manual version: as_of() still reads the full row
+    assert [(o.fii_pct, o.source) for o in seen] == [(Decimal("27.3200"), "nse_shp")]
 
 
 def test_india_upsert_keeps_h2_values(conn: psycopg.Connection[Any]) -> None:

@@ -35,10 +35,10 @@ from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
 from pipeline.net.stooq import StooqClient, StooqUnavailable
 from pipeline.prices import benchmarks as bench
-from pipeline.prices.splits import Adjusted, adjust
+from pipeline.prices.splits import Adjusted, SourceSplit, adjust, rebased
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals import context, redflags, registry, reverse_dcf, s01_orderbook
-from pipeline.signals.base import CapexView, Ctx, Event, Fact, Holding, Insider, SectorView, num
+from pipeline.signals.base import CapexView, Ctx, Event, Fact, Holding, Insider, SectorView, months_before, num
 from pipeline.signals.buckets import Ranked, bucket, market_cap_ok, shortlist
 from pipeline.signals.context import percentile_rank
 from pipeline.signals.scores import Evidence, Weights, evidence, gap
@@ -48,7 +48,6 @@ BATCH = 300
 STOOQ_MAX_SYMBOLS = 400  # §4.4, benchmarks included
 GDELT_MAX_QUERIES = 100  # ~8 minutes at GDELT's 1 request / 5 s; the rest reuse a count under 28 days old
 GDELT_REUSE_DAYS = 28
-PRICE_YEARS = 10  # C1 looks back up to 10 years
 EVENT_MONTHS = 25  # S10 reorganizations (24 months) and R3/R4 (12 months)
 FACT_YEARS = 3  # S9 "longer lead time" compares with the previous statement
 NONE_SCORE_WEEKS = 13  # 'none' rows are kept for a quarter (the novelty window is 12 weeks)
@@ -74,6 +73,11 @@ class ScoresStats:
     stooq_ok: int = 0
     stooq_failed: int = 0
     stooq_imported: int = 0
+    stooq_skipped: int = 0  # already priced this week (a re-run)
+    bench_ok: int = 0
+    bench_failed: int = 0
+    bench_skipped: int = 0
+    source_splits: list[str] = field(default_factory=list)  # splits a re-adjusted Stooq history showed
     gdelt_queried: int = 0
     gdelt_reused: int = 0
     gdelt_failed: int = 0
@@ -100,9 +104,11 @@ class Configs:
         def y(name: str) -> Any:
             return yaml.safe_load((root / "config" / name).read_text(encoding="utf-8"))
 
-        holdcos = {(str(h["market"]), str(h["symbol"]).upper()) for h in (y("holdcos.yaml").get("holdcos") or [])}
+        signals = y("signals.yaml")
+        holdco_list = yaml.safe_load((root / str(signals["s10_special"]["holdco_list"])).read_text(encoding="utf-8"))
+        holdcos = {(str(h["market"]), str(h["symbol"]).upper()) for h in (holdco_list.get("holdcos") or [])}
         return cls(
-            y("signals.yaml"),
+            signals,
             y("redflags.yaml"),
             y("context.yaml"),
             {m: y(f"universe_{m}.yaml") for m in ("us", "in")},
@@ -170,6 +176,7 @@ class CrossSection:
     tightness: Counter[tuple[str, str]] = field(default_factory=Counter)
     holder_pct: dict[UUID, Decimal] = field(default_factory=dict)
     sectors: dict[tuple[str, str], SectorView] = field(default_factory=dict)
+    tightness_quarters: int = 2  # config/signals.yaml s12_cycle.tightness_lookback_quarters
 
     def add(self, c: Company, s: Series, holdings: list[Holding], facts: list[Fact], week: date) -> None:
         assert c.id is not None
@@ -185,7 +192,7 @@ class CrossSection:
                 capex, da = s.ttm("capex", k), s.ttm("da", k)
                 capex_da.append(capex / da if capex is not None and da is not None and da > 0 else None)
             self.sector_rows[key].append((capex_da, [s.quarterly_yoy("revenue", k) for k in range(3)]))
-            start = week - timedelta(days=183)
+            start = months_before(week, 3 * self.tightness_quarters)
             self.tightness[key] += sum(1 for f in facts if start <= f.as_of <= week and _tight(f, facts))
 
     def finish(self) -> None:
@@ -289,10 +296,15 @@ def ingest_us_prices(
     week: date,
     imports: Path,
     stats: ScoresStats,
+    history_years: int,
 ) -> None:
-    start = week - timedelta(days=365 * PRICE_YEARS)
+    start = week - timedelta(days=365 * history_years)
+    done = repo.priced_at(conn, [c.id for c in targets if c.id is not None], week)
     for c in targets:
         assert c.id is not None and c.ticker
+        if c.id in done:  # a re-run of the week: Stooq's daily hit limit is better spent elsewhere
+            stats.stooq_skipped += 1
+            continue
         try:
             bars = stooq.weekly(c.ticker)
             stats.stooq_ok += 1
@@ -313,7 +325,28 @@ def ingest_us_prices(
             for b in bars
             if start < b.week_end <= week
         ]
+        stored = [(p.week_end, p.close) for p in repo.prices(conn, [c.id], start, week)]
+        split = rebased(stored, [(r.week_end, r.close) for r in rows])
         repo.upsert_prices(conn, rows)
+        if split is not None:
+            repo.mark_price_split(conn, c.id, split.week_end, split.ratio)
+            stats.source_splits.append(f"{c.ticker} {split.week_end} x{split.ratio}")
+
+
+def mark_stooq(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
+    """source_health for Stooq (M4 review R1-F3): stale when every download this run failed and nothing was priced
+    earlier this week (a manual CSV import may still have priced a company), so the web shows the banner; any
+    download that worked clears it. Failed retries after an earlier run of the week priced things record the error
+    without the banner; a run that downloaded nothing leaves it as it was."""
+    ok = stats.stooq_ok + stats.bench_ok
+    failed = stats.stooq_failed + stats.stooq_imported + stats.bench_failed
+    if ok:
+        repo.mark_source_success(conn, "stooq")
+    elif failed:
+        errors = [e for e in stats.errors if e.startswith(("stooq ", "benchmark "))]
+        stale = stats.stooq_skipped + stats.bench_skipped == 0
+        msg = f"{failed} downloads failed: " + "; ".join(errors[:3])
+        repo.mark_source_error(conn, "stooq", ("stale: " if stale else "") + msg, stale)
 
 
 def shares_history(s: Series) -> list[tuple[date, Decimal]]:
@@ -371,11 +404,12 @@ def price_company(
 ) -> Priced | None:
     c = sc.company
     assert c.id is not None
-    rows = repo.prices(conn, [c.id], week - timedelta(days=365 * PRICE_YEARS), week)
+    rows = repo.prices(conn, [c.id], week - timedelta(days=365 * int(cfgs.context["c1"]["history_years"])), week)
     closes = [(p.week_end, p.close) for p in rows]
     if not closes or (week - closes[-1][0]).days > 7:
         return None  # no price this week
-    adj = adjust(closes, shares_history(sc.series))
+    splits = [SourceSplit(p.week_end, p.split_ratio) for p in rows if p.split_ratio is not None]
+    adj = adjust(closes, shares_history(sc.series), splits)
     stats.unconfirmed_jumps += [f"{c.ticker or c.nse_symbol} {j.week_end}" for j in adj.unconfirmed]
     changed = [
         PriceW(**{**p.model_dump(), "adj_close": adj.adj_close[p.week_end]})
@@ -390,16 +424,20 @@ def price_company(
     versions = as_of(week).fundamental_versions(conn, [c.id])
     history = c1_history(versions, closes, adj, c.market)
     c2 = reverse_dcf.c2(sc.series, ev, c.market, cfgs.context["c2_reverse_dcf"], sc.g_ob)
-    ret = context.return_52w([(d, adj.adj_close[d]) for d, _ in closes], week)
+    weeks = int(cfgs.context["c3_runup"]["lookback_weeks"])
+    ret = context.return_52w([(d, adj.adj_close[d]) for d, _ in closes], week, weeks)
     return Priced(mcap, ev, ret, context.c1(history), c2)
 
 
-def benchmark_returns(conn: psycopg.Connection[Any], symbols: Sequence[str], week: date) -> list[Decimal]:
-    rows = repo.benchmark_closes(conn, symbols, week - timedelta(days=400), week)
+def benchmark_returns(
+    conn: psycopg.Connection[Any], symbols: Sequence[str], week: date, weeks: int = 52
+) -> list[Decimal]:
+    start = week - timedelta(days=7 * weeks + context.RETURN_START_SLACK_DAYS)
+    rows = repo.benchmark_closes(conn, symbols, start, week)
     by: dict[str, list[tuple[date, Decimal]]] = defaultdict(list)
     for r in rows:
         by[r.symbol].append((r.week_end, r.close))
-    return [x for x in (context.return_52w(v, week) for v in by.values()) if x is not None]
+    return [x for x in (context.return_52w(v, week, weeks) for v in by.values()) if x is not None]
 
 
 # ---------------------------------------------------------------- the run
@@ -422,7 +460,7 @@ def run(
     stats.companies = len(companies)
     repo.clear_week(conn, week)
 
-    cross = CrossSection()
+    cross = CrossSection(tightness_quarters=int(cfgs.signals["s12_cycle"]["tightness_lookback_quarters"]))
     for part in chunks(companies, BATCH):
         b = load_batch(conn, week, [c.id for c in part if c.id], full=False)
         for c in part:
@@ -484,8 +522,10 @@ def run(
     if http is not None:
         stooq = StooqClient(http)
         us_bench = list(cfgs.context["benchmarks"]["us"])
-        rows, errs = bench.fetch_us(stooq, us_bench, week)
+        have = repo.benchmarks_at(conn, us_bench, week)
+        rows, errs = bench.fetch_us(stooq, [b for b in us_bench if b not in have], week)
         repo.upsert_benchmarks(conn, rows)
+        stats.bench_ok, stats.bench_failed, stats.bench_skipped = len({r.symbol for r in rows}), len(errs), len(have)
         stats.errors += errs
         prev = {cid for cid, s in last.items() if s.evidence >= min_ev}
         us = sorted(
@@ -505,7 +545,9 @@ def run(
             week,
             imports or root / "imports" / "us_prices",
             stats,
+            int(cfgs.context["c1"]["history_years"]),
         )
+        mark_stooq(conn, stats)
 
     priced: dict[UUID, Priced] = {}
     for sc in stage:
@@ -594,15 +636,20 @@ def context_rows(
     stats: ScoresStats,
 ) -> list[ContextValue]:
     rows: list[ContextValue] = []
-    c3_cfg = cfgs.context["c3_runup"]
+    c3_cfg, c4_cfg = cfgs.context["c3_runup"], cfgs.context["c4_attention"]
+    # one GDELT budget for both markets, spent on the highest Evidence first (M4 review R1-F7)
+    by_evidence = sorted(priced, key=lambda cid: (-scored[cid].evidence.score, str(cid)))
+    counts = attention(
+        conn, week, [scored[cid].company for cid in by_evidence], http, gdelt_limit, stats,
+        int(c4_cfg["lookback_days"]),
+    )  # fmt: skip
     for market in ("us", "in"):
         ids = [cid for cid in priced if scored[cid].company.market == market]
         if not ids:
             continue
         pop = [r for r in (priced[cid].ret_52w for cid in ids) if r is not None]
-        pop += benchmark_returns(conn, cfgs.context["benchmarks"][market], week)
-        counts = attention(conn, week, [scored[cid].company for cid in ids], http, gdelt_limit, stats)
-        count_pop = list(counts.values())
+        pop += benchmark_returns(conn, cfgs.context["benchmarks"][market], week, int(c3_cfg["lookback_weeks"]))
+        count_pop = [counts[cid] for cid in ids if cid in counts]
         for cid in ids:
             p = priced[cid]
             metrics = {
@@ -632,9 +679,10 @@ def attention(
     http: HttpClient | None,
     limit: int,
     stats: ScoresStats,
+    days: int = 90,
 ) -> dict[UUID, int]:
-    """GDELT article counts: re-used for 28 days, at most `limit` new queries a run (highest Evidence first is the
-    caller's order)."""
+    """GDELT article counts over the last `days` (config/context.yaml c4_attention.lookback_days): re-used for 28
+    days, at most `limit` new queries a run, spent in the caller's order (highest Evidence first)."""
     reuse = repo.recent_attention(conn, week, week - timedelta(days=GDELT_REUSE_DAYS))
     out: dict[UUID, int] = {}
     client = GdeltClient(http) if http is not None else None
@@ -647,7 +695,9 @@ def attention(
         if client is None or stats.gdelt_queried >= limit:
             continue
         try:
-            out[c.id] = client.article_count(c.name, c.ticker if c.market == "us" else c.nse_symbol, c.market)
+            out[c.id] = client.article_count(
+                c.name, c.ticker if c.market == "us" else c.nse_symbol, c.market, days=days
+            )
             stats.gdelt_queried += 1
         except (GdeltError, httpx.HTTPError) as e:
             stats.gdelt_failed += 1
@@ -671,7 +721,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     week = a.week or last_friday(datetime.now(UTC).date())
     http = HttpClient(settings)
-    with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "scores_weekly", "stooq") as run_:
+    with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "scores_weekly") as run_:
         stats = run(conn, week, http)
         run_.update(stats.__dict__)
     print(

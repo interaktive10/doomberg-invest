@@ -133,10 +133,12 @@ def test_ownership_revision_never_leaks_backwards(conn: psycopg.Connection[Any])
     revised = OwnershipRow(company_id=cid, quarter_end=q, filed_at=AFTER_W, inst_holders=130, source="s")
     repo.upsert_ownership(conn, [first])
     repo.upsert_ownership(conn, [revised])
-    assert [r.inst_holders for r in as_of(W).ownership(conn, [cid])] == []  # a gap, never the revised value
+    # the version current at W, never the revised value; before migration 0008 this was a gap (M4 review R1-F2)
+    assert [r.inst_holders for r in as_of(W).ownership(conn, [cid])] == [120]
     assert [r.inst_holders for r in as_of(date(2025, 4, 4)).ownership(conn, [cid])] == [130]
     repo.upsert_ownership(conn, [first])  # an older filing arriving late never replaces a newer one
     assert [r.inst_holders for r in as_of(date(2025, 4, 4)).ownership(conn, [cid])] == [130]
+    assert [r.inst_holders for r in as_of(W).ownership(conn, [cid])] == [120]
 
 
 def test_insider_and_corp_events_hidden_until_filed(conn: psycopg.Connection[Any]) -> None:

@@ -15,14 +15,18 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from pipeline.db import repo
-from pipeline.db.models import Company, CorpEvent, InsiderEvent, Score, SignalValue
+from pipeline.db.models import Company, CorpEvent, InsiderEvent, OwnershipRow, PriceW, Score, SignalValue
 from pipeline.db.pit import cutoff_for
 from pipeline.net.gdelt import build_query, timeline_url
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import csv_url
+from pipeline.net.stooq import csv_url, parse_csv
 from pipeline.screener import MetricFilter, ScreenSpec, run_screen
 from pipeline.settings import Settings
 from pipeline.signals import weekly
+from pipeline.signals.context import Metric
+from pipeline.signals.reverse_dcf import C2
+from pipeline.signals.scores import Evidence
+from pipeline.signals.series import Series
 from pipeline.us.fundamentals import load_xbrl_map, quarterize_company, to_models
 from pipeline.us.submissions import parse_submissions
 
@@ -93,6 +97,42 @@ def test_signals_as_of_w_are_identical_whether_or_not_later_filings_exist(conn: 
     sig, flags, scores = runs["with later filings"]
     assert len(sig) == 3 * 12 and len(scores) == 3
     assert runs["with later filings"] == runs["only what was known at W"]
+
+
+def test_ownership_revision_filed_after_w_changes_nothing_as_of_w(conn: psycopg.Connection[Any]) -> None:
+    """M4 review R1-F2: re-filing June's shareholding pattern after W (same numbers) used to replace the row, so the
+    as-of-W run lost it: S8 went missing, R5 read March's pledge and the bucket moved. Versions keep it."""
+    week = date(2026, 9, 18)
+    repo.upsert_in_companies(conn, [Company(market="in", name="Pledged Ltd", isin="INE000X01011", nse_symbol="PLDG")])
+    cid = repo.company_ids_by(conn, "nse_symbol")["PLDG"]
+
+    def pattern(q: date, fii_dii: str, pledged: str, filed: datetime) -> OwnershipRow:
+        return OwnershipRow(company_id=cid, quarter_end=q, filed_at=filed, fii_pct=Decimal(fii_dii),
+                            dii_pct=Decimal(0), promoter_pct=Decimal(50), promoter_pledged_pct=Decimal(pledged),
+                            source="nse_shp")  # fmt: skip
+
+    repo.upsert_ownership(conn, [
+        pattern(date(2025, 12, 31), "10", "10", datetime(2026, 1, 20, tzinfo=UTC)),
+        pattern(date(2026, 3, 31), "11", "10", datetime(2026, 4, 20, tzinfo=UTC)),
+        pattern(date(2026, 6, 30), "12.5", "25", datetime(2026, 7, 20, tzinfo=UTC)),
+    ])  # fmt: skip
+    weekly.run(conn, week, http=None)
+    before = snapshot_in(conn, week)
+    sig, flags, scores = before
+    assert ("S8", True) in [(r[0], r[1]) for r in sig]  # FII+DII 10 -> 12.5: +2.5 pp
+    assert [r[1] for r in flags if r[0] == "R5"] == [True] and scores[0][2] == "excluded"  # pledge 25% of promoter
+    repo.upsert_ownership(conn, [pattern(date(2026, 6, 30), "12.5", "25", datetime(2026, 10, 1, tzinfo=UTC))])
+    weekly.run(conn, week, http=None)
+    assert snapshot_in(conn, week) == before
+
+
+def snapshot_in(conn: psycopg.Connection[Any], week: date) -> tuple[list[Any], list[Any], list[Any]]:
+    sig = conn.execute("select signal_id, fired, strength, inputs from signal_values where week_end = %s order by 1",
+                       (week,)).fetchall()  # fmt: skip
+    flags = conn.execute("select flag_id, hard, inputs from redflag_values where week_end = %s order by 1",
+                         (week,)).fetchall()  # fmt: skip
+    scores = conn.execute("select evidence, families, bucket from scores where week_end = %s", (week,)).fetchall()
+    return sig, flags, scores
 
 
 # ---------------------------------------------------------------- the weekly scoring run
@@ -177,6 +217,90 @@ def test_manual_price_import_when_stooq_fails(conn: psycopg.Connection[Any], tmp
     stats = weekly.run(conn, week, http=http, imports=imports, gdelt_limit=0)
     assert (stats.stooq_ok, stats.stooq_imported) == (0, 1)
     assert conn.execute("select count(*) from prices_w where company_id = %s", (cid,)).fetchone() == (260,)
+
+
+def test_stooq_stale_when_every_download_fails_cleared_when_it_answers(
+    conn: psycopg.Connection[Any], tmp_path: Path
+) -> None:
+    """M4 review R1-F3: a run where every Stooq download fails leaves source_health stale (the web's banner); a run
+    where Stooq answers clears it; a re-run of the week doesn't download what it already has."""
+    week = date(2026, 9, 18)
+    cid = add(conn, "0001050915")
+    fundamentals(conn, "0001050915", cid)
+    thesis(conn, cid)
+    down = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path / "a"))
+    down.register_mock(csv_url("pwr.us"), (FIX / "px" / "limit.txt").read_bytes())  # benchmarks: no answer at all
+    stats = weekly.run(conn, week, http=down, imports=tmp_path / "imports", gdelt_limit=0)
+    assert (stats.stooq_ok, stats.stooq_failed, stats.bench_ok, stats.bench_failed) == (0, 1, 0, 12)
+
+    def stooq() -> Any:
+        return {h.source: h for h in repo.source_health(conn)}["stooq"]
+
+    assert stooq().stale and (stooq().last_error or "").startswith("stale: 13 downloads failed")
+    up = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
+    assert up.stooq_ok == 1 and not stooq().stale and stooq().last_error is None and stooq().last_success
+    http = mock_http(tmp_path / "c")
+    again = weekly.run(conn, week, http=http, imports=tmp_path / "imports", gdelt_limit=0)
+    assert (again.stooq_ok, again.stooq_skipped, again.bench_skipped) == (0, 1, 2)  # PWR, ^spx and XLK are priced
+    assert csv_url("pwr.us") not in http.calls and csv_url("^spx") not in http.calls
+    assert not stooq().stale  # the other ten benchmarks failed again, but this week's prices are in
+
+
+def test_adjusted_source_split_moves_market_cap_to_the_new_basis(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """M4 review R1-F6: stored closes 10x the fresh download's (Stooq re-adjusted its history for a 10:1 split).
+    Until a 10-Q reports the new count, market cap is price x the pre-split count x 10."""
+    week = date(2026, 9, 18)
+    cid = add(conn, "0001050915")
+    fundamentals(conn, "0001050915", cid)
+    thesis(conn, cid)
+
+    def market_cap() -> Decimal:
+        row = conn.execute("select metrics->>'market_cap' from company_metrics where company_id = %s", (cid,))
+        return Decimal(str((row.fetchone() or [None])[0]))
+
+    with conn.transaction(force_rollback=True):
+        weekly.run(conn, week, http=mock_http(tmp_path / "a"), imports=tmp_path / "imports", gdelt_limit=0)
+        before = market_cap()
+    old = [PriceW(company_id=cid, week_end=b.week_end, close=b.close * 10, adj_close=b.close * 10, source="stooq")
+           for b in parse_csv((FIX / "px" / "pwr.us_w.csv").read_bytes()) if b.week_end < week]  # fmt: skip
+    repo.upsert_prices(conn, old)
+    stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
+    assert stats.source_splits == [f"PWR {week} x10"]
+    assert abs(market_cap() / before - 10) < Decimal("1e-9")
+    stored = conn.execute("select split_ratio from prices_w where company_id = %s and week_end = %s", (cid, week))
+    assert stored.fetchone() == (Decimal(10),)
+    nxt = weekly.run(
+        conn, week + timedelta(days=7), http=mock_http(tmp_path / "c"), imports=tmp_path / "i", gdelt_limit=0
+    )
+    assert nxt.source_splits == []  # the history is on the new basis now; the ratio stays on its week
+
+
+def test_gdelt_budget_goes_to_the_highest_evidence_across_both_markets(
+    conn: psycopg.Connection[Any], tmp_path: Path
+) -> None:
+    """M4 review R1-F7: with one query left, the staged company with the highest Evidence gets it, whichever market
+    it is in (the US was served first, in name order)."""
+    week = date(2026, 9, 18)
+    us = add(conn, "0000018230")
+    repo.upsert_in_companies(conn, [Company(market="in", name="Pledged Ltd", isin="INE000X01011", nse_symbol="PLDG")])
+    companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
+    ind = repo.company_ids_by(conn, "nse_symbol")["PLDG"]
+    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    for c in companies.values():
+        http.register_mock(timeline_url(build_query(c.name, c.ticker if c.market == "us" else c.nse_symbol, c.market)),
+                           (FIX / "gdelt" / "timeline_pwr.json").read_bytes())  # fmt: skip
+
+    def scored(cid: uuid.UUID, ev: int) -> weekly.Scored:
+        c = companies[cid]
+        e = Evidence(Decimal(ev), Decimal(0), {}, (), 0, False)
+        return weekly.Scored(c, Series([], c.market), e, False, {}, None, {})
+
+    nothing = weekly.Priced(None, None, None, Metric(None, None, None, {}), C2(None, None, {}))
+    stats = weekly.ScoresStats(week.isoformat())
+    rows = weekly.context_rows(conn, week, weekly.Configs.load(), {us: scored(us, 30), ind: scored(ind, 70)},
+                               {us: nothing, ind: nothing}, http, 1, stats)  # fmt: skip
+    c4 = {r.company_id: r.inputs for r in rows if r.metric_id == "C4"}
+    assert stats.gdelt_queried == 1 and "articles_90d" in c4[ind] and c4[us].get("missing") == ["gdelt_count"]
 
 
 # ---------------------------------------------------------------- pruning (SPEC_ISSUES 9)

@@ -24,7 +24,15 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
-from pipeline.db.models import FUNDAMENTAL_COLUMNS, CorpEvent, FactRow, FundamentalsRow, InsiderEvent, OwnershipRow
+from pipeline.db.models import (
+    FUNDAMENTAL_COLUMNS,
+    MANUAL_OWNERSHIP,
+    CorpEvent,
+    FactRow,
+    FundamentalsRow,
+    InsiderEvent,
+    OwnershipRow,
+)
 
 _FUNDAMENTALS_COLS = ", ".join(
     ("company_id", "period_end", "fiscal_label", "filed_at", *FUNDAMENTAL_COLUMNS, "currency", "source")
@@ -106,13 +114,15 @@ class AsOf:
         return [FactRow(**r) for r in self._fetch(conn, sql, company_ids, since)]
 
     def ownership(self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None) -> list[OwnershipRow]:
+        """Per company and quarter, the latest version filed by the cutoff (a revision filed later leaves it as it
+        was at the cutoff, M4 review R1-F2); a full row wins over a promoter-only manual CSV row."""
         sql = (
-            "select company_id, quarter_end, filed_at, inst_holders, inst_pct, fii_pct, dii_pct, promoter_pct, "
-            "promoter_pledged_pct, source from ownership_q "
+            "select distinct on (company_id, quarter_end) company_id, quarter_end, filed_at, inst_holders, inst_pct, "
+            "fii_pct, dii_pct, promoter_pct, promoter_pledged_pct, source from ownership_q "
             "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
-            "order by company_id, quarter_end"
+            "order by company_id, quarter_end, (source = %(manual)s), filed_at desc"
         )
-        return [OwnershipRow(**r) for r in self._fetch(conn, sql, company_ids)]
+        return [OwnershipRow(**r) for r in self._fetch(conn, sql, company_ids, manual=MANUAL_OWNERSHIP)]
 
     def insider_events(
         self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None
@@ -143,10 +153,12 @@ class AsOf:
         sql: str,
         company_ids: Sequence[UUID] | None,
         since: date | None = None,
+        **params: object,
     ) -> list[dict[str, Any]]:
+        """`params` are a query's own constants; they come first, so none can replace the cutoff."""
         ids = None if company_ids is None else [UUID(str(c)) for c in company_ids]  # rejects non-UUID input
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(sql.encode("utf-8"), {"cutoff": self.cutoff, "ids": ids, "since": since})
+            cur.execute(sql.encode("utf-8"), {**params, "cutoff": self.cutoff, "ids": ids, "since": since})
             return list(cur.fetchall())
 
 
