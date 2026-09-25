@@ -238,3 +238,119 @@ def test_hype_variants_are_rejected(phrase: str) -> None:
     card = copy.deepcopy(GOOD)
     card["summary"] = f"{card['summary']} {phrase}"
     assert any(e.startswith("hype word") for e in check(card).errors), phrase
+
+
+RPO = "[m:rpo:2026-06-30] [m:rpo:2025-06-30]"
+ORDER = f"A hyperscale cloud provider placed a $600 million multi-year order [{F_ORDER}]."
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Nimbus's largest customer is Microsoft Corp. The customer placed a $600 million multi-year order "
+        f"[{F_ORDER}].",
+        f"Nimbus will dominate the AI server market in the U.S. {ORDER}",
+        f"Nimbus's only real rival is Dell Inc. {ORDER}",
+        f"Nimbus sells servers, storage, networking, etc. {ORDER}",
+        f"Nimbus will dominate AI servers.({ORDER[:-1]}.)",
+        f"{ORDER[:-1]}\u2028Nimbus is the only supplier able to meet this demand",
+        f"{ORDER[:-1]}\rNimbus is the only supplier able to meet this demand",
+    ],
+    ids=["corp", "u-s", "inc", "etc", "open-paren", "u2028", "lone-cr"],
+)
+def test_abbreviation_end_hides_no_uncited_sentence(text: str) -> None:
+    """M6 review R2-F1: after Corp., Inc., U.S. or etc. a capital starts a new sentence, and so does "(" or any line
+    break, so the uncited claim before it is checked on its own."""
+    r = with_fact(text)
+    assert any("sentence cites no pack id" in e for e in r.errors), r.errors
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Nimbus Compute Corp. received a $600 million multi-year order from a hyperscale cloud provider [{F_ORDER}].",
+        f"A U.S. hyperscale cloud provider placed a $600 million multi-year order [{F_ORDER}].",
+        f"Director John A. Smith said a hyperscale cloud provider placed a $600 million multi-year order [{F_ORDER}].",
+        f"A hyperscale cloud provider placed a $600 million multi-year order with J.P. Morgan as adviser [{F_ORDER}].",
+    ],
+    ids=["corp-runs-on", "u-s-runs-on", "initial", "dotted-initials"],
+)
+def test_abbreviation_end_keeps_names_and_abbreviations_in_one_sentence(text: str) -> None:
+    r = with_fact(text)
+    assert r.ok, r.errors
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Revenue fell from $1.25 billion to $980 million {REV}.",
+        f"Revenue fell from $1.25 billion a year earlier to $980 million {REV}.",
+        f"Revenue posted a 27.6% decline to $1.25 billion {REV}.",
+        f"Remaining performance obligations reached $4.2 billion, 44.8% lower {RPO}.",
+        f"Revenue plunged 27.6% to $1.25 billion from $980 million a year earlier {REV}.",
+        f"Revenue slumped 27.6% year over year to $1.25 billion {REV}.",
+        f"Revenue doubled to $1.25 billion from $980 million a year earlier {REV}.",
+        f"Revenue tripled to $1.25 billion {REV}.",
+        f"Revenue halved to $1.25 billion {REV}.",
+        f"Revenue rose to $1.25 billion from $980 million, up by half {REV}.",
+    ],
+    ids=["fell-from-to", "fell-from-a-year-earlier", "decline-after", "lower-after", "plunged", "slumped", "doubled",
+         "tripled", "halved", "up-by-half"],
+)  # fmt: skip
+def test_direction_variants_are_rejected(text: str) -> None:
+    """M6 review R2-F2: every figure here is a pack value, but the words give the move the wrong direction or size."""
+    r = with_fact(text, [], 0)
+    assert not r.ok, text
+
+
+def test_direction_variants_that_are_true_still_pass() -> None:
+    assert with_fact(f"Revenue rose from $980 million a year earlier to $1.25 billion, up 27.6% {REV}.", [], 0).ok
+    assert with_fact(f"Remaining performance obligations reached $4.2 billion, 44.8% higher {RPO}.", [], 0).ok
+    doubled = v.Candidates(raw=(), differences=(), changes=(D("1.01"),), ratios=(D("2.01"),))
+    assert v.multiplier_errors("Backlog doubled.", doubled) == []
+    assert v.multiplier_errors("Backlog more than doubled.", doubled) == []
+    assert v.multiplier_errors("Backlog nearly doubled.", doubled) != []  # 2.01 is not "nearly" 2
+
+
+@pytest.mark.parametrize(
+    ("text", "cites"),
+    [
+        (f"In Q2 45% of orders came from hyperscalers [{F_ORDER}].", []),
+        (f"In H1 40% of orders came from hyperscalers [{F_ORDER}].", []),
+        (f"The order is worth Rs50 crore [{F_ORDER}].", []),
+        (f"The company now has 2000 hyperscale customers {REV}.", []),
+        (f"A hyperscale cloud provider placed a $600 million multi-year order, the largest of its 1995 orders "
+         f"[{F_ORDER}].", []),
+    ],
+    ids=["q2", "h1", "rs50", "2000-customers", "1995-orders"],
+)  # fmt: skip
+def test_masked_figures_are_checked(text: str, cites: list[str]) -> None:
+    """M6 review R2-F3: a label doesn't take the figure after it, signal names are capitals, and a four-digit number
+    is a year only in a year's context."""
+    r = with_fact(text, cites)
+    assert any("matches no cited pack value" in e for e in r.errors), r.errors
+
+
+@pytest.mark.parametrize(
+    "text", ["In Q2 2026", "In Q2'26", "In FY2026", "In FY 2026", "Signal S1 and context C2", "in 2026",
+             "on June 30, 2026", "2026 revenue", "since 2019,", "Q2FY26"],
+)  # fmt: skip
+def test_masked_figures_labels_still_read_as_labels(text: str) -> None:
+    assert v.sentence_numbers(text, (1996, 2041)) == [], text
+
+
+@pytest.mark.parametrize(
+    ("good", "bad"),
+    [
+        ("Revenue was $1.25 billion for the three months ended June 30, 2026 [m:revenue:2026-06-30].", "$1.35 billion"),
+        ("Revenue was $1.25 billion in the three months to June [m:revenue:2026-06-30].", "$1.35 billion"),
+        ("Revenue for the quarter ended June 30 was $1.25 billion [m:revenue:2026-06-30].", "$1.35 billion"),
+        ("Revenue for the 12 months ended June 30, 2026 grew 24.1% [m:revenue_ttm_yoy].", "34.1%"),
+    ],
+    ids=["three-months-ended", "three-months-to", "month-day", "twelve-months"],
+)
+def test_period_phrasing_is_a_label(good: str, bad: str) -> None:
+    """M6 review R2-F4: how 10-Qs name their periods is a label, and the figures stay checked."""
+    assert with_fact(good, [], 0).ok, with_fact(good, [], 0).errors
+    wrong = good.replace("$1.25 billion", bad) if bad.startswith("$") else good.replace("24.1%", bad)
+    assert any(repr(bad.lstrip("$")) in e for e in with_fact(wrong, [], 0).errors)

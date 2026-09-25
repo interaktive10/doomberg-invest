@@ -10,3 +10,7 @@ sla_days:
   nse: 10       # India weekly
   bse: 10       # India fallback
   sec_13f: 100  # quarterly 13F data sets
+# A fallback source is used only when its primary fails (BSE when NSE's bhavcopy fails), so it records a success only
+# in those weeks; while its primary is within its SLA, a fallback isn't late (M6 review R2-F5).
+fallback_of:
+  bse: nse

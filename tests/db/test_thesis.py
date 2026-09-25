@@ -432,6 +432,24 @@ def test_the_digest_without_scores_says_the_candidates_are_missing(conn: psycopg
     assert "**Stale data:** sec (no success for 17 days; SLA 8)" in body and "## Source health" in body
 
 
+@pytest.mark.parametrize(("nse", "banner"), [("2026-09-18 06:00+00", None), (None, "nse (stale)")],
+                         ids=["nse-fine", "nse-stale"])  # fmt: skip
+def test_fallback_banner_only_when_its_primary_is_down(conn: psycopg.Connection[Any], nse: str | None,
+                                                       banner: str | None) -> None:  # fmt: skip
+    """M6 review R2-F5: BSE records a success only in weeks it stood in for NSE, so while NSE is within its SLA an
+    old BSE date isn't stale data (the table still lists it); when NSE is stale, the banner names NSE."""
+    conn.execute("insert into source_health (source, last_success, last_error, stale) values "
+                 "('bse', '2026-08-01 06:00+00', null, false), ('nse', %s, %s, %s)",
+                 (nse, None if nse else "stale: 3 bhavcopy downloads failed", nse is None))  # fmt: skip
+    _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
+    head = body.split("## ", 1)[0]
+    if banner is None:
+        assert "Stale data" not in head, head
+        assert "| bse | 2026-08-01 06:00Z | fallback, not needed (nse ok) |" in body
+    else:
+        assert "**Stale data:**" in head and banner in head and "bse (no success for 48 days; SLA 10)" in head, head
+
+
 def test_fallback_p04_and_p05_replay_from_cassettes(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     """R1-F13 (BRIEF §9 "fallback P-04" and P-05 cassettes): P-04 on F-CARD's pack and validate.py's P-05 call are
     recorded through cassette recorders (pipeline.thesis.samples, as record-cassettes.yml does), and the fallback

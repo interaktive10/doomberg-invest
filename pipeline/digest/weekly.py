@@ -41,6 +41,12 @@ def sla_days(root: Any = REPO_ROOT) -> dict[str, int]:
     return {str(k): int(v) for k, v in (doc.get("sla_days") or {}).items()}
 
 
+def fallbacks(root: Any = REPO_ROOT) -> dict[str, str]:
+    """Fallback source -> its primary (config/staleness.yaml `fallback_of`: bse -> nse)."""
+    doc = yaml.safe_load((root / "config" / "staleness.yaml").read_text(encoding="utf-8"))
+    return {str(k): str(v) for k, v in (doc.get("fallback_of") or {}).items()}
+
+
 def _fmt(x: Decimal | float | None, digits: int = 1) -> str:
     return "n/a" if x is None else f"{Decimal(str(x)):.{digits}f}"
 
@@ -102,10 +108,22 @@ def late(h: SourceHealth, now: datetime, sla: Mapping[str, int]) -> bool:
     return days is not None and h.last_success is not None and now - h.last_success > timedelta(days=days)
 
 
-def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int]) -> list[str]:
-    """§2.7: every source that is stale, or past its SLA, named under the title."""
+def resting(h: SourceHealth, rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int],
+            fallback_of: Mapping[str, str]) -> bool:  # fmt: skip
+    """A fallback source whose primary is fine: it isn't needed, so its age says nothing (M6 review R2-F5)."""
+    primary = next((r for r in rows if r.source == fallback_of.get(h.source)), None)
+    return (primary is not None and not primary.stale and primary.last_success is not None
+            and not late(primary, now, sla))  # fmt: skip
+
+
+def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int],
+           fallback_of: Mapping[str, str] | None = None) -> list[str]:  # fmt: skip
+    """§2.7: every source that is stale, or past its SLA, named under the title (a fallback only when its primary
+    isn't fine)."""
     items = []
     for h in rows:
+        if resting(h, rows, now, sla, fallback_of or {}):
+            continue
         if h.stale:
             items.append(f"{h.source} (stale)")
         elif late(h, now, sla) and h.last_success is not None:
@@ -114,13 +132,16 @@ def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int]) 
             ""] if items else []  # fmt: skip
 
 
-def health(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int] | None = None) -> list[str]:
+def health(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int] | None = None,
+           fallback_of: Mapping[str, str] | None = None) -> list[str]:  # fmt: skip
     if not rows:
         return ["No source has reported yet."]
     sla = sla if sla is not None else sla_days()
     out = ["| Source | Last success | Status |", "|---|---|---|"]
     for h in rows:
-        if h.stale:
+        if resting(h, rows, now, sla, fallback_of or {}):
+            status = f"fallback, not needed ({(fallback_of or {})[h.source]} ok)"
+        elif h.stale:
             status = "**stale**" + (f": {h.last_error.removeprefix('stale: ')[:120]}" if h.last_error else "")
         elif h.last_error:
             status = f"error: {h.last_error[:120]}"
@@ -162,18 +183,22 @@ def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: dat
     since = datetime.combine(week - timedelta(days=6), time(0), tzinfo=UTC)
     until = datetime.combine(week + timedelta(days=1), time(0), tzinfo=UTC)
     title = f"Doomberg weekly — {week_label(week)}"
-    sources, sla = repo.source_health(conn), sla_days()
+    sources, sla, fb = repo.source_health(conn), sla_days(), fallbacks()
     parts: list[tuple[str, list[str]]] = [
         ("New candidates", candidates(conn, week, companies, app_url)),
         ("Theses needing attention", attention(conn, week)),
         ("Capex brief", capex(conn, week)),
-        ("Source health", health(sources, now, sla)),
+        ("Source health", health(sources, now, sla, fb)),
         ("LLM quota use", llm(thesis_repo.llm_use(conn, since, until))),
     ]
     notes = lab(thesis_repo.lab_runs(conn, since, until))
     if notes:
         parts.append(("Lab notes", notes))
-    lines = [f"Week ending {week:%Y-%m-%d}. Research only: no orders, no price alerts.", "", *banner(sources, now, sla)]
+    lines = [
+        f"Week ending {week:%Y-%m-%d}. Research only: no orders, no price alerts.",
+        "",
+        *banner(sources, now, sla, fb),
+    ]
     for name, body in parts:
         lines += [f"## {name}", "", *body, ""]
     return title, "\n".join(lines).rstrip() + "\n"
