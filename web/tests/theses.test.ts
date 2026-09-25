@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterVerdict, canMove, positionOpen } from "@/lib/theses";
+import { afterVerdict, canMove, markMoved, positionOpen } from "@/lib/theses";
 
 describe("thesis workflow (BRIEF §1.8)", () => {
   it("offers each move in its state only", () => {
@@ -24,5 +24,18 @@ describe("thesis workflow (BRIEF §1.8)", () => {
     expect(afterVerdict("review", "weakened", false)).toBe("thesis");
     expect(afterVerdict("review", "broken", true)).toBe("review");
     expect(afterVerdict("position", "intact", true)).toBe("position");
+  });
+});
+
+describe("theses moved to Review in this render", () => {
+  it("show their new state without a second read (CI: a re-read in the same render returned the old state)", () => {
+    const list = [
+      { id: "a", state: "thesis" as const },
+      { id: "b", state: "position" as const },
+    ];
+    const shown = markMoved(list, new Set(["a"]));
+    expect(shown.map((t) => t.state)).toEqual(["review", "position"]);
+    expect(list[0]?.state).toBe("thesis");
+    expect(markMoved(list, new Set())).toEqual(list);
   });
 });

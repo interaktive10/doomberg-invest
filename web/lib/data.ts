@@ -321,9 +321,11 @@ export async function postmortem(thesisId: string): Promise<Postmortem | null> {
 
 /** BRIEF §4.9 Reviews: for each thesis or position whose company has filed a quarter the thesis hasn't seen, a review
  * row with the pack diff (one per quarter end: the unique index makes a re-render a no-op), and the thesis moves to
- * the Review column until Manzoor marks it (§1.8). */
-export async function ensureReviews(list: Pick<Thesis, "id" | "company_id" | "state" | "evidence_pack" | "accepted_at" | "created_week">[]): Promise<number> {
-  let made = 0;
+ * the Review column until Manzoor marks it (§1.8). Returns the ids it moved to Review: the page shows their new state
+ * with lib/theses.ts markMoved, because reading the rows again in the same render returns the first answer (Next
+ * memoizes a repeated GET within a render). */
+export async function ensureReviews(list: Pick<Thesis, "id" | "company_id" | "state" | "evidence_pack" | "accepted_at" | "created_week">[]): Promise<Set<string>> {
+  const moved = new Set<string>();
   for (const t of list) {
     if (t.state !== "thesis" && t.state !== "position" && t.state !== "review") continue;
     const [filed, last, kills] = await Promise.all([
@@ -348,14 +350,14 @@ export async function ensureReviews(list: Pick<Thesis, "id" | "company_id" | "st
       { onConflict: "thesis_id,period_end", ignoreDuplicates: true },
     ).select("id");
     if (ins.error) throw new Error(ins.error.message);
-    if ((ins.data ?? []).length > 0) made += 1;
     if (t.state !== "review") {
       const up = await db().from("theses").update({ state: "review", updated_at: new Date().toISOString() })
-        .eq("id", t.id).in("state", ["thesis", "position"]);
+        .eq("id", t.id).in("state", ["thesis", "position"]).select("id");
       if (up.error) throw new Error(up.error.message);
+      if ((up.data ?? []).length > 0) moved.add(t.id);
     }
   }
-  return made;
+  return moved;
 }
 
 export async function setting<T>(key: string, fallback: T): Promise<T> {

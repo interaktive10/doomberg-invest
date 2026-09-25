@@ -43,3 +43,8 @@ export function afterVerdict(state: ThesisState, verdict: "intact" | "weakened" 
   if (state !== "review" || verdict === "broken") return state;
   return open ? "position" : "thesis";
 }
+
+/** The theses with those in `moved` shown in Review (lib/data.ts ensureReviews moved them in this render). */
+export function markMoved<T extends { id: string; state: ThesisState }>(list: readonly T[], moved: ReadonlySet<string>): T[] {
+  return list.map((t) => (moved.has(t.id) ? { ...t, state: "review" as const } : t));
+}

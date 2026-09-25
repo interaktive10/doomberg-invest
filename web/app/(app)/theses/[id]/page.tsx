@@ -11,7 +11,7 @@ import { thesisWeeks } from "@/lib/discipline";
 import { big, code, num } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
 import type { PackDiff } from "@/lib/reviews";
-import { canMove, positionOpen, STATE_LABEL } from "@/lib/theses";
+import { canMove, markMoved, positionOpen, STATE_LABEL } from "@/lib/theses";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
 
 // BRIEF §6 Theses: the thesis page with the card, kill-criteria status, review history and journal entries, plus the
@@ -60,8 +60,8 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
   if (!UUID.test(id)) notFound();
   const first = await getThesis(id);
   if (first === null) notFound();
-  const made = await ensureReviews([first]);
-  const t = made > 0 ? ((await getThesis(id)) ?? first) : first;
+  const [t] = markMoved([first], await ensureReviews([first]));
+  if (t === undefined) notFound();
   const [kills, revs, entries, pm, minWeeks] = await Promise.all([
     killCriteria(id),
     reviews(id),

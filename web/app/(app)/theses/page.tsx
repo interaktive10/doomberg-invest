@@ -3,7 +3,7 @@ import { Empty, Page } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { ensureReviews, theses, type Thesis, type ThesisState } from "@/lib/data";
 import { code } from "@/lib/format";
-import { STATE_LABEL } from "@/lib/theses";
+import { markMoved, STATE_LABEL } from "@/lib/theses";
 
 // BRIEF §6 Theses: a Kanban by state (§1.8 Research → Thesis → Position → Review → Closed; dismissed cards last).
 const COLUMNS: ThesisState[] = ["research", "thesis", "position", "review", "closed"];
@@ -26,8 +26,7 @@ function CardLink({ t }: { t: Thesis }) {
 
 export default async function Theses() {
   const first = await theses();
-  const made = await ensureReviews(first);
-  const all = made > 0 ? await theses() : first;
+  const all = markMoved(first, await ensureReviews(first));
   const by = (s: ThesisState) => all.filter((t) => t.state === s);
   const dismissed = by("dismissed");
   return (
