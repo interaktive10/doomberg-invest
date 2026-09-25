@@ -8,7 +8,7 @@ applies each month-end's cutoff), prices from the Stooq bulk file, and writes:
   human-approved label);
 - the panel as Parquet (--panel-out; lab.yml keeps it as a release asset, §2.8).
 Without the bulk file the run is BLOCKED(human) (exit 3): Manzoor downloads it once (it has a CAPTCHA) and attaches
-it to the `lab-data` release (M8-05). India runs only once config/lab.yaml enables it (§4.10.7).
+it to the `lab-data-v1` release (M8-05). India runs only once config/lab.yaml enables it (§4.10.7).
 """
 
 from __future__ import annotations

@@ -14,5 +14,5 @@ markets:
   in: false                       # §4.10.7: enabled after 8 quarters of collected India data
 india_min_quarters: 8
 prices:                           # the Stooq bulk daily file, downloaded manually once (it has a CAPTCHA; §2.7)
-  release_tag: lab-data           # a private GitHub release of this repository holds it
+  release_tag: lab-data-v1        # a private GitHub release of this repository holds it
   asset: d_us_txt.zip

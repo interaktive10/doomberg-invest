@@ -86,10 +86,10 @@ LAB_PRICES = ROOT / ".cache" / "lab" / "d_us_txt.zip"
 
 
 def _needs_lab_prices() -> str | None:
-    """M8-05: the Stooq bulk daily file is downloaded by hand once (CAPTCHA) into the `lab-data` release; lab.yml
+    """M8-05: the Stooq bulk daily file is downloaded by hand once (CAPTCHA) into the `lab-data-v1` release; lab.yml
     fetches it to .cache/lab/."""
     if not LAB_PRICES.exists():
-        return "human:Stooq bulk file d_us_txt.zip not attached to the lab-data release (BRIEF §2.7)"
+        return "human:Stooq bulk file d_us_txt.zip not attached to the lab-data-v1 release (BRIEF §2.7)"
     return _needs_database()
 
 

@@ -1,5 +1,5 @@
 name: lab
-# BRIEF §4.10 Signal Lab (manual; US first; <= 90 min): the Stooq bulk daily file from the `lab-data` release (Manzoor
+# BRIEF §4.10 Signal Lab (manual; US first; <= 90 min): the Stooq bulk daily file from the `lab-data-v1` release (Manzoor
 # downloads it once from stooq.com: it has a CAPTCHA) -> the point-in-time monthly panel -> events and statistics ->
 # lab_results, docs/LAB_REPORT.md and the §4.10.5 weight proposals. Two PRs: the report, and config/weights.yaml
 # alone (a protected path: it passes the `protected` check only with the human-approved label). The panel is kept as
@@ -37,23 +37,23 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
-      - name: Stooq bulk file (the lab-data release)
+      - name: Stooq bulk file (the lab-data-v1 release)
         id: prices
         run: |
           mkdir -p .cache/lab
           if [ -z "$DATABASE_URL" ]; then
             echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
-          elif gh release download lab-data --pattern 'd_us_txt.zip' --dir .cache/lab --clobber; then
+          elif gh release download lab-data-v1 --pattern 'd_us_txt.zip' --dir .cache/lab --clobber; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::BLOCKED(human): attach the Stooq bulk file d_us_txt.zip to the lab-data release (BRIEF §2.7)"
+            echo "::warning::BLOCKED(human): attach the Stooq bulk file d_us_txt.zip to the lab-data-v1 release (BRIEF §2.7)"
           fi
       - name: Lab run
         if: steps.prices.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.lab.run --market "$MARKET" --workers 4 --propose
       - name: Keep the panel (release asset)
         if: steps.prices.outputs.ok == 'true'
-        run: gh release upload lab-data .cache/lab/panel.parquet --clobber
+        run: gh release upload lab-data-v1 .cache/lab/panel.parquet --clobber
       - name: Open the report PR and the weights PR
         if: steps.prices.outputs.ok == 'true'
         run: |
