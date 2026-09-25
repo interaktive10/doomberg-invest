@@ -65,6 +65,24 @@ def select_as_of[T](
     return list(best.values())
 
 
+def ownership_as_of(rows: Iterable[OwnershipRow], cutoff: datetime) -> list[OwnershipRow]:
+    """Pure-Python form of AsOf.ownership(): drop rows filed at/after `cutoff`; per company and quarter keep the
+    latest version, a full row before a promoter-only manual CSV row. The Signal Lab replays
+    AsOf.ownership_versions() month by month with it."""
+    best: dict[tuple[UUID, date], OwnershipRow] = {}
+    for r in rows:
+        if r.filed_at >= cutoff:
+            continue
+        k = (r.company_id, r.quarter_end)
+        if k not in best or _ownership_rank(best[k]) < _ownership_rank(r):
+            best[k] = r
+    return [best[k] for k in sorted(best)]
+
+
+def _ownership_rank(r: OwnershipRow) -> tuple[bool, datetime]:
+    return (r.source != MANUAL_OWNERSHIP, r.filed_at)
+
+
 @dataclass(frozen=True)
 class AsOf:
     """A point-in-time view. Build it with as_of(); the cutoff can't be changed afterwards."""
@@ -123,6 +141,19 @@ class AsOf:
             "order by company_id, quarter_end, (source = %(manual)s), filed_at desc"
         )
         return [OwnershipRow(**r) for r in self._fetch(conn, sql, company_ids, manual=MANUAL_OWNERSHIP)]
+
+    def ownership_versions(
+        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None
+    ) -> list[OwnershipRow]:
+        """Every version of every company-quarter filed before the cutoff, oldest filing first. The version current
+        at an earlier date is ownership_as_of() over these rows with that date's cutoff (the Signal Lab)."""
+        sql = (
+            "select company_id, quarter_end, filed_at, inst_holders, inst_pct, fii_pct, dii_pct, promoter_pct, "
+            "promoter_pledged_pct, source from ownership_q "
+            "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
+            "order by company_id, quarter_end, filed_at"
+        )
+        return [OwnershipRow(**r) for r in self._fetch(conn, sql, company_ids)]
 
     def insider_events(
         self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None

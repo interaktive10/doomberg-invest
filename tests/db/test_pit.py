@@ -13,7 +13,7 @@ import pytest
 
 from pipeline.db import repo
 from pipeline.db.models import CorpEvent, FundamentalsRow, InsiderEvent, OwnershipRow
-from pipeline.db.pit import AsOf, as_of, cutoff_for, select_as_of
+from pipeline.db.pit import AsOf, as_of, cutoff_for, ownership_as_of, select_as_of
 
 from .conftest import new_company
 
@@ -139,6 +139,26 @@ def test_ownership_revision_never_leaks_backwards(conn: psycopg.Connection[Any])
     repo.upsert_ownership(conn, [first])  # an older filing arriving late never replaces a newer one
     assert [r.inst_holders for r in as_of(date(2025, 4, 4)).ownership(conn, [cid])] == [130]
     assert [r.inst_holders for r in as_of(W).ownership(conn, [cid])] == [120]
+
+
+def test_ownership_versions_replayed_give_what_as_of_gives(conn: psycopg.Connection[Any]) -> None:
+    """The Signal Lab reads every version once and replays them month by month (ownership_as_of); at any cutoff that
+    must be exactly what as_of().ownership() returns: the version current then, a full row before a manual one."""
+    cid = new_company(conn)
+    q1, q2 = date(2024, 9, 30), date(2024, 12, 31)
+    t = [datetime(2024, 11, 14, tzinfo=UTC), datetime(2025, 2, 14, tzinfo=UTC), datetime(2025, 3, 1, tzinfo=UTC),
+         datetime(2025, 5, 1, tzinfo=UTC)]  # fmt: skip
+    repo.upsert_ownership(conn, [
+        OwnershipRow(company_id=cid, quarter_end=q1, filed_at=t[0], inst_holders=100, source="s"),
+        OwnershipRow(company_id=cid, quarter_end=q2, filed_at=t[1], inst_holders=120, source="s"),
+        OwnershipRow(company_id=cid, quarter_end=q2, filed_at=t[2], promoter_pct=Decimal(40), source="manual_csv"),
+        OwnershipRow(company_id=cid, quarter_end=q2, filed_at=t[3], inst_holders=130, source="s"),
+    ])  # fmt: skip
+    versions = as_of(date(2025, 6, 30)).ownership_versions(conn, [cid])
+    assert [v.filed_at for v in versions] == [t[0], t[1], t[2], t[3]]
+    for day in (date(2024, 11, 13), date(2024, 11, 14), date(2025, 2, 20), date(2025, 3, 7), date(2025, 6, 30)):
+        assert ownership_as_of(versions, cutoff_for(day)) == as_of(day).ownership(conn, [cid]), day
+    assert [r.inst_holders for r in as_of(date(2025, 3, 7)).ownership(conn, [cid])] == [100, 120]  # not the manual
 
 
 def test_insider_and_corp_events_hidden_until_filed(conn: psycopg.Connection[Any]) -> None:
