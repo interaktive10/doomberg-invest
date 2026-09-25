@@ -75,5 +75,5 @@ files = ["pipeline", "scripts"]
 exclude = ["tests/guard/cases"]
 
 [[tool.mypy.overrides]]
-module = ["edgar.*", "feedparser.*", "statsmodels.*", "scipy.*", "vcr.*"]
+module = ["edgar.*", "feedparser.*", "statsmodels.*", "scipy.*", "vcr.*", "pypdfium2.*"]
 ignore_missing_imports = true
