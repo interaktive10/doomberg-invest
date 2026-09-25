@@ -83,12 +83,16 @@ def run_weekly(
     if state_path is not None and state_path.exists():
         state = json.loads(state_path.read_text(encoding="utf-8"))
     issue_log: list[tuple[str, str, str, str]] = []
-    for company in repo.companies(conn, market="us"):
+    with conn.transaction():  # leaves the connection idle, so each company below is its own committed transaction
+        companies = repo.companies(conn, market="us")
+    for company in companies:
         if not company.cik or company.id is None:
             continue
         stats.companies += 1
         try:
-            with conn.transaction():  # a savepoint: a failing company leaves no partial rows
+            # Its own transaction (a savepoint inside a caller's): a failing company leaves no partial rows, and a
+            # run cut off by the job timeout keeps the companies it finished.
+            with conn.transaction():
                 prev = state.get(company.cik, {})
                 redo = force or prev.get("v") != version
                 done = _one_company(conn, company.cik, company.id, companyfacts, submissions, today, prev, redo,

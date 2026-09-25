@@ -336,6 +336,39 @@ def test_weekly_run_isolates_a_broken_company(conn: psycopg.Connection[Any], tmp
     assert "0000320193" not in json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))  # retried next run
 
 
+class Killed(BaseException):
+    """The job timeout: not an Exception, so nothing in the run catches it."""
+
+
+class CutOff(JsonSource):
+    def read(self, name: str) -> bytes | None:
+        if name == "CIK0001050915.json":  # the second company (by name) is where the job is killed
+            raise Killed
+        return super().read(name)
+
+
+def test_weekly_run_cut_off_by_the_timeout_keeps_finished_companies(migrated_url: str, tmp_path: Path) -> None:
+    """Review F1: each company is committed on its own, so a run killed by the job timeout keeps the work it did."""
+    cat, pwr = "0000018230", "0001050915"
+    with psycopg.connect(migrated_url) as c, psycopg.connect(migrated_url, autocommit=True) as observer:
+        ids = [add(c, cat, F_US[cat]), add(c, pwr, F_US[pwr])]
+        c.commit()
+        try:
+            with pytest.raises(Killed):
+                run_weekly(c, CutOff(FIX / "companyfacts"), JsonSource(FIX / "submissions"), date(2026, 9, 20),
+                           tmp_path / "state.json")  # fmt: skip
+            counts = [
+                observer.execute("select count(*) from fundamentals_q where company_id = %s", (i,)).fetchone()
+                for i in ids
+            ]
+            assert counts[0] is not None and counts[0][0] > 0 and counts[1] == (0,)
+        finally:
+            c.rollback()
+            c.execute("delete from fundamentals_q where company_id = any(%s)", (ids,))
+            c.execute("delete from companies where id = any(%s)", (ids,))
+            c.commit()
+
+
 # ---------------------------------------------------------------- runs bookkeeping
 
 
