@@ -156,16 +156,23 @@ class AsOf:
         return [OwnershipRow(**r) for r in self._fetch(conn, sql, company_ids)]
 
     def insider_events(
-        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None
+        self,
+        conn: psycopg.Connection[Any],
+        company_ids: Sequence[UUID] | None = None,
+        since: date | None = None,
+        filed_since: date | None = None,
     ) -> list[InsiderEvent]:
+        """`since` bounds the trade date; `filed_since` the filing date, which keeps a recent Form 4/A that moves a
+        trade further back next to the original it amends (M4 review R2-F4)."""
         sql = (
             "select id, company_id, event_date, filed_at, person, role, kind, shares, value, currency, planned, "
             "source_url, amends from insider_events "
             "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
             "and (%(since)s::date is null or event_date >= %(since)s::date) "
+            "and (%(filed_since)s::date is null or filed_at >= %(filed_since)s::date) "
             "order by company_id, event_date, filed_at"
         )
-        return [InsiderEvent(**r) for r in self._fetch(conn, sql, company_ids, since)]
+        return [InsiderEvent(**r) for r in self._fetch(conn, sql, company_ids, since, filed_since=filed_since)]
 
     def corp_events(
         self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None

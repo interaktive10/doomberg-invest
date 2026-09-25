@@ -95,3 +95,24 @@ def test_quarterly_yoy_needs_the_same_quarter_a_year_back() -> None:
     s = Series([q(e, revenue=str(100 + 10 * i)) for i, e in enumerate(ENDS)], "us")
     assert s.quarterly_yoy("revenue") == D("0.4")  # 140 vs 100
     assert s.quarterly_yoy("revenue", 1) is None
+
+
+def test_year_back_gates_s4_c2_order_book_and_the_screener() -> None:
+    """M4 review R2-F3: with 2025-06-30 missing, every YoY that compared the quarter four back (15 months back) is
+    unknown: S4's CCR and Sloan, C2's latest revenue YoY, g(ob) and the screener's share change."""
+    import yaml
+
+    from pipeline.settings import REPO_ROOT
+    from pipeline.signals import reverse_dcf, s01_orderbook, s04_earnings_quality
+    from pipeline.signals.base import Ctx
+    from pipeline.signals.weekly import company_metrics
+
+    cfg = yaml.safe_load((REPO_ROOT / "config" / "signals.yaml").read_text(encoding="utf-8"))
+    ends = [date(2024, 6, 30), date(2024, 9, 30), date(2024, 12, 31), date(2025, 3, 31),  # 2025-06-30 missing
+            date(2025, 9, 30), date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]  # fmt: skip
+    s = Series([q(e, revenue="100", net_income="10", cfo=str(10 + 5 * i), total_assets="200", rpo=str(100 + 50 * i),
+                  diluted_shares=str(100 + 10 * i)) for i, e in enumerate(ends)], "us")  # fmt: skip
+    ctx = Ctx("c", "us", date(2026, 9, 18), s, cfg)
+    assert s04_earnings_quality.compute(ctx).inputs.get("missing") == ["ccr_year_ago"]
+    assert reverse_dcf.latest_revenue_yoy(s) is None and s01_orderbook.orderbook_growth(ctx) is None
+    assert "share_change_yoy" not in company_metrics(s)

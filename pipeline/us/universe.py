@@ -152,6 +152,32 @@ def decide(
     return UniverseDecision(True, None)
 
 
+STRUCTURAL_REASONS = (  # decide()'s reasons that describe the security rather than a moment in time
+    "no common stock listed",
+    "no public common equity",
+    "SPAC",
+    "fund",
+    "royalty/grantor trust",
+    "foreign private issuer",
+)
+
+
+def structural(sic: str | None, reason: str | None, rules: UniverseRules) -> str | None:
+    """The §1.3 exclusions that don't change with time (what the security is), for replays such as the Signal Lab
+    (M8 review R2-F1): SPAC, fund and royalty/grantor-trust SIC codes, preferred-only listings, no public common
+    equity, foreign private issuers. The SIC rules are read from the SIC itself, since decide() stores only the first
+    failing rule. The time-dependent rules (a recent 10-K/10-Q, the TTM revenue floor) are for the replay to apply
+    point in time; today's listing status is not applied (it would add survivorship bias)."""
+    code = sic or ""
+    if code in rules.spac_sic:
+        return f"SPAC (SIC {code})"
+    if code.startswith(rules.fund_sic_prefixes):
+        return f"fund (SIC {code})"
+    if code in rules.trust_sic:
+        return f"royalty/grantor trust (SIC {code})"
+    return reason if reason is not None and reason.startswith(STRUCTURAL_REASONS) else None
+
+
 def sector_for_sic(sic: str | None, ranges: dict[str, list[list[int]]]) -> str | None:
     """Narrowest configured SIC range containing `sic` (real estate 6500-6553 wins over financials 6000-6799)."""
     if not sic or not sic.isdigit():

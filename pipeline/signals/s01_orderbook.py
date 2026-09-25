@@ -33,6 +33,12 @@ def order_book(ctx: Ctx) -> tuple[Callable[[int], Decimal | None], str]:
     return from_facts, "backlog_fact"
 
 
+def orderbook_growth(ctx: Ctx, lag: int = 0) -> Decimal | None:
+    """g(ob) at `lag` against a year earlier (None without a year back; C2's evidence growth uses it too)."""
+    ob, _ = order_book(ctx)
+    return growth(ob(lag), ob(lag + 4)) if ctx.series.year_back_ok(lag) else None
+
+
 def compute(ctx: Ctx) -> SignalResult:
     c = ctx.section("s1_orderbook")
     ob, source = order_book(ctx)

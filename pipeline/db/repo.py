@@ -487,6 +487,16 @@ def approve_weights_version(conn: Conn, version: str, approved_by: str) -> bool:
     return cur.rowcount == 1
 
 
+def weights_version(conn: Conn, version: str) -> WeightsVersion | None:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q("select version, weights, reason, approved_by, approved_at from weights_versions where version = %s"),
+            (version,),
+        )
+        r = cur.fetchone()
+    return None if r is None else WeightsVersion(**r)
+
+
 def insert_weights_version(conn: Conn, w: WeightsVersion) -> bool:
     """Weights versions are immutable once written; returns False if the version already exists."""
     d = w.model_dump()
