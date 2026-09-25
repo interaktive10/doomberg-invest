@@ -457,8 +457,8 @@ def test_form4_amendment_counts_once_and_the_original_stays_visible_before_it(co
     first = datetime(2025, 3, 10, 21, tzinfo=UTC)  # the first amendment, which the fixture's 4/A restates
     repo.insert_insider_events(conn, events(first, "https://www.sec.gov/first-4a.txt"))
     repo.insert_insider_events(conn, events(amended.accepted_at, "https://www.sec.gov/second-4a.txt"))
-    before = as_of(amended.accepted_at).insider_events(conn, [cid])
-    after = as_of(amended.accepted_at + timedelta(seconds=1)).insider_events(conn, [cid])
+    before = as_of(amended.accepted_at - timedelta(seconds=1)).insider_events(conn, [cid])  # as_of(t) includes t
+    after = as_of(amended.accepted_at).insider_events(conn, [cid])
     assert len(after) == 2 * len(before) and len(before) == len(amended.purchases()) > 0  # history is kept
     assert {e.source_url for e in latest_versions(before)} == {"https://www.sec.gov/first-4a.txt"}
     kept = latest_versions(after)
