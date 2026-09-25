@@ -307,6 +307,46 @@ def test_adjusted_source_split_moves_market_cap_to_the_new_basis(conn: psycopg.C
     assert nxt.source_splits == []  # the history is on the new basis now; the ratio stays on its week
 
 
+def test_adjusted_source_split_in_a_gap_already_reported_keeps_market_cap_and_c1(
+    conn: psycopg.Connection[Any], tmp_path: Path
+) -> None:
+    """M4 review R3-F1: PWR's stored closes stop at 2026-01-02 on the old basis (it left the candidate set), it split
+    10:1 in February, and its March and June 10-Qs report the 10x count. The download comes back rebased: the split is
+    stored at 2026-01-09, the share split confirms it (nothing pending), and market cap, EV/Sales and C1 equal a
+    database that never had the old closes."""
+    week = date(2026, 9, 18)
+    cid = add(conn, "0001050915")
+    cf = json.loads((FIX / "us" / "companyfacts" / "CIK0001050915.json").read_text(encoding="utf-8"))
+    subs = parse_submissions(
+        json.loads((FIX / "us" / "submissions" / "CIK0001050915.json").read_text(encoding="utf-8"))
+    )
+    models = to_models(cid, quarterize_company(cf, subs, load_xbrl_map(), TODAY).rows)
+    ten = {c: None for c in ("diluted_shares", "shares_outstanding")}
+    repo.insert_fundamentals(conn, [
+        m.model_copy(update={c: (getattr(m, c) * 10 if getattr(m, c) is not None else None) for c in ten})
+        if m.period_end >= date(2026, 3, 31) else m
+        for m in models
+    ])  # fmt: skip
+    thesis(conn, cid)
+
+    def seen() -> tuple[Any, ...]:
+        cap = conn.execute("select metrics->>'market_cap' from company_metrics where company_id = %s", (cid,))
+        c1 = conn.execute("select value, pct from context_values where company_id = %s and week_end = %s "
+                          "and metric_id = 'C1'", (cid, week))  # fmt: skip
+        return (cap.fetchone(), c1.fetchone())
+
+    with conn.transaction(force_rollback=True):
+        weekly.run(conn, week, http=mock_http(tmp_path / "a"), imports=tmp_path / "imports", gdelt_limit=0)
+        clean = seen()
+    assert clean[0] is not None and clean[0][0] is not None and clean[1] is not None
+    bars = [b for b in parse_csv((FIX / "px" / "pwr.us_w.csv").read_bytes()) if b.week_end <= date(2026, 1, 2)]
+    repo.upsert_prices(conn, [PriceW(company_id=cid, week_end=b.week_end, close=b.close * 10, adj_close=b.close * 10,
+                                     source="stooq") for b in bars])  # fmt: skip
+    stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
+    assert stats.source_splits == ["PWR 2026-01-09 x10"]
+    assert seen() == clean
+
+
 def test_gdelt_budget_goes_to_the_highest_evidence_across_both_markets(
     conn: psycopg.Connection[Any], tmp_path: Path
 ) -> None:

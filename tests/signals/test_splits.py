@@ -7,7 +7,16 @@ from decimal import Decimal as D
 from pathlib import Path
 
 from pipeline.net.stooq import parse_csv
-from pipeline.prices.splits import SourceSplit, adjust, price_jumps, rebased, split_ratio
+from pipeline.prices.splits import (
+    RATIOS,
+    TOL,
+    SourceSplit,
+    adjust,
+    date_source_split,
+    price_jumps,
+    rebased,
+    split_ratio,
+)
 
 FRIDAYS = [date(2026, 1, 2) + timedelta(weeks=i) for i in range(20)]
 
@@ -117,9 +126,52 @@ def test_adjusted_source_after_a_gap_in_the_stored_history() -> None:
     stored = [(d, D(1200)) for d in weeks if d <= date(2026, 1, 2)]
     fresh = [(d, D(120)) for d in weeks]
     split = rebased(stored, fresh)
-    assert split == SourceSplit(date(2026, 9, 18), D(10))
+    assert split == SourceSplit(date(2026, 9, 18), D(10), since=date(2026, 1, 9))
     counts = [(date(2025, 12, 31), NVDA_SHARES), (date(2026, 3, 31), NVDA_SHARES), (date(2026, 6, 30), NVDA_SHARES)]
-    a = adjust(fresh, counts, [split])
-    assert a.pending == [split] and a.share_factor(date(2026, 6, 30)) == 10  # market cap x10, never x1
-    later = adjust(fresh, [*counts, (date(2026, 9, 30), NVDA_SHARES * 10)], [split])
+    stored_split = date_source_split(split, counts, weeks)  # no filing shows it yet: the newest week
+    assert stored_split == SourceSplit(date(2026, 9, 18), D(10))
+    a = adjust(fresh, counts, [stored_split])
+    assert a.pending == [stored_split] and a.share_factor(date(2026, 6, 30)) == 10  # market cap x10, never x1
+    later = adjust(fresh, [*counts, (date(2026, 9, 30), NVDA_SHARES * 10)], [stored_split])
     assert later.pending == [] and later.share_factor(date(2025, 12, 31)) == 10
+
+
+def test_adjusted_source_split_in_a_gap_that_a_filing_already_reported() -> None:
+    """M4 review R3-F1 (the mirror of R2-F2): the stored closes stop at 2026-01-02, the split happened in February,
+    and the March and June 10-Qs already report the 10x count. The share split confirms the source split: it is
+    stored inside the share split's window, nothing stays pending, the June count is on today's basis (factor 1) and
+    the December count x10."""
+    weeks = [date(2025, 10, 3) + timedelta(weeks=i) for i in range(51)]  # to 2026-09-18
+    stored = [(d, D(1200)) for d in weeks if d <= date(2026, 1, 2)]
+    fresh = [(d, D(120)) for d in weeks]
+    split = rebased(stored, fresh)
+    assert split == SourceSplit(date(2026, 9, 18), D(10), since=date(2026, 1, 9))
+    counts = [(date(2025, 12, 31), NVDA_SHARES), (date(2026, 3, 31), NVDA_SHARES * 10),
+              (date(2026, 6, 30), NVDA_SHARES * 10)]  # fmt: skip
+    stored_split = date_source_split(split, counts, weeks)
+    assert stored_split == SourceSplit(date(2026, 1, 9), D(10))
+    a = adjust(fresh, counts, [stored_split])
+    assert a.pending == [] and a.share_factor(date(2026, 6, 30)) == 1 and a.share_factor(date(2025, 12, 31)) == 10
+    assert a.adj_close[date(2026, 9, 18)] * NVDA_SHARES * 10 * a.share_factor(date(2026, 6, 30)) == D(120) * (
+        NVDA_SHARES * 10
+    )  # market cap: close x the June count
+    # a share split of the same ratio long before the gap (2020) is not this one
+    old = [(date(2020, 3, 31), NVDA_SHARES // 10), (date(2020, 6, 30), NVDA_SHARES), *counts[:1]]
+    assert date_source_split(split, old, weeks) == SourceSplit(date(2026, 9, 18), D(10))
+
+
+def test_split_ratio_checks_only_the_nearest_ratios() -> None:
+    """M4 review R3 idea (speed): split_ratio tries the ratios either side of r and 1/r, with the same answer as
+    trying every ratio in RATIOS (this runs for every pair of consecutive counts)."""
+
+    def every(r: D) -> D | None:
+        best: tuple[D, D] | None = None
+        for k in RATIOS:
+            for ratio, dist in ((k, abs(r / k - 1)), (1 / k, abs(r * k - 1))):
+                if dist <= TOL and (best is None or dist < best[0]):
+                    best = (dist, ratio)
+        return None if best is None else best[1]
+
+    probes = [D(k) * D(f) for k in range(1, 55) for f in ("0.97", "0.9701", "0.985", "1", "1.02999", "1.03", "1.0301")]
+    probes += [1 / p for p in probes] + [D("1.46"), D("51.4"), D("51.6"), D("0.0195"), D("7.1"), D("1.2")]
+    assert all(split_ratio(p) == every(p) for p in probes)

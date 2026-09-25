@@ -56,3 +56,12 @@ def test_s5_path_b_ignores_yearly_bonus_issues() -> None:
     s = series([100] * 5 + [200] * 4 + [400] * 4)
     r = s05_capital_discipline.compute(Ctx("c", "in", WEEK, s, CFG))
     assert not r.fired and r.inputs["share_change_prior_years"] == [0.0, 0.0]
+    # the review's own case (fired path B at 0.6 before the fix)
+    r = s05_capital_discipline.compute(Ctx("c", "in", WEEK, series([100] + [200] * 4 + [400] * 8), CFG))
+    assert not r.fired
+
+
+def test_share_splits_are_computed_once_per_series() -> None:
+    """M4 review R3 idea (speed): R4, S5 and the screener ask for a series' splits ~9 times; it is computed once."""
+    s = series([100] * 6 + [200] * 3)
+    assert s.share_splits() is s.share_splits() and len(s.share_splits()) == 1
