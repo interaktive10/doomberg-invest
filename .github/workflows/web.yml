@@ -1,0 +1,85 @@
+name: web
+# BRIEF §8 M7: the web app's checks. Type check, unit tests (Vitest), a production build, then Playwright (M7-01 the
+# flow, M7-02 no LLM calls, M7-03 axe at 390 px) against a local Supabase stack with the repo's migrations and
+# scripts/seed_e2e.py. Runs only when the web app, the schema or the seed change.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ["web/**", "db/migrations/**", "scripts/seed_e2e.py", "scripts/e2e_report.py", "scripts/verify.py",
+            "supabase/**", ".github/workflows/web.yml"]
+  push:
+    branches: [main]
+    paths: ["web/**", "db/migrations/**", "scripts/seed_e2e.py", "scripts/e2e_report.py", "scripts/verify.py",
+            "supabase/**", ".github/workflows/web.yml"]
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    env:
+      APP_ALLOWED_EMAIL: manzoor@example.com  # a test address; the real one is the deployment's secret (§2.4)
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install (no lockfile committed yet; docs/SPEC_ISSUES.md 32)
+        run: pnpm install --no-frozen-lockfile
+      - name: resolved versions (docs/VERSIONS.md)
+        run: pnpm list --depth 0
+      - run: pnpm typecheck
+      - run: pnpm test
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: local Supabase stack (Postgres, Auth, PostgREST, mail)
+        working-directory: .
+        run: supabase start
+      - name: stack settings for the app and the seed
+        working-directory: .
+        run: |
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          set -a; . "$RUNNER_TEMP/supabase.env"; set +a
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "DATABASE_URL=$DB_URL"
+          } >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: migrations and seed data
+        working-directory: .
+        run: |
+          uv python install 3.12
+          uv sync --frozen
+          uv run --frozen python -m pipeline.db.migrate --database-url "$DATABASE_URL"
+          uv run --frozen python scripts/seed_e2e.py --database-url "$DATABASE_URL"
+          psql "$DATABASE_URL" -c "notify pgrst, 'reload schema'"
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - name: verify M7 (reads web/e2e-report.json)
+        if: always()
+        working-directory: .
+        run: python3 scripts/verify.py --milestone m7 --only M7-
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report

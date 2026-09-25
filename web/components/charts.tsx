@@ -53,7 +53,7 @@ export function LineChartCard({
               <CartesianGrid stroke="#e5e7eb" />
               <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "#374151" }} minTickGap={24} />
               <YAxis tick={{ fontSize: 11, fill: "#374151" }} tickFormatter={(v: number) => fmt(v, format)} width={52} />
-              <Tooltip formatter={(v) => fmt(Number(v), format)} />
+              <Tooltip formatter={(v: unknown) => fmt(Number(v), format)} />
               {series.length > 1 ? <Legend wrapperStyle={{ fontSize: 12 }} /> : null}
               {series.map((s, i) => (
                 <Line

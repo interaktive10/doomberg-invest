@@ -157,3 +157,16 @@ def test_weights_approval_runs_when_weights_change_on_main() -> None:
     assert "github.ref == 'refs/heads/main'" in job["if"] and doc["permissions"] == {"contents": "read"}
     runs = [r for r in steps("weights.yml", "weights") if "python -m pipeline" in r]
     assert runs[0].endswith("python -m pipeline.db.migrate") and runs[-1].endswith("python -m pipeline.db.weights")
+
+
+def test_the_web_job_migrates_and_seeds_before_the_e2e_suite() -> None:
+    """M7: Playwright runs against the repo's own schema and seed on a local Supabase stack, and verify reads its
+    report afterwards (even when a test failed)."""
+    runs = steps("web.yml", "web")
+    keys = ("pnpm typecheck", "pnpm test", "supabase start", "pipeline.db.migrate", "seed_e2e.py", "notify pgrst",
+            "pnpm build", "pnpm e2e", "--only M7-")  # fmt: skip
+    order = [next(i for i, r in enumerate(runs) if k in r) for k in keys]
+    assert order == sorted(order)
+    doc = yaml.safe_load((WF / "web.yml").read_text(encoding="utf-8"))
+    verify = next(s for s in doc["jobs"]["web"]["steps"] if "--only M7-" in str(s.get("run", "")))
+    assert verify.get("if") == "always()"

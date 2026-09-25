@@ -31,5 +31,10 @@ Pinned in `uv.lock` (Python) and `web/pnpm-lock.yaml` (web, from M7). Regenerate
 | pytest | 9.1.1 |
 | ruff | 0.16.8 |
 | mypy | 2.3.1 |
-| Node / pnpm / Next.js | 22 / 9 / 15, pinned from M7 |
+| Node / pnpm | 22 / 9.15.9 |
+| Next.js / React | ^15.5 / ^19.1 (web/package.json ranges until web/pnpm-lock.yaml exists: SPEC_ISSUES 32; web.yml prints the resolved versions) |
+| Tailwind / shadcn/ui | ^4.1 / components in web/components/ui (class-variance-authority ^0.7, tailwind-merge ^3.3, @radix-ui/react-slot ^1.2) |
+| @supabase/ssr / supabase-js / zod | ^0.6 / ^2.50 / ^3.25 |
+| Recharts / Cytoscape / react-markdown | ^2.15 / ^3.30 / ^10.1 |
+| Playwright / axe / Vitest | ^1.56 / ^4.10 / ^3.2 |
 | PostgreSQL (dev) | 16, pre-installed in cloud sessions |

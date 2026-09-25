@@ -2,12 +2,12 @@ import { Markdown } from "@/components/markdown";
 import { Empty, Page, Section } from "@/components/page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { latestDigest, llmUse, sourceHealth } from "@/lib/data";
-import { staleSources } from "@/lib/staleness";
+import { sourceStatus } from "@/lib/staleness";
 
 // BRIEF §6 Home: the digest for this week; source health; LLM quota use; a stale-data banner (the layout's).
 export default async function Home() {
   const [digest, sources, use] = await Promise.all([latestDigest(), sourceHealth(), llmUse(7)]);
-  const late = new Set(staleSources(sources, new Date()).map((s) => s.split(" ")[0]));
+  const now = new Date();
   return (
     <Page title="This week">
       <Section title={digest ? digest.title : "Weekly digest"} id="digest">
@@ -31,7 +31,7 @@ export default async function Home() {
                 <TableRow key={s.source}>
                   <TableCell>{s.source}</TableCell>
                   <TableCell>{s.last_success ? s.last_success.slice(0, 16).replace("T", " ") + "Z" : "never"}</TableCell>
-                  <TableCell>{s.stale ? "stale" : late.has(s.source) ? "late" : "ok"}</TableCell>
+                  <TableCell>{sourceStatus(s, sources, now)}</TableCell>
                   <TableCell className="max-w-md break-words">{s.last_error ?? ""}</TableCell>
                 </TableRow>
               ))}

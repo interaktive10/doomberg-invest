@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -10,7 +11,7 @@ export function Markdown({ text }: { text: string }) {
         remarkPlugins={[remarkGfm]}
         skipHtml
         components={{
-          table: ({ node: _node, ...props }) => (
+          table: ({ node: _node, ...props }: ComponentProps<"table"> & { node?: unknown }) => (
             <div className="overflow-x-auto" tabIndex={0}>
               <table {...props} />
             </div>

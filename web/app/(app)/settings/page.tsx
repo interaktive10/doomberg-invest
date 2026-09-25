@@ -6,6 +6,7 @@ import { configText } from "@/lib/config-files";
 import { setting, sourceHealth, universeCounts, weightsVersions } from "@/lib/data";
 import { env } from "@/lib/env";
 import { one, type Query } from "@/lib/forms";
+import { sourceStatus } from "@/lib/staleness";
 import { saveDiscipline } from "./actions";
 
 // BRIEF §6 Settings: universes, quotas, sources, allowed email; weights shown read-only (they change only through a
@@ -93,7 +94,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
               <TableRow>
                 <TableHead>Source</TableHead>
                 <TableHead>Last success</TableHead>
-                <TableHead>Stale</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -101,7 +102,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
                 <TableRow key={s.source}>
                   <TableCell>{s.source}</TableCell>
                   <TableCell>{s.last_success ? s.last_success.slice(0, 16).replace("T", " ") + "Z" : "never"}</TableCell>
-                  <TableCell>{s.stale ? "yes" : "no"}</TableCell>
+                  <TableCell>{sourceStatus(s, sources, new Date())}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
