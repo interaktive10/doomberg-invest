@@ -20,7 +20,10 @@ setup("allowlist login", async ({ page, request }) => {
   expect(await messages(request, "intruder@example.com")).toEqual([]);
 
   await page.goto(link);
-  await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
+  const landed = page.getByRole("heading", { level: 1, name: "This week" });
+  if (!(await landed.isVisible())) await page.waitForLoadState("networkidle");
+  const where = `landed on ${page.url()}: ${(await page.locator("body").innerText()).slice(0, 400)}`;
+  await expect(landed, where).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   await page.context().storageState({ path: "e2e/.auth/user.json" });
 });

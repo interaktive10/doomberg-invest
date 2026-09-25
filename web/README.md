@@ -12,8 +12,12 @@ Supabase directly: every read and write runs on the server with the service-role
 | `SUPABASE_SERVICE_ROLE_KEY` | the service-role key (data; never exposed to the browser) |
 | `APP_ALLOWED_EMAIL` | the one address that may sign in |
 
-In Supabase → Authentication → URL configuration, set the Site URL to the app's URL and add `<app URL>/auth/callback`
-to the redirect URLs.
+In Supabase → Authentication:
+- **URL configuration:** set the Site URL to the app's URL and add `<app URL>/auth/callback` to the redirect URLs.
+- **Email templates** (Magic Link, and Confirm signup): make the link
+  `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email` (as `supabase/templates/*.html` do for the
+  local stack). The app verifies the token on the server, so the link needs no code verifier in the browser; the
+  default PKCE link (`?code=`) still works when opened in the browser that asked for it.
 
 ## Commands
 

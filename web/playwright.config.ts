@@ -27,6 +27,8 @@ export default defineConfig({
     url: "http://127.0.0.1:3000/login",
     reuseExistingServer: false,
     timeout: 120_000,
+    stdout: "pipe",
+    stderr: "pipe",
     env: { ...env, NODE_OPTIONS: "--require ./e2e/net-log.cjs", NET_LOG_FILE: "e2e/.net-log.jsonl", NEXT_TELEMETRY_DISABLED: "1" },
   },
 });

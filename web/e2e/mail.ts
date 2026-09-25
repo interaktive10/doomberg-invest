@@ -48,7 +48,9 @@ export async function signInLink(request: APIRequestContext, email: string, time
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
     for (const m of (await messages(request, email)).reverse()) {
-      const link = /href="([^"]*\/verify\?[^"]*)"/.exec(m.html)?.[1] ?? /(https?:\/\/\S*\/verify\?\S*)/.exec(m.html)?.[1];
+      const link =
+        /href="(https?:[^"]*(?:token_hash=|\/verify\?)[^"]*)"/.exec(m.html)?.[1] ??
+        /(https?:\/\/\S*(?:token_hash=|\/verify\?)\S*)/.exec(m.html)?.[1];
       if (link) return link.replace(/&amp;/g, "&");
     }
     await new Promise((r) => setTimeout(r, 500));

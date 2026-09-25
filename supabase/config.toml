@@ -53,3 +53,13 @@ enable_confirmations = false
 double_confirm_changes = false
 max_frequency = "1s"
 otp_expiry = 3600
+
+# The sign-in link carries a token hash that the app verifies on the server (web/app/auth/callback/route.ts,
+# verifyOtp), so it needs no code verifier in the browser. Production uses the same templates (web/README.md).
+[auth.email.template.magic_link]
+subject = "Sign in to Doomberg Invest"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Sign in to Doomberg Invest"
+content_path = "./supabase/templates/confirmation.html"
