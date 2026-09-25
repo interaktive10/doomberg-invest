@@ -10,8 +10,9 @@ weights on the month distance: Var(mean) = (1/N^2) sum_{t,u: |t-u| <= L} (1 - |t
 It is the usual estimator on the calendar-time series (a month without events adds nothing). With lags as long as
 a third of the period, that estimate is noisy and can fall far below the plain standard error by chance (F-LAB: a
 pure-noise signal at t = -5.2 against -1.4 with the plain error), so t_nw divides by the larger of the two: the
-§4.10.5 rule never promotes or demotes on a variance the data can't support. The prove-first lower bound of the old
-Doomberg (mean - 1.645 SE; docs/DOOMBERG_AUDIT.md §4.9) is reported next to it, not used by rules.
+§4.10.5 rule never promotes or demotes on a variance the data can't support (docs/SPEC_ISSUES.md 19; the unfloored
+t is kept in lab_results.notes). The prove-first lower bound of the old Doomberg (mean - 1.645 SE;
+docs/DOOMBERG_AUDIT.md §4.9) is reported next to it, not used by rules.
 """
 
 from __future__ import annotations
@@ -42,8 +43,9 @@ class Stat:
     median: float | None
     hit_rate: float | None
     p10: float | None
-    t_nw: float | None
+    t_nw: float | None  # mean / max(NW SE, plain SE): the floored t the §4.10.5 rule reads (SPEC_ISSUES 19)
     lower_bound: float | None
+    t_nw_unfloored: float | None = None  # mean / NW SE alone, kept for the record (M8 review R1-F2)
 
 
 def period_bounds(cfg: Mapping[str, Sequence[str]]) -> dict[str, tuple[date, date]]:
@@ -95,11 +97,13 @@ def stat(signal_id: str, horizon: int, period: str, obs: Sequence[tuple[date, fl
     if n == 0:
         return Stat(signal_id, horizon, period, 0, None, None, None, None, None, None)
     mean = sum(vals) / n
-    known = [s for s in (newey_west_se(obs, horizon), plain_se(vals)) if s is not None]
+    nw = newey_west_se(obs, horizon)
+    known = [s for s in (nw, plain_se(vals)) if s is not None]
     se = max(known) if known else None
     return Stat(
         signal_id, horizon, period, n, mean, quantile(vals, 0.5), sum(v > 0 for v in vals) / n, quantile(vals, 0.1),
         None if se is None else mean / se, None if se is None else mean - Z_LOWER * se,
+        None if nw is None else mean / nw,
     )  # fmt: skip
 
 

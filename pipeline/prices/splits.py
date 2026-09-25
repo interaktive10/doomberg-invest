@@ -1,8 +1,10 @@
 """Splits and bonus issues in weekly prices (BRIEF §4.4): a price discontinuity is adjusted only when a matching
 share-count change confirms it. Unconfirmed jumps are flagged and never adjusted.
 
-- A share split is a change between consecutive share counts within 3% of a standard ratio (3:2, 2:1, 5:2, 3:1,
-  4:1, 5:1, 10:1, 20:1, or the reverse for a consolidation).
+- A share split is a change between consecutive share counts within 3% of a split ratio: every whole ratio from 2:1
+  to 50:1, and 3:2 and 5:2, or the reverse for a consolidation; the nearest one wins. Real splits aren't only the
+  standard ones (AAPL 7:1 in 2014, GE 1:8 in 2021, CMG 50:1 in 2024; M8 review R1-F1), and a missed split rescales
+  every earlier market cap by its ratio.
 - A price jump is a week-over-week move whose inverse is within 3% of such a ratio.
 - A jump inside a split's window (from a month before the last old-count period end to 120 days after the first
   new-count period end, to allow for reporting lag) is confirmed: closes before it are divided by the ratio.
@@ -17,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
-RATIOS = tuple(Decimal(r) for r in ("1.5", "2", "2.5", "3", "4", "5", "10", "20"))
+RATIOS = tuple(sorted({Decimal(n) for n in range(2, 51)} | {Decimal("1.5"), Decimal("2.5")}))
 TOL = Decimal("0.03")
 BEFORE_DAYS, AFTER_DAYS = 30, 120
 
@@ -26,12 +28,12 @@ def split_ratio(r: Decimal) -> Decimal | None:
     """r = new count / old count (or old price / new price). The standard ratio it matches, or None."""
     if r <= 0:
         return None
+    best: tuple[Decimal, Decimal] | None = None  # (distance, ratio)
     for k in RATIOS:
-        if abs(r / k - 1) <= TOL:
-            return k
-        if abs(r * k - 1) <= TOL:  # a consolidation (reverse split)
-            return 1 / k
-    return None
+        for ratio, dist in ((k, abs(r / k - 1)), (1 / k, abs(r * k - 1))):  # a split, or a consolidation
+            if dist <= TOL and (best is None or dist < best[0]):
+                best = (dist, ratio)
+    return None if best is None else best[1]
 
 
 @dataclass(frozen=True)

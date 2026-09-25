@@ -27,7 +27,7 @@ import psycopg
 import yaml
 
 from pipeline.db import repo
-from pipeline.db.models import LabResult
+from pipeline.db.models import LabResult, WeightsVersion
 from pipeline.db.pit import as_of
 from pipeline.lab import evaluate, panel, proposals, report
 from pipeline.lab.events import events, signal_ids
@@ -86,6 +86,13 @@ def _dec(x: float | None) -> Decimal | None:
     return None if x is None else Decimal(str(round(x, 6)))
 
 
+def _notes(s: evaluate.Stat) -> str | None:
+    parts = [] if s.lower_bound is None else [f"lower_bound={s.lower_bound:.6f}"]
+    if s.t_nw_unfloored is not None:
+        parts.append(f"t_nw_unfloored={s.t_nw_unfloored:.4f}")
+    return "; ".join(parts) or None
+
+
 def results(stats: Sequence[evaluate.Stat], market: str) -> list[LabResult]:
     return [
         LabResult.model_validate(
@@ -100,7 +107,7 @@ def results(stats: Sequence[evaluate.Stat], market: str) -> list[LabResult]:
                 "hit_rate": _dec(s.hit_rate),
                 "p10": _dec(s.p10),
                 "t_nw": _dec(s.t_nw),
-                "notes": None if s.lower_bound is None else f"lower_bound={s.lower_bound:.6f}",
+                "notes": _notes(s),
             }
         )  # fmt: skip
         for s in stats
@@ -149,6 +156,23 @@ def run(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, r
     return report.render(info, ev_stats, evid, gp, props), props, rows, ev_stats
 
 
+def record_proposal(
+    conn: psycopg.Connection[Any], proposed: dict[str, Any], changed: Sequence[proposals.Proposal]
+) -> bool:
+    """weights_versions gets the proposed version with the §4.10.5 reason of every changed weight, not yet approved;
+    the seed marks it approved once config/weights.yaml carries it (merged with the human-approved label)."""
+    reason = "Signal Lab §4.10.5 proposals: " + "; ".join(
+        f"{p.section}.{p.signal_id} {p.old} -> {p.new} ({p.reason})" for p in changed
+    )
+    version = WeightsVersion(
+        version=str(proposed["version"]),
+        weights={k: v for k, v in proposed.items() if k != "version"},
+        reason=reason[:4000],
+        approved_by=None,
+    )
+    return repo.insert_weights_version(conn, version)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--market", choices=("us", "in"), default="us")
@@ -169,15 +193,18 @@ def main(argv: list[str] | None = None) -> int:
         return BLOCKED_EXIT
     today = datetime.now(UTC).date()
     settings = Settings.from_env()
+    path = REPO_ROOT / "config" / "weights.yaml"
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "lab") as tracked:
         text, props, rows, stats = run(conn, a.market, a.prices, today, workers=a.workers)
-        tracked.update({"company_months": len(rows), "stats": len(stats)})
+        changed = [p for p in props if p.new != p.old]
+        after = proposals.render(path.read_text(encoding="utf-8"), props, f"lab-{today}")
+        if a.propose and changed:
+            record_proposal(conn, yaml.safe_load(after), changed)
+        tracked.update({"company_months": len(rows), "stats": len(stats), "weight_changes": len(changed)})
     a.report.write_text(text, encoding="utf-8")
     write_panel(rows, a.panel_out, [int(h) for h in cfg["horizons_months"]])
-    if a.propose:
-        path = REPO_ROOT / "config" / "weights.yaml"
-        path.write_text(proposals.render(path.read_text(encoding="utf-8"), props, f"lab-{today}"), encoding="utf-8")
-    changed = [p for p in props if p.new != p.old]
+    if a.propose and changed:
+        path.write_text(after, encoding="utf-8")
     print(
         f"lab {a.market}: {len(rows)} company-months, {len(stats)} statistics, {len(changed)} weight changes proposed"
     )

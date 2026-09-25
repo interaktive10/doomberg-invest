@@ -47,3 +47,28 @@ def test_lab_run_on_f_lab_companies(conn: psycopg.Connection[Any], tmp_path: Pat
     assert all(c in text for c in CAVEATS) and text.startswith("# Signal Lab report")
     weights = yaml.safe_load((ROOT / "config" / "weights.yaml").read_text(encoding="utf-8"))
     assert sorted(p.signal_id for p in props) == sorted([*weights["signals"], *weights["legacy"]])
+
+
+def test_proposed_weights_version_has_the_lab_reason(conn: psycopg.Connection[Any]) -> None:
+    """Review R1-F3: a Lab proposal is recorded with its §4.10.5 reasons and no approval; once config/weights.yaml
+    carries it (merged with the human-approved label) the seed marks it approved and keeps the Lab's reason; a later
+    version the Lab didn't write never gets the initial "brief" reason."""
+    from decimal import Decimal
+
+    from pipeline.db.seed import INITIAL_REASON, record_weights_in_use
+    from pipeline.lab.proposals import Proposal
+
+    w = yaml.safe_load((ROOT / "config" / "weights.yaml").read_text(encoding="utf-8"))
+    proposed = {**w, "version": "lab-2026-10-01", "signals": {**w["signals"], "S1": 1.5}}
+    why = "OOS mean +0.0600, t_nw 3.40 >= 2, in-sample +0.0100"
+    assert run.record_proposal(conn, proposed, [Proposal("S1", "signals", Decimal("1.0"), Decimal("1.5"), why)])
+    sql = "select reason, approved_by, approved_at, weights->'signals'->>'S1' from weights_versions where version = %s"
+    reason, by, at, s1 = conn.execute(sql, ("lab-2026-10-01",)).fetchone() or (None, None, None, None)
+    assert reason == f"Signal Lab §4.10.5 proposals: signals.S1 1.0 -> 1.5 ({why})" and by is None and at is None
+    assert s1 == "1.5"
+    assert record_weights_in_use(conn, proposed) is False  # merged: approve, don't rewrite
+    reason, by, at, _ = conn.execute(sql, ("lab-2026-10-01",)).fetchone() or (None, None, None, None)
+    assert reason.startswith("Signal Lab §4.10.5 proposals") and by == "human-approved PR" and at is not None
+    assert record_weights_in_use(conn, {**w, "version": "manual-2026-11"}) is True
+    reason, by, _, _ = conn.execute(sql, ("manual-2026-11",)).fetchone() or (None, None, None, None)
+    assert reason != INITIAL_REASON and by == "human-approved PR"

@@ -117,3 +117,9 @@
 2026-09-25 M3 review R2-F2: the backfill reads a company's results history page by page (&page=N&size=50, up to totalCount; NSE serves 20 rows when unpaged), through the same pager as the dated listing; an incomplete read queues nothing and the company is retried next week.
 2026-09-25 M8: the Stooq bulk file's release is `lab-data-v1` (BRIEF §11.5), in config/lab.yaml, lab.yml, the BLOCKED message and verify M8-05.
 2026-09-25 M3 review R3-F1: the per-company results history URL-encodes the symbol (M&M, GVT&D and six other EQ symbols contain '&', which ended the parameter; NSE then answered with an empty history).
+2026-09-25 M8 review R1-F1: split detection knows every whole ratio from 2:1 to 50:1 plus 3:2 and 5:2 (and reverses), nearest ratio wins; the Lab's share basis and the weekly share factor use it (AAPL 7:1 2014: factor 28 at 2013-12-31). An issuance of about a whole multiple can still read as a split (documented risk).
+2026-09-25 M8 review R1-F2: t_nw stays floored at the plain SE (SPEC_ISSUES 19, decision needed); the report names the floor and lab_results.notes keeps t_nw_unfloored.
+2026-09-25 M8 review R1-F3: a Lab proposal writes weights_versions (version lab-<date>, the proposed weights, the changed weights' §4.10.5 reasons, approved_by null); the seed marks it approved ("human-approved PR") once config/weights.yaml carries it; the "initial ... brief" reason is only for w0-equal.
+2026-09-25 M8 review R1-F4/F7/F8: render leaves weights.yaml untouched when no weight changes (no PR); a significant OOS result whose in-sample sign disagrees says so; lab.yml migrates first.
+2026-09-25 M8 review R1-F5: quarterly.yml dispatches lab.yml (gh workflow run, actions: write) after the 13F step and the universe rebuild; lab.yml stays manual too.
+2026-09-25 M8 review R1-F6: F-LAB noise companies are never planted ones (the draw is kept so the rest of the panel is unchanged).

@@ -123,3 +123,72 @@ def test_periods_from_config() -> None:
     bounds = evaluate.period_bounds({"in_sample": ["2012-01", "2018-12"], "out_of_sample": ["2019-01", "2025-12"]})
     assert bounds == {"in_sample": (date(2012, 1, 31), date(2018, 12, 31)),
                       "out_of_sample": (date(2019, 1, 31), date(2025, 12, 31))}  # fmt: skip
+
+
+def test_noise_companies_are_not_planted() -> None:
+    """Review R1-F6: the noise signal's companies carry no planted drift."""
+    _, truth = load_generator().make(seed=7, n=500)
+    assert truth.planted and truth.noise and not truth.planted.keys() & truth.noise.keys()
+
+
+def test_lab_results_notes_carry_the_unfloored_t() -> None:
+    """Review R1-F2: lab_results.notes keeps the unfloored Newey-West t next to the prove-first lower bound."""
+    from pipeline.lab.run import results
+
+    s = stats(0)[("S5", "in_sample")]
+    assert s.t_nw_unfloored is not None and s.t_nw is not None and abs(s.t_nw) <= abs(s.t_nw_unfloored) + 1e-9
+    note = results([s], "us")[0].notes or ""
+    assert note.startswith("lower_bound=") and f"t_nw_unfloored={s.t_nw_unfloored:.4f}" in note
+
+
+def _feed(shares_by_quarter: list[tuple[date, int]], closes: list[tuple[date, float]]) -> panel.Feed:
+    from datetime import UTC, datetime, time, timedelta
+    from decimal import Decimal
+
+    from pipeline.db.models import Company, FundamentalsRow
+    from pipeline.lab.prices import MonthBar
+
+    cid = uuid4()
+    rows = [FundamentalsRow(company_id=cid, period_end=q, fiscal_label=f"Q{q:%Y%m}",
+                            filed_at=datetime.combine(q + timedelta(days=30), time(21), tzinfo=UTC),
+                            shares_outstanding=Decimal(n), currency="USD", source="sec_xbrl")
+            for q, n in shares_by_quarter]  # fmt: skip
+    bars = [MonthBar(m, Decimal(str(c)), Decimal(str(c)), Decimal(str(c))) for m, c in closes]
+    company = Company(id=cid, market="us", name="Split Co", ticker="SPLT")
+    return panel.Feed(company, panel.LabData("us", [company], {cid: rows}, {cid: bars}))
+
+
+def test_share_basis_is_split_neutral_for_a_7_for_1_split() -> None:
+    """Review R1-F1: a 7:1 split (outside the old standard ratios) puts earlier share counts on today's basis, so the
+    adjusted close x the Lab's shares is the market cap of the day (raw close 7x the adjusted one)."""
+    from datetime import UTC, datetime
+
+    quarters = [(date(2013, 9, 30), 100_000_000), (date(2013, 12, 31), 100_000_000), (date(2014, 3, 31), 100_000_000),
+                (date(2014, 6, 30), 700_000_000), (date(2014, 9, 30), 700_000_000)]  # fmt: skip
+    feed = _feed(quarters, [(date(2014, 2, 28), 10.0), (date(2014, 10, 31), 10.0)])
+    feed.advance(datetime(2014, 3, 1, tzinfo=UTC))  # February 2014: the latest known count is Q4 2013's 100M
+    shares = feed.shares()
+    assert shares is not None and shares == 700_000_000  # 100M x 7, today's basis
+    raw_cap = 70.0 * 100_000_000  # the raw close was 7x the split-adjusted 10.0
+    assert float(shares) * float(feed.close(date(2014, 2, 28)) or 0) == raw_cap
+
+
+def test_aapl_share_basis_covers_the_2014_split() -> None:
+    """Review R1-F1 on real data (F-US AAPL): 7:1 in June 2014 and 4:1 in August 2020, so a share count reported
+    for 2013-12-31 is multiplied by 28."""
+    import json
+    from pathlib import Path
+
+    from pipeline.us.fundamentals import load_xbrl_map, quarterize_company, to_models
+    from pipeline.us.submissions import parse_submissions
+
+    fix = Path(__file__).resolve().parents[2] / "fixtures" / "us"
+    cf = json.loads((fix / "companyfacts" / "CIK0000320193.json").read_text(encoding="utf-8"))
+    subs = parse_submissions(json.loads((fix / "submissions" / "CIK0000320193.json").read_text(encoding="utf-8")))
+    cid = uuid4()
+    rows = to_models(cid, quarterize_company(cf, subs, load_xbrl_map(), date(2026, 9, 20)).rows)
+    from pipeline.db.models import Company
+
+    company = Company(id=cid, market="us", name="Apple Inc.", ticker="AAPL")
+    feed = panel.Feed(company, panel.LabData("us", [company], {cid: rows}, {cid: []}))
+    assert feed._factor(date(2013, 12, 31)) == 28 and feed._factor(date(2020, 9, 26)) == 1

@@ -39,3 +39,12 @@ def report_dec(x: str):  # type: ignore[no-untyped-def]
     from decimal import Decimal
 
     return Decimal(x)
+
+
+def test_the_run_section_names_the_se_floor() -> None:
+    """Review R1-F2: the report says t (NW) uses a standard error floored at the plain one (SPEC_ISSUES 19)."""
+    info = report.RunInfo("us", date(2010, 1, 31), date(2026, 8, 31), 3, 30, 2,
+                          {"in_sample": (date(2012, 1, 31), date(2018, 12, 31))}, "F-LAB synthetic panel")  # fmt: skip
+    text = report.render(info, [], [], [], [])
+    assert "floored at the plain standard error" in text and "docs/SPEC_ISSUES.md 19" in text
+    assert "unfloored" in text
