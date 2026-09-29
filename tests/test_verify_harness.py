@@ -29,3 +29,7 @@ def test_m5_01_is_blocked_on_the_key_until_cassettes_exist() -> None:
     assert (verify._needs_cassettes() is None) == recorded
     assert "pipeline.facts.evaluate --replay" in m5_01.command[-1] and "tests/facts/test_fsyn.py" in m5_01.command[-1]
     assert [c.id for c in verify.CHECKS if c.milestone == "m5"] == [f"M5-0{i}" for i in range(1, 8)]
+
+
+def test_m6_checks() -> None:
+    assert [c.id for c in verify.CHECKS if c.milestone == "m6"] == [f"M6-0{i}" for i in range(1, 7)]

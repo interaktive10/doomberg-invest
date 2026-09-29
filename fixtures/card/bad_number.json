@@ -1,0 +1,88 @@
+{
+ "summary": "Nimbus's order book is growing faster than its revenue, and the market price implies slower growth than the evidence supports. The thesis holds while backlog keeps converting and margins stay intact.",
+ "facts": [
+  {
+   "text": "Revenue rose to $1.35 billion in the June 2026 quarter from $980 million a year earlier, up 27.6% [m:revenue:2026-06-30] [m:revenue:2025-06-30].",
+   "cites": [
+    "m:revenue:2026-06-30",
+    "m:revenue:2025-06-30"
+   ]
+  },
+  {
+   "text": "Remaining performance obligations reached $4.2 billion, 44.8% above a year earlier [m:rpo:2026-06-30] [m:rpo:2025-06-30].",
+   "cites": [
+    "m:rpo:2026-06-30",
+    "m:rpo:2025-06-30"
+   ]
+  },
+  {
+   "text": "Management expects fiscal 2027 capital expenditures of approximately $1.8 billion [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001].",
+   "cites": [
+    "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001"
+   ]
+  },
+  {
+   "text": "A hyperscale cloud provider placed a $600 million multi-year order [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002].",
+   "cites": [
+    "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002"
+   ]
+  },
+  {
+   "text": "The order-book signal S1 fired with strength 0.82 [s:S1].",
+   "cites": [
+    "s:S1"
+   ]
+  }
+ ],
+ "why_mispriced": [
+  {
+   "text": "The price implies 12% annual growth, below the 18% the evidence supports [c:C2].",
+   "cites": [
+    "c:C2"
+   ]
+  }
+ ],
+ "inferences": [
+  "Inference: the order book growing faster than revenue suggests revenue growth can continue if orders convert on the usual schedule."
+ ],
+ "assumptions": [
+  "Assumption: backlog converts to revenue within 24 months (assumed).",
+  "Assumption: the operating margin stays above 15% (assumed)."
+ ],
+ "risks": [
+  {
+   "text": "Customer concentration: one hyperscaler placed the largest disclosed order [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002].",
+   "cites": [
+    "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002"
+   ]
+  },
+  {
+   "text": "Heavy capital spending could strain free cash flow [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001].",
+   "cites": [
+    "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001"
+   ]
+  }
+ ],
+ "kill_criteria": [
+  {
+   "metric_id": "m:rpo_yoy",
+   "operator": "<",
+   "threshold": 0.1,
+   "check_after": "2026-11-20",
+   "why": "The thesis rests on the order book growing; under 10% a year it no longer leads revenue."
+  },
+  {
+   "metric_id": "m:op_margin_ttm",
+   "operator": "<",
+   "threshold": 0.12,
+   "check_after": "2026-11-20",
+   "why": "Growth bought with falling margins is not the thesis."
+  }
+ ],
+ "read_next": [
+  {
+   "title": "Nimbus press release with fiscal 2027 guidance",
+   "url": "https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm"
+  }
+ ]
+}

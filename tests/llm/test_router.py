@@ -91,3 +91,27 @@ def test_the_request_carries_the_verbatim_prompt_and_the_task_model(clock: FakeC
     assert req.system.startswith("Classify one Indian exchange announcement title and summary.")
     assert req.user == f"TITLE: {ITEM.title}\nSUMMARY: {ITEM.summary}"
     assert req.mode == "json" and req.temperature == 0.0 and req.model == "gemini-small"  # P-07: Flash-Lite class
+
+
+def test_p04_routes_through_its_fallback_key_with_the_card_model(clock: FakeClock) -> None:
+    """P-04 runs only in thesis-fallback.yml: config/quotas.yaml routes it as `P-04-fallback` (Gemini only)."""
+    from pipeline.llm.quotas import Quotas
+    from pipeline.thesis.evidence_pack import CardInput
+
+    base = quotas()
+    q = Quotas.from_doc({**base.raw, "routing": {**base.raw["routing"], "P-04-fallback": ["gemini"]}})
+    ps = providers([{"summary": "s"}], [ANSWER], [ANSWER])
+    r = Router(ps, q, clock)
+    import json
+    from pathlib import Path
+
+    from pipeline.thesis.evidence_pack import EvidencePack, to_json
+
+    doc = json.loads((Path(__file__).resolve().parents[2] / "fixtures" / "card" / "pack.json").read_text("utf-8"))
+    pack = EvidencePack.model_validate(doc)
+    out = r.call(CardInput(pack))
+    assert isinstance(out, Done) and (out.provider, out.model) == ("gemini", "gemini-big")
+    sent = ps["gemini"].requests[0].user
+    assert sent.startswith("EVIDENCE PACK:\n{") and json.loads(sent.split("\n", 1)[1]) == to_json(pack)
+    assert ps["gemini"].requests[0].temperature == 0.3 and not r.exhausted("P-04")
+    assert Router(ps, quotas(), clock).exhausted("P-04")  # no P-04-fallback route: nothing to call

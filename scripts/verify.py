@@ -104,6 +104,13 @@ def _needs_cassettes() -> str | None:
     return None
 
 
+def _needs_card_cassettes() -> str | None:
+    """M6-04 replays fallback P-04 (and the P-05 calls validate.py makes) on recorded answers (M6 review R1-F13)."""
+    if not any((CASSETTES / "P-04").glob("*.json")):
+        return "key:GEMINI_API_KEY (record fallback P-04 and P-05 with record-cassettes.yml)"
+    return None
+
+
 def _needs_old_repo() -> str | None:
     old = Path(os.environ.get("DOOMBERG_REPO", ROOT.parent / "doomberg"))
     if not (old / ".git").exists():
@@ -401,6 +408,53 @@ CHECKS: list[Check] = [
         "m5",
         "S11 rules on a synthetic graph",
         _both(["tests/capex/test_s11_graph.py"], ["tests/db/test_capex.py", "-k", "s11_view"]),
+        requires=_needs_database,
+    ),
+    Check(
+        "M6-01",
+        "m6",
+        "pack schema, stable ids, public-data-only check",
+        _both(["tests/thesis/test_pack.py"], ["tests/db/test_thesis.py", "-k", "pack or queue"]),
+        requires=_needs_database,
+    ),
+    Check(
+        "M6-02",
+        "m6",
+        "validate.py rejects F-CARD's bad cards and accepts the good one",
+        [*PYTEST, "tests/thesis/test_validate.py", "tests/thesis/test_render.py"],
+    ),
+    Check(
+        "M6-03",
+        "m6",
+        "ingest logic (synthetic push event) upserts idempotently",
+        [*PYTEST, "tests/db/test_thesis.py", "-k", "ingest"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M6-04",
+        "m6",
+        "the fallback runs only when the week has no cards (time-travel test); fallback P-04 replays its cassettes",
+        [
+            "bash",
+            "-c",
+            " ".join(PYTEST) + " tests/db/test_thesis.py -k fallback && "
+            "{ uv run --frozen python -m pipeline.thesis.samples --replay; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 2 ]; }",
+        ],  # samples exits 2 when no P-04 cassette is recorded: BLOCKED(key) below, never PASS
+        requires=_needs_database,
+        requires_after=_needs_card_cassettes,
+    ),
+    Check(
+        "M6-05",
+        "m6",
+        "a new fundamentals row triggers a kill criterion -> review + a digest entry",
+        [*PYTEST, "tests/db/test_thesis.py", "-k", "kill_criterion"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M6-06",
+        "m6",
+        "digest issue body snapshot (mock GitHub API)",
+        _both(["tests/digest"], ["tests/db/test_thesis.py", "-k", "snapshot"]),
         requires=_needs_database,
     ),
     Check(

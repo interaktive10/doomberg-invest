@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -154,3 +155,54 @@ def test_public_modules_never_name_the_private_tables() -> None:
                 found += [f"{f.relative_to(root)}:{i}" for i, line in enumerate(f.read_text().splitlines(), 1)
                           if words.search(line)]  # fmt: skip
     assert found == []
+
+
+# ---------------------------------------------------------------- pydantic models (M6: the evidence pack)
+
+
+def _pack() -> Any:
+    import json
+    from pathlib import Path
+
+    from pipeline.thesis.evidence_pack import EvidencePack
+
+    doc = json.loads((Path(__file__).resolve().parents[2] / "fixtures" / "card" / "pack.json").read_text("utf-8"))
+    return EvidencePack.model_validate(doc)
+
+
+def test_pydantic_private_model_in_a_card_input_is_refused(router: tuple[Router, Scripted]) -> None:
+    """M6 review R2-F6: a CardInput whose pack is a private pydantic model (not the public EvidencePack) raises."""
+    from pipeline.thesis.evidence_pack import CardInput
+
+    r, gemini = router
+    with pytest.raises(PrivacyViolation):
+        r.call(CardInput(JOURNAL))  # type: ignore[arg-type]
+    assert gemini.requests == []
+
+
+def test_pydantic_pack_subclass_outside_the_public_modules_is_refused(router: tuple[Router, Scripted]) -> None:
+    """An EvidencePack subclass defined here (not in a public module) with a journal field raises."""
+    from pipeline.thesis.evidence_pack import CardInput, EvidencePack
+
+    class LeakyPack(EvidencePack):
+        journal: str = "private reasoning"
+
+    r, gemini = router
+    leaky = LeakyPack.model_validate(_pack().model_dump())
+    with pytest.raises(PrivacyViolation):
+        r.call(CardInput(leaky))
+    assert gemini.requests == []
+
+
+def test_pydantic_pack_with_a_journal_row_in_signal_inputs_is_refused(router: tuple[Router, Scripted]) -> None:
+    """A pack whose signal `inputs` (dict[str, Any]) hold a journal row raises: Any is checked all the way down."""
+    from pipeline.thesis.evidence_pack import CardInput
+
+    pack = _pack()
+    signal = pack.signals[0].model_copy(update={"inputs": {**pack.signals[0].inputs, "row": JOURNAL}})
+    leaky = pack.model_copy(update={"signals": [signal, *pack.signals[1:]]})
+    r, gemini = router
+    with pytest.raises(PrivacyViolation):
+        r.call(CardInput(leaky))
+    assert gemini.requests == []
+    check(CardInput(pack))  # the pack itself is public data

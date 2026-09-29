@@ -1,0 +1,7 @@
+{
+ "bad_uncited": "sentence cites no pack id",
+ "bad_number": "number '1.35 billion' matches no cited pack value",
+ "bad_inference": "does not start with 'Inference:'",
+ "bad_kill": "is not after the next filing window",
+ "bad_hype": "hype word: 'multibagger'"
+}

@@ -79,6 +79,12 @@ def _next_day(t: datetime) -> datetime:
     return datetime.combine(t.date() + timedelta(days=1), datetime.min.time(), UTC)
 
 
+def route(prompt_id: str) -> str:
+    """The config/quotas.yaml `routing` key of a prompt (P-04 routes as P-04-fallback)."""
+    spec = PROMPTS.get(prompt_id)
+    return (spec.route or spec.id) if spec is not None else prompt_id
+
+
 class Router:
     def __init__(
         self,
@@ -127,7 +133,7 @@ class Router:
     def exhausted(self, prompt_id: str) -> bool:
         """True when no provider routed for `prompt_id` can take a request now (callers stop early)."""
         self._roll_day()
-        return all(self.unavailable(n) for n in self.quotas.routing.get(prompt_id, ()))
+        return all(self.unavailable(n) for n in self.quotas.routing.get(route(prompt_id), ()))
 
     def _pace(self, name: str) -> None:
         rpm = self.quotas.providers[name].requests_per_minute
@@ -162,7 +168,7 @@ class Router:
         estimate = (len(system) + len(user)) // CHARS_PER_TOKEN
         self._roll_day()
         reasons: list[str] = []
-        for name in self.quotas.routing.get(spec.id, ()):
+        for name in self.quotas.routing.get(route(spec.id), ()):
             why = self.unavailable(name, estimate)
             if why:
                 reasons.append(f"{name}: {why}")

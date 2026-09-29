@@ -1,0 +1,233 @@
+{
+ "version": 1,
+ "week": "2026-W38",
+ "week_end": "2026-09-18",
+ "company": {
+  "company_id": "00000000-0000-4000-8000-00000000c0de",
+  "key": "us-nmbs",
+  "name": "Nimbus Compute Corp.",
+  "market": "us",
+  "ticker": "NMBS",
+  "nse_symbol": null,
+  "cik": "0000999001",
+  "isin": null,
+  "sector": "Information Technology",
+  "industry": "Computer hardware",
+  "capex_desk": true,
+  "fiscal_year_end": "0630"
+ },
+ "bucket": "candidate",
+ "families": [
+  "fundamentals",
+  "text"
+ ],
+ "metrics": [
+  {
+   "id": "m:revenue:2025-06-30",
+   "name": "revenue",
+   "period_end": "2025-06-30",
+   "value": "980000000",
+   "unit": "usd",
+   "source": "fundamentals"
+  },
+  {
+   "id": "m:revenue:2026-06-30",
+   "name": "revenue",
+   "period_end": "2026-06-30",
+   "value": "1250000000",
+   "unit": "usd",
+   "source": "fundamentals"
+  },
+  {
+   "id": "m:op_income:2026-06-30",
+   "name": "op_income",
+   "period_end": "2026-06-30",
+   "value": "206250000",
+   "unit": "usd",
+   "source": "fundamentals"
+  },
+  {
+   "id": "m:rpo:2025-06-30",
+   "name": "rpo",
+   "period_end": "2025-06-30",
+   "value": "2900000000",
+   "unit": "usd",
+   "source": "fundamentals"
+  },
+  {
+   "id": "m:rpo:2026-06-30",
+   "name": "rpo",
+   "period_end": "2026-06-30",
+   "value": "4200000000",
+   "unit": "usd",
+   "source": "fundamentals"
+  },
+  {
+   "id": "m:diluted_shares:2026-06-30",
+   "name": "diluted_shares",
+   "period_end": "2026-06-30",
+   "value": "212000000",
+   "unit": "shares",
+   "source": "fundamentals"
+  }
+ ],
+ "signals": [
+  {
+   "id": "s:S1",
+   "kind": "signal",
+   "fired": true,
+   "strength": "0.82",
+   "hard": null,
+   "status": null,
+   "inputs": {
+    "g_ob": 0.4483,
+    "g_rev": 0.2755,
+    "gap": 0.1728,
+    "consecutive": 2
+   }
+  },
+  {
+   "id": "s:R2",
+   "kind": "red_flag",
+   "fired": false,
+   "strength": null,
+   "hard": false,
+   "status": "unknown",
+   "inputs": {
+    "missing": [
+     "receivables_growth"
+    ]
+   }
+  }
+ ],
+ "context": [
+  {
+   "id": "c:C2",
+   "value": "0.06",
+   "pct": null,
+   "inputs": {
+    "g_implied": 0.12,
+    "g_evidence": 0.18,
+    "discount_rate": 0.09,
+    "terminal_growth": 0.025
+   }
+  },
+  {
+   "id": "c:evidence",
+   "value": "62.5",
+   "pct": null,
+   "inputs": {
+    "families": [
+     "fundamentals",
+     "text"
+    ]
+   }
+  },
+  {
+   "id": "c:gap",
+   "value": "58.3",
+   "pct": null,
+   "inputs": {}
+  }
+ ],
+ "facts": [
+  {
+   "id": "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001",
+   "fact_type": "capex_guidance",
+   "subject": "Fiscal 2027 capital expenditures",
+   "subject_key": "capex_guidance:FY2027",
+   "value": "1800000000",
+   "value_low": null,
+   "value_high": null,
+   "unit": "usd",
+   "currency": "USD",
+   "period_label": "FY2027",
+   "period_end": "2027-06-30",
+   "as_of": "2026-08-06",
+   "counterparty": null,
+   "quote": "We expect fiscal 2027 capital expenditures of approximately $1.8 billion.",
+   "url": "https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm",
+   "document_kind": "EX-99.1",
+   "published_at": "2026-08-06T20:05:00Z"
+  },
+  {
+   "id": "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002",
+   "fact_type": "order_win",
+   "subject": "Multi-year hyperscaler order",
+   "subject_key": "order_win:hyperscaler",
+   "value": "600000000",
+   "value_low": null,
+   "value_high": null,
+   "unit": "usd",
+   "currency": "USD",
+   "period_label": null,
+   "period_end": null,
+   "as_of": "2026-08-06",
+   "counterparty": "a hyperscale cloud provider",
+   "quote": "Nimbus received a $600 million multi-year order from a hyperscale cloud provider.",
+   "url": "https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm",
+   "document_kind": "EX-99.1",
+   "published_at": "2026-08-06T20:05:00Z"
+  }
+ ],
+ "ownership": [
+  {
+   "id": "m:inst_holders:2026-06-30",
+   "name": "inst_holders",
+   "period_end": "2026-06-30",
+   "value": "412",
+   "unit": "count",
+   "source": "sec_13f"
+  }
+ ],
+ "insiders": [],
+ "capex_categories": [
+  "compute"
+ ],
+ "capex_links": [
+  {
+   "entity": "a hyperscale cloud provider",
+   "entity_kind": "company",
+   "relation": "customer",
+   "fact_id": "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002"
+  }
+ ],
+ "kill_metrics": [
+  {
+   "id": "m:revenue_ttm_yoy",
+   "description": "TTM revenue vs the TTM a year earlier",
+   "value": "0.2410",
+   "unit": "ratio"
+  },
+  {
+   "id": "m:rpo_yoy",
+   "description": "RPO vs a year earlier",
+   "value": "0.4483",
+   "unit": "ratio"
+  },
+  {
+   "id": "m:op_margin_ttm",
+   "description": "TTM operating income / TTM revenue",
+   "value": "0.1650",
+   "unit": "ratio"
+  },
+  {
+   "id": "m:evidence",
+   "description": "Evidence score, latest scored week (0-100)",
+   "value": "62.5",
+   "unit": "score"
+  },
+  {
+   "id": "m:signal:S1",
+   "description": "S1 strength, latest scored week (0-1)",
+   "value": "0.82",
+   "unit": "score"
+  }
+ ],
+ "next_filing": {
+  "period_end": "2026-09-30",
+  "form": "10-Q",
+  "opens": "2026-10-01",
+  "closes": "2026-11-14"
+ }
+}
