@@ -35,7 +35,21 @@ jobs:
           out=$(PGCONNECT_TIMEOUT=15 psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select current_user, current_database(), split_part(version(), ' ', 2), (select count(*) from information_schema.tables where table_schema = 'public')" 2>&1)
           code=$?
           set -e
-          if [ $code -eq 0 ]; then echo "PASS connected: user|db|postgres version|public tables = $out"; else echo "FAIL could not connect: $out"; exit 1; fi
+          if [ $code -eq 0 ]; then echo "PASS connected: user|db|postgres version|public tables = $out"; exit 0; fi
+          # never echo the connection string: strip every piece of it (split at : / @ ?) from the error first
+          OUT="$out" python3 - <<'PY'
+          import os, re
+          url, out = os.environ["DATABASE_URL"], os.environ["OUT"]
+          for piece in sorted(set(re.split(r"[:/@?=&]+", url)), key=len, reverse=True):
+              if len(piece) >= 3 and piece not in ("postgresql", "postgres", "5432", "6543"):
+                  out = out.replace(piece, "<hidden>")
+          kind = ("the password or connection string has an unescaped special character (@ : / ?)" if "translate host name" in out
+                  else "network unreachable: the Direct connection is IPv6-only; use the Session pooler" if "unreachable" in out.lower()
+                  else "wrong password" if "password authentication failed" in out
+                  else "timed out" if "timeout" in out.lower() else "other")
+          print(f"FAIL could not connect ({kind}): {out}")
+          PY
+          exit 1
 
       - name: SEC (SEC_USER_AGENT)
         if: always()
