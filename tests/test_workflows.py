@@ -58,6 +58,8 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     assert lab["needs"] == "us" and lab["permissions"] == {"actions": "write"}
     assert "actions" not in doc["permissions"]  # only the dispatching job's token can (least privilege)
     assert any("gh workflow run lab.yml" in str(s.get("run", "")) for s in lab["steps"])
+    # the branch is named: gh can't look up the default branch with an actions-only token (first live run, 2026-09-29)
+    assert any("--ref" in str(s.get("run", "")) for s in lab["steps"] if "gh workflow run" in str(s.get("run", "")))
     runs = steps("quarterly.yml", "us")
     assert "pipeline.db.seed" in runs[-1]  # the rebuild is the us job's last step, so the Lab runs on the new universe
 
