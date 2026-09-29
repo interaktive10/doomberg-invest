@@ -13,7 +13,8 @@
     "start": "next start --hostname 127.0.0.1 --port 3000",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "screens": "playwright test -c playwright.screens.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.3",
