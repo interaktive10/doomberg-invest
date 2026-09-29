@@ -1,0 +1,556 @@
+{
+ "companies": {
+  "ARVL": {
+   "fye": "0331",
+   "market": "in",
+   "name": "Aravalli Cables Limited"
+  },
+  "CLST": {
+   "fye": "1231",
+   "market": "us",
+   "name": "Coolstream Thermal Inc."
+  },
+  "KYST": {
+   "fye": "1231",
+   "market": "us",
+   "name": "Keystone Power & Light Co."
+  },
+  "NMBS": {
+   "fye": "0630",
+   "market": "us",
+   "name": "Nimbus Compute Corp."
+  },
+  "VOLT": {
+   "fye": "1231",
+   "market": "us",
+   "name": "Voltara Grid Systems, Inc."
+  }
+ },
+ "distractors": [
+  "The Board authorized a new share repurchase program of up to $2.0 billion.",
+  "We declared a quarterly dividend of $0.42 per share, payable next month.",
+  "Diluted earnings per share were $1.87, up 14% from a year ago.",
+  "Our stock price rose 23% during the quarter, and two analysts upgraded their ratings to buy."
+ ],
+ "documents": [
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": "INR",
+     "fact_type": "order_win",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Aravalli Cables has received an export order worth Rs 371 crore for high-voltage cables for a data center project in the United States.",
+     "status": "needs_review",
+     "subject_key": "order_win:us_data_center_cables",
+     "unit": "usd",
+     "value": "3710000000",
+     "written": {
+      "scale_word": null,
+      "value": "371"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "export_exposure",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Exports accounted for 32% of revenue in the first half of fiscal 2027.",
+     "status": "verified",
+     "subject_key": "export_exposure:share_pct",
+     "unit": "percent",
+     "value": "32",
+     "written": {
+      "scale_word": null,
+      "value": "32"
+     }
+    }
+   ],
+   "file": "arvl_pr_order.htm",
+   "kind": "press_release",
+   "published_at": "2026-09-18T10:15:00+00:00",
+   "ticker": "ARVL",
+   "title": "Export order announcement"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": "Nimbus Compute",
+     "currency": null,
+     "fact_type": "order_win",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Coolstream Thermal received an order valued at $255 million from Nimbus Compute for liquid cooling systems for AI data centers.",
+     "status": "verified",
+     "subject_key": "order_win:nimbus_cooling",
+     "unit": "usd",
+     "value": "255000000",
+     "written": {
+      "scale_word": "million",
+      "value": "255"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "price_increase",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Effective January 1, the company will raise list prices on data center cooling units by 11%.",
+     "status": "verified",
+     "subject_key": "price_increase:cooling_units",
+     "unit": "percent",
+     "value": "11",
+     "written": {
+      "scale_word": null,
+      "value": "11"
+     }
+    }
+   ],
+   "file": "clst_pr_order.htm",
+   "kind": "EX-99.1",
+   "published_at": "2026-09-15T12:00:00+00:00",
+   "ticker": "CLST",
+   "title": "Order press release"
+  },
+  {
+   "facts": [],
+   "file": "kyst_10k_2025_risk.htm",
+   "kind": "10-K",
+   "published_at": "2025-02-20T21:00:00+00:00",
+   "ticker": "KYST",
+   "title": "Form 10-K 2024"
+  },
+  {
+   "facts": [],
+   "file": "kyst_10k_2026_risk.htm",
+   "kind": "10-K",
+   "published_at": "2026-02-19T21:00:00+00:00",
+   "ticker": "KYST",
+   "title": "Form 10-K 2025"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "utility_load",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Our large-load interconnection pipeline, mostly data center requests, grew to 36 GW as of June 30, 2026.",
+     "status": "verified",
+     "subject_key": "large_load:pipeline_gw",
+     "unit": "gw",
+     "value": "36",
+     "written": {
+      "scale_word": null,
+      "value": "36"
+     }
+    },
+    {
+     "counterparty": "Nimbus Compute",
+     "currency": null,
+     "fact_type": "commitment_ppa",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "We signed a 15-year power purchase agreement with Nimbus Compute for 400 MW to serve its Ohio data center campus.",
+     "status": "verified",
+     "subject_key": "ppa:nimbus_compute:ohio",
+     "unit": "mw",
+     "value": "400",
+     "written": {
+      "scale_word": null,
+      "value": "400"
+     }
+    }
+   ],
+   "file": "kyst_10q.htm",
+   "kind": "10-Q",
+   "published_at": "2026-08-06T20:30:00+00:00",
+   "ticker": "KYST",
+   "title": "Form 10-Q Q2 2026"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capex_guidance",
+     "high": null,
+     "low": null,
+     "period_label": "fiscal 2027",
+     "quote": "We expect capital expenditures of approximately $80 billion in fiscal 2027, driven by data center capacity for AI workloads.",
+     "status": "verified",
+     "subject_key": "capex_guidance:FY2027",
+     "unit": "usd",
+     "value": "80000000000.0",
+     "written": {
+      "scale_word": "billion",
+      "value": "80"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capex_reported",
+     "high": null,
+     "low": null,
+     "period_label": "first quarter of fiscal 2027",
+     "quote": "Capital expenditures were $20 billion in the first quarter of fiscal 2027, primarily for servers, network equipment and data center construction.",
+     "status": "verified",
+     "subject_key": "capex_reported:Q1FY2027",
+     "unit": "usd",
+     "value": "20000000000.0",
+     "written": {
+      "scale_word": "billion",
+      "value": "20"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "rpo",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Remaining performance obligations were $186 billion as of September 30, 2026, reflecting multi-year commitments for AI infrastructure and data center services.",
+     "status": "verified",
+     "subject_key": "rpo:total",
+     "unit": "usd",
+     "value": "186000000000",
+     "written": {
+      "scale_word": "billion",
+      "value": "186"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "commitment_lease",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "We have additional data center leases that have not yet commenced with future lease payments of $94 billion.",
+     "status": "verified",
+     "subject_key": "lease_not_commenced:total",
+     "unit": "usd",
+     "value": "94000000000",
+     "written": {
+      "scale_word": "billion",
+      "value": "94"
+     }
+    }
+   ],
+   "file": "nmbs_10q_q1.htm",
+   "kind": "10-Q",
+   "published_at": "2026-10-28T20:05:00+00:00",
+   "ticker": "NMBS",
+   "title": "Form 10-Q Q1 FY2027"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capex_guidance",
+     "high": null,
+     "low": null,
+     "period_label": "fiscal 2027",
+     "quote": "We now expect capital expenditures of approximately $84 billion in fiscal 2027, an increase from our prior outlook due to accelerating AI demand.",
+     "status": "verified",
+     "subject_key": "capex_guidance:FY2027",
+     "unit": "usd",
+     "value": "84000000000.0",
+     "written": {
+      "scale_word": "billion",
+      "value": "84"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "commitment_purchase",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Purchase obligations for compute capacity and network equipment totaled $56 billion, most of which we expect to pay within two years.",
+     "status": "verified",
+     "subject_key": "purchase_obligations:total",
+     "unit": "usd",
+     "value": "56000000000",
+     "written": {
+      "scale_word": "billion",
+      "value": "56"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capacity_addition",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "We plan to add 800 MW of data center capacity at our Ohio campus by the end of calendar 2027.",
+     "status": "verified",
+     "subject_key": "capacity:mw:site_ohio_campus",
+     "unit": "mw",
+     "value": "800",
+     "written": {
+      "scale_word": null,
+      "value": "800"
+     }
+    }
+   ],
+   "file": "nmbs_10q_q2.htm",
+   "kind": "10-Q",
+   "published_at": "2027-01-27T21:10:00+00:00",
+   "ticker": "NMBS",
+   "title": "Form 10-Q Q2 FY2027"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capacity_addition",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "We plan to bring 2.4 GW of new AI data center capacity online across our global campuses by 2028.",
+     "status": "verified",
+     "subject_key": "capacity:gw:global_ai_campuses",
+     "unit": "gw",
+     "value": "2.4",
+     "written": {
+      "scale_word": null,
+      "value": "2.4"
+     }
+    }
+   ],
+   "file": "nmbs_investor_day.pdf",
+   "kind": "presentation",
+   "published_at": "2026-11-12T15:00:00+00:00",
+   "ticker": "NMBS",
+   "title": "Investor Day 2026"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capex_guidance",
+     "high": "76000000000.0",
+     "low": "71000000000.0",
+     "period_label": "fiscal 2028",
+     "quote": "For fiscal 2028, Nimbus expects capital expenditures of $71 billion to $76 billion.",
+     "status": "verified",
+     "subject_key": "capex_guidance:FY2028",
+     "unit": "usd",
+     "value": "73500000000.0",
+     "written": {
+      "scale_word": "billion",
+      "value_high": "76",
+      "value_low": "71"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "new_segment",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Beginning next quarter, Nimbus will report AI Infrastructure Services as a new reportable segment.",
+     "status": "verified",
+     "subject_key": "new_segment:ai_infrastructure",
+     "unit": "other",
+     "value": null,
+     "written": {}
+    }
+   ],
+   "file": "nmbs_pr_guidance.htm",
+   "kind": "EX-99.1",
+   "published_at": "2027-07-29T20:05:00+00:00",
+   "ticker": "NMBS",
+   "title": "Fiscal 2028 outlook"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "backlog",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Total backlog reached $13.2 billion at quarter end, a record for the company.",
+     "status": "verified",
+     "subject_key": "backlog:total",
+     "unit": "usd",
+     "value": "13200000000.0",
+     "written": {
+      "scale_word": "billion",
+      "value": "13.2"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "backlog",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Backlog from data center customers was $4.1 billion, up from the prior year.",
+     "status": "verified",
+     "subject_key": "backlog:data_center",
+     "unit": "usd",
+     "value": "4100000000.0",
+     "written": {
+      "scale_word": "billion",
+      "value": "4.1"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "lead_time",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Lead times for large power transformers extended to 147 weeks during the quarter.",
+     "status": "verified",
+     "subject_key": "lead_time:large_power_transformers",
+     "unit": "weeks",
+     "value": "147",
+     "written": {
+      "scale_word": null,
+      "value": "147"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "customer_concentration",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Our largest customer, a hyperscale data center operator, accounted for 26% of revenue in the quarter.",
+     "status": "verified",
+     "subject_key": "customer_concentration:top1",
+     "unit": "percent",
+     "value": "26",
+     "written": {
+      "scale_word": null,
+      "value": "26"
+     }
+    },
+    {
+     "counterparty": "Nimbus Compute",
+     "currency": null,
+     "fact_type": "supply_link",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "We entered into a multi-year agreement to supply power transformers and switchgear to Nimbus Compute for its AI data center campuses.",
+     "status": "verified",
+     "subject_key": "link:nimbus_compute",
+     "unit": "other",
+     "value": null,
+     "written": {}
+    }
+   ],
+   "file": "volt_10q.htm",
+   "kind": "10-Q",
+   "published_at": "2026-07-30T20:15:00+00:00",
+   "ticker": "VOLT",
+   "title": "Form 10-Q Q2 2026"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "lead_time",
+     "high": "36",
+     "low": "30",
+     "period_label": null,
+     "quote": "Customers now face lead times of 30 to 36 months for large gas turbines.",
+     "status": "verified",
+     "subject_key": "lead_time:gas_turbines",
+     "unit": "months",
+     "value": "33",
+     "written": {
+      "scale_word": null,
+      "value_high": "36",
+      "value_low": "30"
+     }
+    }
+   ],
+   "file": "volt_investor_pres.pdf",
+   "kind": "presentation",
+   "published_at": "2026-09-22T13:00:00+00:00",
+   "ticker": "VOLT",
+   "title": "Investor presentation"
+  },
+  {
+   "facts": [
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capacity_addition",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Voltara will build a 600,000 square foot transformer factory in Texas to expand capacity for grid and data center customers.",
+     "status": "verified",
+     "subject_key": "capacity:sq_ft:texas_transformer_plant",
+     "unit": "sq_ft",
+     "value": "600000",
+     "written": {
+      "scale_word": null,
+      "value": "600000"
+     }
+    },
+    {
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "lead_time",
+     "high": null,
+     "low": null,
+     "period_label": null,
+     "quote": "Current lead times for medium-voltage switchgear are 41 weeks.",
+     "status": "verified",
+     "subject_key": "lead_time:switchgear",
+     "unit": "weeks",
+     "value": "41",
+     "written": {
+      "scale_word": null,
+      "value": "41"
+     }
+    }
+   ],
+   "file": "volt_pr_plant.htm",
+   "kind": "EX-99.1",
+   "published_at": "2026-09-10T12:30:00+00:00",
+   "ticker": "VOLT",
+   "title": "Texas plant press release"
+  }
+ ],
+ "risk_changes": {
+  "expected": {
+   "added": 1,
+   "removed": 1
+  },
+  "from": "kyst_10k_2025_risk.htm",
+  "to": "kyst_10k_2026_risk.htm"
+ },
+ "seed": 7
+}

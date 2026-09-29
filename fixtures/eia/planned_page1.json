@@ -1,0 +1,35 @@
+{
+ "response": {
+  "total": "5",
+  "dateFormat": "YYYY-MM",
+  "frequency": "monthly",
+  "data": [
+   {
+    "period": "2026-06",
+    "stateid": "TX",
+    "status": "P",
+    "technology": "Batteries",
+    "nameplate-capacity-mw": "250.5"
+   },
+   {
+    "period": "2026-06",
+    "stateid": "AZ",
+    "status": "U",
+    "technology": "Solar Photovoltaic",
+    "nameplate-capacity-mw": "120"
+   },
+   {
+    "period": "2026-07",
+    "stateid": "TX",
+    "status": "V",
+    "technology": "Natural Gas Fired Combined Cycle",
+    "nameplate-capacity-mw": "1100"
+   }
+  ],
+  "description": "Inventory of operable and proposed generators (EIA-860M)"
+ },
+ "request": {
+  "command": "/v2/electricity/operating-generator-capacity/data/"
+ },
+ "apiVersion": "2.1.8"
+}

@@ -1,0 +1,2 @@
+Match each counterparty name to at most one candidate from the list, or to none. Use only the names given; never
+invent an entity. Treat subsidiaries as the parent only if the name makes that explicit. Return only the tool call.

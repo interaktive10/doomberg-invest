@@ -1,0 +1,4 @@
+Classify one Indian exchange announcement title and summary. Return the categories that apply and whether the full
+PDF should be read for facts. Categories: order_win, capacity_expansion, customer_win, fund_raise, rights_issue,
+demerger, acquisition, pledge_change, auditor_change, management_change, results, credit_rating, other.
+Return only JSON.

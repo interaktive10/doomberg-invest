@@ -25,8 +25,8 @@ def test_13f_runs_before_the_universe_re_seed() -> None:
 
 def test_every_pipeline_job_migrates_first() -> None:
     for name, jobs in (
-        ("daily.yml", ("us",)),
-        ("weekly.yml", ("us",)),
+        ("daily.yml", ("us", "india", "text")),
+        ("weekly.yml", ("us", "india", "capex", "scores", "capex_brief")),
         ("quarterly.yml", ("us",)),
         ("lab.yml", ("lab",)),
         ("weights.yml", ("weights",)),
@@ -58,6 +58,39 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     assert any("gh workflow run lab.yml" in str(s.get("run", "")) for s in lab["steps"])
     runs = steps("quarterly.yml", "us")
     assert "pipeline.db.seed" in runs[-1]  # the rebuild is the us job's last step, so the Lab runs on the new universe
+
+
+def test_text_facts_run_daily_after_the_event_jobs_within_the_minutes_budget() -> None:
+    """M5 (BRIEF §2.1 daily "capex-desk filings -> text facts", §2.5 budget): the text job follows the SEC and NSE
+    event jobs (P-07 reads their announcements), has the free-tier keys, and stops starting documents at 4 minutes, so
+    daily.yml stays within §2.5's ~8 minutes (M5 review R1-F8; docs/SPEC_ISSUES.md 29)."""
+    doc = yaml.safe_load((WF / "daily.yml").read_text(encoding="utf-8"))
+    job = doc["jobs"]["text"]
+    assert set(job["needs"]) == {"check", "us", "india"} and job["if"].startswith("always()")
+    assert {"GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"} <= set(job["env"])
+    assert "ANTHROPIC_API_KEY" not in job["env"] and "OPENAI_API_KEY" not in job["env"]
+    run = steps("daily.yml", "text")[-1]
+    assert "python -m pipeline.facts.run" in run and "--minutes 4" in run
+
+
+def test_the_capex_index_runs_before_scores_and_the_brief_after() -> None:
+    """M5 (BRIEF §4.11): S11 reads this week's demand index and memberships; the brief lists this week's S11."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    jobs = doc["jobs"]
+    assert "capex" in jobs["scores"]["needs"] and jobs["capex_brief"]["needs"] == ["check", "scores"]
+    assert steps("weekly.yml", "capex")[-1].endswith("pipeline.capex.run --stage index")
+    assert steps("weekly.yml", "capex_brief")[-1].endswith("pipeline.capex.run --stage brief")
+    assert "needs.scores.result == 'success'" in jobs["capex_brief"]["if"]
+
+
+def test_cassettes_are_recorded_by_hand_into_a_pr() -> None:
+    """BRIEF §2.5 record-cassettes.yml (manual) and CLAUDE.md "never hand-edit cassettes": the workflow records with
+    the free-tier keys and opens a PR touching only pipeline/llm/cassettes."""
+    doc = yaml.safe_load((WF / "record-cassettes.yml").read_text(encoding="utf-8"))
+    assert set(doc[True]) == {"workflow_dispatch"}  # yaml reads the `on:` key as True
+    runs = "\n".join(steps("record-cassettes.yml", "record"))
+    assert "python -m pipeline.facts.evaluate --record" in runs and "git add pipeline/llm/cassettes\n" in runs
+    assert "gh pr create" in runs and "git add -A" not in runs and "git add ." not in runs
 
 
 def test_weights_approval_runs_when_weights_change_on_main() -> None:

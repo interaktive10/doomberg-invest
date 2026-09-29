@@ -32,6 +32,7 @@ class Check:
     description: str
     command: list[str]
     requires: Requirement | None = None
+    requires_after: Requirement | None = None  # checked after the command passes (M5-01: structure tests, then key)
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,16 @@ def _needs_lab_prices() -> str | None:
     if not LAB_PRICES.exists():
         return "human:Stooq bulk file d_us_txt.zip not attached to the lab-data-v1 release (BRIEF §2.7)"
     return _needs_database()
+
+
+CASSETTES = ROOT / "pipeline" / "llm" / "cassettes"
+
+
+def _needs_cassettes() -> str | None:
+    """M5-01 scores F-SYN on recorded free-tier answers; recording them needs the keys (record-cassettes.yml)."""
+    if not any((CASSETTES / "P-01").glob("*.json")):
+        return "key:GEMINI_API_KEY or GROQ_API_KEY (record the F-SYN cassettes with record-cassettes.yml)"
+    return None
 
 
 def _needs_old_repo() -> str | None:
@@ -335,6 +346,64 @@ CHECKS: list[Check] = [
         [*PYTEST, "tests/signals/test_context.py"],
     ),
     Check(
+        "M5-01",
+        "m5",
+        "F-SYN planted facts: recall >= 95%, precision >= 98% on cassettes (mock structure tests without them)",
+        [
+            "bash",
+            "-c",
+            " ".join(PYTEST) + " tests/facts/test_fsyn.py tests/llm/test_cassettes.py && "
+            "{ uv run --frozen python -m pipeline.facts.evaluate --replay; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 2 ]; }",
+        ],  # evaluate exits 2 when no cassettes are recorded: BLOCKED(key) below, never PASS
+        requires_after=_needs_cassettes,
+    ),
+    Check(
+        "M5-02",
+        "m5",
+        "100% grounding invariant on stored verified facts",
+        _both(
+            ["tests/facts/test_fsyn.py", "tests/facts/test_text.py", "-k", "offsets or grounding"],
+            ["tests/db/test_facts_pipeline.py", "-k", "grounded or deferred or daily_run"],
+        ),
+        requires=_needs_database,
+    ),
+    Check(
+        "M5-03",
+        "m5",
+        "router: a 429 falls back to the next provider; all exhausted -> deferred; picked up the next day",
+        [*PYTEST, "tests/llm/test_router.py", "tests/llm/test_providers.py"],
+    ),
+    Check(
+        "M5-04",
+        "m5",
+        "passing journal/post-mortem objects to the router raises PrivacyViolation",
+        [*PYTEST, "tests/llm/test_privacy.py"],
+    ),
+    Check(
+        "M5-05",
+        "m5",
+        "demand index and direction on synthetic inputs",
+        _both(["tests/capex/test_index.py"], ["tests/db/test_capex.py", "-k", "index_from_point_in_time"]),
+        requires=_needs_database,
+    ),
+    Check(
+        "M5-06",
+        "m5",
+        "P-06 ungrounded categories dropped; memberships count only after confirmation",
+        _both(
+            ["tests/capex/test_membership.py"],
+            ["tests/db/test_capex.py", "-k", "memberships_count or p06_proposes"],
+        ),
+        requires=_needs_database,
+    ),
+    Check(
+        "M5-07",
+        "m5",
+        "S11 rules on a synthetic graph",
+        _both(["tests/capex/test_s11_graph.py"], ["tests/db/test_capex.py", "-k", "s11_view"]),
+        requires=_needs_database,
+    ),
+    Check(
         "M8-01",
         "m8",
         "F-LAB planted signal detected (t_nw >= 3 out of sample); noise signal |t_nw| < 2",
@@ -377,7 +446,12 @@ def run_check(c: Check) -> Result:
     env = {**os.environ, "MOCK_EXTERNALS": "true"}
     p = subprocess.run(c.command, cwd=ROOT, capture_output=True, text=True, env=env)
     tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-6:])
-    return Result(c, "PASS" if p.returncode == 0 else "FAIL", time.monotonic() - t0, tail)
+    status = "PASS" if p.returncode == 0 else "FAIL"
+    if status == "PASS" and c.requires_after is not None:
+        blocked = c.requires_after()
+        if blocked:
+            status = f"BLOCKED({blocked})"
+    return Result(c, status, time.monotonic() - t0, tail)
 
 
 def write_report(results: list[Result], target: str) -> None:

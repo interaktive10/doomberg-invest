@@ -29,6 +29,7 @@ import httpx
 import psycopg
 import yaml
 
+from pipeline.capex.desk import load_views
 from pipeline.db import repo
 from pipeline.db.models import (
     Company,
@@ -198,6 +199,7 @@ class CrossSection:
     tightness: Counter[tuple[str, str]] = field(default_factory=Counter)
     holder_pct: dict[UUID, Decimal] = field(default_factory=dict)
     sectors: dict[tuple[str, str], SectorView] = field(default_factory=dict)
+    capex: dict[UUID, CapexView] = field(default_factory=dict)  # S11: the Capex Desk's view (M5, capex/desk.py)
     tightness_quarters: int = 2  # config/signals.yaml s12_cycle.tightness_lookback_quarters
 
     def add(self, c: Company, s: Series, holdings: list[Holding], facts: list[Fact], week: date) -> None:
@@ -295,7 +297,7 @@ def score_company(
         holdco=(c.market, symbol.upper()) in cfgs.holdcos,
         holder_pct_in_size_decile=cross.holder_pct.get(c.id),
         sector=cross.sectors.get((c.market, c.sector)) if c.sector else SectorView(None),
-        capex=CapexView(),
+        capex=cross.capex.get(c.id, CapexView()),
         surveillance=surveillance,
     )
     results = registry.evaluate(ctx, modules)
@@ -501,6 +503,7 @@ def run(
                 week,
             )
     cross.finish()
+    cross.capex = load_views(conn, week, companies)
 
     scored: dict[UUID, Scored] = {}
     for part in chunks(companies, BATCH):

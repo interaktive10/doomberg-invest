@@ -1,7 +1,8 @@
 name: daily
 # BRIEF §2.1 "daily", §2.5: SEC events for the previous business day (Form 4 purchases, 8-K items 4.01 / 1.01 /
-# 2.03, NT filings, spin-offs) and NSE announcements + insider-trading disclosures. M5 adds capex-desk text
-# extraction.
+# 2.03, NT filings, spin-offs) and NSE announcements + insider-trading disclosures; then (M5) the text facts of the
+# capex desk, the shortlist and live theses through the free-tier LLM router (no document starts after 4 minutes,
+# so the whole workflow stays ~8 minutes: docs/SPEC_ISSUES.md 29).
 # Also the Supabase keep-alive (§2.9): a free project pauses without activity.
 on:
   schedule:
@@ -91,3 +92,30 @@ jobs:
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: NSE announcements and insider trading
         run: uv run --frozen python -m pipeline.india.daily ${DAY:+--date "$DAY"}
+
+  text:
+    # M5 (BRIEF §4.5, Appendix F): new 10-K/10-Q/8-K filings and P-07-flagged India PDFs -> P-01 -> Verify-1 ->
+    # facts, diffs, risk-factor changes and counterparty links. Without LLM keys or quotas (config/quotas.yaml)
+    # documents stay queued; nothing fails. Runs after both event jobs (their announcements feed P-07).
+    needs: [check, us, india]
+    if: always() && needs.check.outputs.ready == 'true' && (needs.us.result == 'success' || needs.india.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      DAY: ${{ github.event.inputs.date }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Text facts, diffs and links (P-01, P-02, P-03); India announcement triage (P-07)
+        run: uv run --frozen python -m pipeline.facts.run --minutes 4 ${DAY:+--day "$DAY"}
