@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { db } from "@/lib/supabase/admin";
 import { allPages } from "@/lib/paging";
 import type { ScreenSpec } from "@/lib/screener";
@@ -166,6 +167,31 @@ export async function sourceHealth(): Promise<SourceHealth[]> {
   return rows(await db().from("source_health").select("source, last_success, last_error, stale").order("source"));
 }
 
+/** Home's summary: the latest scored week with its count per bucket (the week the Candidates tabs show, screener_v),
+ * and the theses in Review and Position. Counted in the database. */
+export async function overview(): Promise<{ week: string | null; buckets: Record<"candidate" | "early" | "priced_in", number>; review: number; position: number }> {
+  const count = async (q: PromiseLike<{ count: number | null; error: { message: string } | null }>): Promise<number> => {
+    const res = await q;
+    if (res.error) throw new Error(res.error.message);
+    return res.count ?? 0;
+  };
+  const latest = one<{ week_end: string }>(
+    await db().from("scores").select("week_end").order("week_end", { ascending: false }).limit(1).maybeSingle(),
+  );
+  const week = latest?.week_end ?? null;
+  const inWeek = (bucket: Bucket) =>
+    week === null ? Promise.resolve(0) : count(db().from("scores").select("company_id", { count: "exact", head: true }).eq("week_end", week).eq("bucket", bucket));
+  const inState = (state: ThesisState) => count(db().from("theses").select("id", { count: "exact", head: true }).eq("state", state));
+  const [candidate, early, priced_in, review, position] = await Promise.all([
+    inWeek("candidate"),
+    inWeek("early"),
+    inWeek("priced_in"),
+    inState("review"),
+    inState("position"),
+  ]);
+  return { week, buckets: { candidate, early, priced_in }, review, position };
+}
+
 export interface LlmUse {
   provider: string;
   calls: number;
@@ -223,11 +249,18 @@ export async function screens(): Promise<{ id: string; name: string; spec: Scree
 
 // ---------------------------------------------------------------- Company
 
-export async function company(id: string): Promise<Company | null> {
+/** Cached per request: the page and its tab title (generateMetadata) read the same row once. */
+export const company = cache(async (id: string): Promise<Company | null> => {
   return one(await db().from("companies").select(
     "id, market, name, ticker, nse_symbol, cik, isin, sector, industry, capex_desk, in_universe, excluded_reason, " +
       "fiscal_year_end",
   ).eq("id", id).maybeSingle());
+});
+
+/** The company's latest scores row (BRIEF §4.8): Evidence, Gap, bucket, families. */
+export async function latestScore(id: string): Promise<{ week_end: string; evidence: number; gap: number | null; families: string[]; bucket: Bucket } | null> {
+  return one(await db().from("scores").select("week_end, evidence, gap, families, bucket").eq("company_id", id)
+    .order("week_end", { ascending: false }).limit(1).maybeSingle());
 }
 
 export async function fundamentals(id: string): Promise<(QuarterRow & { currency: string | null; filed_at: string })[]> {
@@ -305,6 +338,15 @@ export async function theses(): Promise<Thesis[]> {
     "id, company_id, state, card_md, card_json, evidence_pack, author, validation, created_week, next_review, " +
       "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol, fiscal_year_end)",
   ).order("updated_at", { ascending: false }));
+}
+
+/** A thesis page's tab title: its company's name and code (not cached: the page's own reads must see the moves its
+ * server actions make in the same request). */
+export async function thesisTitle(id: string): Promise<Pick<Company, "name" | "market" | "ticker" | "nse_symbol"> | null> {
+  const t = one<{ companies: Pick<Company, "name" | "market" | "ticker" | "nse_symbol"> | null }>(
+    await db().from("theses").select("companies(name, market, ticker, nse_symbol)").eq("id", id).maybeSingle(),
+  );
+  return t?.companies ?? null;
 }
 
 export async function thesis(id: string): Promise<Thesis | null> {

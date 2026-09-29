@@ -1,32 +1,69 @@
 @import "tailwindcss";
 
-/* BRIEF §6: readable at 390 px; axe 0 serious issues (contrast: gray-900 text, blue-800 links on white).
-   Everything here sits in Tailwind's layers, so a utility class on an element (a button-styled link's
-   text-white, no-underline) still wins over these defaults. */
+/* BRIEF §6: readable at 390 px; axe 0 serious issues. Contrast: gray-700 and darker text, blue-800 links; secondary
+   text on the gray-50 page background is gray-600 or darker. Everything here sits in Tailwind's layers, so a utility
+   class on an element (a button-styled link's text-white, no-underline) still wins over these defaults. */
 @layer base {
   :root {
     color-scheme: light;
   }
 
   body {
-    @apply bg-white text-gray-900 antialiased;
+    @apply bg-gray-50 text-gray-900 antialiased;
   }
 
-  /* Links are underlined, not told apart by colour alone (axe link-in-text-block). */
+  /* Links in text are underlined, not told apart by colour alone (axe link-in-text-block). */
   a {
-    @apply text-blue-800 underline underline-offset-2 hover:text-blue-950;
+    @apply text-blue-800 underline decoration-blue-800/40 underline-offset-2 hover:text-blue-950 hover:decoration-blue-950;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-blue-700;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    @apply size-4 accent-blue-800;
+  }
+
+  summary {
+    @apply cursor-pointer;
+  }
+
+  code {
+    @apply rounded bg-gray-100 px-1 py-0.5 font-mono text-[0.85em] text-gray-900;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply text-balance;
   }
 }
 
 @layer components {
-  /* Markdown headings render two levels down (components/markdown.tsx): # -> h3, ## -> h4, ### -> h5. */
-  .prose-md h3 { @apply mt-4 mb-2 text-xl font-semibold; }
-  .prose-md h4 { @apply mt-4 mb-2 text-lg font-semibold; }
-  .prose-md h5, .prose-md h6 { @apply mt-3 mb-1 font-semibold; }
+  /* A link that stands alone (a table's company name): weight tells it apart, the underline comes on hover. */
+  .link-quiet {
+    @apply font-medium text-blue-800 no-underline hover:underline;
+  }
+
+  /* Markdown the pipeline wrote (components/markdown.tsx): headings render two levels down (# -> h3, ## -> h4). */
+  .prose-md {
+    @apply max-w-3xl text-[0.95rem] leading-relaxed text-gray-900;
+  }
+  .prose-md > :first-child { @apply mt-0; }
+  .prose-md h3 { @apply mt-6 mb-2 text-lg font-semibold; }
+  .prose-md h4 { @apply mt-6 mb-2 text-base font-semibold text-gray-900; }
+  .prose-md h5, .prose-md h6 { @apply mt-4 mb-1 font-semibold; }
   .prose-md p { @apply my-2; }
-  .prose-md ul { @apply my-2 list-disc pl-5; }
-  .prose-md ol { @apply my-2 list-decimal pl-5; }
-  .prose-md table { @apply my-2 text-sm; }
-  .prose-md th, .prose-md td { @apply border border-gray-300 px-2 py-1 text-left align-top; }
-  .prose-md code { @apply rounded bg-gray-100 px-1 text-sm; }
+  .prose-md ul { @apply my-2 list-disc space-y-1 pl-5; }
+  .prose-md ol { @apply my-2 list-decimal space-y-1 pl-5; }
+  .prose-md li::marker { @apply text-gray-600; }
+  .prose-md blockquote { @apply my-3 border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-gray-900; }
+  .prose-md strong { @apply font-semibold; }
+  .prose-md table { @apply my-3 w-full border-collapse text-sm; }
+  .prose-md thead { @apply border-b border-gray-200; }
+  .prose-md th { @apply px-3 py-2 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-gray-700 uppercase; }
+  .prose-md td { @apply border-b border-gray-100 px-3 py-2 text-left align-top; }
+  .prose-md hr { @apply my-4 border-gray-200; }
 }

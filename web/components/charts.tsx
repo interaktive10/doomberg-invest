@@ -1,6 +1,7 @@
 "use client";
 
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { yScale } from "@/lib/chart";
 
 // Recharts line charts for the Company page (BRIEF §6). Dark series colours keep the legend text readable (axe).
 export type Format = "big" | "pct" | "x" | "num";
@@ -42,18 +43,32 @@ export function LineChartCard({
   format: Format;
   xKey?: string;
 }) {
-  const has = data.some((r) => series.some((s) => typeof r[s.key] === "number"));
+  const points = data.filter((r) => series.some((s) => typeof r[s.key] === "number")).length;
+  const y = yScale(data, series.map((s) => s.key));
   return (
-    <figure className="rounded-lg border border-gray-300 p-3">
-      <figcaption className="mb-2 text-sm font-semibold">{title}</figcaption>
-      {has ? (
+    <figure className="rounded-lg border border-gray-200 bg-white p-3">
+      <figcaption className="mb-2 text-sm font-semibold text-gray-900">{title}</figcaption>
+      {points > 0 ? (
         <div className="h-48 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 5, right: 12, bottom: 5, left: 0 }}>
-              <CartesianGrid stroke="#e5e7eb" />
-              <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "#374151" }} minTickGap={24} />
-              <YAxis tick={{ fontSize: 11, fill: "#374151" }} tickFormatter={(v: number) => fmt(v, format)} width={52} />
-              <Tooltip formatter={(v: unknown) => fmt(Number(v), format)} />
+            <LineChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 0 }}>
+              <CartesianGrid stroke="#eef0f3" vertical={false} />
+              <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "#374151" }} tickLine={false} axisLine={{ stroke: "#d1d5db" }} minTickGap={24} />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#374151" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: number) => fmt(v, format)}
+                domain={y.domain}
+                ticks={y.ticks}
+                interval={0}
+                width={52}
+              />
+              <Tooltip
+                formatter={(v: unknown) => fmt(Number(v), format)}
+                contentStyle={{ borderRadius: 8, borderColor: "#e5e7eb", fontSize: 12 }}
+                labelStyle={{ color: "#111827", fontWeight: 600 }}
+              />
               {series.length > 1 ? <Legend wrapperStyle={{ fontSize: 12 }} /> : null}
               {series.map((s, i) => (
                 <Line
@@ -63,7 +78,7 @@ export function LineChartCard({
                   name={s.label}
                   stroke={COLORS[i % COLORS.length]}
                   strokeWidth={2}
-                  dot={false}
+                  dot={points <= 3 ? { r: 3 } : false}
                   isAnimationActive={false}
                 />
               ))}
@@ -71,7 +86,7 @@ export function LineChartCard({
           </ResponsiveContainer>
         </div>
       ) : (
-        <p className="text-sm text-gray-700">No data.</p>
+        <p className="py-8 text-center text-sm text-gray-700">No data yet.</p>
       )}
     </figure>
   );

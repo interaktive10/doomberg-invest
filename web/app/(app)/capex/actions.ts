@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { field, UUID, withMessage } from "@/lib/forms";
+import { humanize } from "@/lib/labels";
 import { db } from "@/lib/supabase/admin";
 
 // BRIEF §4.11: memberships start `proposed` and count for S11 only once confirmed here (from the week they're
@@ -26,5 +27,6 @@ export async function decideMembership(form: FormData): Promise<void> {
   if (res.error) redirect(withMessage("/capex", "error", res.error.message));
   if ((res.data ?? []).length === 0) redirect(withMessage("/capex", "error", "That membership was already decided."));
   revalidatePath("/capex");
-  redirect(withMessage("/capex", "ok", decision === "confirm" ? `Confirmed: ${category}.` : `Rejected: ${category}.`));
+  const name = humanize(category);
+  redirect(withMessage("/capex", "ok", decision === "confirm" ? `Confirmed: ${name}.` : `Rejected: ${name}.`));
 }

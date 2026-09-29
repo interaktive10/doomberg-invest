@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Nav email={email} />
       <StaleBanner sources={sources} now={new Date()} />
       {children}
-      <footer className="mx-auto max-w-6xl px-4 py-6 text-xs text-gray-700">
+      <footer className="mx-auto max-w-6xl px-4 pt-4 pb-10 text-xs text-gray-700">
         Research only: no orders, no price alerts. Nothing here is investment advice.
       </footer>
     </>

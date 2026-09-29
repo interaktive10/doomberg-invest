@@ -1,0 +1,91 @@
+name: ui-screens
+# Screenshots of every web screen (desktop 1280 px, phone 390 px), first on an empty database and then on the e2e seed
+# data, published to the ui-screens branch for reviewing the UI (web/e2e/screens.shot.ts). Runs on pushes to web UI
+# branches and on demand.
+on:
+  push:
+    branches: [web-polish]
+    paths: ["web/**", ".github/workflows/ui-screens.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ui-screens-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # pushes the screenshots to the ui-screens branch
+
+jobs:
+  screens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    env:
+      APP_ALLOWED_EMAIL: manzoor@example.com  # a test address, as in web.yml
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --no-frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: local Supabase stack
+        working-directory: .
+        run: supabase start
+      - name: stack settings for the app and the seed
+        working-directory: .
+        run: |
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          set -a; . "$RUNNER_TEMP/supabase.env"; set +a
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "DATABASE_URL=$DB_URL"
+          } >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: migrations
+        working-directory: .
+        run: |
+          uv python install 3.12
+          uv sync --frozen
+          uv run --frozen python -m pipeline.db.migrate --database-url "$DATABASE_URL"
+          psql "$DATABASE_URL" -c "notify pgrst, 'reload schema'"
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: screens on the empty database (a new deployment before its first weekly run)
+        run: SHOTS_SET=empty pnpm screens
+      - name: seed data
+        working-directory: .
+        run: uv run --frozen python scripts/seed_e2e.py --database-url "$DATABASE_URL"
+      - name: screens on the seed data
+        run: pnpm screens
+      - name: publish to the ui-screens branch
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          dir="$RUNNER_TEMP/shots"
+          if git ls-remote --exit-code --heads "$remote" ui-screens >/dev/null; then
+            git clone -q --depth 1 --branch ui-screens "$remote" "$dir"
+          else
+            mkdir -p "$dir" && git -C "$dir" init -q -b ui-screens && git -C "$dir" remote add origin "$remote"
+          fi
+          rm -rf "$dir/latest" && mkdir -p "$dir/latest" && cp web/screenshots/*.png "$dir/latest/"
+          cd "$dir"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "screens for ${GITHUB_REF_NAME} ${GITHUB_SHA::7}"
+          git push -q origin HEAD:ui-screens
+          ls latest | wc -l
