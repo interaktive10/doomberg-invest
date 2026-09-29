@@ -44,6 +44,13 @@ def migrated_url() -> Iterator[str]:
         yield url
 
 
+@pytest.fixture(autouse=True)
+def _not_on_a_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Weights approval depends on GITHUB_REF (pipeline.db.weights.on_main); CI sets it to the PR's ref, so tests run
+    as outside Actions unless they set it themselves."""
+    monkeypatch.delenv("GITHUB_REF", raising=False)
+
+
 @pytest.fixture
 def conn(migrated_url: str) -> Iterator[psycopg.Connection[Any]]:
     """A connection inside a transaction that is rolled back after the test."""

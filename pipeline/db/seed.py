@@ -4,7 +4,8 @@
   `capex_desk` from config/capex_seed.yaml (India: verified symbols only). Companies that left a snapshot are
   marked out of the universe, never deleted. M2/M3 apply the remaining universe rules (§1.3) on top.
   A snapshot below its M0-05 floor (config/universe_*.yaml) is refused before anything is written.
-- weights_versions: the version in config/weights.yaml (immutable once written).
+- weights_versions: the version in config/weights.yaml (pipeline.db.weights: immutable once written; a Lab
+  proposal's row, written by the Lab run with its reasons, is approved once its PR has merged unedited).
 - source_health: one row per external source, so staleness is visible from the first run (§2.7).
 Idempotent: re-running changes nothing.
 """
@@ -21,7 +22,8 @@ import psycopg
 import yaml
 
 from pipeline.db import repo
-from pipeline.db.models import Company, WeightsVersion
+from pipeline.db.models import Company
+from pipeline.db.weights import record_weights_in_use
 from pipeline.india.securities import NseSecurity
 from pipeline.india.securities import load_snapshot as load_nse
 from pipeline.settings import REPO_ROOT, Settings
@@ -94,17 +96,10 @@ def seed(conn: psycopg.Connection[Any], root: Path = REPO_ROOT) -> SeedReport:
         in_out = repo.mark_missing_out_of_universe(
             conn, "in", [c.nse_symbol for c in india if c.nse_symbol], repo.SNAPSHOT_OUT["in"]
         )
-        w: dict[str, Any] = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
-        inserted = repo.insert_weights_version(
-            conn,
-            WeightsVersion(
-                version=str(w["version"]),
-                weights={k: v for k, v in w.items() if k != "version"},
-                reason="initial weights from config/weights.yaml (BRIEF §1.7: equal; legacy L* at 0)",
-                approved_by="brief",
-            ),
-        )
         repo.ensure_sources(conn, SOURCES)
+    w: dict[str, Any] = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
+    with conn.transaction():  # apart: a weights mismatch doesn't undo the universe rebuild (M8 review R3 idea)
+        inserted = record_weights_in_use(conn, w)
     return SeedReport(
         us=len(us),
         india=len(india),

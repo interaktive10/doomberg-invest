@@ -474,6 +474,29 @@ def upsert_scores(conn: Conn, rows: Sequence[Score]) -> None:
 # ---------------------------------------------------------------- weights, lab
 
 
+def approve_weights_version(conn: Conn, version: str, approved_by: str) -> bool:
+    """Record the approval of a proposed version (approved_by was null) once it is the one in config/weights.yaml:
+    that file changes only through a PR with the human-approved label (BRIEF §4.10.5)."""
+    cur = conn.execute(
+        _q(
+            "update weights_versions set approved_by = %s, approved_at = now() "
+            "where version = %s and approved_by is null"
+        ),
+        (approved_by, version),
+    )
+    return cur.rowcount == 1
+
+
+def weights_version(conn: Conn, version: str) -> WeightsVersion | None:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q("select version, weights, reason, approved_by, approved_at from weights_versions where version = %s"),
+            (version,),
+        )
+        r = cur.fetchone()
+    return None if r is None else WeightsVersion(**r)
+
+
 def insert_weights_version(conn: Conn, w: WeightsVersion) -> bool:
     """Weights versions are immutable once written; returns False if the version already exists."""
     d = w.model_dump()

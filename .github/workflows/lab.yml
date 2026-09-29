@@ -1,0 +1,87 @@
+name: lab
+# BRIEF §4.10 Signal Lab (manual; US first; <= 90 min): the Stooq bulk daily file from the `lab-data-v1` release (Manzoor
+# downloads it once from stooq.com: it has a CAPTCHA) -> the point-in-time monthly panel -> events and statistics ->
+# lab_results, docs/LAB_REPORT.md and the §4.10.5 weight proposals. Two PRs: the report, and config/weights.yaml
+# alone (a protected path: it passes the `protected` check only with the human-approved label). The panel is kept as
+# a release asset (§2.8). PRs opened with the workflow token start no CI run: close and reopen them, or push to them,
+# to run the checks.
+on:
+  workflow_dispatch:
+    inputs:
+      market:
+        description: "Market (India only once config/lab.yaml enables it, §4.10.7)"
+        type: choice
+        options: [us, in]
+        default: us
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GH_TOKEN: ${{ github.token }}
+      MARKET: ${{ inputs.market }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Stooq bulk file (the lab-data-v1 release)
+        id: prices
+        run: |
+          mkdir -p .cache/lab
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
+          elif gh release download lab-data-v1 --pattern 'd_us_txt.zip' --dir .cache/lab --clobber; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::BLOCKED(human): attach the Stooq bulk file d_us_txt.zip to the lab-data-v1 release (BRIEF §2.7)"
+          fi
+      - name: Migrations
+        if: steps.prices.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      - name: Lab run
+        if: steps.prices.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.lab.run --market "$MARKET" --workers 4 --propose
+      - name: Keep the panel (release asset)
+        if: steps.prices.outputs.ok == 'true'
+        run: gh release upload lab-data-v1 .cache/lab/panel.parquet --clobber
+      - name: Open the report PR and the weights PR
+        if: steps.prices.outputs.ok == 'true'
+        run: |
+          git config user.name "doomberg-lab"
+          git config user.email "doomberg-lab@users.noreply.github.com"
+          stamp="$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+          cp docs/LAB_REPORT.md "$RUNNER_TEMP/report.md"
+          cp config/weights.yaml "$RUNNER_TEMP/weights.yaml"
+          git checkout -- docs/LAB_REPORT.md config/weights.yaml
+          git switch -c "lab/report-$stamp" "$GITHUB_SHA"
+          cp "$RUNNER_TEMP/report.md" docs/LAB_REPORT.md
+          git add docs/LAB_REPORT.md
+          git commit -m "[Lab] Report $stamp ($MARKET)"
+          git push -u origin HEAD
+          gh pr create --title "[Lab] Report $stamp ($MARKET)" \
+            --body "Signal Lab report from run ${GITHUB_RUN_ID} (BRIEF §4.10.6). Statistics are also in lab_results."
+          git switch -c "lab/weights-$stamp" "$GITHUB_SHA"
+          cp "$RUNNER_TEMP/weights.yaml" config/weights.yaml
+          if git diff --quiet -- config/weights.yaml; then
+            echo "no weight change proposed"
+          else
+            git add config/weights.yaml
+            git commit -m "[Lab] Weight proposals $stamp ($MARKET)"
+            git push -u origin HEAD
+            body="BRIEF §4.10.5 proposals from run ${GITHUB_RUN_ID}; the reasons per weight are in the report PR."
+            gh pr create --title "[Lab] Weight proposals $stamp ($MARKET)" \
+              --body "$body config/weights.yaml is protected: it needs the human-approved label. If you edit a weight, also change \`version:\` (the proposal's version is stored as proposed; weights.yml fails on edited weights under the same version)."
+          fi

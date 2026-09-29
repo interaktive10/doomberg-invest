@@ -82,6 +82,17 @@ def _needs_db_and_f_in() -> str | None:
     return _needs_f_in() or _needs_database()
 
 
+LAB_PRICES = ROOT / ".cache" / "lab" / "d_us_txt.zip"
+
+
+def _needs_lab_prices() -> str | None:
+    """M8-05: the Stooq bulk daily file is downloaded by hand once (CAPTCHA) into the `lab-data-v1` release; lab.yml
+    fetches it to .cache/lab/."""
+    if not LAB_PRICES.exists():
+        return "human:Stooq bulk file d_us_txt.zip not attached to the lab-data-v1 release (BRIEF §2.7)"
+    return _needs_database()
+
+
 def _needs_old_repo() -> str | None:
     old = Path(os.environ.get("DOOMBERG_REPO", ROOT.parent / "doomberg"))
     if not (old / ".git").exists():
@@ -322,6 +333,37 @@ CHECKS: list[Check] = [
         "m4",
         "GDELT client (mock) and percentiles",
         [*PYTEST, "tests/signals/test_context.py"],
+    ),
+    Check(
+        "M8-01",
+        "m8",
+        "F-LAB planted signal detected (t_nw >= 3 out of sample); noise signal |t_nw| < 2",
+        [*PYTEST, "tests/lab/test_lab.py", "-k", "planted or noise"],
+    ),
+    Check(
+        "M8-02",
+        "m8",
+        "leak test: moving filed_at later removes the planted effect (the panel runs the live signal code)",
+        [*PYTEST, "tests/lab/test_lab.py", "-k", "filed_at or live_signal_code or event"],
+    ),
+    Check(
+        "M8-03",
+        "m8",
+        "the report prints the §7 caveats verbatim",
+        [*PYTEST, "tests/lab/test_report.py"],
+    ),
+    Check(
+        "M8-04",
+        "m8",
+        "the proposal PR touches only config/weights.yaml and needs the label",
+        [*PYTEST, "tests/lab/test_proposals.py"],
+    ),
+    Check(
+        "M8-05",
+        "m8",
+        "a real run needs the Stooq bulk release asset (BLOCKED(human) until it exists)",
+        ["uv", "run", "--frozen", "python", "-m", "pipeline.lab.run", "--market", "us", "--prices", str(LAB_PRICES)],
+        requires=_needs_lab_prices,
     ),
 ]
 
