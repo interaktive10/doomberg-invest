@@ -1,0 +1,56 @@
+name: connection-check
+# One-off check that the repository secrets work (Manzoor's request, 2026-09-29). Read-only and free:
+# - DATABASE_URL: connects and reads the server version; writes nothing.
+# - SEC_USER_AGENT: one request to SEC's public ticker file.
+# - GEMINI_API_KEY: one tiny free-tier request ("reply OK").
+# Prints only pass/fail, status codes and non-secret details; GitHub also masks secret values in logs.
+on:
+  push:
+    branches: [connection-check]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - name: secrets present
+        run: |
+          for s in DATABASE_URL SEC_USER_AGENT GEMINI_API_KEY; do
+            if [ -n "${!s}" ]; then echo "PASS $s is set"; else echo "FAIL $s is empty or missing"; fi
+          done
+
+      - name: database (DATABASE_URL)
+        if: always()
+        run: |
+          host=$(python3 -c "import os,urllib.parse as u; p=u.urlsplit(os.environ['DATABASE_URL']); print(p.hostname or '?', p.port or 5432)")
+          echo "host and port: $host (a Session pooler address ends in pooler.supabase.com, port 5432)"
+          out=$(PGCONNECT_TIMEOUT=15 psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select current_user, current_database(), split_part(version(), ' ', 2), (select count(*) from information_schema.tables where table_schema = 'public')" 2>&1)
+          code=$?
+          if [ $code -eq 0 ]; then echo "PASS connected: user|db|postgres version|public tables = $out"; else echo "FAIL could not connect: $out"; exit 1; fi
+
+      - name: SEC (SEC_USER_AGENT)
+        if: always()
+        run: |
+          case "$SEC_USER_AGENT" in *@*.*) echo "PASS the user agent contains an email address";; *) echo "FAIL the user agent has no email address (SEC requires one)";; esac
+          code=$(curl -s -o /tmp/tickers.json -w "%{http_code}" -H "User-Agent: $SEC_USER_AGENT" https://www.sec.gov/files/company_tickers.json)
+          if [ "$code" = "200" ]; then echo "PASS SEC answered 200 ($(python3 -c "import json; print(len(json.load(open('/tmp/tickers.json'))))") tickers)"; else echo "FAIL SEC answered HTTP $code"; exit 1; fi
+
+      - name: Gemini (GEMINI_API_KEY)
+        if: always()
+        run: |
+          code=$(curl -s -o /tmp/gemini.json -w "%{http_code}" -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json" \
+            -d '{"contents":[{"parts":[{"text":"Reply with the single word OK."}]}]}' \
+            https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent)
+          if [ "$code" = "200" ]; then
+            echo "PASS Gemini answered 200: $(python3 -c "import json; d=json.load(open('/tmp/gemini.json')); print(d['candidates'][0]['content']['parts'][0]['text'].strip()[:40])")"
+          else
+            echo "FAIL Gemini answered HTTP $code: $(python3 -c "import json; d=json.load(open('/tmp/gemini.json')); e=d.get('error',{}); print(e.get('status'), '-', str(e.get('message'))[:200])" 2>/dev/null)"
+            exit 1
+          fi
