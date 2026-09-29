@@ -123,6 +123,7 @@ class InsiderEvent(Row):
     planned: bool = False
     source_url: str
     amends: date | None = None  # a Form 4/A: the filing date of the Form 4 it amends (review R2-F7)
+    line: str | None = None  # the line within the filing (India: the disclosure line's XBRL context; review F5 on M3)
 
 
 CorpEventKind = Literal[

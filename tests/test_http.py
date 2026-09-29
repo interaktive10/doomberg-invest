@@ -62,6 +62,23 @@ def test_rate_limiter_spaces_requests_per_host() -> None:
     assert slept == [3.0, 3.0]
 
 
+def test_rate_limit_is_shared_by_a_sites_hosts() -> None:
+    """Review F6 on M3: NSE's www and archive hosts share one limit (so do SEC's and BSE's)."""
+    t = [0.0]
+    slept: list[float] = []
+
+    def sleep(s: float) -> None:
+        slept.append(s)
+        t[0] += s
+
+    rl = RateLimiter(clock=lambda: t[0], sleep=sleep)
+    rl.wait("www.nseindia.com")
+    rl.wait("nsearchives.nseindia.com")
+    rl.wait("www.bseindia.com")
+    rl.wait("api.bseindia.com")
+    assert slept == [3.0, 3.0]  # NSE after NSE, BSE after BSE; BSE after NSE isn't delayed
+
+
 def test_sec_requires_user_agent(tmp_path: Path) -> None:
     s = Settings(database_url="x", mock_externals=False, sec_user_agent=None, cache_dir=tmp_path)
     with pytest.raises(RuntimeError, match="SEC_USER_AGENT"):

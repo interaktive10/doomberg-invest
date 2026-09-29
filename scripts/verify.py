@@ -68,6 +68,19 @@ def _needs_database() -> str | None:
     return None
 
 
+def _needs_f_in() -> str | None:
+    """F-IN comes from NSE/BSE; if NSE blocks the fetch, Manzoor downloads the files (BRIEF Appendix fixtures)."""
+    need = ("bhavcopy", "results", "shareholding", "pit/disclosures", "securities", "announcements")
+    missing = [d for d in need if not any((ROOT / "fixtures" / "in" / d).glob("*.*"))]
+    if missing:
+        return "human:F-IN fixtures missing (" + ", ".join(missing) + "); run `fetch_fixtures.py f-in` or add the files"
+    return None
+
+
+def _needs_db_and_f_in() -> str | None:
+    return _needs_f_in() or _needs_database()
+
+
 def _needs_old_repo() -> str | None:
     old = Path(os.environ.get("DOOMBERG_REPO", ROOT.parent / "doomberg"))
     if not (old / ".git").exists():
@@ -196,6 +209,59 @@ CHECKS: list[Check] = [
             "weekly or universe_rules or decide or sector or rules_come",
         ],
         requires=_needs_database,
+    ),
+    Check(
+        "M3-01",
+        "m3",
+        "the UDiFF bhavcopy parser works on F-IN (NSE and BSE) and tolerates unknown columns",
+        [*PYTEST, "tests/india/test_parsers.py", "-k", "bhavcopy or columns"],
+        requires=_needs_f_in,
+    ),
+    Check(
+        "M3-02",
+        "m3",
+        "3 real results XBRL map to the expected fundamentals_q rows; half-yearly balance sheet / cash flow",
+        [
+            *PYTEST,
+            "tests/india/test_parsers.py",
+            "tests/db/test_india_pipeline.py",
+            "-k",
+            "kei or half_yearly or consolidated or legacy or unsafe or weekly_run",
+        ],
+        requires=_needs_db_and_f_in,
+    ),
+    Check(
+        "M3-03",
+        "m3",
+        "shareholding and pledge % from 3 real XBRL files; written to ownership_q point-in-time",
+        [*PYTEST, "tests/india/test_parsers.py", "tests/db/test_india_pipeline.py", "-k", "shareholding or weekly_run"],
+        requires=_needs_db_and_f_in,
+    ),
+    Check(
+        "M3-04",
+        "m3",
+        "promoter purchases detected from the PIT sample (and stored by the daily run)",
+        [*PYTEST, "tests/india/test_pit.py", "tests/db/test_india_pipeline.py", "-k", "pit or promoter or daily"],
+        requires=_needs_db_and_f_in,
+    ),
+    Check(
+        "M3-05",
+        "m3",
+        "3 simulated 403s -> stale, then BSE fallback, then a manual CSV import produces rows",
+        [
+            *PYTEST,
+            "tests/india/test_access.py",
+            "tests/db/test_india_pipeline.py",
+            "-k",
+            "403 or stale or bse or manual or nothing or holiday or bhavdata",
+        ],
+        requires=_needs_db_and_f_in,
+    ),
+    Check(
+        "M3-06",
+        "m3",
+        "<= 1 request per 3 s to NSE enforced",
+        [*PYTEST, "tests/india/test_access.py", "tests/test_http.py", "-k", "rate"],
     ),
 ]
 

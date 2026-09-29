@@ -7,6 +7,8 @@
   fetch_fixtures.py f-f4                    # M2: 10 real Form 4 submissions (.txt) -> fixtures/us/form4/
   fetch_fixtures.py f-13f                   # M2: a seeded slice of one SEC 13F data set -> fixtures/us/13f/
   fetch_fixtures.py f-events                # M2: 2 EDGAR daily indexes + submissions + a Form 10 -> fixtures/us/events/
+  fetch_fixtures.py f-in                    # M3: NSE/BSE bhavcopy, securities, ASM/GSM, results + shareholding
+                                            #     XBRL, PIT, announcements -> fixtures/in/ (patient: NSE blocks bursts)
 
 Later milestones add their fixture sets (F-F4, F-13F, F-IN, F-PX) as further subcommands.
 Needs SEC_USER_AGENT and a network policy that allows the BRIEF §0.2 domains. MOCK_EXTERNALS is ignored here.
@@ -302,9 +304,117 @@ def fetch_f_events(client: HttpClient) -> list[str]:
     return errors
 
 
+# F-IN (BRIEF §9, §8 M3): real NSE/BSE files. KEI Industries (capex desk: cables) is the results company: Q2, Q3 and
+# Q4 of FY2026 consolidated (half-yearly balance sheet and cash flow in Q2/Q4), plus a standalone Q3 (the basis rule)
+# and the FY2027 Q1 standalone original + revision (a restatement). Shareholding: KEI plus two companies whose
+# promoters pledge shares. Files already present are kept (the fetch is resumable).
+F_IN_DAY = "20260605"  # a Friday
+F_IN_ARCH = "https://nsearchives.nseindia.com/corporate/xbrl"
+F_IN_FILES: list[tuple[str, str]] = [
+    ("bhavcopy/BhavCopy_NSE_CM_0_0_0_20260605_F_0000.csv.zip",
+     "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_20260605_F_0000.csv.zip"),
+    ("bhavcopy/BhavCopy_BSE_CM_0_0_0_20260605_F_0000.CSV",
+     "https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_20260605_F_0000.CSV"),
+    ("securities/EQUITY_L.csv", "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"),
+    ("securities/asm.json", "https://www.nseindia.com/api/reportASM"),
+    ("securities/gsm.json", "https://www.nseindia.com/api/reportGSM"),
+    ("results/index_KEI.json",
+     "https://www.nseindia.com/api/integrated-filing-results?index=equities&type=Integrated%20Filing-%20Financials&symbol=KEI"),
+    ("results/KEI_FY2026Q2_consolidated.xml", f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1549479_15102025075915_WEB.xml"),
+    ("results/KEI_FY2026Q3_consolidated.xml", f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1607504_21012026062530_WEB.xml"),
+    ("results/KEI_FY2026Q4_consolidated.xml", f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1663459_04052026092025_WEB.xml"),
+    ("results/KEI_FY2026Q3_standalone.xml", f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1607503_21012026062525_WEB.xml"),
+    ("results/KEI_FY2027Q1_standalone.xml", f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1707263_03082026084835_WEB.xml"),
+    ("results/KEI_FY2027Q1_standalone_revision.xml",
+     f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1707294_03082026102024_WEB.xml"),
+    ("results/legacy_VSTTILLERS_FY2025Q3.xml", f"{F_IN_ARCH}/INDAS_121277_1705282_30072026051753.xml"),
+    ("shareholding/index.json", "https://www.nseindia.com/api/corporate-share-holdings-master?index=equities"),
+    ("shareholding/SHP_KEI_2026-06-30.xml", f"{F_IN_ARCH}/SHP_1696739_20072026031837_WEB.xml"),
+    ("shareholding/SHP_JSWSTEEL_2026-06-30.xml", f"{F_IN_ARCH}/SHP_1698632_21072026062045_WEB.xml"),
+    ("shareholding/SHP_JPPOWER_2026-06-30.xml", f"{F_IN_ARCH}/SHP_1691416_13072026035716_WEB.xml"),
+    ("pit/pit.json", "https://www.nseindia.com/api/corporates-pit-gg?index=equities"),  # the page's activeApiName
+    ("pit/pit.csv", "https://www.nseindia.com/api/corporates-pit-gg?index=equities&csv=true"),
+    ("pit/Insider_Trading.xml", "https://nsearchives.nseindia.com/content/RSS/Insider_Trading.xml"),
+    ("announcements/announcements.json", "https://www.nseindia.com/api/corporate-announcements?index=equities"),
+    # the pages' "Download (.csv)" files, the manual import's input (review F4 on M3)
+    ("announcements/announcements_2026-09-19.csv",
+     "https://www.nseindia.com/api/corporate-announcements?index=equities&from_date=19-09-2026&to_date=19-09-2026"
+     "&csv=true"),
+    ("shareholding/shareholding_page.csv",
+     "https://www.nseindia.com/api/corporate-share-holdings-master?index=equities&csv=true"),
+    *((f"pit/disclosures/{u.rsplit('/', 1)[-1]}", u) for u in (  # every 170th disclosure of the PIT index
+        f"{F_IN_ARCH}/IT_22933_WebXMLFile_20260925_132011105.xml",  # SINCLAIR
+        f"{F_IN_ARCH}/IT_23163_WebXMLFile_20260919_124927843.xml",  # AQYLON
+        f"{F_IN_ARCH}/IT_1496_WebXMLFile_20260911_171905572.xml",  # ELECTHERM
+        f"{F_IN_ARCH}/IT_20784_WebXMLFile_20260907_121156624.xml",  # CSLFINANCE
+        f"{F_IN_ARCH}/IT_3067_WebXMLFile_20260901_172346283.xml",  # THANGAMAYL
+        f"{F_IN_ARCH}/IT_13498_WebXMLFile_20260826_153544367.xml",  # BHAGERIA
+        f"{F_IN_ARCH}/IT_17593_WebXMLFile_20260819_213411802.xml",  # 360ONE
+        f"{F_IN_ARCH}/IT_14236_WebXMLFile_20260812_153243430.xml",  # GNA
+        f"{F_IN_ARCH}/PIT_530475_2872026173846_IT_WebXMLFile_20260728_173852777.xml",  # TINNARUBR
+        f"{F_IN_ARCH}/PIT_532507_172026172031_IT_WebXMLFile_20260701_172036496.xml",  # BAGFILMS
+        f"{F_IN_ARCH}/PIT_540724_2662026144622_IT_WebXMLFile_20260626_144807138.xml",  # DIAMONDYD
+        f"{F_IN_ARCH}/PIT_543513_2062026173325_IT_WebXMLFile_20260620_173348364.xml",  # UMAEXPORTS
+        f"{F_IN_ARCH}/PIT_507910_166202615653_IT_WebXMLFile_20260616_150659137.xml",  # FIBERWEB
+        f"{F_IN_ARCH}/PIT_532809_1062026161554_IT_WebXMLFile_20260610_161822642.xml",  # FSL
+        f"{F_IN_ARCH}/PIT_524774_462026163113_IT_WebXMLFile_20260604_163257665.xml",  # NGLFINE
+        f"{F_IN_ARCH}/PIT_531120_2852026122358_IT_WebXMLFile_20260528_122404596.xml",  # PATELENG
+        f"{F_IN_ARCH}/PIT_539524_185202615324_IT_WebXMLFile_20260518_153248238.xml",  # LALPATHLAB
+    )),
+]  # fmt: skip
+F_IN_KEEP_SHP = {"KEI", "JSWSTEEL", "JPPOWER"}  # the shareholding listing is trimmed to these
+# the shareholding page's CSV is trimmed to these companies plus every 100th row (it has names, not symbols)
+F_IN_KEEP_SHP_NAMES = {"KEI Industries Limited", "JSW Steel Limited", "Jaiprakash Power Ventures Limited",
+                       "Bhageria Industries Limited"}  # fmt: skip
+
+
+def trim_shareholding_csv(body: bytes) -> bytes:
+    lines = body.decode("utf-8-sig").splitlines(keepends=True)
+    keep = [
+        x for n, x in enumerate(lines[1:], 1) if n % 100 == 0 or x.split('","')[0].strip('"') in F_IN_KEEP_SHP_NAMES
+    ]
+    return ("\ufeff" + lines[0] + "".join(keep)).encode()
+
+
+def fetch_f_in(client: HttpClient, cooldown_s: float = 600.0, rounds: int = 4) -> list[str]:
+    import time
+
+    from pipeline.net.bse import BseClient
+    from pipeline.net.nse import NseBlocked, NseClient
+
+    out = FIXTURES / "in"
+    todo = [(out / rel, url) for rel, url in F_IN_FILES if not (out / rel).exists()]
+    errors: list[str] = []
+    for n in range(rounds):
+        nse, bse, failed = NseClient(client, backoff=(30.0, 90.0)), BseClient(client), []
+        for dest, url in todo:
+            try:
+                body = bse.get(url) if "bseindia.com" in url else nse.get(url)
+            except (NseBlocked, Exception) as e:  # noqa: BLE001 — reported, retried next round
+                failed.append((dest, url))
+                errors.append(f"{dest.relative_to(ROOT)}: {type(e).__name__}: {e}")
+                continue
+            if dest.name == "index.json" and dest.parent.name == "shareholding":
+                rows = [r for r in json.loads(body) if r.get("symbol") in F_IN_KEEP_SHP]
+                body = (json.dumps(rows, indent=1) + "\n").encode()
+            if dest.name == "shareholding_page.csv":
+                body = trim_shareholding_csv(body)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(body)
+            print(f"F-IN {dest.relative_to(ROOT)}: {len(body):,} bytes")
+        todo = failed
+        if not todo:
+            return []
+        if n < rounds - 1:
+            print(f"F-IN: {len(todo)} files blocked; cooling down {cooldown_s:.0f}s (round {n + 1}/{rounds})")
+            errors = []
+            time.sleep(cooldown_s)
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["universe", "f-us", "f-f4", "f-13f", "f-events"])
+    ap.add_argument("what", choices=["universe", "f-us", "f-f4", "f-13f", "f-events", "f-in"])
     ap.add_argument("--source", choices=["all", *UNIVERSE_SOURCES], default="all")
     a = ap.parse_args(argv)
     settings = dataclasses.replace(Settings.from_env(), mock_externals=False)
@@ -318,6 +428,8 @@ def main(argv: list[str] | None = None) -> int:
         errors = fetch_f_f4(client)
     elif a.what == "f-13f":
         errors = fetch_f_13f(client)
+    elif a.what == "f-in":
+        errors = fetch_f_in(client)
     else:
         errors = fetch_f_events(client)
     for e in errors:

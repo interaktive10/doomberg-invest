@@ -11,7 +11,7 @@ through pipeline.db.pit.as_of(). Writes are idempotent so a re-run of a weekly j
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from typing import Any
@@ -77,7 +77,7 @@ def _set_excluded(cols: Iterable[str]) -> str:
 # ---------------------------------------------------------------- companies
 
 
-_US_METADATA = ("sector", "industry", "sic", "fiscal_year_end")  # filled by the weekly run from submissions (M2)
+_METADATA = ("sector", "industry", "sic", "fiscal_year_end")  # filled by the weekly runs, not by listings
 SNAPSHOT_OUT = {"us": "not in the SEC NYSE/Nasdaq snapshot", "in": "not in the NSE EQ snapshot"}
 _DECISION = ("in_universe", "excluded_reason")
 
@@ -99,7 +99,7 @@ def upsert_us_companies(conn: Conn, companies: Sequence[Company]) -> None:
     upd = (
         ", ".join(
             f"{c} = coalesce(excluded.{c}, companies.{c})"
-            if c in _US_METADATA
+            if c in _METADATA
             else _keep_decision(c)
             if c in _DECISION
             else f"{c} = excluded.{c}"
@@ -118,8 +118,19 @@ def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
     first; a face-value split keeps the symbol and changes the ISIN, which the upsert on symbol handles."""
     if any(c.market != "in" or not c.nse_symbol or not c.isin for c in companies):
         raise ValueError("upsert_in_companies needs market='in' rows with nse_symbol and isin")
-    rows = [c.model_dump(include=set(_COMPANY_COLS)) for c in companies]
-    upd = _set_excluded(c for c in _COMPANY_COLS if c not in ("market", "nse_symbol")) + ", updated_at = now()"
+    rows = [{**c.model_dump(include=set(_COMPANY_COLS)), "snapshot_out": SNAPSHOT_OUT["in"]} for c in companies]
+    upd = (
+        ", ".join(
+            f"{c} = coalesce(excluded.{c}, companies.{c})"
+            if c in _METADATA
+            else _keep_decision(c)
+            if c in _DECISION
+            else f"{c} = excluded.{c}"
+            for c in _COMPANY_COLS
+            if c not in ("market", "nse_symbol")
+        )
+        + ", updated_at = now()"
+    )
     with conn.cursor() as cur:
         cur.executemany(
             _q(
@@ -130,6 +141,22 @@ def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
             rows,
         )
         cur.executemany(_insert("companies", _COMPANY_COLS, f"on conflict (nse_symbol) do update set {upd}"), rows)
+
+
+def set_india_universe(conn: Conn, reasons: Mapping[str, str | None]) -> int:
+    """India universe status by NSE symbol: a reason (e.g. an ASM/GSM listing) takes the company out, None puts it
+    back. Symbols not given are left as they are (companies missing from the securities list stay out)."""
+    rows = [{"sym": k, "why": v, "u": v is None} for k, v in reasons.items()]
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q(
+                "update companies set in_universe = %(u)s, excluded_reason = %(why)s, updated_at = now() "
+                "where market = 'in' and nse_symbol = %(sym)s "
+                "and (in_universe is distinct from %(u)s or excluded_reason is distinct from %(why)s)"
+            ),
+            rows,
+        )
+        return cur.rowcount
 
 
 def mark_missing_out_of_universe(conn: Conn, market: str, present_keys: Sequence[str], reason: str) -> int:
@@ -233,8 +260,17 @@ def company_ids_by(conn: Conn, key: str) -> dict[str, UUID]:
 _FUND_COLS = ("company_id", "period_end", "fiscal_label", "filed_at", *FUNDAMENTAL_COLUMNS, "currency", "source")
 
 
-def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow]) -> None:
-    upd = _set_excluded(c for c in _FUND_COLS if c not in ("company_id", "period_end", "filed_at"))
+def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow], fill_only: bool = False) -> None:
+    """Upsert row versions by (company, period_end, filed_at). fill_only (India): a stored version is never given
+    fewer values, since a null in the new row keeps the stored value (review F1 on M3)."""
+    cols = [c for c in _FUND_COLS if c not in ("company_id", "period_end", "filed_at")]
+    if fill_only:
+        upd = ", ".join(
+            f"{c} = coalesce(excluded.{c}, fundamentals_q.{c})" if c in FUNDAMENTAL_COLUMNS else f"{c} = excluded.{c}"
+            for c in cols
+        )
+    else:
+        upd = _set_excluded(cols)
     with conn.cursor() as cur:
         cur.executemany(
             _insert(
@@ -269,7 +305,12 @@ _OWN_COLS = (
 )
 
 
+MANUAL_OWNERSHIP = "manual_csv"  # promoter % only, from an NSE page CSV (pipeline/india/manual_import.py)
+
+
 def upsert_ownership(conn: Conn, rows: Sequence[OwnershipRow]) -> None:
+    """One row per company and quarter: a later filing replaces it. A manual CSV row (promoter % only) never
+    replaces a full row, and the full row of the same filing replaces it."""
     upd = _set_excluded(c for c in _OWN_COLS if c not in ("company_id", "quarter_end"))
     with conn.cursor() as cur:
         cur.executemany(
@@ -277,9 +318,12 @@ def upsert_ownership(conn: Conn, rows: Sequence[OwnershipRow]) -> None:
                 "ownership_q",
                 _OWN_COLS,
                 f"on conflict (company_id, quarter_end) do update set {upd} "
-                "where excluded.filed_at > ownership_q.filed_at",
+                "where (excluded.source <> %(manual)s and (excluded.filed_at > ownership_q.filed_at "
+                "or (excluded.filed_at = ownership_q.filed_at and ownership_q.source = %(manual)s))) "
+                "or (excluded.source = %(manual)s and ownership_q.source = %(manual)s "
+                "and excluded.filed_at > ownership_q.filed_at)",
             ),
-            [r.model_dump() for r in rows],
+            [{**r.model_dump(), "manual": MANUAL_OWNERSHIP} for r in rows],
         )
 
 
@@ -296,12 +340,13 @@ _INSIDER_COLS = (
     "planned",
     "source_url",
     "amends",
+    "line",
 )
 
 
 def insert_insider_events(conn: Conn, rows: Sequence[InsiderEvent]) -> None:
-    """Rows already stored (same company, person, date, kind, shares, value, source) are skipped by a unique
-    index."""
+    """Rows already stored (same company, person, date, kind, shares, value, source and line) are skipped by a
+    unique index."""
     with conn.cursor() as cur:
         cur.executemany(
             _insert("insider_events", _INSIDER_COLS, "on conflict do nothing"),
