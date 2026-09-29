@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 import psycopg
 import yaml
 
@@ -79,6 +80,33 @@ def run_13f(conn: psycopg.Connection[Any], ds: DataSet, overrides: Mapping[str, 
     )
 
 
+SPARE_WINDOWS = 2  # how many of the newest windows may still be unpublished before a run fails
+
+
+def fetch_windows(download: Callable[[str, Path], Path], cache: Path, today: date, n: int) -> list[tuple[Path, date]]:
+    """The `n` newest 13F data sets SEC has published, oldest first, each with its window's last filing date (downloaded
+    into `cache` unless already there). A window is assumed out PUBLISH_LAG_DAYS after it closes, but SEC can take
+    longer, so while the newest windows answer 404 the run falls back to the ones before them; a 404 after that is an
+    error (a real gap, not a late release)."""
+    out: list[tuple[Path, date]] = []
+    for start, end in windows_before(today, n + SPARE_WINDOWS):
+        if len(out) == n:
+            break
+        dest = cache / f"{start:%Y%m%d}-{end:%Y%m%d}.zip"
+        if not dest.exists():
+            try:
+                download(dataset_url(start, end), dest)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404 and not out:
+                    print(f"13F data set {start}..{end} is not published yet: using the window before it")
+                    continue
+                raise
+        out.append((dest, end))
+    if len(out) < n:
+        raise RuntimeError(f"only {len(out)} of the {n} newest 13F data sets are published")
+    return out[::-1]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--windows", type=int, default=1, help="how many of the latest published windows to load")
@@ -94,11 +122,7 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("--zip needs --filed-through")
         jobs.append((a.zip, a.filed_through))
     else:
-        for start, end in reversed(windows_before(today, a.windows)):  # oldest first
-            dest = settings.cache_dir / "us" / "13f" / f"{start:%Y%m%d}-{end:%Y%m%d}.zip"
-            if not dest.exists():
-                client.download(dataset_url(start, end), dest)
-            jobs.append((dest, end))
+        jobs.extend(fetch_windows(client.download, settings.cache_dir / "us" / "13f", today, a.windows))
     overrides = load_overrides()
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "us_13f", "sec_13f") as run:
         run["windows"] = []
