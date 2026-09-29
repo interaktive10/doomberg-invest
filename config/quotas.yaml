@@ -2,7 +2,7 @@
 # (see docs/QUOTAS.md). null = not filled in yet -> the router treats that provider as unavailable.
 providers:
   gemini:
-    models: {extract: gemini-2.5-flash-lite, card: gemini-2.5-flash}
+    models: {extract: gemini-3.5-flash-lite, card: gemini-3.5-flash}  # 2.5 is closed to new keys (2026-09-29)
     requests_per_day: null
     requests_per_minute: null
     tokens_per_day: null
