@@ -51,6 +51,38 @@ jobs:
           PY
           exit 1
 
+      - name: database via the Session pooler (derived from DATABASE_URL)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess, urllib.parse as u
+          url = os.environ["DATABASE_URL"]
+          p = u.urlsplit(url)
+          host = p.hostname or ""
+          if host.endswith(".pooler.supabase.com"):
+              print("DATABASE_URL already uses the pooler:", host); raise SystemExit(0)
+          m = re.fullmatch(r"db\.([a-z0-9]+)\.supabase\.co", host)
+          if not m:
+              print("not a Supabase direct-connection host; nothing to derive"); raise SystemExit(0)
+          ref, pw = m.group(1), u.unquote(p.password or "")
+          def scrub(s):
+              return s.replace(pw, "<hidden>") if pw else s
+          regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "ca-central-1", "sa-east-1", "eu-west-1",
+                     "eu-west-2", "eu-west-3", "eu-central-1", "eu-central-2", "eu-north-1", "ap-south-1",
+                     "ap-southeast-1", "ap-southeast-2", "ap-northeast-1", "ap-northeast-2"]
+          for prefix in ("aws-0", "aws-1"):
+              for region in regions:
+                  h = f"{prefix}-{region}.pooler.supabase.com"
+                  cand = f"postgresql://postgres.{ref}:{u.quote(pw, safe='')}@{h}:5432/postgres"
+                  r = subprocess.run(["psql", cand, "-X", "-A", "-t", "-c", "select version()"], capture_output=True, text=True,
+                                     env={**os.environ, "PGCONNECT_TIMEOUT": "8"})
+                  if r.returncode == 0:
+                      print(f"PASS the Session pooler answers at {h}:5432 as user postgres.{ref}: {r.stdout.strip()[:60]}")
+                      raise SystemExit(0)
+                  print(f"  not {h}: {scrub(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else '?')[:90]}")
+          print("FAIL no pooler host accepted the connection"); raise SystemExit(1)
+          PY
+
       - name: SEC (SEC_USER_AGENT)
         if: always()
         run: |
