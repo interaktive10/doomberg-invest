@@ -23,6 +23,15 @@ SEEDED: dict[str, tuple[str, str]] = {
     "order_identifier.py": ("pipeline/scratch_orders.py", "ORDER_IDENTIFIER"),
     "journal_to_llm.py": ("pipeline/llm/scratch_prompt.py", "PRIVACY"),
     "pit_bypass.py": ("pipeline/signals/scratch_pit.py", "PIT_READ"),
+    "pit_multiline.py": ("pipeline/signals/scratch_pit2.py", "PIT_READ"),  # review F7 (M2): the reads the guard missed
+    "pit_from_underscore.py": ("web/lib/scratch_pit.py", "PIT_READ"),
+    "pit_table_copy.py": ("scripts/scratch_pit.py", "PIT_READ"),
+    "pit_fstring.py": ("pipeline/lab/scratch_pit.py", "PIT_READ"),
+    "pit_upper_fstring.py": ("pipeline/signals/scratch_upper.py", "PIT_READ"),  # review R2-F4
+    "pit_repo_variable.py": ("pipeline/db/repo.py", "PIT_READ"),
+    "pit_probe_import.py": ("pipeline/lab/scratch_probe.py", "PIT_READ"),
+    "pit_insert_suffix.py": ("pipeline/db/repo.py", "PIT_READ"),  # review R3-F3
+    "pit_samples_key.py": ("pipeline/db/size_guard.py", "PIT_READ"),
     "openai_default_base.py": ("pipeline/llm/providers/scratch_openai.py", "OPENAI_CLIENT"),
     "npm_anthropic.ts": ("web/lib/scratch.ts", "BANNED_NPM_PACKAGE"),
 }
@@ -133,3 +142,20 @@ def test_paths_mode_outside_repo_is_ignored(scratch_repo: Path, tmp_path_factory
     outside = tmp_path_factory.mktemp("outside") / "x.py"
     outside.write_text("import kiteconnect\n", encoding="utf-8")
     assert guard.run(scratch_repo, [outside]) == []
+
+
+def test_pit_rule_reports_each_bypass_on_its_line(scratch_repo: Path) -> None:
+    """Review F7 (M2): multi-line SQL, .from_(), COPY/TABLE and a table name held in a variable are all reads."""
+    dest = scratch_repo / "pipeline" / "x.py"
+    dest.write_text((CASES / "pit_table_copy.py").read_text(encoding="utf-8") + (CASES / "pit_multiline.py").read_text(
+        encoding="utf-8"), encoding="utf-8")  # fmt: skip
+    got = sorted((v.line, v.rule) for v in guard.run(scratch_repo))
+    assert got == [(1, "PIT_READ"), (2, "PIT_READ"), (5, "PIT_READ")]
+    writer = scratch_repo / "pipeline" / "db" / "repo.py"  # the repository may name tables to write them
+    writer.parent.mkdir(parents=True)
+    ok = 'INSERT = "insert into fundamentals_q"\n_insert(\n    "fundamentals_q", COLS, "")\n'
+    writer.write_text(ok, encoding="utf-8")
+    dest.unlink()
+    assert guard.run(scratch_repo) == []
+    writer.write_text('_insert("fundamentals_q", COLS, "")\nTABLE = "fundamentals_q"\n', encoding="utf-8")
+    assert [(v.line, v.rule) for v in guard.run(scratch_repo)] == [(2, "PIT_READ")]  # a name held for anything else

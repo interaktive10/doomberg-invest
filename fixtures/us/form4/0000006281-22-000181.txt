@@ -1,0 +1,269 @@
+<SEC-DOCUMENT>0000006281-22-000181.txt : 20220602
+<SEC-HEADER>0000006281-22-000181.hdr.sgml : 20220602
+<ACCEPTANCE-DATETIME>20220602160625
+ACCESSION NUMBER:		0000006281-22-000181
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		2
+CONFORMED PERIOD OF REPORT:	20220601
+FILED AS OF DATE:		20220602
+DATE AS OF CHANGE:		20220602
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			DOLUCA TUNC
+		CENTRAL INDEX KEY:			0001183597
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-07819
+		FILM NUMBER:		22990827
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			ANALOG DEVICES INC
+		CENTRAL INDEX KEY:			0000006281
+		STANDARD INDUSTRIAL CLASSIFICATION:	SEMICONDUCTORS & RELATED DEVICES [3674]
+		IRS NUMBER:				042348234
+		STATE OF INCORPORATION:			MA
+		FISCAL YEAR END:			1029
+
+	BUSINESS ADDRESS:	
+		STREET 1:		ONE ANALOG WAY
+		CITY:			WILMINGTON
+		STATE:			MA
+		ZIP:			01887
+		BUSINESS PHONE:		7813294700
+
+	MAIL ADDRESS:	
+		STREET 1:		ONE ANALOG WAY
+		CITY:			WILMINGTON
+		STATE:			MA
+		ZIP:			01887
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>wf-form4_165420035479808.xml
+<DESCRIPTION>FORM 4
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0306</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2022-06-01</periodOfReport>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0000006281</issuerCik>
+        <issuerName>ANALOG DEVICES INC</issuerName>
+        <issuerTradingSymbol>ADI</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001183597</rptOwnerCik>
+            <rptOwnerName>DOLUCA TUNC</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerStreet1>ONE ANALOG WAY</rptOwnerStreet1>
+            <rptOwnerStreet2></rptOwnerStreet2>
+            <rptOwnerCity>WILMINGTON</rptOwnerCity>
+            <rptOwnerState>MA</rptOwnerState>
+            <rptOwnerZipCode>01887</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>1</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>0</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle></officerTitle>
+            <otherText></otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <nonDerivativeTable>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Comm Stock - $.16-2/3 value</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>0</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Comm Stock - $.16-2/3 value</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2022-06-01</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F1"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>2700</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>169.18</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>665027</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Living Trust</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Comm Stock - $.16-2/3 value</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2022-06-01</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F2"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>2000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>169.18</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>87357</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Irrevocable Trust</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <derivativeTable></derivativeTable>
+
+    <footnotes>
+        <footnote id="F1">These shares were disposed of in an open market sale pursuant to a 10b5-1 trading plan adopted by the Tunc Doluca Living Trust in accordance with Rule 10b5-1 of the Securities Exchange Act of 1934, as amended.</footnote>
+        <footnote id="F2">These shares were disposed of in an open market sale pursuant to a 10b5-1 trading plan adopted by the Tunc Doluca Irrevocable Trust in accordance with Rule 10b5-1 of the Securities Exchange Act of 1934, as amended.</footnote>
+    </footnotes>
+
+    <remarks></remarks>
+
+    <ownerSignature>
+        <signatureName>/s/ Shelly Shaw, Associate General Counsel, by Power of Attorney</signatureName>
+        <signatureDate>2022-06-02</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>EX-24
+<SEQUENCE>2
+<FILENAME>subpoa-xmkstossandja.htm
+<DESCRIPTION>DOLUCA POA
+<TEXT>
+<!-- Document created using Workiva -->
+<html>
+<body>
+<pre>
+SUBSTITUTE POWER OF ATTORNEY
+
+      Pursuant to a written Limited Power of Attorney for Section 16 Reporting Obligations granted by each of the following individuals (collectively, the "Powers of Attorney"), copies of which were previously filed with the Securities and Exchange Commission, the undersigned has been constituted and appointed true and lawful attorney-in-fact and agent, with full powers of substitution and revocation, to do and perform every act and thing whatsoever requisite, necessary or proper to be done in the exercise of the rights and powers granted in such Powers of Attorney:
+      James A. Champy
+      Anantha P. Chandrakasan
+      Martin Cotter
+      Tunc Doluca
+      Bruce R. Evans
+      Edward H. Frank
+      Laurie H. Glimcher
+      Karen M. Golz
+      Gregory N. Henderson
+      Mercedes Johnson
+      Mark M. Little
+      Prashanth Mahendra-Rajah
+      Vincent Roche
+      Anelise Angelino Sacks
+      Kenton J. Sicchitano
+      Ray Stata
+
+      The undersigned, pursuant to the powers granted in the Powers of Attorney, hereby constitutes and appoints Janene Asgeirsson and Shelly Shaw as substitute to the undersigned attorney-in-fact, with full power and authority to do and perform every act and thing whatsoever requisite, necessary or proper to be done in the exercise of the rights and powers granted to the undersigned in the Powers of Attorney.  For the avoidance of doubt, the foregoing appointment shall not serve as a revocation of the powers granted to the undersigned in the Powers of Attorney.
+      This Substitute Power of Attorney shall remain in full force and effect with respect to each individual listed above, until the underlying Power of Attorney is revoked or terminated, unless earlier revoked by the undersigned in a signed writing.
+
+IN WITNESS WHEREOF, the undersigned has caused this Substitute Power of Attorney to be executed as of this 3rd day of March, 2022.
+
+
+
+Signature
+
+
+/s/ Margaret K. Seif
+Print Name
+
+
+
+
+
+
+
+\\\DC - 57385/2 - #1301253 v1
+
+
+
+
+
+
+
+\\\DC - 57385/2 - #1301253 v1
+
+
+</pre>
+</body>
+</html>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

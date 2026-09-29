@@ -22,6 +22,7 @@ from pipeline.settings import Settings
 MB = 1024 * 1024
 LIMIT_MB = 400
 SIGNAL_KEEP_YEARS = 3
+FUNDAMENTAL_VERSIONS = 1.45  # rows per company-quarter: restatement versions (F-US measures 1.418; R2-F1)
 
 Conn = psycopg.Connection[Any]
 
@@ -142,14 +143,21 @@ def _measure(conn: Conn, table: str, n: int, quarters: int = 1) -> float:
 
 
 def project(
-    conn: Conn, companies: int = 7000, quarters: int = 60, sample_companies: int = 200
+    conn: Conn,
+    companies: int = 7000,
+    quarters: int = 60,
+    sample_companies: int = 200,
+    versions: float = FUNDAMENTAL_VERSIONS,
 ) -> list[TableProjection]:
     """Projected size of the company and quarterly tables for `companies` x `quarters` (BRIEF §2.8: one wide row
-    per company-quarter)."""
+    per company-quarter, times the restatement versions kept for point-in-time reads)."""
     n = sample_companies * quarters
     return [
         TableProjection(
-            "fundamentals_q", n, _measure(conn, "fundamentals_q", sample_companies, quarters), companies * quarters
+            "fundamentals_q",
+            n,
+            _measure(conn, "fundamentals_q", sample_companies, quarters),
+            round(companies * quarters * versions),
         ),
         TableProjection(
             "ownership_q", n, _measure(conn, "ownership_q", sample_companies, quarters), companies * quarters

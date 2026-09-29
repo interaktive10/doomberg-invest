@@ -92,7 +92,7 @@ class AsOf:
     ) -> list[InsiderEvent]:
         sql = (
             "select id, company_id, event_date, filed_at, person, role, kind, shares, value, currency, planned, "
-            "source_url from insider_events "
+            "source_url, amends from insider_events "
             "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
             "and (%(since)s::date is null or event_date >= %(since)s::date) "
             "order by company_id, event_date, filed_at"

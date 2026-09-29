@@ -135,3 +135,23 @@ class HttpClient:
             cp.parent.mkdir(parents=True, exist_ok=True)
             cp.write_bytes(body)
         return body
+
+    def download(self, url: str, dest: Path, *, timeout: float = 600.0) -> Path:
+        """Stream a large file (SEC bulk zips are gigabytes) to `dest` without holding it in memory. Same allowlist,
+        rate limit and mock rules as get_bytes; no redirects (bulk URLs are direct)."""
+        host = check_allowed(url)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if self.settings.mock_externals:
+            if url in self.mocks:
+                dest.write_bytes(self.mocks[url])
+                return dest
+            raise MockNotRegistered(url)
+        self.limiter.wait(host)
+        part = dest.with_name(dest.name + ".part")
+        with httpx.stream("GET", url, headers=self._headers(host), timeout=timeout, follow_redirects=False) as r:
+            r.raise_for_status()
+            with part.open("wb") as fh:
+                for chunk in r.iter_bytes(1 << 20):
+                    fh.write(chunk)
+        part.replace(dest)
+        return dest

@@ -144,6 +144,59 @@ CHECKS: list[Check] = [
         "guard passes on the migrations",
         ["bash", "-c", "uv run --frozen python scripts/guard.py --paths db/migrations/*.sql"],
     ),
+    Check(
+        "M2-01",
+        "m2",
+        "F-US quarterized values equal the expected CSVs (AAPL, MSFT, CAT) incl. Q4 derivation; quarterizing rules",
+        [*PYTEST, "tests/us/test_fus.py", "tests/us/test_quarterize.py"],
+    ),
+    Check(
+        "M2-02",
+        "m2",
+        "a restatement creates a new row; as_of returns the right version (Apple FY2017 Q2 CFO)",
+        [*PYTEST, "tests/db/test_us_pipeline.py", "-k", "restatement or vintage"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M2-03",
+        "m2",
+        "Form 4: code P only; planned via the checkbox and via a footnote; derivatives excluded (F-F4)",
+        [*PYTEST, "tests/us/test_form4.py"],
+    ),
+    Check(
+        "M2-04",
+        "m2",
+        "8-K 4.01 and NT detection (real EDGAR days through the daily run); spin-offs",
+        [
+            *PYTEST,
+            "tests/us/test_events.py",
+            "tests/us/test_specials.py",
+            "tests/db/test_us_pipeline.py",
+            "-k",
+            "events or specials or daily or spinoff or weekend or outside_the_universe",
+        ],
+        requires=_needs_database,
+    ),
+    Check(
+        "M2-05",
+        "m2",
+        "13F counts correct on F-13F; CUSIP mapping >= 90% on the sample; ownership_q written",
+        [*PYTEST, "tests/us/test_thirteenf.py", "tests/db/test_us_pipeline.py", "-k", "thirteenf or 13f"],
+        requires=_needs_database,
+    ),
+    Check(
+        "M2-06",
+        "m2",
+        "US weekly run on fixtures < 10 min (incremental, idempotent, universe rules)",
+        [
+            *PYTEST,
+            "tests/db/test_us_pipeline.py",
+            "tests/us/test_universe_rules.py",
+            "-k",
+            "weekly or universe_rules or decide or sector or rules_come",
+        ],
+        requires=_needs_database,
+    ),
 ]
 
 

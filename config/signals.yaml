@@ -141,7 +141,16 @@ xbrl_map:
   interest_expense: [InterestExpense, InterestExpenseNonoperating]
   total_assets: [Assets]
   cash: [CashAndCashEquivalentsAtCarryingValue, CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents]
-  total_debt: [LongTermDebt, LongTermDebtNoncurrent, DebtCurrent]
+  # A list entry is a sum: its first concept is required for that date, the rest are added when present. The M0
+  # map fell back to DebtCurrent alone (current maturities only), which F-US showed for PWR/ORCL (M2, DECISIONS.log).
+  total_debt:
+    - [LongTermDebt, CommercialPaper, ShortTermBorrowings]
+    - [LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities, CommercialPaper, ShortTermBorrowings]
+    - DebtLongtermAndShorttermCombinedAmount
+    - [LongTermDebtNoncurrent, LongTermDebtCurrent, CommercialPaper, ShortTermBorrowings]
+    - [LongTermDebtAndCapitalLeaseObligations, LongTermDebtAndCapitalLeaseObligationsCurrent, CommercialPaper,
+       ShortTermBorrowings]
+    - [LongTermNotesPayable, NotesPayableCurrent, CommercialPaper, ShortTermBorrowings]
   equity: [StockholdersEquity, StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest]
   receivables: [AccountsReceivableNetCurrent]
   inventory: [InventoryNet]

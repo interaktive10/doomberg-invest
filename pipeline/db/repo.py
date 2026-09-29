@@ -11,8 +11,9 @@ through pipeline.db.pit.as_of(). Writes are idempotent so a re-run of a weekly j
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
-from datetime import UTC, datetime
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -26,6 +27,7 @@ from pipeline.db.models import (
     Company,
     ContextValue,
     CorpEvent,
+    FilingRow,
     FundamentalsRow,
     InsiderEvent,
     LabResult,
@@ -75,16 +77,40 @@ def _set_excluded(cols: Iterable[str]) -> str:
 # ---------------------------------------------------------------- companies
 
 
+_US_METADATA = ("sector", "industry", "sic", "fiscal_year_end")  # filled by the weekly run from submissions (M2)
+SNAPSHOT_OUT = {"us": "not in the SEC NYSE/Nasdaq snapshot", "in": "not in the NSE EQ snapshot"}
+_DECISION = ("in_universe", "excluded_reason")
+
+
+def _keep_decision(col: str) -> str:
+    """A re-seed doesn't undo the weekly run's universe decision (review F9: the quarterly seed re-admitted SPACs and
+    funds right before the 13F step). It re-admits only a company the snapshot step had moved out (listed again)."""
+    return (
+        f"{col} = case when companies.excluded_reason is null or companies.excluded_reason = %(snapshot_out)s "
+        f"then excluded.{col} else companies.{col} end"
+    )
+
+
 def upsert_us_companies(conn: Conn, companies: Sequence[Company]) -> None:
-    """US companies are keyed by CIK."""
+    """US companies are keyed by CIK. The listing snapshot has no SIC/sector/industry/fiscal year: a re-seed keeps
+    the values the weekly run stored rather than blanking them, and keeps its universe decision."""
     if any(c.market != "us" or not c.cik for c in companies):
         raise ValueError("upsert_us_companies needs market='us' rows with a cik")
-    upd = _set_excluded(c for c in _COMPANY_COLS if c not in ("market", "cik")) + ", updated_at = now()"
-    with conn.cursor() as cur:
-        cur.executemany(
-            _insert("companies", _COMPANY_COLS, f"on conflict (cik) do update set {upd}"),
-            [c.model_dump(include=set(_COMPANY_COLS)) for c in companies],
+    upd = (
+        ", ".join(
+            f"{c} = coalesce(excluded.{c}, companies.{c})"
+            if c in _US_METADATA
+            else _keep_decision(c)
+            if c in _DECISION
+            else f"{c} = excluded.{c}"
+            for c in _COMPANY_COLS
+            if c not in ("market", "cik")
         )
+        + ", updated_at = now()"
+    )
+    rows = [{**c.model_dump(include=set(_COMPANY_COLS)), "snapshot_out": SNAPSHOT_OUT["us"]} for c in companies]
+    with conn.cursor() as cur:
+        cur.executemany(_insert("companies", _COMPANY_COLS, f"on conflict (cik) do update set {upd}"), rows)
 
 
 def upsert_in_companies(conn: Conn, companies: Sequence[Company]) -> None:
@@ -122,6 +148,65 @@ def mark_missing_out_of_universe(conn: Conn, market: str, present_keys: Sequence
     return cur.rowcount
 
 
+def update_us_company(
+    conn: Conn,
+    cik: str,
+    *,
+    name: str | None,
+    sic: str | None,
+    industry: str | None,
+    sector: str | None,
+    fiscal_year_end: str | None,
+    in_universe: bool,
+    excluded_reason: str | None,
+) -> None:
+    """Metadata and universe status from the weekly US run (BRIEF §1.3); name is kept when not given."""
+    conn.execute(
+        _q(
+            "update companies set name = coalesce(%(name)s, name), sic = %(sic)s, industry = %(industry)s, "
+            "sector = %(sector)s, fiscal_year_end = %(fye)s, in_universe = %(u)s, excluded_reason = %(why)s, "
+            "updated_at = now() where market = 'us' and cik = %(cik)s"
+        ),
+        {
+            "name": name,
+            "sic": sic,
+            "industry": industry,
+            "sector": sector,
+            "fye": fiscal_year_end,
+            "u": in_universe,
+            "why": excluded_reason,
+            "cik": cik,
+        },  # fmt: skip
+    )
+
+
+def ensure_company(conn: Conn, c: Company) -> UUID:
+    """Insert a US company by CIK if missing (e.g. a spin-off registrant before it lists); return its id."""
+    if c.market != "us" or not c.cik:
+        raise ValueError("ensure_company needs a US company with a cik")
+    row = conn.execute(
+        _q(
+            "insert into companies (market, name, cik, ticker, in_universe, excluded_reason) "
+            "values ('us', %(name)s, %(cik)s, %(ticker)s, %(u)s, %(why)s) "
+            "on conflict (cik) do update set updated_at = companies.updated_at returning id"
+        ),
+        {"name": c.name, "cik": c.cik, "ticker": c.ticker, "u": c.in_universe, "why": c.excluded_reason},
+    ).fetchone()
+    assert row is not None
+    cid: UUID = row[0]
+    return cid
+
+
+def insert_filings(conn: Conn, rows: Sequence[FilingRow]) -> None:
+    """Queue filings for text extraction; an accession already queued is left as it is."""
+    cols = ("company_id", "accession_no", "form_type", "items", "filed_at", "accepted_at", "period_of_report",
+            "primary_doc_url", "index_url", "status")  # fmt: skip
+    with conn.cursor() as cur:
+        cur.executemany(
+            _insert("filings", cols, "on conflict (accession_no) do nothing"), [r.model_dump() for r in rows]
+        )
+
+
 def companies(conn: Conn, market: str | None = None, in_universe: bool | None = None) -> list[Company]:
     cols = ", ".join(("id", *_COMPANY_COLS))
     with conn.cursor(row_factory=dict_row) as cur:
@@ -157,6 +242,17 @@ def insert_fundamentals(conn: Conn, rows: Sequence[FundamentalsRow]) -> None:
             ),
             [r.model_dump() for r in rows],
         )
+
+
+def prune_fundamentals(conn: Conn, company_id: UUID, keep: Sequence[tuple[date, datetime]], min_period: date) -> int:
+    """Delete the company's fundamentals_q versions not in `keep` (period_end, filed_at) and quarters before
+    `min_period` (migration 0004; review F10). Called right after the company's rows are rewritten. An empty `keep`
+    prunes nothing: a company whose facts gave no rows keeps what it had (review R3 idea)."""
+    if not keep:
+        return 0
+    payload = Jsonb([[p.isoformat(), t.isoformat()] for p, t in keep])
+    row = conn.execute(_q("select prune_fundamentals(%s, %s, %s)"), (company_id, payload, min_period)).fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
 
 
 _OWN_COLS = (
@@ -199,6 +295,7 @@ _INSIDER_COLS = (
     "currency",
     "planned",
     "source_url",
+    "amends",
 )
 
 
@@ -383,6 +480,30 @@ def finish_run(conn: Conn, run_id: UUID, status: str, stats: dict[str, Any], err
         _q("update runs set finished_at = now(), status = %(st)s, stats = %(stats)s, error = %(e)s where id = %(id)s"),
         {"st": status, "stats": Jsonb(stats), "e": error, "id": run_id},
     )
+
+
+@contextmanager
+def tracked_run(conn: Conn, kind: str, source: str | None = None) -> Iterator[dict[str, Any]]:
+    """A pipeline job's `runs` row (committed at once, so a crash still leaves a record). Yields a JSON-able stats
+    dict for the job to fill. On success: status ok, or partial when stats["errors"] is non-empty, plus
+    source_health success; everything is committed. On an exception: the job's writes are rolled back, the run is
+    marked failed with the error (and the source's last_error), and the exception propagates."""
+    run_id = start_run(conn, kind)
+    conn.commit()
+    stats: dict[str, Any] = {}
+    try:
+        yield stats
+    except BaseException as e:
+        conn.rollback()
+        if source:
+            mark_source_error(conn, source, f"{type(e).__name__}: {e}", stale=False)
+        finish_run(conn, run_id, "failed", stats, f"{type(e).__name__}: {e}"[:2000])
+        conn.commit()
+        raise
+    if source:
+        mark_source_success(conn, source)
+    finish_run(conn, run_id, "partial" if stats.get("errors") else "ok", stats)
+    conn.commit()
 
 
 def record_llm_call(conn: Conn, call: LlmCall) -> None:

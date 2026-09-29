@@ -66,3 +66,14 @@ def test_sec_requires_user_agent(tmp_path: Path) -> None:
     s = Settings(database_url="x", mock_externals=False, sec_user_agent=None, cache_dir=tmp_path)
     with pytest.raises(RuntimeError, match="SEC_USER_AGENT"):
         HttpClient(s)._headers("www.sec.gov")
+
+
+def test_download_streams_in_mock_mode_and_checks_the_allowlist(tmp_path: Path) -> None:
+    c = HttpClient(_settings(tmp_path))
+    url = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
+    c.register_mock(url, b"PK...")
+    assert c.download(url, tmp_path / "bulk" / "submissions.zip").read_bytes() == b"PK..."
+    with pytest.raises(MockNotRegistered):
+        c.download("https://www.sec.gov/other.zip", tmp_path / "other.zip")
+    with pytest.raises(DomainNotAllowed):
+        HttpClient(_settings(tmp_path, mock=False)).download("https://example.com/x.zip", tmp_path / "x.zip")

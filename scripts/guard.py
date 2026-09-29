@@ -233,19 +233,61 @@ def check_identifiers(rel: str, text: str, cfg: GuardConfig) -> list[Violation]:
     return out
 
 
-_PIT_SQL = re.compile(r"\b(?:from|join)\s+(?:public\.)?\"?(" + "|".join(PIT_TABLES) + r")\b", re.IGNORECASE)
-_PIT_ORM = re.compile(r"""\.(?:from|table)\(\s*['"](""" + "|".join(PIT_TABLES) + r""")['"]""")
+_PIT_NAMES = "|".join(PIT_TABLES)
+# Matched over the whole file (\s+ spans newlines, so SQL split across lines is caught): FROM/JOIN, psql's TABLE,
+# COPY (to or from), DELETE ... USING, with optional ONLY / schema / quotes; ORM .from( / .from_( / .table(.
+_PIT_SQL = re.compile(
+    r"\b(?:from|join|table|copy|using)\s+(?:only\s+)?(?:public\s*\.\s*)?\"?(" + _PIT_NAMES + r")\b", re.IGNORECASE
+)
+_PIT_ORM = re.compile(r"""\.(?:from_?|table)\(\s*['"](""" + _PIT_NAMES + r""")['"]""")
+# A table name used as a string value (f-strings, concatenation, variables) can build any read, so it's only allowed
+# where it can't: this guard's own list and pit.py; in repo.py only as the table of an _insert() (a write); in
+# size_guard.py only where it names a probe table (the temp copy it measures). Postgres folds unquoted names to lower
+# case, so any spelling counts (review R2-F4).
+_PIT_LITERAL = re.compile(r"""(['"])(""" + _PIT_NAMES + r""")\1""", re.IGNORECASE)
+PIT_LITERAL_OK = frozenset({PIT_OWNER, "scripts/guard.py"})
+_PIT_LITERAL_WHERE = {
+    "pipeline/db/repo.py": re.compile(r"(?<![\w.])_insert\(\s*$"),  # the _insert() helper itself (review R3-F3)
+    "pipeline/db/size_guard.py": re.compile(
+        r"(?:_measure\(\s*conn,\s*|TableProjection\(\s*|_PROBE_TABLES\s*=\s*\([^)]*)$"
+    ),
+}
+_PROBE_NAMES = re.compile(r"\b_PROBE_TABLES\b|\b_SAMPLES\b")
+
+
+def _literal_allowed(rel: str, text: str, m: re.Match[str]) -> bool:
+    if rel in PIT_LITERAL_OK:
+        return True
+    where = _PIT_LITERAL_WHERE.get(rel)
+    if where is None:
+        return False
+    if rel == "pipeline/db/size_guard.py" and re.match(r"\s*:", text[m.end() :]):
+        start = text.find("_SAMPLES: dict[str, str] = {")  # a key of the probe samples, inside their literal only
+        return 0 <= start < m.start() < text.find("\n}", start)
+    return where.search(text[: m.start()]) is not None
 
 
 def check_pit(rel: str, text: str) -> list[Violation]:
     if rel == PIT_OWNER or rel.startswith("db/migrations/"):
         return []
-    out: list[Violation] = []
-    for i, line in enumerate(text.splitlines(), 1):
-        m = _PIT_SQL.search(line) or _PIT_ORM.search(line)
-        if m:
-            out.append(Violation(rel, i, "PIT_READ", f"direct read of {m.group(1)} outside {PIT_OWNER} (use as_of())"))
-    return out
+    found: dict[tuple[int, str], str] = {}
+    for rx in (_PIT_SQL, _PIT_ORM):
+        for m in rx.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            found.setdefault((line, m.group(1)), f"direct read of {m.group(1)} outside {PIT_OWNER} (use as_of())")
+    for m in _PIT_LITERAL.finditer(text):
+        if _literal_allowed(rel, text, m):
+            continue
+        line = text.count("\n", 0, m.start()) + 1
+        found.setdefault(
+            (line, m.group(2).lower()),
+            f"{m.group(2)} used as a string value outside {PIT_OWNER} (reads go through as_of())",
+        )
+    if rel != "pipeline/db/size_guard.py" and rel not in PIT_LITERAL_OK:
+        for m in _PROBE_NAMES.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            found.setdefault((line, m.group(0)), f"size_guard's probe tables ({m.group(0)}) used outside it")
+    return [Violation(rel, line, "PIT_READ", msg) for (line, _), msg in sorted(found.items())]
 
 
 def check_privacy(rel: str, text: str) -> list[Violation]:

@@ -1,0 +1,470 @@
+<SEC-DOCUMENT>0001127602-24-017715.txt : 20240604
+<SEC-HEADER>0001127602-24-017715.hdr.sgml : 20240604
+<ACCEPTANCE-DATETIME>20240604164851
+ACCESSION NUMBER:		0001127602-24-017715
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20240531
+FILED AS OF DATE:		20240604
+DATE AS OF CHANGE:		20240604
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			ZELNICK STRAUSS
+		CENTRAL INDEX KEY:			0001223489
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-34003
+		FILM NUMBER:		241018979
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O ZELNICKMEDIA
+		STREET 2:		650 FIFTH AVE 31ST FLOOR
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10019
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			TAKE TWO INTERACTIVE SOFTWARE INC
+		CENTRAL INDEX KEY:			0000946581
+		STANDARD INDUSTRIAL CLASSIFICATION:	SERVICES-PREPACKAGED SOFTWARE [7372]
+		ORGANIZATION NAME:           	06 Technology
+		IRS NUMBER:				510350842
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			0331
+
+	BUSINESS ADDRESS:	
+		STREET 1:		110 WEST 44TH STREET
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10036
+		BUSINESS PHONE:		646 536 2842
+
+	MAIL ADDRESS:	
+		STREET 1:		110 WEST 44TH STREET
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10036
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>form4.xml
+<DESCRIPTION>PRIMARY DOCUMENT
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0508</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2024-05-31</periodOfReport>
+
+    <issuer>
+        <issuerCik>0000946581</issuerCik>
+        <issuerName>TAKE TWO INTERACTIVE SOFTWARE INC</issuerName>
+        <issuerTradingSymbol>TTWO</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001223489</rptOwnerCik>
+            <rptOwnerName>ZELNICK STRAUSS</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerStreet1>C/O TAKE-TWO INTERACTIVE SOFTWARE, INC.</rptOwnerStreet1>
+            <rptOwnerStreet2>110 WEST 44TH STREET</rptOwnerStreet2>
+            <rptOwnerCity>NEW YORK</rptOwnerCity>
+            <rptOwnerState>NY</rptOwnerState>
+            <rptOwnerZipCode>10036</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>1</isDirector>
+            <isOfficer>1</isOfficer>
+            <officerTitle>Chairman, CEO</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>1</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+                <footnoteId id="F1"/>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-05-31</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>D</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>67920</value>
+                    <footnoteId id="F2"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>1078598</value>
+                    <footnoteId id="F3"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By ZMC Advisors, L.P.</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-05-31</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F4"/>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>49402</value>
+                    <footnoteId id="F5"/>
+                    <footnoteId id="F6"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>158.9588</value>
+                    <footnoteId id="F7"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>1029196</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By ZMC Advisors, L.P.</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-05-31</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F4"/>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>32054</value>
+                    <footnoteId id="F5"/>
+                    <footnoteId id="F6"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>160.0822</value>
+                    <footnoteId id="F8"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>997142</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By ZMC Advisors, L.P.</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-05-31</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F4"/>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>6105</value>
+                    <footnoteId id="F5"/>
+                    <footnoteId id="F6"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>160.6495</value>
+                    <footnoteId id="F9"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>991037</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By ZMC Advisors, L.P.</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-05-31</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>J</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F10"/>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>84128</value>
+                    <footnoteId id="F10"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>906909</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By ZMC Advisors, L.P.</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-05-31</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>G</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>34493</value>
+                    <footnoteId id="F11"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>0</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-05-31</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>G</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>34493</value>
+                    <footnoteId id="F11"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>203010</value>
+                    <footnoteId id="F12"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Zelnick Belzberg Living Trust</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2024-06-03</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>A</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>516179</value>
+                    <footnoteId id="F13"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>1423088</value>
+                    <footnoteId id="F14"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By ZMC Advisors, L.P.</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>71551</value>
+                    <footnoteId id="F15"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Wendy Jay Belzberg 2012 Family Trust</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">EXPLANATORY NOTE: This Form 4 relates to (i) the vesting of 171,689 restricted units previously granted to ZMC Advisors, L.P. (&quot;ZMC&quot;) on June 1, 2022 and June 1, 2023 under the Management Agreement, dated effective May 23, 2022, between the issuer and ZMC (the &quot;Management Agreement&quot;), and the sale of shares of Common Stock by ZMC, including in order to satisfy the tax obligations arising from such vesting, pursuant to a Rule 10b5-1 trading plan adopted on December 8, 2023 by ZMC, (ii) the forfeiture of 67,920 performance-based restricted units previously granted to ZMC on June 1, 2022 under the Management Agreement due to the failure to meet certain performance conditions, (iii) the distribution by ZMC to certain of its employees of 84,128 shares of Common Stock received by ZMC upon such vesting in accordance with the customary historical practices of ZMC, and (iv) the annual grant of restricted stock units to ZMC on June 3, 2024, in each case as further described below.</footnote>
+        <footnote id="F2">Represents the forfeiture of 67,920 performance-based restricted units previously granted to ZMC on June 1, 2022 due to the failure to meet certain performance conditions.</footnote>
+        <footnote id="F3">Represents 906,909 restricted units and 171,689 shares of Common Stock held directly by ZMC (in each case after giving effect to the forfeiture and vesting described in footnote (2) above and footnote (6) below), of which Mr. Zelnick is a partner (and such securities are not held individually by Mr. Zelnick). Mr. Zelnick disclaims beneficial ownership of the securities held by ZMC except to the extent of his pecuniary interest therein.</footnote>
+        <footnote id="F4">All of the sales reported in this Form 4 were made pursuant to a Rule 10b5-1 trading plan adopted on December 8, 2023 by ZMC related to the vesting of restricted units granted pursuant to the Management Agreement.</footnote>
+        <footnote id="F5">These transactions are reported on separate lines due to the range of the sale prices.</footnote>
+        <footnote id="F6">On May 31, 2024, 171,689 restricted units previously granted to ZMC vested. The reported sale transactions were effected pursuant to a Rule 10b5-1 trading plan adopted on December 8, 2023 by ZMC, including to satisfy the tax obligations of the partners of ZMC upon the vesting of such restricted units.</footnote>
+        <footnote id="F7">Represents a weighted average sales price of shares sold in multiple transactions at sales prices ranging from $158.46 to $159.46, inclusive. Upon request, the Reporting Person undertakes to provide the full sale information regarding the number of shares sold at each price increment to the Commission, the issuer or any security holder of the issuer.</footnote>
+        <footnote id="F8">Represents a weighted average sales price of shares sold in multiple transactions at sales prices ranging from $159.47 to $160.47, inclusive. Upon request, the Reporting Person undertakes to provide the full sale information regarding the number of shares sold at each price increment to the Commission, the issuer or any security holder of the issuer.</footnote>
+        <footnote id="F9">Represents a weighted average sales price of shares sold in multiple transactions at sales prices ranging from $160.48 to $160.84, inclusive. Upon request, the Reporting Person undertakes to provide the full sale information regarding the number of shares sold at each price increment to the Commission, the issuer or any security holder of the issuer.</footnote>
+        <footnote id="F10">On May 31, 2024, 171,689 restricted units previously granted to ZMC vested. Following such vest, ZMC distributed a total of 84,128 shares received upon vesting to its employees, including 34,493 shares to Mr. Zelnick, which shares Mr. Zelnick had previously indirectly beneficially owned through ZMC.</footnote>
+        <footnote id="F11">Mr. Zelnick received 34,493 shares pursuant to a distribution, as further described in Footnote (10) above, which receipt was exempt from Section 16 as such shares were previously held by Mr. Zelnick indirectly through ZMC. Mr. Zelnick then contributed such securities to the Zelnick/Belzberg Living Trust in exchange for no consideration.</footnote>
+        <footnote id="F12">Represents 203,010 shares of Common Stock held by the Zelnick/Belzberg Living Trust (such securities are indirectly held by Mr. Zelnick), including 34,493 shares received by Mr. Zelnick pursuant to the distribution referred to in Footnote (10) above, which were then contributed to the Zelnick/Belzberg Living Trust. Mr. Zelnick disclaims beneficial ownership of the securities held by the Zelnick/Belzberg Living Trust except to the extent of his pecuniary interest therein.</footnote>
+        <footnote id="F13">Represents the grant of 516,179 restricted units to ZMC pursuant to the Restricted Unit Agreement entered into by ZMC and the Company on June 3, 2024. Includes (a) 101,999 time-based restricted units, 33,999 of which units are scheduled to vest on June 1, 2025, 34,000 of which units are scheduled to vest on June 1, 2026, and 34,000 of which units are scheduled to vest on June 1, 2027, and (b) 414,180 performance-based restricted units (representing the maximum number of performance-based units that are eligible to vest) that are subject to vesting on June 1, 2027. Further information regarding the Restricted Unit Agreement and the restricted units, including the vesting schedule, is available in the Company's Registration Statement on Form S-3 filed with the Commission on June 3, 2024.</footnote>
+        <footnote id="F14">Represents 1,423,088 restricted units held directly by ZMC Advisors, L.P., of which Mr. Zelnick is a partner (such securities are not held individually by Mr. Zelnick). Mr. Zelnick disclaims beneficial ownership of the securities held by ZMC Advisors, L.P. except to the extent of his pecuniary interest therein.</footnote>
+        <footnote id="F15">Represents 71,551 shares of Common Stock held by the Wendy Jay Belzberg 2012 Family Trust (such securities are indirectly held by Mr. Zelnick). Mr. Zelnick disclaims beneficial ownership of the securities held by the Wendy Jay Belzberg 2012 Family Trust except to the extent of his pecuniary interest therein.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>/s/ Strauss Zelnick</signatureName>
+        <signatureDate>2024-06-04</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

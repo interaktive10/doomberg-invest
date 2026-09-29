@@ -1,0 +1,70 @@
+name: weekly
+# BRIEF §2.1 "weekly", §2.5 (Saturday): SEC bulk companyfacts + submissions -> fundamentals_q and the US universe
+# rules. M3 adds India (bhavcopy, shareholding, PIT, results XBRL); M4 adds signals -> red flags -> prices ->
+# context -> scores; M6 adds evidence packs, the thesis queue and the digest issue.
+# The bulk zips (a few GB) stay on the runner; only the per-company sha256 state is cached between weeks.
+on:
+  schedule:
+    - cron: "0 2 * * 6"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-quarterize every company (after a database restore; ignores the sha256 state)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      ready: ${{ steps.secrets.outputs.ready }}
+    steps:
+      - id: secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: |
+          if [ -n "$DATABASE_URL" ] && [ -n "$SEC_USER_AGENT" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::DATABASE_URL and SEC_USER_AGENT secrets are not set (BRIEF §2.4): nothing to do"; fi
+
+  us:
+    needs: check
+    if: needs.check.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      FORCE: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: companyfacts state (sha256 + TTM revenue per company)
+        uses: actions/cache@v4
+        with:
+          path: .cache/us/companyfacts_state.json
+          key: us-companyfacts-state-${{ github.run_id }}
+          restore-keys: us-companyfacts-state-
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: US fundamentals and universe
+        run: uv run --frozen python -m pipeline.us.weekly $FORCE
+      - name: data issues (every §4.1.5 null reason)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: us-data-issues
+          path: .cache/us/issues.csv
+          if-no-files-found: ignore

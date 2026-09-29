@@ -1,0 +1,77 @@
+<SEC-DOCUMENT>0009999901-25-000004.txt : 20250415
+<SEC-HEADER>0009999901-25-000004.hdr.sgml : 20250415
+<ACCEPTANCE-DATETIME>20250415180000
+ACCESSION NUMBER:		0009999901-25-000004
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20250411
+FILED AS OF DATE:		20250415
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>ownership.xml
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+    <schemaVersion>X0508</schemaVersion>
+    <documentType>4</documentType>
+    <periodOfReport>2025-04-11</periodOfReport>
+    <issuer>
+        <issuerCik>0009999901</issuerCik>
+        <issuerName>SYNTHETIC CLUSTER CORP</issuerName>
+        <issuerTradingSymbol>ZZZC</issuerTradingSymbol>
+    </issuer>
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0009999914</rptOwnerCik>
+            <rptOwnerName>EXAMPLE CAPITAL FUND LP</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerRelationship>
+            <isDirector>false</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0009999915</rptOwnerCik>
+            <rptOwnerName>EXAMPLE CAPITAL GP LLC</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerRelationship>
+            <isDirector>false</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+    <aff10b5One>false</aff10b5One>
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle><value>Common Stock</value></securityTitle>
+            <transactionDate><value>2025-04-11</value></transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+                <footnoteId id="F1"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares><value>2000</value></transactionShares>
+                <transactionPricePerShare><value>16.10</value></transactionPricePerShare>
+                <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <ownershipNature><directOrIndirectOwnership><value>D</value></directOrIndirectOwnership></ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">These shares were purchased pursuant to a Rule 10b5-1 trading plan adopted by the Reporting Persons on November 12, 2024.</footnote>
+    </footnotes>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
