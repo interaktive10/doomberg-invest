@@ -98,10 +98,31 @@ jobs:
       - name: India universe, prices, results and shareholding
         run: uv run --frozen python -m pipeline.india.weekly
 
+  scores:
+    # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Stooq) -> context C1-C4 -> Gap ->
+    # buckets -> shortlist. Runs after both markets' data; if one market's job failed, the other is still scored.
+    needs: [check, us, india]
+    if: always() && needs.check.outputs.db == 'true' && (needs.us.result == 'success' || needs.india.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Signals, red flags, candidate prices, context, scores and the shortlist
+        run: uv run --frozen python -m pipeline.signals.weekly
+
   size_guard:
     # BRIEF §2.8: after every job that writes, prune (signal_values past 3 years, NSE announcements past 120 days) and
     # fail the weekly run above 400 MB. Runs when a writer failed too (review R2-F1 on M3).
-    needs: [check, us, india]
+    needs: [check, us, india, scores]
     if: always() && needs.check.outputs.db == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10

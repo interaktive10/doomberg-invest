@@ -37,6 +37,7 @@ from pipeline.net.bse import BseClient
 from pipeline.net.bse import bhavcopy_url as bse_url
 from pipeline.net.http import HttpClient, RateLimiter
 from pipeline.net.nse import NSE_API, NseClient
+from pipeline.prices.benchmarks import index_close_url
 from pipeline.settings import Settings
 
 FIN = Path(__file__).resolve().parents[2] / "fixtures" / "in"
@@ -384,6 +385,7 @@ def fake_db(monkeypatch: pytest.MonkeyPatch, written: Written) -> Written:
     monkeypatch.setattr(weekly.repo, "mark_missing_out_of_universe", lambda conn, market, keys, reason: 0)
     monkeypatch.setattr(weekly.repo, "set_india_universe", lambda conn, reasons: 0)
     monkeypatch.setattr(weekly.repo, "upsert_prices", upsert_prices)
+    monkeypatch.setattr(weekly.repo, "upsert_benchmarks", lambda conn, rows: None)  # M4's NIFTY closes
     return written
 
 
@@ -394,6 +396,7 @@ def week_mocks(http: HttpClient) -> None:
     http.register_mock(bse_url(DAY), (FIN / "bhavcopy" / "BhavCopy_BSE_CM_0_0_0_20260605_F_0000.CSV").read_bytes())
     http.register_mock(bhavcopy.nse_url(DAY),
                        (FIN / "bhavcopy" / "BhavCopy_NSE_CM_0_0_0_20260605_F_0000.csv.zip").read_bytes())  # fmt: skip
+    http.register_mock(index_close_url(DAY), (FIN / "indices" / "ind_close_all_05062026.csv").read_bytes())
     empty = json.dumps({"data": [], "totalCount": 0}).encode()
     http.register_mock(f"{NSE_API}/{listing_path(DAY - timedelta(days=10), DAY, 1)}", empty)
     http.register_mock(f"{NSE_API}/{SHP_API}", b"[]")

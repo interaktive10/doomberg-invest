@@ -412,9 +412,31 @@ def fetch_f_in(client: HttpClient, cooldown_s: float = 600.0, rounds: int = 4) -
     return errors
 
 
+PX_SYMBOLS = ("aapl.us", "msft.us", "nvda.us", "cat.us", "orcl.us", "pwr.us", "jbl.us", "gev.us", "xlk.us", "^spx")
+
+
+def fetch_f_px(client: HttpClient) -> list[str]:
+    """F-PX (BRIEF §9): Stooq weekly CSVs for 10 symbols, replacing the synthetic stand-ins of fixtures/px/make_px.py.
+    Stooq resets connections from some networks; run this where stooq.com answers (1 request / 2 s)."""
+    import httpx
+
+    from pipeline.net.stooq import StooqUnavailable, csv_url, parse_csv
+
+    out, errors = ROOT / "fixtures" / "px", []
+    for sym in PX_SYMBOLS:
+        try:
+            raw = client.get_bytes(csv_url(sym))
+            parse_csv(raw)  # refuse to write "No data" or a hit-limit page over a fixture
+        except (StooqUnavailable, httpx.HTTPError) as e:
+            errors.append(f"{sym}: {type(e).__name__}: {e}")
+            continue
+        (out / f"{sym.replace('^', '_')}_w.csv").write_bytes(raw)
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["universe", "f-us", "f-f4", "f-13f", "f-events", "f-in"])
+    ap.add_argument("what", choices=["universe", "f-us", "f-f4", "f-13f", "f-events", "f-in", "f-px"])
     ap.add_argument("--source", choices=["all", *UNIVERSE_SOURCES], default="all")
     a = ap.parse_args(argv)
     settings = dataclasses.replace(Settings.from_env(), mock_externals=False)
@@ -430,6 +452,8 @@ def main(argv: list[str] | None = None) -> int:
         errors = fetch_f_13f(client)
     elif a.what == "f-in":
         errors = fetch_f_in(client)
+    elif a.what == "f-px":
+        errors = fetch_f_px(client)
     else:
         errors = fetch_f_events(client)
     for e in errors:

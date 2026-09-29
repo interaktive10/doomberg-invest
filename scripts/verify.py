@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -86,6 +87,12 @@ def _needs_old_repo() -> str | None:
     if not (old / ".git").exists():
         return "human:old doomberg repo not checked out (clone read-only to ../doomberg or set DOOMBERG_REPO)"
     return None
+
+
+def _both(first: list[str], second: list[str]) -> list[str]:
+    """Two pytest runs in one check (a -k filter for the DB tests must not deselect the pure ones)."""
+    run = " ".join(PYTEST)
+    return ["bash", "-c", f"{run} {' '.join(map(shlex.quote, first))} && {run} {' '.join(map(shlex.quote, second))}"]
 
 
 CHECKS: list[Check] = [
@@ -262,6 +269,59 @@ CHECKS: list[Check] = [
         "m3",
         "<= 1 request per 3 s to NSE enforced",
         [*PYTEST, "tests/india/test_access.py", "tests/test_http.py", "-k", "rate"],
+    ),
+    Check(
+        "M4-01",
+        "m4",
+        "every S1-S12 and R1-R6: a true, a false and a just-below-threshold case on F-SYNQ",
+        [*PYTEST, "tests/signals/test_synq.py", "tests/signals/test_series.py"],
+    ),
+    Check(
+        "M4-02",
+        "m4",
+        "signals as of W are identical whether or not later filings exist",
+        [
+            *PYTEST,
+            "tests/db/test_signals_pipeline.py",
+            "tests/db/test_pit.py",
+            "-k",
+            "later_filings or fundamental_versions or facts_need",
+        ],
+        requires=_needs_database,
+    ),
+    Check(
+        "M4-03",
+        "m4",
+        "reverse DCF recovers a known g within +/-0.1 pp from a synthetic EV; monotonic; null with no root",
+        [*PYTEST, "tests/signals/test_reverse_dcf.py"],
+    ),
+    Check(
+        "M4-04",
+        "m4",
+        "Stooq and bhavcopy weekly ingestion; split detection needs share-count confirmation",
+        _both(
+            ["tests/prices", "tests/signals/test_splits.py"],
+            [
+                "tests/db/test_signals_pipeline.py",
+                "tests/db/test_india_pipeline.py",
+                "-k",
+                "scoring_run or manual_price_import or india_weekly_run",
+            ],
+        ),  # fmt: skip
+        requires=_needs_db_and_f_in,
+    ),
+    Check(
+        "M4-05",
+        "m4",
+        "Evidence/Gap/bucket math, the 2-family cap, soft-flag penalties, the 12-week novelty rule; screener API",
+        _both(["tests/signals/test_scores.py"], ["tests/db/test_signals_pipeline.py", "-k", "older_weeks or screen"]),
+        requires=_needs_database,
+    ),
+    Check(
+        "M4-06",
+        "m4",
+        "GDELT client (mock) and percentiles",
+        [*PYTEST, "tests/signals/test_context.py"],
     ),
 ]
 

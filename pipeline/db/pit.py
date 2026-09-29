@@ -24,7 +24,15 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
-from pipeline.db.models import FUNDAMENTAL_COLUMNS, CorpEvent, FundamentalsRow, InsiderEvent, OwnershipRow
+from pipeline.db.models import (
+    FUNDAMENTAL_COLUMNS,
+    MANUAL_OWNERSHIP,
+    CorpEvent,
+    FactRow,
+    FundamentalsRow,
+    InsiderEvent,
+    OwnershipRow,
+)
 
 _FUNDAMENTALS_COLS = ", ".join(
     ("company_id", "period_end", "fiscal_label", "filed_at", *FUNDAMENTAL_COLUMNS, "currency", "source")
@@ -57,6 +65,24 @@ def select_as_of[T](
     return list(best.values())
 
 
+def ownership_as_of(rows: Iterable[OwnershipRow], cutoff: datetime) -> list[OwnershipRow]:
+    """Pure-Python form of AsOf.ownership(): drop rows filed at/after `cutoff`; per company and quarter keep the
+    latest version, a full row before a promoter-only manual CSV row. The Signal Lab replays
+    AsOf.ownership_versions() month by month with it."""
+    best: dict[tuple[UUID, date], OwnershipRow] = {}
+    for r in rows:
+        if r.filed_at >= cutoff:
+            continue
+        k = (r.company_id, r.quarter_end)
+        if k not in best or _ownership_rank(best[k]) < _ownership_rank(r):
+            best[k] = r
+    return [best[k] for k in sorted(best)]
+
+
+def _ownership_rank(r: OwnershipRow) -> tuple[bool, datetime]:
+    return (r.source != MANUAL_OWNERSHIP, r.filed_at)
+
+
 @dataclass(frozen=True)
 class AsOf:
     """A point-in-time view. Build it with as_of(); the cutoff can't be changed afterwards."""
@@ -78,26 +104,75 @@ class AsOf:
         )
         return [FundamentalsRow(**r) for r in self._fetch(conn, sql, company_ids)]
 
+    def fundamental_versions(
+        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None
+    ) -> list[FundamentalsRow]:
+        """Every version of every company-quarter filed before the cutoff, oldest filing first. For histories that
+        must themselves be point-in-time (C1's weekly multiples, BRIEF §4.7): the version current at an earlier
+        week is select_as_of() over these rows with that week's cutoff."""
+        sql = (
+            f"select {_FUNDAMENTALS_COLS} from fundamentals_q "  # noqa: S608
+            "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
+            "order by company_id, period_end, filed_at"
+        )
+        return [FundamentalsRow(**r) for r in self._fetch(conn, sql, company_ids)]
+
+    def facts(
+        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None
+    ) -> list[FactRow]:
+        """Verified text facts (Appendix F) whose document was published before the cutoff; `since` bounds as_of."""
+        sql = (
+            "select f.company_id, f.fact_type, f.subject, f.subject_key, f.value_num, f.unit, f.period_end, f.as_of, "
+            "f.counterparty, d.published_at from facts f join documents d on d.id = f.document_id "
+            "where d.published_at < %(cutoff)s and f.verification_status = 'verified' "
+            "and (%(ids)s::uuid[] is null or f.company_id = any(%(ids)s::uuid[])) "
+            "and (%(since)s::date is null or f.as_of >= %(since)s::date) "
+            "order by f.company_id, f.as_of"
+        )
+        return [FactRow(**r) for r in self._fetch(conn, sql, company_ids, since)]
+
     def ownership(self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None) -> list[OwnershipRow]:
+        """Per company and quarter, the latest version filed by the cutoff (a revision filed later leaves it as it
+        was at the cutoff, M4 review R1-F2); a full row wins over a promoter-only manual CSV row."""
+        sql = (
+            "select distinct on (company_id, quarter_end) company_id, quarter_end, filed_at, inst_holders, inst_pct, "
+            "fii_pct, dii_pct, promoter_pct, promoter_pledged_pct, source from ownership_q "
+            "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
+            "order by company_id, quarter_end, (source = %(manual)s), filed_at desc"
+        )
+        return [OwnershipRow(**r) for r in self._fetch(conn, sql, company_ids, manual=MANUAL_OWNERSHIP)]
+
+    def ownership_versions(
+        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None
+    ) -> list[OwnershipRow]:
+        """Every version of every company-quarter filed before the cutoff, oldest filing first. The version current
+        at an earlier date is ownership_as_of() over these rows with that date's cutoff (the Signal Lab)."""
         sql = (
             "select company_id, quarter_end, filed_at, inst_holders, inst_pct, fii_pct, dii_pct, promoter_pct, "
             "promoter_pledged_pct, source from ownership_q "
             "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
-            "order by company_id, quarter_end"
+            "order by company_id, quarter_end, filed_at"
         )
         return [OwnershipRow(**r) for r in self._fetch(conn, sql, company_ids)]
 
     def insider_events(
-        self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None
+        self,
+        conn: psycopg.Connection[Any],
+        company_ids: Sequence[UUID] | None = None,
+        since: date | None = None,
+        filed_since: date | None = None,
     ) -> list[InsiderEvent]:
+        """`since` bounds the trade date; `filed_since` the filing date, which keeps a recent Form 4/A that moves a
+        trade further back next to the original it amends (M4 review R2-F4)."""
         sql = (
             "select id, company_id, event_date, filed_at, person, role, kind, shares, value, currency, planned, "
             "source_url, amends from insider_events "
             "where filed_at < %(cutoff)s and (%(ids)s::uuid[] is null or company_id = any(%(ids)s::uuid[])) "
             "and (%(since)s::date is null or event_date >= %(since)s::date) "
+            "and (%(filed_since)s::date is null or filed_at >= %(filed_since)s::date) "
             "order by company_id, event_date, filed_at"
         )
-        return [InsiderEvent(**r) for r in self._fetch(conn, sql, company_ids, since)]
+        return [InsiderEvent(**r) for r in self._fetch(conn, sql, company_ids, since, filed_since=filed_since)]
 
     def corp_events(
         self, conn: psycopg.Connection[Any], company_ids: Sequence[UUID] | None = None, since: date | None = None
@@ -116,10 +191,12 @@ class AsOf:
         sql: str,
         company_ids: Sequence[UUID] | None,
         since: date | None = None,
+        **params: object,
     ) -> list[dict[str, Any]]:
+        """`params` are a query's own constants; they come first, so none can replace the cutoff."""
         ids = None if company_ids is None else [UUID(str(c)) for c in company_ids]  # rejects non-UUID input
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(sql.encode("utf-8"), {"cutoff": self.cutoff, "ids": ids, "since": since})
+            cur.execute(sql.encode("utf-8"), {**params, "cutoff": self.cutoff, "ids": ids, "since": since})
             return list(cur.fetchall())
 
 

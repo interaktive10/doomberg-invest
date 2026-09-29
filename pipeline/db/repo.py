@@ -4,8 +4,9 @@ Point-in-time tables (fundamentals_q, ownership_q, insider_events, corp_events) 
 through pipeline.db.pit.as_of(). Writes are idempotent so a re-run of a weekly job doesn't duplicate rows:
 - fundamentals_q: keyed by (company, period_end, filed_at). A restatement has a later filed_at, so it's a new row
   and the old version stays (BRIEF §4.1.4). Re-ingesting the same filing overwrites that version only.
-- ownership_q: keyed by (company, quarter_end) as §3 defines it. A revision replaces the row only when it's filed
-  later; as_of() before the revision then sees no row for that quarter (a gap, never a look-ahead).
+- ownership_q: keyed by (company, quarter_end, filed_at) (migration 0008, M4 review R1-F2): a revised pattern is a
+  new version and as_of() picks the latest version filed by its cutoff. Re-ingesting the same filing overwrites that
+  version.
 - insider_events / corp_events: unique natural-key indexes (db/migrations/0002) make re-inserts no-ops.
 """
 
@@ -14,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -23,6 +25,7 @@ from psycopg.types.json import Jsonb
 
 from pipeline.db.models import (
     FUNDAMENTAL_COLUMNS,
+    MANUAL_OWNERSHIP,
     BenchmarkW,
     Company,
     ContextValue,
@@ -305,23 +308,18 @@ _OWN_COLS = (
 )
 
 
-MANUAL_OWNERSHIP = "manual_csv"  # promoter % only, from an NSE page CSV (pipeline/india/manual_import.py)
-
-
 def upsert_ownership(conn: Conn, rows: Sequence[OwnershipRow]) -> None:
-    """One row per company and quarter: a later filing replaces it. A manual CSV row (promoter % only) never
-    replaces a full row, and the full row of the same filing replaces it."""
-    upd = _set_excluded(c for c in _OWN_COLS if c not in ("company_id", "quarter_end"))
+    """One row per company, quarter and filing time: a later filing is a new version (as_of() picks the latest one
+    filed by its cutoff). For the same filing time, a full row replaces anything and a manual CSV row (promoter %
+    only) replaces only a manual row, so it never replaces a full one; as_of() also prefers a full version."""
+    upd = _set_excluded(c for c in _OWN_COLS if c not in ("company_id", "quarter_end", "filed_at"))
     with conn.cursor() as cur:
         cur.executemany(
             _insert(
                 "ownership_q",
                 _OWN_COLS,
-                f"on conflict (company_id, quarter_end) do update set {upd} "
-                "where (excluded.source <> %(manual)s and (excluded.filed_at > ownership_q.filed_at "
-                "or (excluded.filed_at = ownership_q.filed_at and ownership_q.source = %(manual)s))) "
-                "or (excluded.source = %(manual)s and ownership_q.source = %(manual)s "
-                "and excluded.filed_at > ownership_q.filed_at)",
+                f"on conflict (company_id, quarter_end, filed_at) do update set {upd} "
+                "where excluded.source <> %(manual)s or ownership_q.source = %(manual)s",
             ),
             [{**r.model_dump(), "manual": MANUAL_OWNERSHIP} for r in rows],
         )
@@ -376,6 +374,29 @@ def upsert_prices(conn: Conn, rows: Sequence[PriceW]) -> None:
             _insert("prices_w", cols, f"on conflict (company_id, week_end) do update set {_set_excluded(cols[2:])}"),
             [r.model_dump() for r in rows],
         )
+
+
+def mark_price_split(conn: Conn, company_id: UUID, week_end: date, ratio: Decimal) -> None:
+    """A split a split-adjusted source showed (pipeline.prices.splits.rebased), on its first week on the new basis."""
+    conn.execute(
+        _q("update prices_w set split_ratio = %s where company_id = %s and week_end = %s"),
+        (ratio, company_id, week_end),
+    )
+
+
+def priced_at(conn: Conn, company_ids: Sequence[UUID], week: date) -> set[UUID]:
+    """Companies that already have a price for `week` (a re-run of the week doesn't download them again)."""
+    rows = conn.execute(
+        _q("select company_id from prices_w where company_id = any(%s) and week_end = %s"), (list(company_ids), week)
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def benchmarks_at(conn: Conn, symbols: Sequence[str], week: date) -> set[str]:
+    rows = conn.execute(
+        _q("select symbol from benchmarks_w where symbol = any(%s) and week_end = %s"), (list(symbols), week)
+    ).fetchall()
+    return {str(r[0]) for r in rows}
 
 
 def upsert_benchmarks(conn: Conn, rows: Sequence[BenchmarkW]) -> None:
@@ -554,3 +575,126 @@ def tracked_run(conn: Conn, kind: str, source: str | None = None) -> Iterator[di
 def record_llm_call(conn: Conn, call: LlmCall) -> None:
     cols = tuple(LlmCall.model_fields)
     conn.execute(_insert("llm_calls", cols, ""), call.model_dump())
+
+
+# ---------------------------------------------------------------- weekly scoring (M4)
+
+WEEKLY_TABLES = ("signal_values", "redflag_values", "context_values", "scores", "shortlists")
+
+
+def clear_week(conn: Conn, week: date) -> None:
+    """A re-run of a week replaces it (a flag that cleared must not linger from the first run)."""
+    for t in WEEKLY_TABLES:
+        conn.execute(_q(f"delete from {t} where week_end = %s"), (week,))  # noqa: S608 — fixed table names
+
+
+def prices(conn: Conn, company_ids: Sequence[UUID], start: date, end: date) -> list[PriceW]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q(
+                "select company_id, week_end, close, adj_close, volume, source, split_ratio from prices_w "
+                "where company_id = any(%s) and week_end between %s and %s order by company_id, week_end"
+            ),
+            (list(company_ids), start, end),
+        )
+        return [PriceW(**r) for r in cur.fetchall()]
+
+
+def benchmark_closes(conn: Conn, symbols: Sequence[str], start: date, end: date) -> list[BenchmarkW]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q(
+                "select symbol, week_end, close from benchmarks_w where symbol = any(%s) "
+                "and week_end between %s and %s order by symbol, week_end"
+            ),
+            (list(symbols), start, end),
+        )
+        return [BenchmarkW(**r) for r in cur.fetchall()]
+
+
+def scores_for_week(conn: Conn, week: date) -> dict[UUID, Score]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            _q(
+                "select company_id, week_end, evidence, gap, families, bucket, weights_version from scores "
+                "where week_end = %s"
+            ),
+            (week,),
+        )
+        return {r["company_id"]: Score(**r) for r in cur.fetchall()}
+
+
+def recently_shortlisted(conn: Conn, before: date, since: date) -> set[UUID]:
+    rows = conn.execute(
+        _q("select distinct company_id from shortlists where week_end >= %s and week_end < %s"), (since, before)
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def insert_shortlist(conn: Conn, week: date, rows: Sequence[tuple[UUID, Any, Any]]) -> None:
+    """rows: (company_id, evidence, gap) in rank order."""
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q("insert into shortlists (week_end, company_id, rank, evidence, gap) values (%s, %s, %s, %s, %s)"),
+            [(week, cid, i + 1, ev, gap) for i, (cid, ev, gap) in enumerate(rows)],
+        )
+
+
+def upsert_company_metrics(conn: Conn, week: date, metrics: Mapping[UUID, Mapping[str, Any]]) -> None:
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q(
+                "insert into company_metrics (company_id, week_end, metrics) values (%s, %s, %s) "
+                "on conflict (company_id) do update set week_end = excluded.week_end, metrics = excluded.metrics"
+            ),
+            [(cid, week, Jsonb(dict(m))) for cid, m in metrics.items()],
+        )
+
+
+def recent_attention(conn: Conn, week: date, since: date) -> dict[UUID, int]:
+    """The latest GDELT article count per company from C4 rows in [since, week): C4 is re-queried monthly."""
+    rows = conn.execute(
+        _q(
+            "select distinct on (company_id) company_id, (inputs->>'articles_90d')::int from context_values "
+            "where metric_id = 'C4' and week_end >= %s and week_end < %s and inputs ? 'articles_90d' "
+            "order by company_id, week_end desc"
+        ),
+        (since, week),
+    ).fetchall()
+    return {r[0]: int(r[1]) for r in rows}
+
+
+def research_company_ids(conn: Conn) -> set[UUID]:
+    """Companies with a live thesis or position: priced and scored even outside the universe (BRIEF §4.4)."""
+    rows = conn.execute(
+        _q("select distinct company_id from theses where state in ('research', 'thesis', 'position', 'review')")
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def prune_scoring_history(conn: Conn, week: date, keep_from: date, none_from: date) -> dict[str, int]:
+    """docs/SPEC_ISSUES.md 9: signal_values keeps every row for the latest week only; older weeks keep fired rows and
+    the first unfired row after a firing streak, without their inputs (the timeline needs only fired and strength).
+    Unknown red flags and 'none' scores go after the latest week / `none_from`; everything before `keep_from`
+    (3 years, §2.8) goes."""
+    out: dict[str, int] = {}
+    out["signal_values"] = conn.execute(
+        _q(
+            "delete from signal_values s where s.week_end < %(w)s and not s.fired and coalesce(("
+            "select p.fired from signal_values p where p.company_id = s.company_id and p.signal_id = s.signal_id "
+            "and p.week_end < s.week_end order by p.week_end desc limit 1), false) = false"
+        ),
+        {"w": week},
+    ).rowcount
+    out["signal_inputs_dropped"] = conn.execute(  # the timeline needs fired/strength; inputs are for this week
+        _q("update signal_values set inputs = '{}' where week_end < %s and inputs <> '{}'"), (week,)
+    ).rowcount
+    out["redflag_values"] = conn.execute(
+        _q("delete from redflag_values where week_end < %s and inputs->>'status' = 'unknown'"), (week,)
+    ).rowcount
+    none = conn.execute(_q("delete from scores where week_end < %s and bucket = 'none'"), (none_from,))
+    out["scores"] = none.rowcount
+    for t in ("signal_values", "redflag_values", "context_values", "scores", "shortlists"):
+        n = conn.execute(_q(f"delete from {t} where week_end < %s"), (keep_from,)).rowcount  # noqa: S608
+        out[t] = out.get(t, 0) + n
+    return out

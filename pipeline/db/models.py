@@ -91,6 +91,9 @@ class FundamentalsRow(Row):
     source: Literal["sec_xbrl", "nse_xbrl", "bse_xbrl", "manual"]
 
 
+MANUAL_OWNERSHIP = "manual_csv"  # promoter % only, from an NSE page CSV (pipeline/india/manual_import.py)
+
+
 class OwnershipRow(Row):
     company_id: UUID
     quarter_end: date
@@ -135,6 +138,7 @@ CorpEventKind = Literal[
     "rights_issue",
     "index_change",
     "announcement",
+    "acquisition",
 ]
 
 
@@ -170,6 +174,7 @@ class PriceW(Row):
     adj_close: Decimal | None = None
     volume: Decimal | None = None
     source: str
+    split_ratio: Decimal | None = None  # read only: set by repo.mark_price_split, never by upsert_prices
 
 
 class BenchmarkW(Row):
@@ -253,3 +258,19 @@ class LlmCall(Row):
     tokens_out: int | None = None
     latency_ms: int | None = None
     error: str | None = None
+
+
+class FactRow(Row):
+    """A verified Appendix F fact as a point-in-time reader sees it (pit.AsOf.facts): its document was published
+    before the cutoff."""
+
+    company_id: UUID
+    fact_type: str
+    subject: str
+    subject_key: str
+    value_num: Decimal | None = None
+    unit: str
+    period_end: date | None = None
+    as_of: date
+    counterparty: str | None = None
+    published_at: AwareDatetime

@@ -1,0 +1,7948 @@
+{
+ "base": {
+  "capex": "40",
+  "cash": "1000",
+  "cfo": "100",
+  "da": "30",
+  "deferred_revenue": null,
+  "diluted_shares": "100",
+  "equity": "5000",
+  "interest_expense": "5",
+  "inventory": "300",
+  "net_income": "75",
+  "op_income": "100",
+  "pretax_income": "100",
+  "receivables": "500",
+  "revenue": "1000",
+  "rpo": null,
+  "shares_outstanding": "100",
+  "tax_expense": "20",
+  "total_assets": "10000",
+  "total_debt": "2000"
+ },
+ "cases": [
+  {
+   "expect": {
+    "fired": true,
+    "strength": "1"
+   },
+   "id": "S1-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "rpo": "1250"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "rpo": "1300"
+     }
+    }
+   ],
+   "target": "S1",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S1-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "rpo": "1050"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "rpo": "1050"
+     }
+    }
+   ],
+   "target": "S1",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S1-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "rpo": "1099.9"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "rpo": "1300"
+     }
+    }
+   ],
+   "target": "S1",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "1"
+   },
+   "id": "S1-at-threshold",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "rpo": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "rpo": "1100"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "rpo": "1300"
+     }
+    }
+   ],
+   "target": "S1",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.6"
+   },
+   "id": "S2-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "250",
+      "pretax_income": "250",
+      "revenue": "2500",
+      "tax_expense": "50.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "250",
+      "pretax_income": "250",
+      "revenue": "2500",
+      "tax_expense": "50.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "250",
+      "pretax_income": "250",
+      "revenue": "2500",
+      "tax_expense": "50.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "250",
+      "pretax_income": "250",
+      "revenue": "2500",
+      "tax_expense": "50.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    }
+   ],
+   "target": "S2",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S2-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "400",
+      "pretax_income": "400",
+      "revenue": "2500",
+      "tax_expense": "80.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "400",
+      "pretax_income": "400",
+      "revenue": "2500",
+      "tax_expense": "80.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "400",
+      "pretax_income": "400",
+      "revenue": "2500",
+      "tax_expense": "80.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "400",
+      "pretax_income": "400",
+      "revenue": "2500",
+      "tax_expense": "80.0",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    }
+   ],
+   "target": "S2",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S2-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "6000",
+      "op_income": "125",
+      "pretax_income": "125",
+      "revenue": "2500",
+      "tax_expense": "25",
+      "total_assets": "6000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "7000",
+      "revenue": "2500",
+      "total_assets": "7000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "7500",
+      "op_income": "200",
+      "pretax_income": "200",
+      "revenue": "2500",
+      "tax_expense": "40",
+      "total_assets": "7500",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "218.6875",
+      "pretax_income": "218.6875",
+      "revenue": "2500",
+      "tax_expense": "43.7375",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "218.6875",
+      "pretax_income": "218.6875",
+      "revenue": "2500",
+      "tax_expense": "43.7375",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "218.6875",
+      "pretax_income": "218.6875",
+      "revenue": "2500",
+      "tax_expense": "43.7375",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cash": "0",
+      "equity": "8000",
+      "op_income": "218.6875",
+      "pretax_income": "218.6875",
+      "revenue": "2500",
+      "tax_expense": "43.7375",
+      "total_assets": "8000",
+      "total_debt": "0"
+     }
+    }
+   ],
+   "target": "S2",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.24343675"
+   },
+   "id": "S3-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "op_income": "110",
+      "revenue": "1030"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "op_income": "125",
+      "revenue": "1060"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "op_income": "135",
+      "revenue": "1100"
+     }
+    }
+   ],
+   "target": "S3",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S3-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "op_income": "110",
+      "revenue": "1100"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "op_income": "125",
+      "revenue": "1060"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "op_income": "135",
+      "revenue": "1030"
+     }
+    }
+   ],
+   "target": "S3",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S3-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "op_income": "110",
+      "revenue": "1030"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "op_income": "125",
+      "revenue": "1060"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "op_income": "125.481",
+      "revenue": "1100"
+     }
+    }
+   ],
+   "target": "S3",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.5"
+   },
+   "id": "S4-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cfo": "125",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cfo": "125",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cfo": "125",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cfo": "125",
+      "net_income": "100"
+     }
+    }
+   ],
+   "target": "S4",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S4-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cfo": "90",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cfo": "90",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cfo": "90",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cfo": "90",
+      "net_income": "100"
+     }
+    }
+   ],
+   "target": "S4",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S4-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cfo": "119.99",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cfo": "119.99",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cfo": "119.99",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cfo": "119.99",
+      "net_income": "100"
+     }
+    }
+   ],
+   "target": "S4",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.5"
+   },
+   "id": "S5-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "97"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "97"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "97"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "97"
+     }
+    }
+   ],
+   "target": "S5",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.6"
+   },
+   "id": "S5-true-b",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "110"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "110"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "110"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "110"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "121"
+     }
+    }
+   ],
+   "target": "S5",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S5-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "99"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "99"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "99"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "99"
+     }
+    }
+   ],
+   "target": "S5",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S5-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "98.01"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "98.01"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "98.01"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "capex": "50",
+      "cfo": "150",
+      "diluted_shares": "98.01"
+     }
+    }
+   ],
+   "target": "S5",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.8"
+   },
+   "id": "S6-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "700"
+     }
+    }
+   ],
+   "target": "S6",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S6-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1600"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    }
+   ],
+   "target": "S6",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S6-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1495"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1495"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1495"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1495"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1495"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "1000"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cash": "0",
+      "da": "25",
+      "interest_expense": "20",
+      "total_debt": "700"
+     }
+    }
+   ],
+   "target": "S6",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.51110313"
+   },
+   "id": "S7-true",
+   "insiders": [
+    {
+     "event_date": "2026-08-19",
+     "filed_at": "2026-08-21T21:00:00+00:00",
+     "kind": "open_market_buy",
+     "person": "A",
+     "planned": false,
+     "source_url": "https://www.sec.gov/f4/A/30",
+     "value": "150000"
+    },
+    {
+     "event_date": "2026-09-08",
+     "filed_at": "2026-09-10T21:00:00+00:00",
+     "kind": "open_market_buy",
+     "person": "B",
+     "planned": false,
+     "source_url": "https://www.sec.gov/f4/B/10",
+     "value": "120000"
+    }
+   ],
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S7",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S7-false",
+   "insiders": [
+    {
+     "event_date": "2026-08-19",
+     "filed_at": "2026-08-21T21:00:00+00:00",
+     "kind": "open_market_buy",
+     "person": "A",
+     "planned": false,
+     "source_url": "https://www.sec.gov/f4/A/30",
+     "value": "300000"
+    },
+    {
+     "event_date": "2026-09-13",
+     "filed_at": "2026-09-15T21:00:00+00:00",
+     "kind": "open_market_buy",
+     "person": "B",
+     "planned": true,
+     "source_url": "https://www.sec.gov/f4/B/5",
+     "value": "90000"
+    }
+   ],
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S7",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S7-boundary",
+   "insiders": [
+    {
+     "event_date": "2026-08-19",
+     "filed_at": "2026-08-21T21:00:00+00:00",
+     "kind": "open_market_buy",
+     "person": "A",
+     "planned": false,
+     "source_url": "https://www.sec.gov/f4/A/30",
+     "value": "150000"
+    },
+    {
+     "event_date": "2026-09-08",
+     "filed_at": "2026-09-10T21:00:00+00:00",
+     "kind": "open_market_buy",
+     "person": "B",
+     "planned": false,
+     "source_url": "https://www.sec.gov/f4/B/10",
+     "value": "99999"
+    }
+   ],
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S7",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.6"
+   },
+   "id": "S7-in-pledge",
+   "kind": "true",
+   "market": "in",
+   "ownership": [
+    {
+     "promoter_pledged_pct": "30",
+     "quarter_end": "2026-03-31"
+    },
+    {
+     "promoter_pledged_pct": "24",
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S7",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.45849625"
+   },
+   "id": "S7-in-promoter",
+   "insiders": [
+    {
+     "event_date": "2026-08-29",
+     "filed_at": "2026-08-31T12:00:00+00:00",
+     "kind": "promoter_buy",
+     "person": "Promoter Holdings Pvt Ltd",
+     "planned": false,
+     "source_url": "https://nsearchives.nseindia.com/pit/1.xml",
+     "value": "30000000"
+    }
+   ],
+   "kind": "true",
+   "market": "in",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S7",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.30086957"
+   },
+   "holder_pct_in_size_decile": "30",
+   "id": "S8-true",
+   "kind": "true",
+   "market": "us",
+   "ownership": [
+    {
+     "inst_holders": 1000,
+     "quarter_end": "2025-12-31"
+    },
+    {
+     "inst_holders": 1150,
+     "quarter_end": "2026-03-31"
+    },
+    {
+     "inst_holders": 1323,
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S8",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "holder_pct_in_size_decile": "60",
+   "id": "S8-false",
+   "kind": "false",
+   "market": "us",
+   "ownership": [
+    {
+     "inst_holders": 1000,
+     "quarter_end": "2025-12-31"
+    },
+    {
+     "inst_holders": 1150,
+     "quarter_end": "2026-03-31"
+    },
+    {
+     "inst_holders": 1323,
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S8",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "holder_pct_in_size_decile": "30",
+   "id": "S8-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "ownership": [
+    {
+     "inst_holders": 1000,
+     "quarter_end": "2025-12-31"
+    },
+    {
+     "inst_holders": 1150,
+     "quarter_end": "2026-03-31"
+    },
+    {
+     "inst_holders": 1322,
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S8",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.41666667"
+   },
+   "id": "S8-in-true",
+   "kind": "true",
+   "market": "in",
+   "ownership": [
+    {
+     "dii_pct": "5",
+     "fii_pct": "5",
+     "quarter_end": "2025-12-31"
+    },
+    {
+     "dii_pct": "5",
+     "fii_pct": "6",
+     "quarter_end": "2026-03-31"
+    },
+    {
+     "dii_pct": "5",
+     "fii_pct": "7.5",
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S8",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.4"
+   },
+   "facts": [
+    {
+     "as_of": "2026-08-19",
+     "counterparty": "Utility Co",
+     "fact_type": "order_win",
+     "subject_key": "order:grid"
+    },
+    {
+     "as_of": "2026-09-08",
+     "counterparty": "Utility Co",
+     "fact_type": "order_win",
+     "subject_key": "order:grid"
+    }
+   ],
+   "id": "S9-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S9",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "facts": [
+    {
+     "as_of": "2026-08-19",
+     "fact_type": "capacity_addition",
+     "subject_key": "capacity:mw:site_a"
+    }
+   ],
+   "id": "S9-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S9",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "facts": [
+    {
+     "as_of": "2026-03-17",
+     "counterparty": "Utility Co",
+     "fact_type": "order_win",
+     "subject_key": "order:grid"
+    }
+   ],
+   "id": "S9-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S9",
+   "week": "2026-09-18"
+  },
+  {
+   "events": [
+    {
+     "event_date": "2025-09-18",
+     "kind": "spinoff"
+    }
+   ],
+   "expect": {
+    "fired": true,
+    "strength": "0.6"
+   },
+   "id": "S10-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S10",
+   "week": "2026-09-18"
+  },
+  {
+   "events": [
+    {
+     "event_date": "2025-02-18",
+     "kind": "spinoff"
+    }
+   ],
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S10-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S10",
+   "week": "2026-09-18"
+  },
+  {
+   "events": [
+    {
+     "event_date": "2025-03-17",
+     "kind": "spinoff"
+    }
+   ],
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S10-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S10",
+   "week": "2026-09-18"
+  },
+  {
+   "events": [
+    {
+     "event_date": "2025-03-18",
+     "kind": "spinoff"
+    }
+   ],
+   "expect": {
+    "fired": true,
+    "strength": "0.6"
+   },
+   "id": "S10-at-threshold",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "S10",
+   "week": "2026-09-18"
+  },
+  {
+   "capex": {
+    "categories": [
+     "grid"
+    ],
+    "direction": {
+     "grid": "rising"
+    },
+    "input_growth": {
+     "grid": "0.30"
+    }
+   },
+   "expect": {
+    "fired": true,
+    "strength": "0.75"
+   },
+   "id": "S11-true",
+   "kind": "true",
+   "market": "us",
+   "prior": {
+    "S1": true
+   },
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "revenue": "1050"
+     }
+    }
+   ],
+   "target": "S11",
+   "week": "2026-09-18"
+  },
+  {
+   "capex": {
+    "categories": [
+     "grid"
+    ],
+    "direction": {
+     "grid": "flat"
+    },
+    "input_growth": {
+     "grid": "0.30"
+    }
+   },
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S11-false",
+   "kind": "false",
+   "market": "us",
+   "prior": {
+    "S1": true
+   },
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "revenue": "1050"
+     }
+    }
+   ],
+   "target": "S11",
+   "week": "2026-09-18"
+  },
+  {
+   "capex": {
+    "categories": [
+     "grid"
+    ],
+    "direction": {
+     "grid": "rising"
+    },
+    "input_growth": {
+     "grid": "0.1499"
+    }
+   },
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S11-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "prior": {
+    "S1": true
+   },
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "revenue": "1050"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "revenue": "1050"
+     }
+    }
+   ],
+   "target": "S11",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": "0.6"
+   },
+   "id": "S12-true",
+   "kind": "true",
+   "market": "us",
+   "prior": {
+    "S2": true
+   },
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "sector": {
+    "capex_da_medians": [
+     "0.9",
+     "0.8",
+     "0.95"
+    ],
+    "revenue_yoy_medians": [
+     "0.02",
+     "0.01",
+     "-0.01"
+    ],
+    "sector": "industrials",
+    "tightness_facts": 2
+   },
+   "target": "S12",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S12-false",
+   "kind": "false",
+   "market": "us",
+   "prior": {
+    "S2": true
+   },
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "sector": {
+    "capex_da_medians": [
+     "1.1",
+     "0.8",
+     "0.95"
+    ],
+    "revenue_yoy_medians": [
+     "0.02",
+     "0.01",
+     "-0.01"
+    ],
+    "sector": "industrials",
+    "tightness_facts": 2
+   },
+   "target": "S12",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "S12-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "prior": {
+    "S2": true
+   },
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "sector": {
+    "capex_da_medians": [
+     "0.9",
+     "0.8",
+     "0.95"
+    ],
+    "revenue_yoy_medians": [
+     "0.02",
+     "0.01",
+     "-0.01"
+    ],
+    "sector": "industrials",
+    "tightness_facts": 1
+   },
+   "target": "S12",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": null
+   },
+   "id": "R1-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cfo": "37.5",
+      "net_income": "100"
+     }
+    }
+   ],
+   "target": "R1",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R1-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "net_income": "100"
+     }
+    }
+   ],
+   "target": "R1",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R1-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "cfo": "50",
+      "net_income": "100"
+     }
+    }
+   ],
+   "target": "R1",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": null
+   },
+   "id": "R2-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "receivables": "1333"
+     }
+    }
+   ],
+   "target": "R2",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R2-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "receivables": "1050"
+     }
+    }
+   ],
+   "target": "R2",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R2-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "receivables": "1000"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "receivables": "1199.9"
+     }
+    }
+   ],
+   "target": "R2",
+   "week": "2026-09-18"
+  },
+  {
+   "events": [
+    {
+     "event_date": "2026-06-18",
+     "kind": "auditor_change"
+    }
+   ],
+   "expect": {
+    "fired": true,
+    "strength": null
+   },
+   "id": "R3-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "R3",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R3-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "R3",
+   "week": "2026-09-18"
+  },
+  {
+   "events": [
+    {
+     "event_date": "2025-09-17",
+     "kind": "auditor_change"
+    }
+   ],
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R3-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "R3",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": null
+   },
+   "id": "R4-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "diluted_shares": "112"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "diluted_shares": "112"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "diluted_shares": "112"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "diluted_shares": "112"
+     }
+    }
+   ],
+   "target": "R4",
+   "week": "2026-09-18"
+  },
+  {
+   "events": [
+    {
+     "event_date": "2026-06-18",
+     "kind": "acquisition"
+    }
+   ],
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R4-false",
+   "kind": "false",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "diluted_shares": "112"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "diluted_shares": "112"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "diluted_shares": "112"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "diluted_shares": "112"
+     }
+    }
+   ],
+   "target": "R4",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R4-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "diluted_shares": "109.99"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "diluted_shares": "109.99"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "diluted_shares": "109.99"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "diluted_shares": "109.99"
+     }
+    }
+   ],
+   "target": "R4",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": null
+   },
+   "id": "R5-true",
+   "kind": "true",
+   "market": "in",
+   "ownership": [
+    {
+     "promoter_pledged_pct": "25",
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "R5",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R5-false",
+   "kind": "false",
+   "market": "in",
+   "ownership": [
+    {
+     "promoter_pledged_pct": "5",
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "R5",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R5-boundary",
+   "kind": "boundary",
+   "market": "in",
+   "ownership": [
+    {
+     "promoter_pledged_pct": "19.99",
+     "quarter_end": "2026-06-30"
+    }
+   ],
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {}
+    },
+    {
+     "end": "2021-12-31",
+     "values": {}
+    },
+    {
+     "end": "2022-03-31",
+     "values": {}
+    },
+    {
+     "end": "2022-06-30",
+     "values": {}
+    },
+    {
+     "end": "2022-09-30",
+     "values": {}
+    },
+    {
+     "end": "2022-12-31",
+     "values": {}
+    },
+    {
+     "end": "2023-03-31",
+     "values": {}
+    },
+    {
+     "end": "2023-06-30",
+     "values": {}
+    },
+    {
+     "end": "2023-09-30",
+     "values": {}
+    },
+    {
+     "end": "2023-12-31",
+     "values": {}
+    },
+    {
+     "end": "2024-03-31",
+     "values": {}
+    },
+    {
+     "end": "2024-06-30",
+     "values": {}
+    },
+    {
+     "end": "2024-09-30",
+     "values": {}
+    },
+    {
+     "end": "2024-12-31",
+     "values": {}
+    },
+    {
+     "end": "2025-03-31",
+     "values": {}
+    },
+    {
+     "end": "2025-06-30",
+     "values": {}
+    },
+    {
+     "end": "2025-09-30",
+     "values": {}
+    },
+    {
+     "end": "2025-12-31",
+     "values": {}
+    },
+    {
+     "end": "2026-03-31",
+     "values": {}
+    },
+    {
+     "end": "2026-06-30",
+     "values": {}
+    }
+   ],
+   "target": "R5",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": true,
+    "strength": null
+   },
+   "id": "R6-true",
+   "kind": "true",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "600"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "700"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "800"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "900"
+     }
+    }
+   ],
+   "target": "R6",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R6-false",
+   "kind": "false",
+   "market": "us",
+   "prior": {
+    "S1": true
+   },
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "600"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "700"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "800"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "900"
+     }
+    }
+   ],
+   "target": "R6",
+   "week": "2026-09-18"
+  },
+  {
+   "expect": {
+    "fired": false,
+    "strength": null
+   },
+   "id": "R6-boundary",
+   "kind": "boundary",
+   "market": "us",
+   "quarters": [
+    {
+     "end": "2021-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2021-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2022-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2023-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2024-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "500"
+     }
+    },
+    {
+     "end": "2025-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "600"
+     }
+    },
+    {
+     "end": "2025-09-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "600"
+     }
+    },
+    {
+     "end": "2025-12-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "700"
+     }
+    },
+    {
+     "end": "2026-03-31",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "800"
+     }
+    },
+    {
+     "end": "2026-06-30",
+     "values": {
+      "capex": "50",
+      "cash": "0",
+      "cfo": "-50",
+      "total_debt": "900"
+     }
+    }
+   ],
+   "target": "R6",
+   "week": "2026-09-18"
+  }
+ ]
+}

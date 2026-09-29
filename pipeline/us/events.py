@@ -25,6 +25,7 @@ EIGHT_K = frozenset({"8-K", "8-K/A"})
 LATE = frozenset({"NT 10-K", "NT 10-Q", "NT 10-K/A", "NT 10-Q/A"})
 FORM10 = frozenset({"10-12B", "10-12B/A"})
 AUDITOR_ITEM = "4.01"
+ACQUISITION_ITEM = "2.01"  # completion of an acquisition (or disposition): R4's acquisition exception (M4)
 TEXT_ITEMS = frozenset({"1.01", "2.03"})
 
 
@@ -126,7 +127,7 @@ def select(rows: Iterable[IndexRow], universe: set[str]) -> Selection:
     return Selection(list(form4.values()), need)
 
 
-EventKind = Literal["auditor_change", "late_filing", "spinoff"]
+EventKind = Literal["auditor_change", "late_filing", "spinoff", "acquisition"]
 
 
 @dataclass(frozen=True)
@@ -171,6 +172,17 @@ def filing_events(
                 CorpEventDraft(
                     subs.cik,
                     "auditor_change",
+                    f.filing_date,
+                    f.accepted_at,
+                    url,
+                    {"form": f.form, "items": list(f.items), "accession": f.accession},
+                )  # fmt: skip
+            )
+        if f.form in EIGHT_K and ACQUISITION_ITEM in f.items:
+            events.append(
+                CorpEventDraft(
+                    subs.cik,
+                    "acquisition",
                     f.filing_date,
                     f.accepted_at,
                     url,
