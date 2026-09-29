@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LineChartCard, type Row } from "@/components/charts";
-import { Empty, Page, Section } from "@/components/page";
+import { FactItem } from "@/components/fact";
+import { Empty, Page, Section, Stat } from "@/components/page";
+import { FamilyBadges } from "@/components/score";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -12,11 +15,13 @@ import {
   facts,
   fundamentals,
   insiders,
+  latestScore,
   ownership,
   signalTimeline,
   thesesOf,
 } from "@/lib/data";
 import { big, code, num, pct } from "@/lib/format";
+import { BUCKET_LABEL, dcfRows, detailText, humanize, label, SIGNAL_NAME, sourceLabel } from "@/lib/labels";
 import { chartRows } from "@/lib/metrics";
 import { UUID } from "@/lib/forms";
 import { STATE_LABEL } from "@/lib/theses";
@@ -25,12 +30,6 @@ import { requireUser } from "@/lib/auth";
 // BRIEF §6 Company: fundamentals charts (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA,
 // RPO/backlog; the weekly run's company_series, §4.6 definitions); signal timeline; verified facts with quotes and links; ownership and insiders; events; context
 // (valuation percentile chart, reverse-DCF inputs and implied growth); thesis link.
-
-function factValue(f: { value_num: number | null; value_low: number | null; value_high: number | null; unit: string }): string {
-  const v = (x: number | null) => (x === null ? "n/a" : f.unit === "percent" ? `${num(x)}%` : big(x));
-  const base = f.value_num !== null ? v(f.value_num) : f.value_low !== null || f.value_high !== null ? `${v(f.value_low)}–${v(f.value_high)}` : "";
-  return f.unit === "percent" || f.unit === "usd" || f.unit === "inr" ? base : `${base} ${f.unit}`.trim();
-}
 
 function pctCell(v: unknown): string {
   return v === null || v === undefined ? "" : `${num(Number(v))}%`;
@@ -42,13 +41,38 @@ function str(v: unknown): string {
   return String(v);
 }
 
+const OWNERSHIP: [key: string, head: string][] = [
+  ["inst_holders", "Institutions"],
+  ["fii_pct", "FII"],
+  ["dii_pct", "DII"],
+  ["promoter_pct", "Promoter"],
+  ["promoter_pledged_pct", "Pledged"],
+];
+
+const SECTIONS: [id: string, name: string][] = [
+  ["thesis", "Thesis"],
+  ["fundamentals", "Fundamentals"],
+  ["signals", "Signals"],
+  ["facts", "Facts"],
+  ["ownership", "Ownership"],
+  ["insiders", "Insiders"],
+  ["events", "Events"],
+  ["context", "Context"],
+];
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const c = UUID.test(id) ? await getCompany(id) : null;
+  return { title: c ? `${c.name} (${code(c)})` : "Company" };
+}
+
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const c = await getCompany(id);
   if (c === null) notFound();
-  const [rows, own, ins, evs, fs, sigs, ctx, ths, ser] = await Promise.all([
+  const [rows, own, ins, evs, fs, sigs, ctx, ths, ser, score] = await Promise.all([
     fundamentals(id),
     ownership(id),
     insiders(id),
@@ -58,6 +82,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     contextHistory(id),
     thesesOf(id),
     companySeries(id),
+    latestScore(id),
   ]);
   const data: Row[] = chartRows(ser?.points ?? []).map((p) => ({ ...p }));
   const weeks = new Map<string, string[]>();
@@ -65,27 +90,53 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
   const c1: Row[] = ctx.filter((x) => x.metric_id === "C1" && x.pct !== null).map((x) => ({ week: x.week_end, pct: Number(x.pct) / 100 }));
   const c2 = [...ctx].reverse().find((x) => x.metric_id === "C2");
   const currency = rows.find((r) => r.currency)?.currency ?? (c.market === "us" ? "USD" : "INR");
+  const ownCols = OWNERSHIP.filter(([k]) => own.some((o) => o[k] !== null && o[k] !== undefined));
   return (
     <Page
       title={
         <>
-          {c.name} <span className="text-gray-700">({code(c)})</span>
+          {c.name} <span className="font-normal text-gray-700">({code(c)})</span>
         </>
       }
+      description={
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline">{c.market === "us" ? "US" : "India"}</Badge>
+          {c.sector ? <Badge variant="outline">{c.sector}</Badge> : null}
+          {c.industry ? <Badge variant="outline">{c.industry}</Badge> : null}
+          {c.capex_desk ? <Badge>Capex Desk</Badge> : null}
+          {c.in_universe ? null : <Badge variant="warning">outside the universe{c.excluded_reason ? `: ${c.excluded_reason}` : ""}</Badge>}
+          <span className="text-xs text-gray-700">money in {currency}</span>
+        </div>
+      }
     >
-      <p className="text-sm text-gray-700">
-        {c.market.toUpperCase()} · {c.sector ?? "sector n/a"} · {c.industry ?? "industry n/a"}
-        {c.capex_desk ? " · Capex Desk" : ""}
-        {c.in_universe ? "" : ` · outside the universe${c.excluded_reason ? ` (${c.excluded_reason})` : ""}`} · money in {currency}
-      </p>
+      {score ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Evidence" value={num(score.evidence)} hint="0–100; never uses price" />
+          <Stat label="Gap" value={num(score.gap)} hint="0–100; C1–C4" />
+          <Stat label="Bucket" value={label(BUCKET_LABEL, score.bucket)} hint={`week ending ${score.week_end}`} />
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-medium tracking-wide text-gray-700 uppercase">Families</div>
+            <div className="mt-2">
+              <FamilyBadges ids={score.families} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <nav aria-label="On this page" className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 text-sm whitespace-nowrap">
+        {SECTIONS.map(([hash, name]) => (
+          <a key={hash} href={`#${hash}`} className="rounded-md px-2.5 py-1 font-medium text-gray-700 no-underline hover:bg-gray-200 hover:text-gray-900">
+            {name}
+          </a>
+        ))}
+      </nav>
       <Section title="Thesis" id="thesis">
         {ths.length === 0 ? (
-          <Empty>No thesis or card for this company.</Empty>
+          <Empty>No thesis or card for this company. Start one with Research on the Candidates screen.</Empty>
         ) : (
-          <ul className="list-disc pl-5 text-sm">
+          <ul className="flex flex-wrap gap-2 text-sm">
             {ths.map((t) => (
               <li key={t.id}>
-                <Link href={`/theses/${t.id}`}>
+                <Link href={`/theses/${t.id}`} className="inline-flex rounded-lg border border-gray-200 px-3 py-1.5 font-medium no-underline hover:border-blue-300 hover:bg-blue-50">
                   {STATE_LABEL[t.state]} · week {t.created_week} · {t.author}
                 </Link>
               </li>
@@ -93,14 +144,15 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           </ul>
         )}
       </Section>
-      <Section title="Fundamentals (TTM)" id="fundamentals">
+      <Section
+        title="Fundamentals (TTM)"
+        id="fundamentals"
+        description={data.length > 0 ? `As of the week scored ${ser?.week_end}, with the signals' definitions (BRIEF §4.6).` : undefined}
+      >
         {data.length === 0 ? (
           <Empty>No chart series yet: the weekly scoring run computes them.</Empty>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            <p className="text-xs text-gray-700 md:col-span-2">
-              As of the week scored {ser?.week_end}, with the signals' definitions (BRIEF §4.6).
-            </p>
+          <div className="grid gap-3 md:grid-cols-2">
             <LineChartCard title="Revenue (TTM)" data={data} series={[{ key: "revenue", label: "Revenue" }]} format="big" />
             <LineChartCard title="Operating margin (TTM)" data={data} series={[{ key: "opm", label: "OPM" }]} format="pct" />
             <LineChartCard
@@ -119,7 +171,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           </div>
         )}
       </Section>
-      <Section title="Signal timeline (weeks a signal fired)" id="signals">
+      <Section title="Signal timeline" id="signals" description="The weeks a signal fired, newest first.">
         {weeks.size === 0 ? (
           <Empty>No signal has fired.</Empty>
         ) : (
@@ -133,13 +185,15 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
             <TableBody>
               {[...weeks.entries()].slice(0, 26).map(([w, ids]) => (
                 <TableRow key={w}>
-                  <TableCell>{w}</TableCell>
+                  <TableCell className="w-36 whitespace-nowrap tabular-nums">{w}</TableCell>
                   <TableCell>
-                    {ids.sort().map((s) => (
-                      <Badge key={s} className="mr-1">
-                        {s}
-                      </Badge>
-                    ))}
+                    <span className="flex flex-wrap gap-1">
+                      {ids.sort((a, b) => a.localeCompare(b, "en", { numeric: true })).map((s) => (
+                        <Badge key={s} title={SIGNAL_NAME[s] ?? s}>
+                          {s} <span className="font-normal">{SIGNAL_NAME[s] ?? ""}</span>
+                        </Badge>
+                      ))}
+                    </span>
                   </TableCell>
                 </TableRow>
               ))}
@@ -147,25 +201,13 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           </Table>
         )}
       </Section>
-      <Section title="Verified facts" id="facts">
+      <Section title="Verified facts" id="facts" description="Each one matched word for word in its document.">
         {fs.length === 0 ? (
           <Empty>No verified text facts.</Empty>
         ) : (
-          <ul className="flex flex-col gap-3 text-sm">
+          <ul className="flex flex-col gap-2">
             {fs.map((f) => (
-              <li key={f.id} className="rounded-md border border-gray-300 p-3">
-                <div className="font-medium">
-                  {f.fact_type} · {f.subject_key} · {factValue(f)}
-                  {f.period_label ? ` · ${f.period_label}` : ""} · as of {f.as_of}
-                </div>
-                <blockquote className="mt-1 border-l-4 border-gray-300 pl-3 text-gray-900">“{f.quote}”</blockquote>
-                {f.documents ? (
-                  <a href={f.documents.url} rel="noreferrer" target="_blank" className="mt-1 inline-block">
-                    {f.documents.kind} {f.documents.published_at.slice(0, 10)}
-                    {f.documents.title ? `: ${f.documents.title}` : ""}
-                  </a>
-                ) : null}
-              </li>
+              <FactItem key={f.id} f={f} />
             ))}
           </ul>
         )}
@@ -178,24 +220,24 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
             <TableHeader>
               <TableRow>
                 <TableHead>Quarter</TableHead>
-                <TableHead>Institutions</TableHead>
-                <TableHead>FII</TableHead>
-                <TableHead>DII</TableHead>
-                <TableHead>Promoter</TableHead>
-                <TableHead>Pledged</TableHead>
+                {ownCols.map(([k, head]) => (
+                  <TableHead key={k} num>
+                    {head}
+                  </TableHead>
+                ))}
                 <TableHead>Source</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {own.map((o) => (
                 <TableRow key={`${str(o.quarter_end)}-${str(o.filed_at)}`}>
-                  <TableCell>{str(o.quarter_end)}</TableCell>
-                  <TableCell>{str(o.inst_holders)}</TableCell>
-                  <TableCell>{pctCell(o.fii_pct)}</TableCell>
-                  <TableCell>{pctCell(o.dii_pct)}</TableCell>
-                  <TableCell>{pctCell(o.promoter_pct)}</TableCell>
-                  <TableCell>{pctCell(o.promoter_pledged_pct)}</TableCell>
-                  <TableCell>{str(o.source)}</TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">{str(o.quarter_end)}</TableCell>
+                  {ownCols.map(([k]) => (
+                    <TableCell key={k} num>
+                      {k === "inst_holders" ? (o[k] === null || o[k] === undefined ? "" : Number(o[k]).toLocaleString("en-US")) : pctCell(o[k])}
+                    </TableCell>
+                  ))}
+                  <TableCell>{sourceLabel(str(o.source))}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -213,8 +255,8 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
                 <TableHead>Person</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Kind</TableHead>
-                <TableHead>Shares</TableHead>
-                <TableHead>Value</TableHead>
+                <TableHead num>Shares</TableHead>
+                <TableHead num>Value</TableHead>
                 <TableHead>Planned</TableHead>
                 <TableHead>Source</TableHead>
               </TableRow>
@@ -222,17 +264,19 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
             <TableBody>
               {ins.map((e) => (
                 <TableRow key={str(e.id)}>
-                  <TableCell>{str(e.event_date)}</TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">{str(e.event_date)}</TableCell>
                   <TableCell>{str(e.person)}</TableCell>
                   <TableCell>{str(e.role)}</TableCell>
-                  <TableCell>{str(e.kind)}</TableCell>
-                  <TableCell>{big(e.shares as number | null)}</TableCell>
-                  <TableCell>{big(e.value as number | null)}</TableCell>
+                  <TableCell>{humanize(str(e.kind))}</TableCell>
+                  <TableCell num>{big(e.shares as number | null)}</TableCell>
+                  <TableCell num>
+                    {big(e.value as number | null)} {e.value === null || e.value === undefined ? "" : str(e.currency).toUpperCase()}
+                  </TableCell>
                   <TableCell>{e.planned ? "yes" : "no"}</TableCell>
                   <TableCell>
                     {e.source_url ? (
                       <a href={str(e.source_url)} rel="noreferrer" target="_blank">
-                        filing
+                        filing<span className="sr-only"> (opens in a new tab)</span>
                       </a>
                     ) : null}
                   </TableCell>
@@ -258,13 +302,13 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
             <TableBody>
               {evs.map((e) => (
                 <TableRow key={str(e.id)}>
-                  <TableCell>{str(e.event_date)}</TableCell>
-                  <TableCell>{str(e.kind)}</TableCell>
-                  <TableCell className="max-w-md break-words">{str(e.detail)}</TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">{str(e.event_date)}</TableCell>
+                  <TableCell className="whitespace-nowrap">{humanize(str(e.kind))}</TableCell>
+                  <TableCell className="max-w-md break-words">{detailText(e.detail)}</TableCell>
                   <TableCell>
                     {e.source_url ? (
                       <a href={str(e.source_url)} rel="noreferrer" target="_blank">
-                        source
+                        source<span className="sr-only"> (opens in a new tab)</span>
                       </a>
                     ) : null}
                   </TableCell>
@@ -274,8 +318,8 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           </Table>
         )}
       </Section>
-      <Section title="Context (uses price)" id="context">
-        <div className="grid gap-4 md:grid-cols-2">
+      <Section title="Context (uses price)" id="context" description="Where the price stands against the evidence. Context never feeds the Evidence score.">
+        <div className="grid gap-3 md:grid-cols-2">
           <LineChartCard
             title="Valuation percentile vs own history (C1; high = expensive)"
             data={c1}
@@ -283,18 +327,19 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
             format="pct"
             xKey="week"
           />
-          <div className="rounded-lg border border-gray-300 p-3 text-sm">
-            <h3 className="mb-2 font-semibold">Reverse DCF (C2)</h3>
+          <div className="rounded-lg border border-gray-200 p-3 text-sm">
+            <h3 className="mb-2 text-sm font-semibold">Reverse DCF (C2)</h3>
             {c2 ? (
               <>
-                <p>
-                  Week {c2.week_end}: evidence growth minus implied growth = {pct(c2.value)}
+                <p className="text-gray-900">
+                  Week {c2.week_end}: evidence growth minus implied growth ={" "}
+                  <span className="font-semibold tabular-nums">{pct(c2.value)}</span>
                 </p>
-                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-                  {Object.entries(c2.inputs).map(([k, v]) => (
-                    <div key={k} className="contents">
-                      <dt className="text-gray-700">{k}</dt>
-                      <dd className="break-words">{str(v)}</dd>
+                <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
+                  {dcfRows(c2.inputs).map((r) => (
+                    <div key={r.key} className="contents">
+                      <dt className="text-gray-700">{r.label}</dt>
+                      <dd className="text-right break-words text-gray-900 tabular-nums">{r.value}</dd>
                     </div>
                   ))}
                 </dl>

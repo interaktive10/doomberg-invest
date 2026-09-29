@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { big, num } from "@/lib/format";
 import type { KillSnapshot, PackDiff, StateDiff } from "@/lib/reviews";
@@ -48,8 +49,10 @@ function KillTable({ label, kills, state }: { label: string; kills: readonly Kil
             <TableCell>
               {k.operator} {k.threshold ?? ""}
             </TableCell>
-            <TableCell>{arrow(before.get(k.metric) ?? null, k.last_value, ratio)}</TableCell>
-            <TableCell>{k.status}</TableCell>
+            <TableCell className="whitespace-nowrap tabular-nums">{arrow(before.get(k.metric) ?? null, k.last_value, ratio)}</TableCell>
+            <TableCell>
+              <Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{k.status}</Badge>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -63,8 +66,10 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
     <div className="mt-3 flex flex-col gap-2 text-sm">
       <h3 className="font-semibold">What changed {since}</h3>
       <p>
-        Signals: started {list(state.signals.fired)}; stopped {list(state.signals.dropped)}. Red flags: started{" "}
-        {list(state.red_flags.fired)}; stopped {list(state.red_flags.dropped)}.
+        Signals: started {list(state.signals.fired)}; stopped {list(state.signals.dropped)}.
+      </p>
+      <p>
+        Red flags: started {list(state.red_flags.fired)}; stopped {list(state.red_flags.dropped)}.
       </p>
       {state.context.length > 0 ? (
         <Table label={`Context for review ${id}`}>
@@ -78,7 +83,7 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
             {state.context.map((c) => (
               <TableRow key={c.id}>
                 <TableCell>{c.id}</TableCell>
-                <TableCell>{arrow(c.before, c.now, ratio)}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">{arrow(c.before, c.now, ratio)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -92,7 +97,9 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
               {f.url ? (
                 <>
                   {" "}
-                  <a href={f.url}>source</a>
+                  <a href={f.url} rel="noreferrer" target="_blank">
+                    source<span className="sr-only"> (opens in a new tab)</span>
+                  </a>
                 </>
               ) : null}
             </li>
@@ -146,7 +153,7 @@ export function ReviewDiff({ id, diff }: { id: string; diff: Partial<PackDiff> }
             {figures.map((f) => (
               <TableRow key={f.name}>
                 <TableCell>{FIGURE_LABEL[f.name] ?? f.name}</TableCell>
-                <TableCell>{arrow(f.before, f.now, big)}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">{arrow(f.before, f.now, big)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

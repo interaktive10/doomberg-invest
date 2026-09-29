@@ -1,6 +1,7 @@
 name: ui-screens
-# Screenshots of every web screen (desktop 1280 px, phone 390 px) on the e2e seed data, published to the ui-screens
-# branch for reviewing the UI (web/e2e/screens.shot.ts). Runs on pushes to web UI branches and on demand.
+# Screenshots of every web screen (desktop 1280 px, phone 390 px), first on an empty database and then on the e2e seed
+# data, published to the ui-screens branch for reviewing the UI (web/e2e/screens.shot.ts). Runs on pushes to web UI
+# branches and on demand.
 on:
   push:
     branches: [web-polish]
@@ -53,17 +54,22 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - name: migrations and seed data
+      - name: migrations
         working-directory: .
         run: |
           uv python install 3.12
           uv sync --frozen
           uv run --frozen python -m pipeline.db.migrate --database-url "$DATABASE_URL"
-          uv run --frozen python scripts/seed_e2e.py --database-url "$DATABASE_URL"
           psql "$DATABASE_URL" -c "notify pgrst, 'reload schema'"
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm screens
+      - name: screens on the empty database (a new deployment before its first weekly run)
+        run: SHOTS_SET=empty pnpm screens
+      - name: seed data
+        working-directory: .
+        run: uv run --frozen python scripts/seed_e2e.py --database-url "$DATABASE_URL"
+      - name: screens on the seed data
+        run: pnpm screens
       - name: publish to the ui-screens branch
         working-directory: .
         env:

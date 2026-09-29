@@ -1,6 +1,8 @@
+import Link from "next/link";
 import type { ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { rehypeCites, type CiteView } from "@/lib/cards";
 import { shiftedHeading } from "@/lib/headings";
 
 type HeadingProps = ComponentProps<"h1"> & { node?: unknown };
@@ -12,14 +14,28 @@ function heading(level: 1 | 2 | 3 | 4 | 5 | 6) {
   };
 }
 
+function Cite({ view }: { view: CiteView }) {
+  const chip = "mx-0.5 inline-block rounded bg-gray-100 px-1 py-px align-baseline text-[0.75em] leading-snug font-medium whitespace-nowrap";
+  return view.href ? (
+    <Link href={view.href} title={view.title} className={`${chip} text-blue-900 no-underline ring-1 ring-gray-300 ring-inset hover:bg-blue-50 hover:underline`}>
+      {view.label}
+    </Link>
+  ) : (
+    <span title={view.title} className={`${chip} text-gray-800`}>
+      {view.label}
+    </span>
+  );
+}
+
 /** The digest, the Capex brief and thesis cards are markdown the pipeline wrote; raw HTML in it is not rendered.
  * Its headings sit under the Section's h2 (h1 -> h3). Tables scroll sideways in a focusable box on a phone (axe
- * scrollable-region-focusable). */
-export function Markdown({ text }: { text: string }) {
+ * scrollable-region-focusable). With `cite`, inline citations ([f:...], [m:...], [s:...], [c:...]) show as chips. */
+export function Markdown({ text, cite }: { text: string; cite?: (id: string) => CiteView }) {
   return (
     <div className="prose-md">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={cite ? [rehypeCites as never] : []}
         skipHtml
         components={{
           h1: heading(1),
@@ -33,6 +49,10 @@ export function Markdown({ text }: { text: string }) {
               <table {...props} />
             </div>
           ),
+          span: ({ node: _node, ...props }: ComponentProps<"span"> & { node?: unknown; "data-cite"?: string }) => {
+            const id = props["data-cite"];
+            return typeof id === "string" && cite ? <Cite view={cite(id)} /> : <span {...props} />;
+          },
         }}
       >
         {text}

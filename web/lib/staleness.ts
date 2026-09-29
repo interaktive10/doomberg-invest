@@ -43,13 +43,18 @@ export function sourceStatus(s: SourceHealth, all: readonly SourceHealth[], now:
   return "ok";
 }
 
-/** The banner's list: every source that is stale or past its SLA (a fallback only when its primary isn't fine). */
-export function staleSources(sources: readonly SourceHealth[], now: Date): string[] {
-  const out: string[] = [];
+/** Every source that is stale or past its SLA (a fallback only when its primary isn't fine), with why. */
+export function lateSources(sources: readonly SourceHealth[], now: Date): { source: string; why: string }[] {
+  const out: { source: string; why: string }[] = [];
   for (const s of sources) {
     if (resting(s, sources, now)) continue;
-    if (s.stale) out.push(`${s.source} (stale)`);
-    else if (late(s, now)) out.push(`${s.source} (no success for ${Math.floor(ageDays(s, now) ?? 0)} days; SLA ${SLA_DAYS[s.source]})`);
+    if (s.stale) out.push({ source: s.source, why: "stale" });
+    else if (late(s, now)) out.push({ source: s.source, why: `no success for ${Math.floor(ageDays(s, now) ?? 0)} days; SLA ${SLA_DAYS[s.source]}` });
   }
   return out;
+}
+
+/** The banner's list as text, "sec (no success for 11 days; SLA 8)". */
+export function staleSources(sources: readonly SourceHealth[], now: Date): string[] {
+  return lateSources(sources, now).map((s) => `${s.source} (${s.why})`);
 }

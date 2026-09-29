@@ -93,7 +93,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
 
   await page.getByRole("link", { name: "Journal" }).first().click();
   const echo = page.getByRole("region", { name: "Journal entries" }).getByRole("row").filter({ hasText: "Echo Grid Corp." });
-  for (const action of ["start_position", "review", "exit"]) await expect(echo.getByRole("cell", { name: action, exact: true })).toHaveCount(1);
+  for (const action of ["Start position", "Review", "Exit"]) await expect(echo.getByRole("cell", { name: action, exact: true })).toHaveCount(1);
   await expect(page.getByText("Backlog converted as expected.")).toBeVisible();
 });
 
@@ -122,8 +122,8 @@ test("screener: save a screen, load it, export CSV", async ({ page }) => {
 test("capex desk: confirm a membership", async ({ page }) => {
   await page.goto("/capex");
   await expect(page.getByRole("heading", { name: "Memberships waiting for a decision (1)" })).toBeVisible();
-  await page.getByRole("button", { name: "Confirm Kappa Cables Ltd (KAPPA) in power_equipment" }).click();
-  await flash(page, "Confirmed: power_equipment.");
+  await page.getByRole("button", { name: "Confirm Kappa Cables Ltd (KAPPA) in Power equipment" }).click();
+  await flash(page, "Confirmed: Power equipment.");
   await expect(page.getByRole("heading", { name: "Memberships waiting for a decision (0)" })).toBeVisible();
 });
 
