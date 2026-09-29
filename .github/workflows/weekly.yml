@@ -138,6 +138,7 @@ jobs:
     timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      STOOQ_API_KEY: ${{ secrets.STOOQ_API_KEY }}
       DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
     steps:
       - uses: actions/checkout@v4

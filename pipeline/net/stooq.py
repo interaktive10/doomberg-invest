@@ -3,20 +3,29 @@
 limit, an HTML page) raises StooqUnavailable; the caller marks 'stooq' stale and falls back to a manual CSV in the
 same format (imports/us_prices/<TICKER>.csv).
 
-Bars are dated at the week's last trading day; they are keyed by that week's Friday, like prices_w everywhere."""
+Bars are dated at the week's last trading day; they are keyed by that week's Friday, like prices_w everywhere.
+
+Since 2026 Stooq answers a CSV request only with an apikey ("Get your apikey: 1. Open
+https://stooq.com/q/d/?s=^spx&get_apikey" plus a CAPTCHA, done once by a person; the first live run, 2026-09-29, got
+an HTML page for every symbol). The key comes from STOOQ_API_KEY and rides in the URL, so no error raised here carries
+the URL or the key."""
 
 from __future__ import annotations
 
 import csv
 import io
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
+import httpx
+
 from pipeline.net.http import HttpClient
 
 STOOQ_CSV = "https://stooq.com/q/d/l/?s={symbol}&i=w"
+KEY_IN_TEXT = re.compile(r"apikey=[^&\s\"'<>]*")  # also a key cut short by parse_csv's 120 characters
 
 
 class StooqUnavailable(Exception):
@@ -72,4 +81,15 @@ class StooqClient:
     http: HttpClient
 
     def weekly(self, ticker: str) -> list[Bar]:
-        return parse_csv(self.http.get_bytes(csv_url(stooq_symbol(ticker)), timeout=30.0))
+        key = self.http.settings.stooq_api_key
+        url = csv_url(stooq_symbol(ticker)) + (f"&apikey={quote(key, safe='')}" if key else "")
+        try:
+            return parse_csv(self.http.get_bytes(url, timeout=30.0))
+        except httpx.HTTPError as e:
+            status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else type(e).__name__
+            raise StooqUnavailable(f"Stooq request failed ({status})") from None
+        except StooqUnavailable as e:
+            text = (
+                KEY_IN_TEXT.sub("apikey=***", str(e).replace(key, "***")) if key else f"STOOQ_API_KEY is not set: {e}"
+            )
+            raise StooqUnavailable(text) from None
