@@ -184,7 +184,11 @@ def _one_company(
     return done
 
 
-BULK = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata"
+# SEC's nightly bulk archives live in two places: companyfacts under daily-index/xbrl, submissions under
+# daily-index/bulkdata. SEC answers 403 for a file that isn't there (the first live run, 2026-09-29, asked for
+# bulkdata/companyfacts.zip).
+COMPANYFACTS_ZIP = "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
+SUBMISSIONS_ZIP = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -196,8 +200,8 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     client = HttpClient(settings)
     bulk = settings.cache_dir / "us" / "bulk"
-    companyfacts = a.companyfacts or client.download(f"{BULK}/companyfacts.zip", bulk / "companyfacts.zip")
-    submissions = a.submissions or client.download(f"{BULK}/submissions.zip", bulk / "submissions.zip")
+    companyfacts = a.companyfacts or client.download(COMPANYFACTS_ZIP, bulk / "companyfacts.zip")
+    submissions = a.submissions or client.download(SUBMISSIONS_ZIP, bulk / "submissions.zip")
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "us_weekly", "sec") as run:
         stats = run_weekly(
             conn,
