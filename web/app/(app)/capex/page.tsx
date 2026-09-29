@@ -165,7 +165,7 @@ export default async function Capex({ searchParams }: { searchParams: Promise<Qu
         {graph.edges.length === 0 ? (
           <Empty>No counterparty links yet.</Empty>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <CapexGraph data={graph} />
             <Table label="Counterparty links">
               <TableHeader>

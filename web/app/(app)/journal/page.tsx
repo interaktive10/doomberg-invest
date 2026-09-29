@@ -24,7 +24,7 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
   return (
     <Page title="Journal" description="Private: entries and post-mortems stay in your database and are never sent to any LLM.">
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <div className="grid gap-5 lg:grid-cols-[1fr_20rem] lg:items-start">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <Section title="Entries" id="entries" description="Newest first. Entries about a thesis are added on its page.">
           {entries.length === 0 ? (
             <Empty>No entries yet.</Empty>
@@ -64,7 +64,7 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
           )}
         </Section>
         <Section title="Add a note" id="add-note" description="A general note, not tied to a thesis.">
-          <form action={addNote} className="grid gap-3">
+          <form action={addNote} className="grid grid-cols-1 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="n-date">Date</Label>
               <Input id="n-date" name="entry_date" type="date" defaultValue={localToday(new Date())} required />
@@ -83,7 +83,7 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
         {pms.length === 0 ? (
           <Empty>No post-mortems yet. Closing a thesis asks for one.</Empty>
         ) : (
-          <ul className="grid gap-3 md:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {pms.map((p) => (
               <li key={p.thesis_id} className="rounded-lg border border-gray-200 p-4 text-sm">
                 <div className="flex flex-wrap items-center gap-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { yDomain } from "@/lib/chart";
+import { yScale } from "@/lib/chart";
 
 // Recharts line charts for the Company page (BRIEF §6). Dark series colours keep the legend text readable (axe).
 export type Format = "big" | "pct" | "x" | "num";
@@ -44,6 +44,7 @@ export function LineChartCard({
   xKey?: string;
 }) {
   const points = data.filter((r) => series.some((s) => typeof r[s.key] === "number")).length;
+  const y = yScale(data, series.map((s) => s.key));
   return (
     <figure className="rounded-lg border border-gray-200 bg-white p-3">
       <figcaption className="mb-2 text-sm font-semibold text-gray-900">{title}</figcaption>
@@ -58,7 +59,9 @@ export function LineChartCard({
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v: number) => fmt(v, format)}
-                domain={yDomain(data, series.map((s) => s.key))}
+                domain={y.domain}
+                ticks={y.ticks}
+                interval={0}
                 width={52}
               />
               <Tooltip

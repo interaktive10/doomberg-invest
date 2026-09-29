@@ -16,7 +16,7 @@ export function StaleBanner({ sources, now }: { sources: SourceHealth[]; now: Da
           <strong className="font-semibold">Stale data:</strong> {late.length === 1 ? "1 source is" : `${late.length} sources are`} out
           of date ({names}). Scores that read {late.length === 1 ? "it" : "them"} may be behind.
         </summary>
-        <ul className="mt-2 mb-1 grid gap-1 pl-5 sm:grid-cols-2">
+        <ul className="mt-2 mb-1 grid grid-cols-1 gap-1 pl-5 sm:grid-cols-2">
           {late.map((s) => (
             <li key={s.source} className="list-disc">
               <span className="font-medium">{sourceLabel(s.source)}</span>: {s.why}

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { big, num } from "@/lib/format";
+import { big, measure, num } from "@/lib/format";
+import { humanize } from "@/lib/labels";
 import type { KillSnapshot, PackDiff, StateDiff } from "@/lib/reviews";
 
 // A review's pack diff (BRIEF §4.9 "the pack diff since the last review"; M7 review R1-F4): the quarter's key figures
@@ -21,7 +22,7 @@ function arrow(before: number | null, now: number | null, fmt: (v: number | null
 }
 
 function ratio(v: number | null): string {
-  return v === null ? "n/a" : num(v, 4);
+  return measure(v);
 }
 
 function list(ids: readonly string[]): string {
@@ -82,7 +83,7 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
           <TableBody>
             {state.context.map((c) => (
               <TableRow key={c.id}>
-                <TableCell>{c.id}</TableCell>
+                <TableCell>{humanize(c.id)}</TableCell>
                 <TableCell className="whitespace-nowrap tabular-nums">{arrow(c.before, c.now, ratio)}</TableCell>
               </TableRow>
             ))}

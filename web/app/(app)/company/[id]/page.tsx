@@ -152,7 +152,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         {data.length === 0 ? (
           <Empty>No chart series yet: the weekly scoring run computes them.</Empty>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <LineChartCard title="Revenue (TTM)" data={data} series={[{ key: "revenue", label: "Revenue" }]} format="big" />
             <LineChartCard title="Operating margin (TTM)" data={data} series={[{ key: "opm", label: "OPM" }]} format="pct" />
             <LineChartCard
@@ -319,7 +319,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         )}
       </Section>
       <Section title="Context (uses price)" id="context" description="Where the price stands against the evidence. Context never feeds the Evidence score.">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <LineChartCard
             title="Valuation percentile vs own history (C1; high = expensive)"
             data={c1}
@@ -335,7 +335,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
                   Week {c2.week_end}: evidence growth minus implied growth ={" "}
                   <span className="font-semibold tabular-nums">{pct(c2.value)}</span>
                 </p>
-                <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
+                <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
                   {dcfRows(c2.inputs).map((r) => (
                     <div key={r.key} className="contents">
                       <dt className="text-gray-700">{r.label}</dt>

@@ -1,13 +1,14 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-// shadcn/ui Table. The wrapper scrolls sideways on a phone (390 px) instead of the page; it is focusable so a
+// shadcn/ui Table. The wrapper scrolls sideways on a phone (390 px) instead of the page (it is `relative`, so screen-
+// reader-only text in a cell is clipped with the table instead of widening the page); it is focusable so a
 // keyboard can scroll it too (axe scrollable-region-focusable), and a named region when `label` is given.
 // `num` right-aligns a numeric column in tabular figures; `sticky` keeps a column (the company) in view while the
 // rest scrolls.
 export function Table({ className, label, ...props }: ComponentProps<"table"> & { label?: string }) {
   return (
-    <div className="w-full overflow-x-auto" tabIndex={0} {...(label ? { role: "region", "aria-label": label } : {})}>
+    <div className="relative w-full overflow-x-auto" tabIndex={0} {...(label ? { role: "region", "aria-label": label } : {})}>
       <table className={cn("w-full caption-bottom border-collapse text-sm", className)} {...props} />
     </div>
   );

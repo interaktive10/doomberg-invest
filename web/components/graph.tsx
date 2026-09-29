@@ -36,7 +36,6 @@ const STYLE = [
       label: "data(label)",
       "font-size": 9,
       color: "#374151",
-      "text-rotation": "autorotate",
       "text-background-color": "#ffffff",
       "text-background-opacity": 0.85,
       "line-color": "#9ca3af",
@@ -58,7 +57,7 @@ export function CapexGraph({ data }: { data: GraphData }) {
         container: ref.current,
         elements: [...data.nodes.map((n) => ({ data: { ...n } })), ...data.edges.map((e) => ({ data: { ...e } }))],
         style: STYLE as never,
-        layout: { name: "cose", animate: false, padding: 40 } as never,
+        layout: { name: "cose", animate: false, padding: 40, idealEdgeLength: 140, nodeRepulsion: 12000, componentSpacing: 100 } as never,
         minZoom: 0.3,
         maxZoom: 1.6,
       });

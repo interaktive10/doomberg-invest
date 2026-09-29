@@ -45,9 +45,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   return (
     <Page title="Settings" description="Most settings live in the repository's config files and change through pull requests; they are shown here read-only.">
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Section title="Sign-in" id="signin">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
             <dt className="text-gray-700">Signed in as</dt>
             <dd className="font-medium break-all">{email}</dd>
             <dt className="text-gray-700">Allowed email</dt>
@@ -56,12 +56,12 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <p className="mt-3 text-sm text-gray-700">Magic link only; change it in the deployment&apos;s APP_ALLOWED_EMAIL.</p>
         </Section>
         <Section title="Discipline" id="discipline" description="An earlier start-position entry needs a written override reason (§11.9).">
-          <form action={saveDiscipline} className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="weeks">Weeks a thesis must be old before a start-position entry</Label>
+          <form action={saveDiscipline} className="flex flex-col gap-1.5">
+            <Label htmlFor="weeks">Weeks a thesis must be old before a start-position entry</Label>
+            <div className="flex items-center gap-2">
               <Input id="weeks" name="weeks" type="number" min="0" max="104" step="1" defaultValue={String(weeks)} className="w-28" required />
+              <SubmitButton>Save</SubmitButton>
             </div>
-            <SubmitButton>Save</SubmitButton>
           </form>
         </Section>
       </div>

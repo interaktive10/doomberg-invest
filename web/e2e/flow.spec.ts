@@ -6,6 +6,21 @@ import { OMEGA_THESIS } from "./seed";
 // capex membership confirm (the allowlist login is e2e/auth.setup.ts). One seeded world, so the steps run in order.
 test.describe.configure({ mode: "serial" });
 
+// When a step fails, the job log shows where the page was, what it said and any browser errors (the trace is in the
+// playwright-report artifact).
+test.beforeEach(async ({ page }) => {
+  page.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  page.on("console", (m) => {
+    if (m.type() === "error") console.log(`[console.error] ${m.text()}`);
+  });
+});
+
+test.afterEach(async ({ page }, info) => {
+  if (info.status === info.expectedStatus) return;
+  console.log(`[failed at] ${page.url()}`);
+  console.log(`[page text] ${(await page.locator("body").innerText().catch(() => "")).slice(0, 1500)}`);
+});
+
 async function flash(page: Page, text: string | RegExp): Promise<void> {
   await expect(page.getByRole("main").getByRole("status")).toContainText(text);
 }

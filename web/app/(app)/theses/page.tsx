@@ -55,7 +55,7 @@ export default async function Theses() {
   return (
     <Page title="Theses" description="Research → Thesis → Position → Review → Closed. Open a card to decide, journal, or review it.">
       {all.length === 0 ? <Empty>No theses yet. Cards arrive from the weekly routine, or start one with Research on Candidates.</Empty> : null}
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {COLUMNS.map((s) => (
           <section
             key={s}
@@ -82,7 +82,7 @@ export default async function Theses() {
       {dismissed.length > 0 ? (
         <details className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <summary className="font-semibold">Dismissed ({dismissed.length})</summary>
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {dismissed.map((t) => (
               <CardLink key={t.id} t={t} />
             ))}

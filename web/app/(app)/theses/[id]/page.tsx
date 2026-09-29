@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { citeView, factOrder, stripSection, stripTitle } from "@/lib/cards";
 import { ensureReviews, journal, killCriteria, postmortem, reviews, setting, thesis as getThesis, thesisTitle } from "@/lib/data";
 import { localToday, thesisWeeks } from "@/lib/discipline";
-import { code, num } from "@/lib/format";
+import { code, measure, num } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
 import { ACTION_LABEL, label } from "@/lib/labels";
 import type { PackDiff } from "@/lib/reviews";
@@ -159,7 +159,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                   <TableCell>
                     <Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{k.status}</Badge>
                   </TableCell>
-                  <TableCell num>{k.last_value === null ? "n/a" : num(k.last_value, 4)}</TableCell>
+                  <TableCell num>{measure(k.last_value)}</TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">{k.last_checked ?? ""}</TableCell>
                   <TableCell className="max-w-sm min-w-48">{k.why ?? ""}</TableCell>
                 </TableRow>
@@ -248,7 +248,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
           </Table>
         )}
         {t.state !== "dismissed" ? (
-          <form action={addJournal} className="mt-4 grid gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4 md:grid-cols-2">
+          <form action={addJournal} className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4 md:grid-cols-2">
             <Hidden id={t.id} />
             <h3 className="font-semibold md:col-span-2">Add a journal entry</h3>
             <div className="flex flex-col gap-1.5">
@@ -290,7 +290,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
 
       {canMove(t.state, "close") ? (
         <Section title="Close with a post-mortem" id="close" description="Closing is final: write down what happened while it's fresh.">
-          <form action={close} className="grid gap-4">
+          <form action={close} className="grid grid-cols-1 gap-4">
             <Hidden id={t.id} />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="pm-what">What happened, compared with the thesis</Label>
@@ -324,7 +324,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
 
       {pm ? (
         <Section title="Post-mortem" id="postmortem">
-          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[12rem_1fr]">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)]">
             <dt className="font-medium text-gray-700">What happened</dt>
             <dd className="whitespace-pre-wrap">{pm.what_happened}</dd>
             <dt className="font-medium text-gray-700">Thesis right?</dt>

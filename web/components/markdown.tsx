@@ -15,7 +15,7 @@ function heading(level: 1 | 2 | 3 | 4 | 5 | 6) {
 }
 
 function Cite({ view }: { view: CiteView }) {
-  const chip = "mx-0.5 inline-block rounded bg-gray-100 px-1 py-px align-baseline text-[0.75em] leading-snug font-medium whitespace-nowrap";
+  const chip = "ml-1 inline-block rounded bg-gray-100 px-1 py-px align-baseline text-[0.75em] leading-snug font-medium whitespace-nowrap";
   return view.href ? (
     <Link href={view.href} title={view.title} className={`${chip} text-blue-900 no-underline ring-1 ring-gray-300 ring-inset hover:bg-blue-50 hover:underline`}>
       {view.label}
@@ -45,7 +45,7 @@ export function Markdown({ text, cite }: { text: string; cite?: (id: string) => 
           h5: heading(5),
           h6: heading(6),
           table: ({ node: _node, ...props }: ComponentProps<"table"> & { node?: unknown }) => (
-            <div className="overflow-x-auto" tabIndex={0}>
+            <div className="relative overflow-x-auto" tabIndex={0}>
               <table {...props} />
             </div>
           ),

@@ -88,9 +88,9 @@ export default async function Screener({ searchParams }: { searchParams: Promise
         )}
       </Section>
       <Section title="Filters" id="filters">
-        <form method="get" action="/screener" className="grid gap-5">
+        <form method="get" action="/screener" className="grid grid-cols-1 gap-5">
           <input type="hidden" name="run" value="1" />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="flex min-w-0 flex-col gap-1.5">
               <Label htmlFor="s-market">Market</Label>
               <Select id="s-market" name="market" defaultValue={d.get("market") ?? ""}>
@@ -156,7 +156,7 @@ export default async function Screener({ searchParams }: { searchParams: Promise
               ))}
             </div>
           </fieldset>
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {[0, 1, 2].map((i) => (
               <fieldset key={i} className="min-w-0 rounded-lg border border-gray-200 p-3">
                 <legend className="px-1 text-sm font-medium">Metric filter {i + 1}</legend>

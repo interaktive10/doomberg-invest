@@ -20,6 +20,16 @@ export function big(v: number | string | null | undefined): string {
   return `${(n / d).toFixed(2)}${s}`;
 }
 
+/** A metric's value in a table, at a precision that suits its size: 0.2400 (a ratio), 82.0 (a score), 1.22B (an
+ * amount). */
+export function measure(v: number | string | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "n/a";
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "n/a";
+  const a = Math.abs(n);
+  return a >= 1e4 ? big(n) : a >= 10 ? n.toFixed(1) : n.toFixed(4);
+}
+
 export function code(c: { market: string; ticker: string | null; nse_symbol: string | null }): string {
   return (c.market === "us" ? c.ticker : c.nse_symbol) ?? c.market.toUpperCase();
 }
