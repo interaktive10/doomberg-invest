@@ -31,8 +31,10 @@ jobs:
         run: |
           host=$(python3 -c "import os,urllib.parse as u; p=u.urlsplit(os.environ['DATABASE_URL']); print(p.hostname or '?', p.port or 5432)")
           echo "host and port: $host (a Session pooler address ends in pooler.supabase.com, port 5432)"
+          set +e
           out=$(PGCONNECT_TIMEOUT=15 psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select current_user, current_database(), split_part(version(), ' ', 2), (select count(*) from information_schema.tables where table_schema = 'public')" 2>&1)
           code=$?
+          set -e
           if [ $code -eq 0 ]; then echo "PASS connected: user|db|postgres version|public tables = $out"; else echo "FAIL could not connect: $out"; exit 1; fi
 
       - name: SEC (SEC_USER_AGENT)
@@ -45,12 +47,26 @@ jobs:
       - name: Gemini (GEMINI_API_KEY)
         if: always()
         run: |
-          code=$(curl -s -o /tmp/gemini.json -w "%{http_code}" -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json" \
-            -d '{"contents":[{"parts":[{"text":"Reply with the single word OK."}]}]}' \
-            https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent)
-          if [ "$code" = "200" ]; then
-            echo "PASS Gemini answered 200: $(python3 -c "import json; d=json.load(open('/tmp/gemini.json')); print(d['candidates'][0]['content']['parts'][0]['text'].strip()[:40])")"
-          else
-            echo "FAIL Gemini answered HTTP $code: $(python3 -c "import json; d=json.load(open('/tmp/gemini.json')); e=d.get('error',{}); print(e.get('status'), '-', str(e.get('message'))[:200])" 2>/dev/null)"
-            exit 1
-          fi
+          set +e
+          code=$(curl -s -o /tmp/models.json -w "%{http_code}" -H "x-goog-api-key: $GEMINI_API_KEY" \
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200")
+          if [ "$code" != "200" ]; then echo "FAIL listing models answered HTTP $code"; exit 1; fi
+          echo "PASS the key is valid. Flash models this key can call (generateContent):"
+          python3 - <<'PY'
+          import json
+          d = json.load(open("/tmp/models.json"))
+          for m in d.get("models", []):
+              if "flash" in m["name"] and "generateContent" in m.get("supportedGenerationMethods", []):
+                  print("  ", m["name"].removeprefix("models/"))
+          PY
+          fail=0
+          for model in gemini-2.5-flash-lite gemini-2.5-flash gemini-3.5-flash-lite gemini-3.5-flash; do
+            code=$(curl -s -o /tmp/gemini.json -w "%{http_code}" -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json" \
+              -d '{"contents":[{"parts":[{"text":"Reply with the single word OK."}]}]}' \
+              "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+            if [ "$code" = "200" ]; then
+              echo "PASS $model answered: $(python3 -c "import json; d=json.load(open('/tmp/gemini.json')); print(d['candidates'][0]['content']['parts'][0]['text'].strip()[:40])")"
+            else
+              echo "FAIL $model answered HTTP $code: $(python3 -c "import json; d=json.load(open('/tmp/gemini.json')); e=d.get('error',{}); print(e.get('status'), '-', str(e.get('message'))[:160])" 2>/dev/null)"
+            fi
+          done
