@@ -50,6 +50,14 @@ def test_size_guard_runs_after_every_weekly_job_that_writes() -> None:
     assert "pipeline.db.migrate" in runs[0] and runs[-1].endswith("python -m pipeline.db.size_guard")
 
 
+def test_the_us_weekly_job_has_room_for_a_full_quarterize() -> None:
+    """The first live run (2026-09-29) quarterized all 5,884 companies in 53 minutes against a 60-minute limit. A full
+    run comes back whenever the companyfacts state isn't restored (a cache miss, --force), and a run that times out
+    never saves the state, so every later run would time out too."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    assert doc["jobs"]["us"]["timeout-minutes"] >= 120
+
+
 def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     """M8 review R1-F5: §2.1 "quarterly: ... Signal Lab re-run" (§11.8): quarterly.yml dispatches lab.yml once the
     13F step and the universe rebuild are done."""
