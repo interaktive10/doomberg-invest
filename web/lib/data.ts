@@ -1,0 +1,573 @@
+import "server-only";
+import { db } from "@/lib/supabase/admin";
+import { allPages } from "@/lib/paging";
+import type { ScreenSpec } from "@/lib/screener";
+import type { QuarterRow, SeriesPoint } from "@/lib/metrics";
+import {
+  dayAfter,
+  FIGURES,
+  killReview,
+  lastSnapshot,
+  needsKillReview,
+  packSnapshot,
+  quarterReviews,
+  reviewedThrough,
+  scoredWeek,
+  type FilingRow,
+  type KillSnapshot,
+  type NewItems,
+  type Snapshot,
+} from "@/lib/reviews";
+
+// Server-side reads for the screens (BRIEF §6). Point-in-time tables are read only through the *_display_v views
+// (db/migrations/0003; the guard's pit_rule); everything else through service_role.
+
+export type Bucket = "candidate" | "priced_in" | "early" | "excluded" | "none";
+export type ThesisState = "research" | "thesis" | "position" | "review" | "closed" | "dismissed";
+
+export interface ScreenerRow {
+  company_id: string;
+  market: "us" | "in";
+  name: string;
+  ticker: string | null;
+  nse_symbol: string | null;
+  sector: string | null;
+  industry: string | null;
+  capex_desk: boolean;
+  week_end: string;
+  evidence: number;
+  gap: number | null;
+  families: string[];
+  bucket: Bucket;
+  fired_signals: string[];
+  red_flags: string[];
+  hard_flag: boolean;
+  c1: number | null;
+  c2: number | null;
+  c3: number | null;
+  c4: number | null;
+  metrics: Record<string, number | null>;
+}
+
+export interface Company {
+  id: string;
+  market: "us" | "in";
+  name: string;
+  ticker: string | null;
+  nse_symbol: string | null;
+  cik: string | null;
+  isin: string | null;
+  sector: string | null;
+  industry: string | null;
+  capex_desk: boolean;
+  in_universe: boolean;
+  excluded_reason: string | null;
+  fiscal_year_end: string | null;
+}
+
+export interface Thesis {
+  id: string;
+  company_id: string;
+  state: ThesisState;
+  card_md: string;
+  card_json: Card | Record<string, never>;
+  evidence_pack: Record<string, unknown>;
+  author: "routine" | "fallback" | "manual";
+  validation: Record<string, unknown>;
+  created_week: string;
+  next_review: string | null;
+  accepted_at: string | null;
+  dismissed_reason: string | null;
+  updated_at: string;
+  companies?: Pick<Company, "name" | "market" | "ticker" | "nse_symbol" | "fiscal_year_end"> | null;
+}
+
+export interface Card {
+  summary?: string;
+  facts?: { text: string; cites: string[] }[];
+  why_mispriced?: { text: string; cites: string[] }[];
+  inferences?: string[];
+  assumptions?: string[];
+  risks?: { text: string; cites: string[] }[];
+  kill_criteria?: { metric_id: string; operator: string; threshold: number | null; check_after: string; why: string }[];
+  read_next?: { title: string; url: string }[];
+}
+
+export interface KillCriterion {
+  id: string;
+  metric: string;
+  operator: string;
+  threshold: number | null;
+  check_after: string;
+  status: "ok" | "triggered" | "unknown";
+  last_value: number | null;
+  last_checked: string | null;
+  baseline: number | null;
+  why: string | null;
+  triggered_week: string | null;
+}
+
+export interface Review {
+  id: string;
+  thesis_id: string;
+  period_end: string | null;
+  pack_diff: Record<string, unknown>;
+  verdict: "intact" | "weakened" | "broken" | null;
+  note: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface JournalEntry {
+  id: string;
+  thesis_id: string | null;
+  entry_date: string;
+  action: "note" | "start_position" | "add" | "trim" | "exit" | "review";
+  portfolio_pct: number | null;
+  reason: string;
+  override_reason: string | null;
+  created_at: string;
+}
+
+export interface Postmortem {
+  thesis_id: string;
+  what_happened: string;
+  thesis_right: boolean | null;
+  signals_right: Record<string, unknown> | null;
+  lessons: string;
+  created_at: string;
+}
+
+function rows<T>(res: { data: unknown; error: { message: string } | null }): T[] {
+  if (res.error) throw new Error(res.error.message);
+  return (res.data ?? []) as T[];
+}
+
+function one<T>(res: { data: unknown; error: { message: string } | null }): T | null {
+  if (res.error) throw new Error(res.error.message);
+  return (res.data ?? null) as T | null;
+}
+
+// ---------------------------------------------------------------- Home
+
+export async function latestDigest(): Promise<{ week_end: string; title: string; body_md: string } | null> {
+  return one(await db().from("digests").select("week_end, title, body_md").order("week_end", { ascending: false })
+    .limit(1).maybeSingle());
+}
+
+export interface SourceHealth {
+  source: string;
+  last_success: string | null;
+  last_error: string | null;
+  stale: boolean;
+}
+
+export async function sourceHealth(): Promise<SourceHealth[]> {
+  return rows(await db().from("source_health").select("source, last_success, last_error, stale").order("source"));
+}
+
+export interface LlmUse {
+  provider: string;
+  calls: number;
+  ok: number;
+  rateLimited: number;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+/** LLM calls by provider over the last 7 days, counted in the database (the llm_use_7d view, like the digest's
+ * thesis_repo.llm_use): PostgREST returns at most max_rows rows, so counting fetched rows undercounts a busy week (M7
+ * review R1-F6). */
+export async function llmUse(): Promise<LlmUse[]> {
+  const data = rows<{ provider: string; calls: number; ok: number; rate_limited: number; tokens_in: number; tokens_out: number }>(
+    await db().from("llm_use_7d").select("provider, calls, ok, rate_limited, tokens_in, tokens_out").order("provider"),
+  );
+  return data.map((r) => ({
+    provider: r.provider,
+    calls: Number(r.calls),
+    ok: Number(r.ok),
+    rateLimited: Number(r.rate_limited),
+    tokensIn: Number(r.tokens_in),
+    tokensOut: Number(r.tokens_out),
+  }));
+}
+
+// ---------------------------------------------------------------- Candidates and the screener
+
+/** screen(spec) rows up to spec.limit (the SQL function's default is 500), a page at a time (lib/paging.ts). */
+export async function screen(spec: ScreenSpec): Promise<ScreenerRow[]> {
+  return allPages<ScreenerRow>((from, to) => db().rpc("screen", { p: spec }).range(from, to), spec.limit ?? 500);
+}
+
+export async function dismissedThisWeek(week: string): Promise<Set<string>> {
+  const data = rows<{ company_id: string }>(
+    await db().from("candidate_actions").select("company_id").eq("week_end", week).eq("action", "dismiss"),
+  );
+  return new Set(data.map((r) => r.company_id));
+}
+
+export async function latestThesisByCompany(ids: string[]): Promise<Map<string, Pick<Thesis, "id" | "state" | "author">>> {
+  if (ids.length === 0) return new Map();
+  const data = rows<{ id: string; company_id: string; state: ThesisState; author: Thesis["author"]; created_week: string }>(
+    await db().from("theses").select("id, company_id, state, author, created_week").in("company_id", ids)
+      .order("created_week", { ascending: false }),
+  );
+  const out = new Map<string, Pick<Thesis, "id" | "state" | "author">>();
+  for (const t of data) if (!out.has(t.company_id)) out.set(t.company_id, { id: t.id, state: t.state, author: t.author });
+  return out;
+}
+
+export async function screens(): Promise<{ id: string; name: string; spec: ScreenSpec }[]> {
+  return rows(await db().from("screens").select("id, name, spec").order("name"));
+}
+
+// ---------------------------------------------------------------- Company
+
+export async function company(id: string): Promise<Company | null> {
+  return one(await db().from("companies").select(
+    "id, market, name, ticker, nse_symbol, cik, isin, sector, industry, capex_desk, in_universe, excluded_reason, " +
+      "fiscal_year_end",
+  ).eq("id", id).maybeSingle());
+}
+
+export async function fundamentals(id: string): Promise<(QuarterRow & { currency: string | null; filed_at: string })[]> {
+  return rows(await db().from("fundamentals_display_v").select(
+    "period_end, filed_at, revenue, op_income, net_income, pretax_income, tax_expense, cfo, capex, da, total_assets, " +
+      "cash, total_debt, equity, rpo, diluted_shares, shares_outstanding, currency",
+  ).eq("company_id", id).order("period_end"));
+}
+
+/** The Company page's chart series: company_series, written by the weekly signals run (M7 review R1-F5). */
+export async function companySeries(id: string): Promise<{ week_end: string; points: SeriesPoint[] } | null> {
+  return one(await db().from("company_series").select("week_end, points").eq("company_id", id).maybeSingle());
+}
+
+export async function ownership(id: string): Promise<Record<string, unknown>[]> {
+  return rows(await db().from("ownership_display_v").select(
+    "quarter_end, filed_at, inst_holders, fii_pct, dii_pct, promoter_pct, promoter_pledged_pct, source",
+  ).eq("company_id", id).order("quarter_end", { ascending: false }).limit(8));
+}
+
+export async function insiders(id: string): Promise<Record<string, unknown>[]> {
+  return rows(await db().from("insider_events_display_v").select(
+    "id, event_date, filed_at, person, role, kind, shares, value, currency, planned, source_url, amends",
+  ).eq("company_id", id).order("event_date", { ascending: false }).limit(25));
+}
+
+export async function events(id: string): Promise<Record<string, unknown>[]> {
+  return rows(await db().from("corp_events_display_v").select("id, event_date, filed_at, kind, detail, source_url")
+    .eq("company_id", id).neq("kind", "announcement").order("event_date", { ascending: false }).limit(25));
+}
+
+export interface FactRow {
+  id: string;
+  fact_type: string;
+  subject_key: string;
+  value_num: number | null;
+  value_low: number | null;
+  value_high: number | null;
+  unit: string;
+  period_label: string | null;
+  as_of: string;
+  quote: string;
+  documents: { url: string; kind: string; published_at: string; title: string | null } | null;
+  companies: Pick<Company, "name" | "market" | "ticker" | "nse_symbol"> | null;
+}
+
+export async function facts(companyIds: string[], limit = 30): Promise<(FactRow & { company_id: string })[]> {
+  if (companyIds.length === 0) return [];
+  return rows(await db().from("facts").select(
+    "id, company_id, fact_type, subject_key, value_num, value_low, value_high, unit, period_label, as_of, quote, " +
+      "documents(url, kind, published_at, title), companies(name, market, ticker, nse_symbol)",
+  ).in("company_id", companyIds).eq("verification_status", "verified").order("as_of", { ascending: false })
+    .limit(limit));
+}
+
+export async function signalTimeline(id: string): Promise<{ week_end: string; signal_id: string; strength: number }[]> {
+  return rows(await db().from("signal_values").select("week_end, signal_id, strength").eq("company_id", id)
+    .eq("fired", true).order("week_end", { ascending: false }).limit(300));
+}
+
+export async function contextHistory(id: string): Promise<{ week_end: string; metric_id: string; value: number | null; pct: number | null; inputs: Record<string, unknown> }[]> {
+  return rows(await db().from("context_values").select("week_end, metric_id, value, pct, inputs").eq("company_id", id)
+    .order("week_end").limit(1000));
+}
+
+export async function thesesOf(companyId: string): Promise<Pick<Thesis, "id" | "state" | "created_week" | "author">[]> {
+  return rows(await db().from("theses").select("id, state, created_week, author").eq("company_id", companyId)
+    .order("created_week", { ascending: false }));
+}
+
+// ---------------------------------------------------------------- Theses and the journal
+
+export async function theses(): Promise<Thesis[]> {
+  return rows(await db().from("theses").select(
+    "id, company_id, state, card_md, card_json, evidence_pack, author, validation, created_week, next_review, " +
+      "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol, fiscal_year_end)",
+  ).order("updated_at", { ascending: false }));
+}
+
+export async function thesis(id: string): Promise<Thesis | null> {
+  return one(await db().from("theses").select(
+    "id, company_id, state, card_md, card_json, evidence_pack, author, validation, created_week, next_review, " +
+      "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol, fiscal_year_end)",
+  ).eq("id", id).maybeSingle());
+}
+
+export async function killCriteria(thesisId: string): Promise<KillCriterion[]> {
+  return rows(await db().from("kill_criteria").select(
+    "id, metric, operator, threshold, check_after, status, last_value, last_checked, baseline, why, triggered_week",
+  ).eq("thesis_id", thesisId).order("metric"));
+}
+
+export async function reviews(thesisId: string): Promise<Review[]> {
+  return rows(await db().from("reviews").select("id, thesis_id, period_end, pack_diff, verdict, note, created_at, decided_at")
+    .eq("thesis_id", thesisId).order("created_at", { ascending: false })
+    .order("period_end", { ascending: false, nullsFirst: false })); // a batch shares created_at: newest quarter first
+}
+
+export async function journal(thesisId?: string): Promise<JournalEntry[]> {
+  let q = db().from("journal").select("id, thesis_id, entry_date, action, portfolio_pct, reason, override_reason, created_at");
+  if (thesisId) q = q.eq("thesis_id", thesisId);
+  return rows(await q.order("created_at", { ascending: false }).limit(500));
+}
+
+export async function postmortems(): Promise<Postmortem[]> {
+  return rows(await db().from("postmortems").select("thesis_id, what_happened, thesis_right, signals_right, lessons, created_at")
+    .order("created_at", { ascending: false }));
+}
+
+export async function postmortem(thesisId: string): Promise<Postmortem | null> {
+  return one(await db().from("postmortems").select("thesis_id, what_happened, thesis_right, signals_right, lessons, created_at")
+    .eq("thesis_id", thesisId).maybeSingle());
+}
+
+interface ReviewState {
+  period_end: string | null;
+  verdict: string | null;
+  created_at: string;
+  snapshot: unknown;
+}
+
+// A select of its own, not reviews(): the page reads reviews() after ensureReviews, and Next memoizes a repeated GET
+// within a render, so the page would not see the reviews made here.
+async function reviewStates(thesisId: string): Promise<ReviewState[]> {
+  return rows(await db().from("reviews").select("period_end, verdict, created_at, snapshot:pack_diff->snapshot")
+    .eq("thesis_id", thesisId));
+}
+
+function number(x: unknown): number | null {
+  const n = typeof x === "number" ? x : typeof x === "string" && x !== "" ? Number(x) : Number.NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The company's state now, for a review (M7 review R1-F4): the latest quarter's figures; the latest scored week's
+ * fired signals, red flags, context and scores (lib/reviews.ts scoredWeek, M7 review R2-F1); and the kill criteria's
+ * latest values. It is as of that week, like a card's pack, so the next review lists what was published after it,
+ * including what arrived after this review was made (M7 review R2-F2). */
+async function stateNow(companyId: string, filed: FilingRow[], kills: KillCriterion[]): Promise<Snapshot> {
+  const score = one<{ week_end: string; evidence: unknown; gap: unknown }>(
+    await db().from("scores").select("week_end, evidence, gap").eq("company_id", companyId)
+      .order("week_end", { ascending: false }).limit(1).maybeSingle(),
+  );
+  const week = score?.week_end ?? null;
+  const none = Promise.resolve({ data: [], error: null }); // never scored: no signals, flags or context yet
+  const [signals, flags, context] = await Promise.all([
+    week === null ? none : db().from("signal_values").select("week_end, signal_id, fired").eq("company_id", companyId)
+      .eq("week_end", week),
+    week === null ? none : db().from("redflag_values").select("week_end, flag_id, inputs").eq("company_id", companyId)
+      .eq("week_end", week),
+    week === null ? none : db().from("context_values").select("week_end, metric_id, value").eq("company_id", companyId)
+      .eq("week_end", week),
+  ]);
+  const latest = [...filed].sort((a, b) => a.period_end.localeCompare(b.period_end)).pop();
+  const figures: Record<string, number | null> = {};
+  if (latest) for (const name of FIGURES) figures[name] = latest[name];
+  const at = scoredWeek(week, {
+    signals: rows<{ week_end: string; signal_id: string; fired: boolean }>(signals),
+    flags: rows<{ week_end: string; flag_id: string; inputs: Record<string, unknown> | null }>(flags),
+    context: rows<{ week_end: string; metric_id: string; value: unknown }>(context),
+  });
+  if (score) Object.assign(at.context, { evidence: number(score.evidence), gap: number(score.gap) });
+  return {
+    as_of: week ?? new Date().toISOString().slice(0, 10),
+    quarter: latest?.period_end ?? null,
+    figures,
+    ...at,
+    kill: Object.fromEntries(kills.map((k) => [k.metric, number(k.last_value)])),
+  };
+}
+
+/** Verified facts whose document was published after `since` (the pack's rule: pipeline/db/thesis_repo.py
+ * pack_facts; M7 review R2-F2), newest first, and the ownership rows and insider events filed after it (through the
+ * point-in-time views). */
+async function itemsSince(companyId: string, since: string | null): Promise<NewItems> {
+  const from = since === null ? "1900-01-01" : dayAfter(since);
+  const [f, o, i] = await Promise.all([
+    db().from("facts").select("id, subject, value_num, unit, as_of, quote, documents!inner(url, published_at)")
+      .eq("company_id", companyId).eq("verification_status", "verified").gte("documents.published_at", from)
+      .order("documents(published_at)", { ascending: false }).order("as_of", { ascending: false }).limit(50),
+    db().from("ownership_display_v").select("quarter_end, filed_at, inst_holders, fii_pct, dii_pct, promoter_pct, " +
+      "promoter_pledged_pct").eq("company_id", companyId).gte("filed_at", from).order("filed_at").limit(20),
+    db().from("insider_events_display_v").select("event_date, filed_at, person, role, kind, shares, value, currency")
+      .eq("company_id", companyId).gte("filed_at", from).order("filed_at").limit(50),
+  ]);
+  const facts = rows<{ id: string; subject: string; value_num: unknown; unit: string; as_of: string; quote: string;
+    documents: { url: string; published_at: string } | null }>(f); // prettier-ignore
+  return {
+    facts: facts.map((x) => ({ id: x.id, subject: x.subject, value: number(x.value_num), unit: x.unit, as_of: x.as_of,
+      published_at: x.documents?.published_at ?? null, quote: x.quote, url: x.documents?.url ?? null })), // prettier-ignore
+    ownership: rows<Record<string, unknown>>(o),
+    insiders: rows<Record<string, unknown>>(i),
+  };
+}
+
+/** BRIEF §4.9 Reviews: for each thesis or position whose company has filed quarters the thesis hasn't seen, one
+ * review per quarter (the unique index makes a re-render a no-op), and for a thesis a kill criterion moved to Review
+ * without a new quarter, one review to record a verdict on (a partial unique index keeps it to one open). A review
+ * holds the pack diff since the last one (figures, signals, red flags, context, kill metrics, new facts, ownership
+ * and insider events) and the state it saw, and the thesis moves to the Review column until Manzoor marks it (§1.8;
+ * M7 review R1-F1, F4, F9). Returns the ids it moved to Review: the page shows their new state with lib/theses.ts
+ * markMoved, because reading the rows again in the same render returns the first answer (Next memoizes a repeated
+ * GET within a render). */
+export async function ensureReviews(list: Pick<Thesis, "id" | "company_id" | "state" | "evidence_pack" | "accepted_at" | "created_week">[]): Promise<Set<string>> {
+  const moved = new Set<string>();
+  for (const t of list) {
+    if (t.state !== "thesis" && t.state !== "position" && t.state !== "review") continue;
+    const [filed, revs, kills] = await Promise.all([fundamentals(t.company_id), reviewStates(t.id), killCriteria(t.id)]);
+    const rowsFiled: FilingRow[] = filed.map((r) => ({
+      period_end: r.period_end, filed_at: r.filed_at, revenue: r.revenue, op_income: r.op_income,
+      net_income: r.net_income, cfo: r.cfo, rpo: r.rpo, diluted_shares: r.diluted_shares,
+    }));
+    const start = t.accepted_at ?? `${t.created_week}T00:00:00Z`;
+    const lastQuarter = revs.map((r) => r.period_end).filter((p): p is string => p !== null).sort().pop() ?? null;
+    const since = reviewedThrough(lastQuarter, t.evidence_pack, rowsFiled, start);
+    const fresh = rowsFiled.some((r) => since === null || r.period_end > since);
+    if (!fresh && !needsKillReview(t.state, revs)) continue;
+    const before = lastSnapshot(revs) ?? packSnapshot(t.evidence_pack);
+    const snap: KillSnapshot[] = kills.map((k) => ({
+      metric: k.metric, operator: k.operator, threshold: k.threshold, status: k.status, last_value: k.last_value,
+    }));
+    const [now, items] = await Promise.all([stateNow(t.company_id, rowsFiled, kills), itemsSince(t.company_id, before?.as_of ?? null)]);
+    if (fresh) {
+      const made = quarterReviews(rowsFiled, since, before, now, snap, items)
+        .map((d) => ({ thesis_id: t.id, period_end: d.quarters[0]?.period_end ?? null, pack_diff: d }));
+      const ins = await db().from("reviews").upsert(made, { onConflict: "thesis_id,period_end", ignoreDuplicates: true }).select("id");
+      if (ins.error) throw new Error(ins.error.message);
+    } else {
+      const ins = await db().from("reviews").insert({ thesis_id: t.id, period_end: null, pack_diff: killReview(since, before, now, snap, items) });
+      if (ins.error && ins.error.code !== "23505") throw new Error(ins.error.message); // another render made it
+    }
+    if (t.state !== "review") {
+      const up = await db().from("theses").update({ state: "review", updated_at: new Date().toISOString() })
+        .eq("id", t.id).in("state", ["thesis", "position"]).select("id");
+      if (up.error) throw new Error(up.error.message);
+      if ((up.data ?? []).length > 0) moved.add(t.id);
+    }
+  }
+  return moved;
+}
+
+export async function setting<T>(key: string, fallback: T): Promise<T> {
+  const r = one<{ value: T }>(await db().from("app_settings").select("value").eq("key", key).maybeSingle());
+  return r === null ? fallback : r.value;
+}
+
+// ---------------------------------------------------------------- Capex Desk
+
+export interface CapexIndexRow {
+  category: string;
+  week_end: string;
+  value: number | null;
+  direction: "rising" | "flat" | "falling";
+  input_growth: number | null;
+}
+
+export async function capexIndex(): Promise<CapexIndexRow[]> {
+  const data = rows<CapexIndexRow>(await db().from("capex_index").select("category, week_end, value, direction, input_growth")
+    .order("week_end", { ascending: false }).limit(500));
+  const latest = new Map<string, CapexIndexRow>();
+  for (const r of data) if (!latest.has(r.category)) latest.set(r.category, r);
+  return [...latest.values()].sort((a, b) => a.category.localeCompare(b.category));
+}
+
+export interface Membership {
+  company_id: string;
+  category: string;
+  source: "industry_map" | "p06";
+  status: "proposed" | "confirmed" | "rejected";
+  evidence: string;
+  quote: string | null;
+  decision_reason: string | null;
+  companies: Pick<Company, "name" | "market" | "ticker" | "nse_symbol"> | null;
+}
+
+export async function memberships(): Promise<Membership[]> {
+  return rows(await db().from("capex_memberships").select(
+    "company_id, category, source, status, evidence, quote, decision_reason, companies(name, market, ticker, nse_symbol)",
+  ).order("status").order("category").limit(1000));
+}
+
+export async function capexDeskIds(): Promise<string[]> {
+  return rows<{ id: string }>(await db().from("companies").select("id").eq("capex_desk", true).limit(2000)).map((r) => r.id);
+}
+
+export interface GraphEdge {
+  from_company_id: string;
+  to_entity_id: string;
+  relation: string;
+  companies: { name: string } | null;
+  entities: { name: string; kind: string } | null;
+}
+
+export async function graphEdges(limit = 400): Promise<GraphEdge[]> {
+  return rows(await db().from("links").select("from_company_id, to_entity_id, relation, companies(name), entities(name, kind)")
+    .order("first_seen_at", { ascending: false }).limit(limit));
+}
+
+export async function capexBriefs(): Promise<{ week_end: string; body_md: string }[]> {
+  return rows(await db().from("capex_briefs").select("week_end, body_md").order("week_end", { ascending: false }).limit(26));
+}
+
+// ---------------------------------------------------------------- Signal Lab and Settings
+
+export interface LabResult {
+  run_at: string;
+  signal_id: string;
+  market: string;
+  horizon_m: number;
+  period: "in_sample" | "out_of_sample";
+  n: number;
+  excess_mean: number | null;
+  excess_median: number | null;
+  hit_rate: number | null;
+  p10: number | null;
+  t_nw: number | null;
+  notes: string | null;
+}
+
+export async function labResults(): Promise<LabResult[]> {
+  const latest = one<{ run_at: string }>(await db().from("lab_results").select("run_at").order("run_at", { ascending: false })
+    .limit(1).maybeSingle());
+  if (latest === null) return [];
+  const day = latest.run_at.slice(0, 10);
+  return rows(await db().from("lab_results").select(
+    "run_at, signal_id, market, horizon_m, period, n, excess_mean, excess_median, hit_rate, p10, t_nw, notes",
+  ).gte("run_at", `${day}T00:00:00Z`).order("signal_id").order("horizon_m").order("period"));
+}
+
+export async function weightsVersions(): Promise<{ version: string; weights: Record<string, unknown>; reason: string; approved_by: string | null; approved_at: string | null }[]> {
+  return rows(await db().from("weights_versions").select("version, weights, reason, approved_by, approved_at")
+    .order("approved_at", { ascending: false, nullsFirst: true }));
+}
+
+/** Company counts per market, in and outside the universe (head-only counts: PostgREST caps rows at max_rows). */
+export async function universeCounts(): Promise<{ market: "us" | "in"; in_universe: boolean; count: number }[]> {
+  const cells = (["us", "in"] as const).flatMap((market) => [true, false].map((inside) => ({ market, inside })));
+  return Promise.all(cells.map(async ({ market, inside }) => {
+    const res = await db().from("companies").select("id", { count: "exact", head: true }).eq("market", market)
+      .eq("in_universe", inside);
+    if (res.error) throw new Error(res.error.message);
+    return { market, in_universe: inside, count: res.count ?? 0 };
+  }));
+}

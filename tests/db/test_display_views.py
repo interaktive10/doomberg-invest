@@ -19,7 +19,8 @@ def test_views_run_with_caller_rights(conn: psycopg.Connection[Any]) -> None:
             "where n.nspname = 'public' and c.relkind = 'v'"
         ).fetchall()
     )
-    assert set(rows) == {*VIEWS, "screener_v"}  # M4: the screener API's view reads scores, not the PIT tables
+    # M4: the screener API's view reads scores, not the PIT tables; M7: Home's LLM use (review R1-F6), llm_calls only
+    assert set(rows) == {*VIEWS, "screener_v", "llm_use_7d"}
     for name, opts in rows.items():
         assert opts and "security_invoker=true" in opts, name
 

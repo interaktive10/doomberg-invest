@@ -1,0 +1,66 @@
+# The local Supabase stack for the web app's end-to-end tests (BRIEF §8 M7; .github/workflows/web.yml). Only what
+# the app uses runs: Postgres, Auth (magic link), PostgREST and the mail catcher. The schema comes from db/migrations
+# (pipeline.db.migrate) and the data from scripts/seed_e2e.py, not from supabase/migrations or a seed file.
+project_id = "doomberg-invest"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.seed]
+enabled = false
+
+[studio]
+enabled = false
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = false
+
+[realtime]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false
+
+[auth]
+enabled = true
+# localhost, not 127.0.0.1: Next names a loopback host localhost in its redirects (web/lib/redirect.ts).
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "http://localhost:3000/**"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.rate_limit]
+email_sent = 30
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+double_confirm_changes = false
+max_frequency = "1s"
+otp_expiry = 3600
+
+# The sign-in link carries a token hash that the app verifies on the server (web/app/auth/callback/route.ts,
+# verifyOtp), so it needs no code verifier in the browser. Production uses the same templates (web/README.md).
+[auth.email.template.magic_link]
+subject = "Sign in to Doomberg Invest"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Sign in to Doomberg Invest"
+content_path = "./supabase/templates/confirmation.html"

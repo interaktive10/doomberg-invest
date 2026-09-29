@@ -111,6 +111,18 @@ def _needs_card_cassettes() -> str | None:
     return None
 
 
+E2E_REPORT = ROOT / "web" / "e2e-report.json"
+
+
+def _needs_e2e_report() -> str | None:
+    """M7-01..03 read the Playwright report of the web suite (it needs Node, the npm registry and a local Supabase
+    stack: .github/workflows/web.yml runs it on every change to the web app, the migrations or the seed)."""
+    if not E2E_REPORT.exists():
+        return ("human:web e2e report missing (web/e2e-report.json): the Playwright suite runs in CI "
+                "(.github/workflows/web.yml, `pnpm e2e` against `supabase start`)")  # fmt: skip
+    return None
+
+
 def _needs_old_repo() -> str | None:
     old = Path(os.environ.get("DOOMBERG_REPO", ROOT.parent / "doomberg"))
     if not (old / ".git").exists():
@@ -458,6 +470,28 @@ CHECKS: list[Check] = [
         requires=_needs_database,
     ),
     Check(
+        "M7-01",
+        "m7",
+        "Playwright: allowlist login; candidates -> company -> thesis -> journal -> review -> close with post-mortem; "
+        "screener save/load; capex membership confirm",
+        ["python3", "scripts/e2e_report.py", "auth.setup.ts", "flow.spec.ts"],
+        requires=_needs_e2e_report,
+    ),
+    Check(
+        "M7-02",
+        "m7",
+        "the web app makes no LLM calls at all (network assertion: browser requests and the server's connections)",
+        ["python3", "scripts/e2e_report.py", "network.spec.ts"],
+        requires=_needs_e2e_report,
+    ),
+    Check(
+        "M7-03",
+        "m7",
+        "axe 0 serious; 390 px layouts",
+        ["python3", "scripts/e2e_report.py", "a11y.spec.ts"],
+        requires=_needs_e2e_report,
+    ),
+    Check(
         "M8-01",
         "m8",
         "F-LAB planted signal detected (t_nw >= 3 out of sample); noise signal |t_nw| < 2",
@@ -530,9 +564,10 @@ def write_report(results: list[Result], target: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--milestone", required=True, choices=MILESTONES)
+    ap.add_argument("--only", default="", help="run only the checks whose id starts with this (the web job: M7-)")
     a = ap.parse_args(argv)
     upto = MILESTONES[: MILESTONES.index(a.milestone) + 1]
-    results = [run_check(c) for c in CHECKS if c.milestone in upto]
+    results = [run_check(c) for c in CHECKS if c.milestone in upto and c.id.startswith(a.only)]
     for r in results:
         print(f"{r.check.id:6} {r.status:10} {r.check.description}")
         if r.status == "FAIL" and r.tail:

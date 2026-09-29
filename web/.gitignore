@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.env*.local
+e2e/.net-log.jsonl
+e2e/.auth/
+e2e-report.json

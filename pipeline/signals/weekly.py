@@ -277,6 +277,47 @@ def company_metrics(s: Series) -> dict[str, Any]:
     return {k: num(v) for k, v in rows.items() if v is not None}
 
 
+SERIES_QUARTERS = 12
+
+
+def series_points(
+    s: Series, s2: Mapping[str, Any], market: str = "us", facts: Sequence[Fact] = (), n: int = SERIES_QUARTERS
+) -> list[dict[str, Any]]:
+    """The Company page's charts (BRIEF §6), per quarter, oldest first, with the §4.6 definitions the signals and the
+    screener use (M7 review R1-F5): TTM revenue, operating margin, ROIC on mean invested capital, S2's incremental
+    ROIC (dNOPAT / dIC over its lookback, only when IC grew enough), cash conversion, net debt / EBITDA, split-adjusted
+    diluted shares, RPO, and S1's order book (RPO where the filer tags it, else the verified backlog facts; M7 review
+    R2-F5). The web app charts company_series; it doesn't recompute them."""
+    lb, min_ic = int(s2["lookback_quarters"]), Decimal(str(s2["min_delta_ic_pct"]))
+    ob, _ = s01_orderbook.book(s, market, facts)
+    out = []
+    for lag in range(n):
+        q = s.at(lag)
+        if q is None:
+            break
+        nopat, nopat_then = s.nopat(lag), s.nopat(lag + lb)
+        ic, ic_then = s.invested_capital(lag), s.invested_capital(lag + lb)
+        inc = None
+        if nopat is not None and nopat_then is not None and ic is not None and ic_then is not None:
+            if ic - ic_then > min_ic * ic_then:
+                inc = (nopat - nopat_then) / (ic - ic_then)
+        nd, ebitda = s.net_debt(lag), s.ebitda(lag)
+        ni, cfo = s.ttm("net_income", lag), s.ttm("cfo", lag)
+        row = {
+            "revenue_ttm": s.ttm("revenue", lag),
+            "opm": s.opm(lag),
+            "roic": s.roic(lag),
+            "incremental_roic": inc,
+            "ccr": cfo / ni if cfo is not None and ni is not None and ni > 0 else None,
+            "nd_to_ebitda": nd / ebitda if nd is not None and ebitda is not None and ebitda > 0 else None,
+            "diluted_shares": s.split_adjusted_shares(lag)[0],
+            "rpo": s.point("rpo", lag),
+            "order_book": ob(lag),
+        }
+        out.append({"period_end": q.end.isoformat()} | {k: num(v) for k, v in row.items() if v is not None})
+    return out[::-1]
+
+
 def score_company(
     c: Company, s: Series, b: Batch, cfgs: Configs, cross: CrossSection, week: date,
     modules: Sequence[ModuleType] = registry.SIGNALS,
@@ -506,6 +547,8 @@ def run(
     cross.capex = load_views(conn, week, companies)
 
     scored: dict[UUID, Scored] = {}
+    s2 = cfgs.signals["s2_incremental_roic"]
+    series: dict[UUID, list[dict[str, Any]]] = {}  # the Company page's charts (series_points)
     for part in chunks(companies, BATCH):
         b = load_batch(conn, week, [c.id for c in part if c.id], full=True)
         sig_rows: list[SignalValue] = []
@@ -515,6 +558,7 @@ def run(
             s = Series.from_rows(b.rows.get(c.id, []), c.market)
             results, flags, sc = score_company(c, s, b, cfgs, cross, week)
             scored[c.id] = sc
+            series[c.id] = series_points(s, s2, c.market, b.facts.get(c.id, []))
             for sid, r in results.items():
                 sig_rows.append(
                     SignalValue(
@@ -646,6 +690,7 @@ def run(
     )
     stats.shortlist = [scored[r.company_id].company.name for r in top]
     repo.upsert_company_metrics(conn, week, metrics)
+    repo.upsert_company_series(conn, week, series)
     stats.pruned = repo.prune_scoring_history(
         conn,
         week,

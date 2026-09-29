@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* BRIEF §6: readable at 390 px; axe 0 serious issues (contrast: gray-900 text, blue-800 links on white).
+   Everything here sits in Tailwind's layers, so a utility class on an element (a button-styled link's
+   text-white, no-underline) still wins over these defaults. */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-white text-gray-900 antialiased;
+  }
+
+  /* Links are underlined, not told apart by colour alone (axe link-in-text-block). */
+  a {
+    @apply text-blue-800 underline underline-offset-2 hover:text-blue-950;
+  }
+}
+
+@layer components {
+  /* Markdown headings render two levels down (components/markdown.tsx): # -> h3, ## -> h4, ### -> h5. */
+  .prose-md h3 { @apply mt-4 mb-2 text-xl font-semibold; }
+  .prose-md h4 { @apply mt-4 mb-2 text-lg font-semibold; }
+  .prose-md h5, .prose-md h6 { @apply mt-3 mb-1 font-semibold; }
+  .prose-md p { @apply my-2; }
+  .prose-md ul { @apply my-2 list-disc pl-5; }
+  .prose-md ol { @apply my-2 list-decimal pl-5; }
+  .prose-md table { @apply my-2 text-sm; }
+  .prose-md th, .prose-md td { @apply border border-gray-300 px-2 py-1 text-left align-top; }
+  .prose-md code { @apply rounded bg-gray-100 px-1 text-sm; }
+}

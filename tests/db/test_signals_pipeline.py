@@ -195,6 +195,12 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     metrics = conn.execute("select metrics from company_metrics where company_id = %s", (pwr,)).fetchone()
     assert metrics is not None and metrics[0]["market_cap"] > 0 and "revenue_ttm" in metrics[0]
     assert {r["company_id"] for r in run_screen(conn, ScreenSpec(market="us"))} == set(ids.values())
+    # the Company page's charts (M7 review R1-F5, R2-F5): one company_series row per scored company for the week,
+    # up to the latest quarter filed by it, with S1's order book where the company has one
+    series = dict(conn.execute("select company_id, points from company_series where week_end = %s", (week,)).fetchall())
+    assert set(series) == set(ids.values())
+    assert all(p[-1]["period_end"] <= str(week) and "revenue_ttm" in p[-1] for p in series.values())
+    assert all(q.get("order_book") == q.get("rpo") for p in series.values() for q in p)  # US: RPO where tagged
     # a re-run of the same week replaces its rows
     weekly.run(conn, week, http=mock_http(tmp_path), imports=tmp_path / "imports")
     assert conn.execute("select count(*) from scores where week_end = %s", (week,)).fetchone() == (4,)
