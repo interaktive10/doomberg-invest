@@ -58,6 +58,13 @@ def test_the_us_weekly_job_has_room_for_a_full_quarterize() -> None:
     assert doc["jobs"]["us"]["timeout-minutes"] >= 120
 
 
+def test_the_scores_job_has_room_for_its_network_stages() -> None:
+    """The scores run is one transaction, so a run cut off by the limit keeps nothing and the next one starts over.
+    The first live run (2026-09-29) spent the job's 40 minutes without finishing."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    assert doc["jobs"]["scores"]["timeout-minutes"] >= 90
+
+
 def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     """M8 review R1-F5: §2.1 "quarterly: ... Signal Lab re-run" (§11.8): quarterly.yml dispatches lab.yml once the
     13F step and the universe rebuild are done."""

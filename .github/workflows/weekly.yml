@@ -133,7 +133,9 @@ jobs:
     needs: [check, us, india, capex]
     if: always() && needs.check.outputs.db == 'true' && (needs.us.result == 'success' || needs.india.result == 'success')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # One transaction: a run cut off by the limit keeps nothing. Stooq alone is up to 400 downloads 2 s apart, GDELT
+    # 100 queries 5 s apart; the first live run (2026-09-29) spent 40 minutes without finishing.
+    timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
