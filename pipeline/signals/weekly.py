@@ -439,6 +439,17 @@ def mark_stooq(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
         repo.mark_source_error(conn, "stooq", ("stale: " if stale else "") + msg, stale)
 
 
+def mark_gdelt(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
+    """source_health for GDELT, which nothing recorded before (the first live run, 2026-10-01, queried it and Settings
+    still said "never succeeded"): any answer marks success; a run whose queries all failed records the first errors,
+    not stale (C4 re-uses a count under 28 days old); a run that asked nothing leaves it as it was."""
+    if stats.gdelt_queried:
+        repo.mark_source_success(conn, "gdelt")
+    elif stats.gdelt_failed:
+        errors = [e for e in stats.errors if e.startswith("gdelt ")]
+        repo.mark_source_error(conn, "gdelt", f"{stats.gdelt_failed} queries failed: " + "; ".join(errors[:3]), False)
+
+
 def shares_history(s: Series) -> list[tuple[date, Decimal]]:
     out = []
     for q in s.quarters:
@@ -659,6 +670,7 @@ def run(
     progress(stats, t0, f"{len(priced)} priced")
     ctx_rows = context_rows(conn, week, cfgs, scored, priced, http, gdelt_limit, stats)
     repo.upsert_context_values(conn, ctx_rows)
+    mark_gdelt(conn, stats)
     progress(stats, t0, f"gdelt {stats.gdelt_queried} queried, {stats.gdelt_failed} failed, {stats.gdelt_reused} "
                         f"reused, {stats.gdelt_not_asked} not asked")  # fmt: skip
     gaps = gap_scores(ctx_rows, cfgs)

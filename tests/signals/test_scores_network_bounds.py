@@ -93,3 +93,23 @@ def test_stooq_is_not_asked_again_after_failures_in_a_row_but_manual_imports_sti
     assert len(http.calls) == N
     assert (stats.stooq_ok, stats.stooq_failed, stats.stooq_imported, stats.stooq_not_asked) == (0, N, 1, 12 - N - 1)
     assert written and {r.company_id for r in written} == {late.id}
+
+
+def test_gdelt_source_health_follows_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nothing recorded GDELT's health before: Settings and the digest said "never succeeded" while it answered."""
+    calls: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(weekly.repo, "mark_source_success", lambda conn, source: calls.append(("ok", source)))
+    monkeypatch.setattr(
+        weekly.repo,
+        "mark_source_error",
+        lambda conn, source, error, stale: calls.append(("error", source, error, stale)),
+    )
+    answered, failed, idle = (weekly.ScoresStats(WEEK.isoformat()) for _ in range(3))
+    answered.gdelt_queried, answered.gdelt_failed = 1, 2
+    failed.gdelt_failed, failed.errors = 2, ["stooq PWR: StooqUnavailable: x", "gdelt Quanta: GdeltError: Please limit"]
+    for stats in (answered, failed, idle):
+        weekly.mark_gdelt(NO_DB, stats)
+    assert calls == [
+        ("ok", "gdelt"),
+        ("error", "gdelt", "2 queries failed: gdelt Quanta: GdeltError: Please limit", False),
+    ]
