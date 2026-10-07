@@ -9,9 +9,10 @@ from decimal import Decimal
 from typing import Any
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from pipeline.db import repo
-from pipeline.db.diagnose import report, stage_rows
+from pipeline.db.diagnose import last_run, report, stage_rows
 from pipeline.db.models import ContextValue, Score
 from pipeline.signals.weekly import Configs
 from tests.db.conftest import new_company
@@ -55,3 +56,28 @@ def test_the_stage_and_why_priced_companies_are_not_candidates(conn: psycopg.Con
     assert ("priced but 'none': {'market cap below the floor': 1, "
             "'one signal family (Evidence capped at 55; early needs 2)': 1}") in text  # fmt: skip
     assert "Two          E=70.0 fam=fundamentals+behavior Gap=61.0 C1=61 C2=- C3=61 C4=- mcap=9,000 candidate" in text
+
+
+def test_the_last_scoring_runs_errors_by_source(conn: psycopg.Connection[Any]) -> None:
+    """GDELT answered 3 of the first live run's queries (2026-10-07): its errors are where C4's gaps come from."""
+    errors = [
+        "gdelt Quanta: GdeltError: Please limit requests to one every 5 seconds",
+        "benchmark XLI: x: y",
+        "gdelt Jabil: GdeltError: timeout",
+        "gdelt Caterpillar: GdeltError: timeout",
+        "gdelt Acme: z",
+    ]
+    finished = "('scores_weekly', '2026-10-07 16:01+00', '2026-10-07 16:57+00', 'partial', %s)"
+    conn.execute(f"insert into runs (kind, started_at, finished_at, status, stats) values {finished}",
+                 (Jsonb({"errors": errors}),))  # fmt: skip
+    running = "('scores_weekly', '2026-10-07 17:30+00', 'running')"  # still going: not the last finished run
+    conn.execute(f"insert into runs (kind, started_at, status) values {running}")
+    assert last_run(conn) == [
+        "last scoring run 2026-10-07 16:01Z: partial, 5 errors",
+        "  gdelt: 4",
+        "    gdelt Quanta: GdeltError: Please limit requests to one every 5 seconds",
+        "    gdelt Jabil: GdeltError: timeout",
+        "    gdelt Caterpillar: GdeltError: timeout",
+        "  benchmark: 1",
+        "    benchmark XLI: x: y",
+    ]
