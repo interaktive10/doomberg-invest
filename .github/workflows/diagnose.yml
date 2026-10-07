@@ -1,0 +1,33 @@
+name: diagnose
+# Manual and read-only: why the latest scored week's companies landed in their buckets (pipeline/db/diagnose.py):
+# families, C1-C4, Gap and market-cap coverage of the candidate stage, and the top of it. Market data only.
+on:
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "Friday to inspect (YYYY-MM-DD; empty: the latest scored week)"
+        default: ""
+
+concurrency:
+  group: diagnose
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      WEEK: ${{ github.event.inputs.week }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Bucket diagnostics
+        run: uv run --frozen python -m pipeline.db.diagnose ${WEEK:+--week "$WEEK"}
