@@ -88,6 +88,7 @@ const SOURCE_LABEL: Record<string, string> = {
   sec_13f: "SEC 13F",
   stooq: "Stooq",
   yahoo: "Yahoo Finance",
+  twelvedata: "Twelve Data",
   gdelt: "GDELT",
   fred: "FRED",
   eia: "EIA",

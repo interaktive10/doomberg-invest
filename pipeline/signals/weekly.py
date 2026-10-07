@@ -1,10 +1,10 @@
-"""Weekly scoring run (BRIEF §2.1 "weekly", §4.4-§4.8): signals -> red flags -> Evidence -> candidate prices (Yahoo)
+"""Weekly scoring run (BRIEF §2.1 "weekly", §4.4-§4.8): signals -> red flags -> Evidence -> candidate prices
 -> context C1-C4 -> Gap -> buckets -> shortlist. `python -m pipeline.signals.weekly [--week YYYY-MM-DD]`.
 
 Everything as of week W reads through pipeline.db.pit.as_of(W), so a re-run over the same data gives the same rows
 whether or not later filings exist (M4-02). Evidence never uses price; prices enter only at the candidate stage
-(Evidence >= 40 this week or last): US closes come from Yahoo for that set only (Stooq until 2026-10,
-docs/SPEC_ISSUES.md 37), India from the bhavcopy (M3).
+(Evidence >= 40 this week or last): US closes come from Twelve Data for that set only (Stooq until 2026-10, then
+Yahoo; docs/SPEC_ISSUES.md 37, 38), India from the bhavcopy (M3).
 
 Two passes over the universe in batches keep memory flat: the first collects the cross-sectional inputs (S8's
 revenue-size deciles, S12's sector medians), the second computes signals, flags and Evidence.
@@ -51,8 +51,10 @@ from pipeline.db.weights import record_weights_in_use
 from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
 from pipeline.net.stooq import Bar, parse_csv
-from pipeline.net.yahoo import YahooClient, YahooNoSuchSymbol, YahooUnavailable
+from pipeline.net.twelvedata import TwelveDataClient
+from pipeline.net.yahoo import YahooClient
 from pipeline.prices import benchmarks as bench
+from pipeline.prices.source import NoSuchSymbol, PriceUnavailable, WeeklySource
 from pipeline.prices.splits import Adjusted, SourceSplit, adjust, date_source_split, rebased
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals import context, redflags, registry, reverse_dcf, s01_orderbook
@@ -97,7 +99,7 @@ class ScoresStats:
     signals_fired: dict[str, int] = field(default_factory=dict)
     flags_fired: dict[str, int] = field(default_factory=dict)
     stage: int = 0  # companies at the candidate stage (Evidence >= 40)
-    prices_ok: int = 0  # US closes downloaded from Yahoo
+    prices_ok: int = 0  # US closes downloaded from the price source
     prices_failed: int = 0
     prices_imported: int = 0  # from a manual CSV (imports/us_prices)
     prices_skipped: int = 0  # already priced this week (a re-run)
@@ -367,9 +369,14 @@ def score_company(
 # ---------------------------------------------------------------- prices and context (candidate stage)
 
 
+def price_source(http: HttpClient) -> WeeklySource:
+    """Twelve Data unless PRICE_SOURCE=yahoo (docs/SPEC_ISSUES.md 38)."""
+    return YahooClient(http) if http.settings.price_source == "yahoo" else TwelveDataClient(http)
+
+
 def ingest_us_prices(
     conn: psycopg.Connection[Any],
-    yahoo: YahooClient,
+    source: WeeklySource,
     targets: Sequence[Company],
     week: date,
     imports: Path,
@@ -390,27 +397,27 @@ def ingest_us_prices(
             continue
         manual = imports / f"{c.ticker.upper()}.csv"
         bars: list[Bar] | None = None
-        source = "yahoo"
+        origin = source.name
         if failures < MAX_FAILURES_IN_A_ROW:
             try:
-                bars = yahoo.weekly(c.ticker)
+                bars = source.weekly(c.ticker)
                 stats.prices_ok += 1
                 failures = 0
-            except YahooUnavailable as e:
-                failures = 0 if isinstance(e, YahooNoSuchSymbol) else failures + 1  # an unknown symbol is an answer
+            except PriceUnavailable as e:
+                failures = 0 if isinstance(e, NoSuchSymbol) else failures + 1  # an unknown symbol is an answer
                 if not manual.exists():
                     stats.prices_failed += 1
-                    stats.errors.append(f"yahoo {c.ticker}: {type(e).__name__}: {e}"[:200])
+                    stats.errors.append(f"{source.name} {c.ticker}: {type(e).__name__}: {e}"[:200])
                     continue
         elif not manual.exists():
             stats.prices_not_asked += 1
             continue
         if bars is None:
-            bars, source = parse_csv(manual.read_bytes()), "manual"
+            bars, origin = parse_csv(manual.read_bytes()), "manual"
             stats.prices_imported += 1
         rows = [
             PriceW(
-                company_id=c.id, week_end=b.week_end, close=b.close, adj_close=b.close, volume=b.volume, source=source
+                company_id=c.id, week_end=b.week_end, close=b.close, adj_close=b.close, volume=b.volume, source=origin
             )
             for b in bars
             if start < b.week_end <= week
@@ -424,20 +431,20 @@ def ingest_us_prices(
             stats.source_splits.append(f"{c.ticker} {split.week_end} x{split.ratio}")
 
 
-def mark_prices(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
-    """source_health for the US price source, Yahoo (M4 review R1-F3): stale when every download this run failed and
-    nothing was priced earlier this week (a manual CSV import may still have priced a company), so the web shows the
-    banner; any download that worked clears it. Failed retries after an earlier run of the week priced things record
-    the error without the banner; a run that downloaded nothing leaves it as it was."""
+def mark_prices(conn: psycopg.Connection[Any], stats: ScoresStats, source: str) -> None:
+    """source_health for the US price source (M4 review R1-F3): stale when every download this run failed and nothing
+    was priced earlier this week (a manual CSV import may still have priced a company), so the web shows the banner;
+    any download that worked clears it. Failed retries after an earlier run of the week priced things record the error
+    without the banner; a run that downloaded nothing leaves it as it was."""
     ok = stats.prices_ok + stats.bench_ok
     failed = stats.prices_failed + stats.prices_imported + stats.bench_failed
     if ok:
-        repo.mark_source_success(conn, "yahoo")
+        repo.mark_source_success(conn, source)
     elif failed:
-        errors = [e for e in stats.errors if e.startswith(("yahoo ", "benchmark "))]
+        errors = [e for e in stats.errors if e.startswith((f"{source} ", "benchmark "))]
         stale = stats.prices_skipped + stats.bench_skipped == 0
         msg = f"{failed} downloads failed: " + "; ".join(errors[:3])
-        repo.mark_source_error(conn, "yahoo", ("stale: " if stale else "") + msg, stale)
+        repo.mark_source_error(conn, source, ("stale: " if stale else "") + msg, stale)
 
 
 def mark_gdelt(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
@@ -628,10 +635,10 @@ def run(
     progress(stats, t0, f"signals for {len(scored)} companies, stage {stats.stage}")
 
     if http is not None:
-        yahoo = YahooClient(http)
+        source = price_source(http)
         us_bench = list(cfgs.context["benchmarks"]["us"])
         have = repo.benchmarks_at(conn, us_bench, week)
-        rows, errs = bench.fetch_us(yahoo, [b for b in us_bench if b not in have], week)
+        rows, errs = bench.fetch_us(source, [b for b in us_bench if b not in have], week)
         repo.upsert_benchmarks(conn, rows)
         stats.bench_ok, stats.bench_failed, stats.bench_skipped = len({r.symbol for r in rows}), len(errs), len(have)
         stats.errors += errs
@@ -649,7 +656,7 @@ def run(
         targets = us[: max(0, price_limit - len(us_bench))]
         ingest_us_prices(
             conn,
-            yahoo,
+            source,
             [sc.company for sc in targets],
             week,
             imports or root / "imports" / "us_prices",
@@ -657,7 +664,7 @@ def run(
             int(cfgs.context["c1"]["history_years"]),
             {sc.company.id: shares_history(sc.series) for sc in targets if sc.company.id is not None},
         )
-        mark_prices(conn, stats)
+        mark_prices(conn, stats, source.name)
         progress(stats, t0, f"benchmarks {stats.bench_ok} ok, {stats.bench_failed} failed; prices {stats.prices_ok} "
                             f"ok, {stats.prices_failed} failed, {stats.prices_imported} imported, "
                             f"{stats.prices_skipped} already priced, {stats.prices_not_asked} not asked")  # fmt: skip

@@ -128,16 +128,18 @@ jobs:
         run: uv run --frozen python -m pipeline.capex.run --stage index
 
   scores:
-    # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Yahoo) -> context C1-C4 -> Gap ->
+    # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Twelve Data) -> context C1-C4 -> Gap ->
     # buckets -> shortlist. Runs after both markets' data; if one market's job failed, the other is still scored.
     needs: [check, us, india, capex]
     if: always() && needs.check.outputs.db == 'true' && (needs.us.result == 'success' || needs.india.result == 'success')
     runs-on: ubuntu-latest
-    # One transaction: a run cut off by the limit keeps nothing. Prices are up to 400 downloads 1 s apart, GDELT
-    # 100 queries 5 s apart; the first live run (2026-09-29) spent 40 minutes without finishing.
+    # One transaction: a run cut off by the limit keeps nothing. Prices are up to 400 downloads 8 s apart (Twelve
+    # Data's free 8 a minute: under an hour), GDELT 100 queries 5 s apart; the first live run (2026-09-29) spent 40
+    # minutes without finishing.
     timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
       DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
     steps:
       - uses: actions/checkout@v4
