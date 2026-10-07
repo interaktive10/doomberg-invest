@@ -32,6 +32,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("quarterly.yml", ("us",)),
         ("lab.yml", ("lab",)),
         ("weights.yml", ("weights",)),
+        ("backfill.yml", ("us",)),
     ):
         for job in jobs:
             runs = [r for r in steps(name, job) if "python -m pipeline" in r]

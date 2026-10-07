@@ -1,0 +1,38 @@
+name: backfill
+# Manual, once (docs/SPEC_ISSUES.md 39): what the US daily run reads day by day, for the days before it started -
+# Form 4 purchases of the last 100 days (S7) and 8-K/NT events of the last 25 months (R3, R4) from each company's
+# submissions file, for the latest candidate stage (or the whole universe). Idempotent: the daily run's own rows.
+on:
+  workflow_dispatch:
+    inputs:
+      all:
+        description: "The whole US universe (about 2,500 companies, an hour or more) instead of the candidate stage"
+        type: boolean
+        default: false
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  us:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      ALL: ${{ github.event.inputs.all == 'true' && '--all' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Form 4 purchases and 8-K/NT events from the submissions files
+        run: uv run --frozen python -m pipeline.us.backfill $ALL

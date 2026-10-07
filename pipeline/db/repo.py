@@ -647,6 +647,15 @@ def scores_for_week(conn: Conn, week: date) -> dict[UUID, Score]:
         return {r["company_id"]: Score(**r) for r in cur.fetchall()}
 
 
+def stage_company_ids(conn: Conn, min_evidence: Decimal) -> set[UUID]:
+    """The candidate stage of the latest scored week (Evidence >= min_evidence); empty before any week is scored."""
+    rows = conn.execute(
+        _q("select company_id from scores where evidence >= %s and week_end = (select max(week_end) from scores)"),
+        (min_evidence,),
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def recently_shortlisted(conn: Conn, before: date, since: date) -> set[UUID]:
     rows = conn.execute(
         _q("select distinct company_id from shortlists where week_end >= %s and week_end < %s"), (since, before)
