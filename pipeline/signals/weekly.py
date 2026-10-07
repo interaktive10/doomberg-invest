@@ -49,7 +49,7 @@ from pipeline.db.weights import read as read_weights
 from pipeline.db.weights import record_weights_in_use
 from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import StooqClient, StooqUnavailable
+from pipeline.net.stooq import Bar, StooqClient, StooqUnavailable
 from pipeline.prices import benchmarks as bench
 from pipeline.prices.splits import Adjusted, SourceSplit, adjust, date_source_split, rebased
 from pipeline.settings import REPO_ROOT, Settings
@@ -64,10 +64,19 @@ BATCH = 300
 STOOQ_MAX_SYMBOLS = 400  # §4.4, benchmarks included
 GDELT_MAX_QUERIES = 100  # ~8 minutes at GDELT's 1 request / 5 s; the rest reuse a count under 28 days old
 GDELT_REUSE_DAYS = 28
+# A site that fails this many requests in a row is down or refusing the runner: it isn't asked again this run. Every
+# request waits for the site's rate limit and up to the 60 s timeout, and the first live run (2026-09-29) spent the
+# scores job's 40 minutes without finishing.
+MAX_FAILURES_IN_A_ROW = 5
 EVENT_MONTHS = 25  # S10 reorganizations (24 months) and R3/R4 (12 months)
 FACT_YEARS = 3  # S9 "longer lead time" compares with the previous statement
 NONE_SCORE_WEEKS = 13  # 'none' rows are kept for a quarter (the novelty window is 12 weeks)
 KEEP_YEARS = 3  # §2.8
+
+
+def progress(stats: ScoresStats, t0: float, text: str) -> None:
+    """One line per stage as it ends, so a run cut off by the job's time limit shows how far it got."""
+    print(f"scores {stats.week}: {text} ({time.monotonic() - t0:.0f}s)", flush=True)
 
 
 def last_friday(today: date) -> date:
@@ -90,6 +99,7 @@ class ScoresStats:
     stooq_failed: int = 0
     stooq_imported: int = 0
     stooq_skipped: int = 0  # already priced this week (a re-run)
+    stooq_not_asked: int = 0  # after MAX_FAILURES_IN_A_ROW failures
     bench_ok: int = 0
     bench_failed: int = 0
     bench_skipped: int = 0
@@ -97,6 +107,7 @@ class ScoresStats:
     gdelt_queried: int = 0
     gdelt_reused: int = 0
     gdelt_failed: int = 0
+    gdelt_not_asked: int = 0  # the budget (failures count) was spent, or GDELT failed MAX_FAILURES_IN_A_ROW in a row
     unconfirmed_jumps: list[str] = field(default_factory=list)
     buckets: dict[str, int] = field(default_factory=dict)
     shortlist: list[str] = field(default_factory=list)
@@ -369,20 +380,29 @@ def ingest_us_prices(
     shares = shares or {}
     start = week - timedelta(days=365 * history_years)
     done = repo.priced_at(conn, [c.id for c in targets if c.id is not None], week)
+    failures = 0  # in a row
     for c in targets:
         assert c.id is not None and c.ticker
         if c.id in done:  # a re-run of the week: Stooq's daily hit limit is better spent elsewhere
             stats.stooq_skipped += 1
             continue
-        try:
-            bars = stooq.weekly(c.ticker)
-            stats.stooq_ok += 1
-        except (StooqUnavailable, httpx.HTTPError) as e:
-            manual = imports / f"{c.ticker.upper()}.csv"
-            if not manual.exists():
-                stats.stooq_failed += 1
-                stats.errors.append(f"stooq {c.ticker}: {type(e).__name__}: {e}"[:200])
-                continue
+        manual = imports / f"{c.ticker.upper()}.csv"
+        bars: list[Bar] | None = None
+        if failures < MAX_FAILURES_IN_A_ROW:
+            try:
+                bars = stooq.weekly(c.ticker)
+                stats.stooq_ok += 1
+                failures = 0
+            except (StooqUnavailable, httpx.HTTPError) as e:
+                failures += 1
+                if not manual.exists():
+                    stats.stooq_failed += 1
+                    stats.errors.append(f"stooq {c.ticker}: {type(e).__name__}: {e}"[:200])
+                    continue
+        elif not manual.exists():
+            stats.stooq_not_asked += 1
+            continue
+        if bars is None:
             from pipeline.net.stooq import parse_csv
 
             bars = parse_csv(manual.read_bytes())
@@ -417,6 +437,17 @@ def mark_stooq(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
         stale = stats.stooq_skipped + stats.bench_skipped == 0
         msg = f"{failed} downloads failed: " + "; ".join(errors[:3])
         repo.mark_source_error(conn, "stooq", ("stale: " if stale else "") + msg, stale)
+
+
+def mark_gdelt(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
+    """source_health for GDELT, which nothing recorded before (the first live run, 2026-10-01, queried it and Settings
+    still said "never succeeded"): any answer marks success; a run whose queries all failed records the first errors,
+    not stale (C4 re-uses a count under 28 days old); a run that asked nothing leaves it as it was."""
+    if stats.gdelt_queried:
+        repo.mark_source_success(conn, "gdelt")
+    elif stats.gdelt_failed:
+        errors = [e for e in stats.errors if e.startswith("gdelt ")]
+        repo.mark_source_error(conn, "gdelt", f"{stats.gdelt_failed} queries failed: " + "; ".join(errors[:3]), False)
 
 
 def shares_history(s: Series) -> list[tuple[date, Decimal]]:
@@ -593,6 +624,7 @@ def run(
     last = repo.scores_for_week(conn, week - timedelta(days=7))
     stage = [sc for cid, sc in scored.items() if sc.evidence.score >= min_ev or cid in research]
     stats.stage = len(stage)
+    progress(stats, t0, f"signals for {len(scored)} companies, stage {stats.stage}")
 
     if http is not None:
         stooq = StooqClient(http)
@@ -625,6 +657,8 @@ def run(
             {sc.company.id: shares_history(sc.series) for sc in targets if sc.company.id is not None},
         )
         mark_stooq(conn, stats)
+        progress(stats, t0, f"stooq {stats.stooq_ok} ok, {stats.stooq_failed} failed, {stats.stooq_imported} imported, "
+                            f"{stats.stooq_skipped} already priced, {stats.stooq_not_asked} not asked")  # fmt: skip
 
     priced: dict[UUID, Priced] = {}
     for sc in stage:
@@ -633,8 +667,12 @@ def run(
         if p is not None:
             priced[sc.company.id] = p
 
+    progress(stats, t0, f"{len(priced)} priced")
     ctx_rows = context_rows(conn, week, cfgs, scored, priced, http, gdelt_limit, stats)
     repo.upsert_context_values(conn, ctx_rows)
+    mark_gdelt(conn, stats)
+    progress(stats, t0, f"gdelt {stats.gdelt_queried} queried, {stats.gdelt_failed} failed, {stats.gdelt_reused} "
+                        f"reused, {stats.gdelt_not_asked} not asked")  # fmt: skip
     gaps = gap_scores(ctx_rows, cfgs)
 
     score_rows, ranked = [], []
@@ -764,21 +802,27 @@ def attention(
     reuse = repo.recent_attention(conn, week, week - timedelta(days=GDELT_REUSE_DAYS))
     out: dict[UUID, int] = {}
     client = GdeltClient(http) if http is not None else None
+    failures = 0  # in a row
     for c in companies:
         assert c.id is not None
         if c.id in reuse:
             out[c.id] = reuse[c.id]
             stats.gdelt_reused += 1
             continue
-        if client is None or stats.gdelt_queried >= limit:
+        if client is None:
+            continue
+        if stats.gdelt_queried + stats.gdelt_failed >= limit or failures >= MAX_FAILURES_IN_A_ROW:
+            stats.gdelt_not_asked += 1
             continue
         try:
             out[c.id] = client.article_count(
                 c.name, c.ticker if c.market == "us" else c.nse_symbol, c.market, days=days
             )
             stats.gdelt_queried += 1
+            failures = 0
         except (GdeltError, httpx.HTTPError) as e:
             stats.gdelt_failed += 1
+            failures += 1
             stats.errors.append(f"gdelt {c.name}: {type(e).__name__}: {e}"[:200])
     return out
 

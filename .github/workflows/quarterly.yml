@@ -72,5 +72,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      # --ref: without it gh looks up the default branch, which this token (actions: write only) can't read
+      # ("Resource not accessible by integration", first live run 2026-09-29).
       - name: Signal Lab re-run
-        run: gh workflow run lab.yml --repo "$GITHUB_REPOSITORY" -f market=us
+        run: gh workflow run lab.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f market=us

@@ -50,6 +50,27 @@ def test_size_guard_runs_after_every_weekly_job_that_writes() -> None:
     assert "pipeline.db.migrate" in runs[0] and runs[-1].endswith("python -m pipeline.db.size_guard")
 
 
+def test_the_us_weekly_job_has_room_for_a_full_quarterize() -> None:
+    """The first live run (2026-09-29) quarterized all 5,884 companies in 53 minutes against a 60-minute limit. A full
+    run comes back whenever the companyfacts state isn't restored (a cache miss, --force), and a run that times out
+    never saves the state, so every later run would time out too."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    assert doc["jobs"]["us"]["timeout-minutes"] >= 120
+
+
+def test_the_scores_job_has_room_for_its_network_stages() -> None:
+    """The scores run is one transaction, so a run cut off by the limit keeps nothing and the next one starts over.
+    The first live run (2026-09-29) spent the job's 40 minutes without finishing."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    assert doc["jobs"]["scores"]["timeout-minutes"] >= 90
+
+
+def test_the_scores_job_gets_the_stooq_key() -> None:
+    """Stooq's CSV needs an apikey since 2026 (pipeline/net/stooq.py); only the scores job downloads it."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    assert doc["jobs"]["scores"]["env"]["STOOQ_API_KEY"] == "${{ secrets.STOOQ_API_KEY }}"
+
+
 def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     """M8 review R1-F5: §2.1 "quarterly: ... Signal Lab re-run" (§11.8): quarterly.yml dispatches lab.yml once the
     13F step and the universe rebuild are done."""
@@ -58,6 +79,8 @@ def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     assert lab["needs"] == "us" and lab["permissions"] == {"actions": "write"}
     assert "actions" not in doc["permissions"]  # only the dispatching job's token can (least privilege)
     assert any("gh workflow run lab.yml" in str(s.get("run", "")) for s in lab["steps"])
+    # the branch is named: gh can't look up the default branch with an actions-only token (first live run, 2026-09-29)
+    assert any("--ref" in str(s.get("run", "")) for s in lab["steps"] if "gh workflow run" in str(s.get("run", "")))
     runs = steps("quarterly.yml", "us")
     assert "pipeline.db.seed" in runs[-1]  # the rebuild is the us job's last step, so the Lab runs on the new universe
 

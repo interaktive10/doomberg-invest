@@ -87,8 +87,10 @@ def apply(conn: psycopg.Connection[Any], directory: Path = MIGRATIONS_DIR) -> li
                     (m.version, m.name, m.sha256),
                 )
             applied_now.append(m.version)
-    # 0002 creates the API roles; revoke on the bookkeeping table once they exist.
+    # 0002 creates the API roles; revoke on the bookkeeping table once they exist. Under the lock too: two runners'
+    # revokes at once fail with "tuple concurrently updated" (the weekly us and india jobs, 2026-10-03).
     with conn.transaction():
+        conn.execute("select pg_advisory_xact_lock(%s)", (_LOCK_KEY,))
         conn.execute(_REVOKE_API_ROLES)
     return applied_now
 
