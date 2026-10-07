@@ -18,7 +18,7 @@ Pfizer's revenue is flat and reported earnings swing between profit and loss, bu
 - The trailing one-year return was 1.6%, at the 45.8th percentile of the 409-company comparison set [c:C3].
 
 ## Inferences
-- Inference: S4 fired because reported net income fell while operating cash flow held up, which points to charges rather than a new improvement in cash generation.
+- Inference: S4 fired because reported net income fell much faster than operating cash flow, which also fell; that is not an improvement in cash generation.
 - Inference: three senior insiders buying similar amounts within a week suggests a shared view that the shares are cheap against the cash the business produces.
 - Inference: with revenue flat, the case rests on cash generation holding up; the pack has no product-level data to test that.
 
