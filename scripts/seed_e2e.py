@@ -298,7 +298,8 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     x("insert into digests (week_end, title, body_md) values (%s, 'Doomberg weekly — 2026-W38', %s)", (W, digest))
     x("insert into source_health (source, last_success, last_error, stale) values "
       "('sec', '2026-09-18 06:00+00', null, false), ('nse', '2026-09-18 06:00+00', null, false), "
-      "('bse', '2026-08-01 06:00+00', null, false), ('yahoo', null, 'stale: 13 downloads failed', true)")  # fmt: skip
+      "('bse', '2026-08-01 06:00+00', null, false), "
+      "('twelvedata', null, 'stale: 13 downloads failed', true)")  # fmt: skip
     x("insert into llm_calls (prompt_id, provider, model, ok, tokens_in, tokens_out, error) values "
       "('P-01', 'gemini', 'gemini-flash', true, 1000, 200, null), "
       "('P-01', 'gemini', 'gemini-flash', false, null, null, 'gemini: 429'), "

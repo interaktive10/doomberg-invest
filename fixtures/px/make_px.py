@@ -10,7 +10,11 @@ index files.
 yahoo/ holds the same series as Yahoo's chart endpoint answers them (v8/finance/chart, interval=1wk), which the weekly
 run asks since 2026-10 (docs/SPEC_ISSUES.md 37): every bar stamped at its week's Monday midnight, New York time, and
 prices as single-precision values written as doubles. AAPL's also carries Yahoo's quirks: a week of nulls and the week
-in progress twice (its Monday bar and a later one at the latest trade)."""
+in progress twice (its Monday bar and a later one at the latest trade).
+
+twelvedata/ holds them as Twelve Data's time_series answers them (interval=1week; the weekly run asks it since 2026-10,
+docs/SPEC_ISSUES.md 38): newest first, each bar dated at its week's Monday, prices as decimal strings; the ^spx series
+stands in for SPY, which the client asks for the S&P 500."""
 
 from __future__ import annotations
 
@@ -29,6 +33,7 @@ WEEKS = 260
 LAST = date(2026, 9, 18)
 NEW_YORK = ZoneInfo("America/New_York")
 YAHOO_SYMBOL = {"^spx": "^GSPC"}
+TWELVEDATA_SYMBOL = {"^spx": "SPY"}
 
 
 def series(symbol: str, start: float) -> str:
@@ -85,16 +90,51 @@ def chart(symbol: str, csv_text: str) -> str:
     return json.dumps(doc, separators=(",", ":"))
 
 
+def series_json(symbol: str, csv_text: str) -> str:
+    tsym = TWELVEDATA_SYMBOL.get(symbol, symbol.removesuffix(".us").upper())
+    values = []
+    for r in reversed([line.split(",") for line in csv_text.splitlines()[1:]]):
+        day = date.fromisoformat(r[0])
+        v = {"datetime": (day - timedelta(days=day.weekday())).isoformat(), "open": f"{float(r[1]):.5f}",
+             "high": f"{float(r[2]):.5f}", "low": f"{float(r[3]):.5f}", "close": f"{float(r[4]):.5f}"}  # fmt: skip
+        if len(r) > 5:
+            v["volume"] = r[5]
+        values.append(v)
+    meta = {"symbol": tsym, "interval": "1week", "currency": "USD", "exchange_timezone": "America/New_York",
+            "exchange": "NYSE", "mic_code": "XNYS", "type": "ETF" if tsym in ("SPY", "XLK") else "Common Stock"}  # fmt: skip
+    return json.dumps({"meta": meta, "values": values, "status": "ok"}, separators=(",", ":"))
+
+
 def main() -> None:
+    (OUT / "twelvedata").mkdir(exist_ok=True)
     (OUT / "yahoo").mkdir(exist_ok=True)
     for sym, start in SYMBOLS.items():
         text = series(sym, start)
         (OUT / f"{sym.replace('^', '_')}_w.csv").write_text(text, encoding="utf-8")
         ysym = YAHOO_SYMBOL.get(sym, sym.removesuffix(".us").upper())
         (OUT / "yahoo" / f"{ysym.replace('^', '_')}.json").write_text(chart(sym, text), encoding="utf-8")
-    not_found = {"chart": {"result": None, "error": {"code": "Not Found",
-                                                     "description": "No data found, symbol may be delisted"}}}
+        tsym = TWELVEDATA_SYMBOL.get(sym, sym.removesuffix(".us").upper())
+        (OUT / "twelvedata" / f"{tsym}.json").write_text(series_json(sym, text), encoding="utf-8")
+    not_found = {
+        "chart": {
+            "result": None,
+            "error": {"code": "Not Found", "description": "No data found, symbol may be delisted"},
+        }
+    }
     (OUT / "yahoo" / "not_found.json").write_text(json.dumps(not_found, separators=(",", ":")), encoding="utf-8")
+    errors = {
+        "not_found.json": {"code": 404, "message": "**symbol** not found: ZZZZ. Please specify it correctly according "
+                           "to API Reference.", "status": "error"},
+        "minute_credits.json": {"code": 429, "message": "You have run out of API credits for the current minute. 9 API "
+                                "credits were used, with the current limit being 8. Wait for the next minute or "
+                                "consider switching to a higher tier plan at https://twelvedata.com/pricing",
+                                "status": "error"},
+        "bad_key.json": {"code": 401, "message": "**apikey** parameter is incorrect or not specified. You can get your "
+                         "free API key instantly following this link: https://twelvedata.com/pricing",
+                         "status": "error"},
+    }  # fmt: skip
+    for name, doc in errors.items():
+        (OUT / "twelvedata" / name).write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     (OUT / "no_data.txt").write_text("No data", encoding="utf-8")
     (OUT / "limit.txt").write_text("Exceeded the daily hits limit", encoding="utf-8")
 

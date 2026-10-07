@@ -1,7 +1,8 @@
 """Benchmarks (BRIEF §4.4, config/context.yaml `benchmarks`) -> benchmarks_w, keyed by the week's Friday.
 
-- US: ^spx (Yahoo's ^GSPC) and the sector ETFs from Yahoo's weekly charts (ten years come with each download;
-  Stooq's CSVs until 2026-10, docs/SPEC_ISSUES.md 37). Rows keep the symbols config/context.yaml names.
+- US: ^spx and the sector ETFs from the US price source's weekly bars (pipeline/prices/source.py: Twelve Data, which
+  asks SPY for ^spx, or Yahoo, which asks ^GSPC; ten years come with each download). Rows keep the symbols
+  config/context.yaml names.
 - India: NIFTY 50 and NIFTY 500 from NSE's daily index-close file for the week's last trading day, fetched by the
   India weekly run next to the bhavcopy (it knows which day traded). History builds up week by week."""
 
@@ -15,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 
 from pipeline.db.models import BenchmarkW
 from pipeline.net.stooq import Bar, friday_of
-from pipeline.net.yahoo import YahooClient, YahooUnavailable
+from pipeline.prices.source import PriceUnavailable, WeeklySource
 
 NSE_INDEX_CLOSE = "https://nsearchives.nseindia.com/content/indices/ind_close_all_{day:%d%m%Y}.csv"
 US_HISTORY_WEEKS = 520  # C1 looks back up to 10 years; C3 needs 52 weeks
@@ -52,13 +53,13 @@ def us_rows(bars: Sequence[Bar], symbol: str, week: date, weeks: int = US_HISTOR
     return [BenchmarkW(symbol=symbol, week_end=b.week_end, close=b.close) for b in bars if start < b.week_end <= week]
 
 
-def fetch_us(yahoo: YahooClient, symbols: Sequence[str], week: date) -> tuple[list[BenchmarkW], list[str]]:
+def fetch_us(source: WeeklySource, symbols: Sequence[str], week: date) -> tuple[list[BenchmarkW], list[str]]:
     rows: list[BenchmarkW] = []
     errors: list[str] = []
     for s in symbols:
         try:
-            rows += us_rows(yahoo.weekly(s), s, week)
-        except (YahooUnavailable, OSError) as e:
+            rows += us_rows(source.weekly(s), s, week)
+        except (PriceUnavailable, OSError) as e:
             errors.append(f"benchmark {s}: {type(e).__name__}: {e}"[:200])
         except Exception as e:  # noqa: BLE001 — httpx errors and the like: one symbol never stops the run
             errors.append(f"benchmark {s}: {type(e).__name__}: {e}"[:200])

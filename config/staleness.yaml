@@ -3,7 +3,8 @@
 # sources at 8 days and the India weekly ones at 10; the others follow their own cadence.
 sla_days:
   sec: 8        # US weekly (companyfacts, submissions); the daily events run refreshes it too
-  yahoo: 8      # US weekly prices (candidate set and benchmarks; Stooq until 2026-10, docs/SPEC_ISSUES.md 37)
+  twelvedata: 8 # US weekly prices (candidate set and benchmarks; Stooq, then Yahoo until 2026-10: SPEC_ISSUES 37, 38)
+  yahoo: 8      # the same, with PRICE_SOURCE=yahoo
   gdelt: 8      # weekly attention counts
   fred: 8       # weekly macro context
   eia: 8        # the Capex Desk's weekly input

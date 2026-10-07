@@ -26,6 +26,8 @@ class Settings:
     groq_api_key: str | None = field(default=None, repr=False)
     openrouter_api_key: str | None = field(default=None, repr=False)
     eia_api_key: str | None = field(default=None, repr=False)
+    twelvedata_api_key: str | None = field(default=None, repr=False)  # US weekly prices (net/twelvedata.py)
+    price_source: str = "twelvedata"  # or "yahoo" (net/yahoo.py; it refuses GitHub's runners, SPEC_ISSUES 38)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -38,4 +40,6 @@ class Settings:
             groq_api_key=os.environ.get("GROQ_API_KEY") or None,
             openrouter_api_key=os.environ.get("OPENROUTER_API_KEY") or None,
             eia_api_key=os.environ.get("EIA_API_KEY") or None,
+            twelvedata_api_key=os.environ.get("TWELVEDATA_API_KEY") or None,
+            price_source=os.environ.get("PRICE_SOURCE") or "twelvedata",
         )

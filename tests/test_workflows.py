@@ -65,6 +65,14 @@ def test_the_scores_job_has_room_for_its_network_stages() -> None:
     assert doc["jobs"]["scores"]["timeout-minutes"] >= 90
 
 
+def test_the_scores_job_gets_the_twelvedata_key() -> None:
+    """US prices come from Twelve Data since 2026-10 (pipeline/net/twelvedata.py); only the scores job asks it."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    assert doc["jobs"]["scores"]["env"]["TWELVEDATA_API_KEY"] == "${{ secrets.TWELVEDATA_API_KEY }}"
+    others = [job for name, job in doc["jobs"].items() if name != "scores"]
+    assert all("TWELVEDATA_API_KEY" not in (job.get("env") or {}) for job in others)
+
+
 def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
     """M8 review R1-F5: §2.1 "quarterly: ... Signal Lab re-run" (§11.8): quarterly.yml dispatches lab.yml once the
     13F step and the universe rebuild are done."""

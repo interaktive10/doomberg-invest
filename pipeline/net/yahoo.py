@@ -26,6 +26,7 @@ import httpx
 
 from pipeline.net.http import DomainNotAllowed, HttpClient
 from pipeline.net.stooq import Bar, friday_of
+from pipeline.prices.source import NoSuchSymbol, PriceUnavailable
 
 YAHOO_CHART = "https://{host}.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1wk&range=10y"
 HOSTS = ("query1", "query2")
@@ -35,11 +36,11 @@ INDEX_SYMBOLS = {"^spx": "^GSPC"}  # config/context.yaml names the S&P 500 the w
 HALF_DAY = timedelta(hours=12)
 
 
-class YahooUnavailable(Exception):
+class YahooUnavailable(PriceUnavailable):
     """Yahoo answered something other than a chart, or didn't answer."""
 
 
-class YahooNoSuchSymbol(YahooUnavailable):
+class YahooNoSuchSymbol(YahooUnavailable, NoSuchSymbol):
     """Yahoo answered, but has no chart for the symbol (delisted, renamed, or a ticker it spells differently)."""
 
 
@@ -120,6 +121,7 @@ def parse_chart(body: bytes) -> list[Bar]:
 @dataclass
 class YahooClient:
     http: HttpClient
+    name: str = "yahoo"
 
     def weekly(self, ticker: str) -> list[Bar]:
         symbol, failed = yahoo_symbol(ticker), YahooUnavailable("no host asked")

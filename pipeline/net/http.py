@@ -1,7 +1,7 @@
 """The one HTTP client for the pipeline (BRIEF §2.3, §2.7, §4.3).
 
 - Domain allowlist: any host not listed raises DomainNotAllowed before a socket opens.
-- Minimum interval between requests per site (SEC <= 8 req/s, NSE 1 per 3 s, Yahoo 1 per s, ...). A site's hosts
+- Minimum interval between requests per site (SEC <= 8 req/s, NSE 1 per 3 s, Twelve Data 1 per 8 s, ...). A site's hosts
   share one limit: www.nseindia.com and nsearchives.nseindia.com are one NSE (review F6 on M3).
 - Optional on-disk cache keyed by URL.
 - MOCK_EXTERNALS=true: no network at all; requests are served from registered mock responses, or raise.
@@ -48,6 +48,7 @@ ALLOWED_HOSTS: dict[str, float] = {
     "stooq.com": 2.0,
     "query1.finance.yahoo.com": 1.0,  # US weekly prices (pipeline/net/yahoo.py); one site, one limit
     "query2.finance.yahoo.com": 1.0,
+    "api.twelvedata.com": 8.0,  # US weekly prices (pipeline/net/twelvedata.py): the free plan's 8 credits a minute
     "api.gdeltproject.org": 5.0,  # GDELT asks for at most one request every 5 s
     "api.stlouisfed.org": 0.5,
     "api.eia.gov": 0.5,
