@@ -50,3 +50,17 @@ def test_seed_refuses_truncated_snapshot(conn: psycopg.Connection[Any], tmp_path
     with pytest.raises(seed.SnapshotTooSmall, match="us snapshot has 1 companies"):
         seed.seed(conn, tmp_path)
     assert conn.execute("select count(*) from companies where in_universe").fetchone() == before
+
+
+def test_seed_lists_only_sources_the_pipeline_reports(conn: psycopg.Connection[Any]) -> None:
+    """Regression: the quarterly re-seed put back the 'stooq' row migration 0012 dropped, and 'fred' has no reader, so
+    the digest and Settings listed two sources as "never succeeded" (docs/SPEC_ISSUES.md 40)."""
+    seed.seed(conn)
+    sources = {r[0] for r in conn.execute("select source from source_health")}
+    assert sources == set(seed.SOURCES) and "twelvedata" in sources and not sources & {"stooq", "fred", "yahoo"}
+
+
+def test_migration_0014_drops_the_rows_that_never_succeed(conn: psycopg.Connection[Any]) -> None:
+    conn.execute("insert into source_health (source) values ('stooq'), ('fred'), ('sec') on conflict do nothing")
+    conn.execute((REPO_ROOT / "db" / "migrations" / "0014_source_health_cleanup.sql").read_text(encoding="utf-8"))
+    assert {r[0] for r in conn.execute("select source from source_health")} == {"sec"}
