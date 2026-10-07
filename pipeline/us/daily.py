@@ -12,10 +12,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 import psycopg
@@ -26,6 +28,8 @@ from pipeline.net.http import HttpClient
 from pipeline.settings import Settings
 from pipeline.us.events import (
     FORM10,
+    CorpEventDraft,
+    TextFilingDraft,
     days_to_process,
     filing_events,
     master_index_url,
@@ -35,7 +39,7 @@ from pipeline.us.events import (
     quarters_between,
     select,
 )
-from pipeline.us.form4 import Form4Error, parse_submission
+from pipeline.us.form4 import Form4, Form4Error, parse_submission
 from pipeline.us.specials import effective_spinoff, html_to_text, parent_candidates
 from pipeline.us.submissions import Submissions, end_of_day_utc, parse_submissions
 
@@ -123,23 +127,7 @@ def run_daily(
         if issuer is None or not issuer.in_universe or issuer.id is None:
             continue
         stats.form4_filings += 1
-        for t in f4.purchases():
-            insiders.append(
-                InsiderEvent(
-                    company_id=issuer.id,
-                    event_date=t.date,
-                    filed_at=f4.accepted_at or end_of_day_utc(r.date_filed),
-                    person=f4.person or "unknown",
-                    role=f4.role or None,
-                    kind="open_market_buy",
-                    shares=t.shares,
-                    value=t.value,
-                    currency="USD",
-                    planned=t.planned,
-                    source_url=r.url,
-                    amends=f4.original_date if f4.document_type.startswith("4/A") else None,
-                )
-            )
+        insiders += insider_rows(f4, issuer.id, r.url, r.date_filed)
     repo.insert_insider_events(conn, insiders)
     stats.purchases = len(insiders)
 
@@ -157,31 +145,8 @@ def run_daily(
         company = by_cik.get(cik)
         if company is not None and company.in_universe and company.id is not None:
             evs, drafts = filing_events(subs, today, capex_desk=company.capex_desk)
-            corp += [
-                CorpEvent(
-                    company_id=company.id,
-                    event_date=e.event_date,
-                    filed_at=e.filed_at,
-                    kind=e.kind,
-                    detail=e.detail,
-                    source_url=e.source_url,
-                )  # fmt: skip
-                for e in evs
-            ]
-            texts += [
-                FilingRow(
-                    company_id=company.id,
-                    accession_no=d.accession,
-                    form_type=d.form,
-                    items=list(d.items),
-                    filed_at=d.accepted_at,
-                    accepted_at=d.accepted_at,
-                    period_of_report=d.period_of_report,
-                    primary_doc_url=d.primary_doc_url,
-                    index_url=d.index_url,
-                )  # fmt: skip
-                for d in drafts
-            ]
+            corp += corp_rows(evs, company.id)
+            texts += filing_rows(drafts, company.id)
         if cik in pending:
             try:
                 event = _spinoff_event(conn, client, subs, company, names)
@@ -198,6 +163,59 @@ def run_daily(
     stats.corp_events, stats.text_filings = len(corp), len(texts)
     _save_pending(state_path, pending)
     return stats
+
+
+def insider_rows(f4: Form4, company_id: UUID, url: str, date_filed: date) -> list[InsiderEvent]:
+    """A Form 4's open-market purchases as insider_events rows; `url` is the submission's (the natural key's
+    source_url: the daily run and the backfill, pipeline/us/backfill.py, must give the same one)."""
+    return [
+        InsiderEvent(
+            company_id=company_id,
+            event_date=t.date,
+            filed_at=f4.accepted_at or end_of_day_utc(date_filed),
+            person=f4.person or "unknown",
+            role=f4.role or None,
+            kind="open_market_buy",
+            shares=t.shares,
+            value=t.value,
+            currency="USD",
+            planned=t.planned,
+            source_url=url,
+            amends=f4.original_date if f4.document_type.startswith("4/A") else None,
+        )
+        for t in f4.purchases()
+    ]
+
+
+def corp_rows(events: Sequence[CorpEventDraft], company_id: UUID) -> list[CorpEvent]:
+    return [
+        CorpEvent(
+            company_id=company_id,
+            event_date=e.event_date,
+            filed_at=e.filed_at,
+            kind=e.kind,
+            detail=e.detail,
+            source_url=e.source_url,
+        )  # fmt: skip
+        for e in events
+    ]
+
+
+def filing_rows(drafts: Sequence[TextFilingDraft], company_id: UUID) -> list[FilingRow]:
+    return [
+        FilingRow(
+            company_id=company_id,
+            accession_no=d.accession,
+            form_type=d.form,
+            items=list(d.items),
+            filed_at=d.accepted_at,
+            accepted_at=d.accepted_at,
+            period_of_report=d.period_of_report,
+            primary_doc_url=d.primary_doc_url,
+            index_url=d.index_url,
+        )  # fmt: skip
+        for d in drafts
+    ]
 
 
 def _spinoff_event(
