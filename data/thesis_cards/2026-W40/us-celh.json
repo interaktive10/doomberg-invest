@@ -1,0 +1,150 @@
+{
+ "summary": "Celsius more than doubled its quarterly revenue in one step in 2025 and now produces solid free cash flow, yet the stock fell by more than half over the trailing year and institutional holders are thinning. The chief executive and two directors bought in September 2026. Margins are thin and the history is distorted by the step change.",
+ "facts": [
+  {
+   "text": "Revenue rose to $739.3 million in the quarter ended 2025-06-30 from $329.3 million in the quarter ended 2025-03-31 [m:revenue:2025-06-30] [m:revenue:2025-03-31].",
+   "cites": [
+    "m:revenue:2025-06-30",
+    "m:revenue:2025-03-31"
+   ]
+  },
+  {
+   "text": "Total debt went from 0 at 2024-12-31 to $871.9 million at 2025-06-30 [m:total_debt:2024-12-31] [m:total_debt:2025-06-30].",
+   "cites": [
+    "m:total_debt:2024-12-31",
+    "m:total_debt:2025-06-30"
+   ]
+  },
+  {
+   "text": "Revenue in the quarter ended 2026-06-30 was $817.9 million, 10.6% above the same quarter a year earlier [m:revenue:2026-06-30] [m:revenue_q_yoy].",
+   "cites": [
+    "m:revenue:2026-06-30",
+    "m:revenue_q_yoy"
+   ]
+  },
+  {
+   "text": "Trailing-twelve-month free cash flow was $462.8 million and net debt was $43.6 million [m:fcf_ttm] [m:net_debt].",
+   "cites": [
+    "m:fcf_ttm",
+    "m:net_debt"
+   ]
+  },
+  {
+   "text": "Cash conversion was 3.94, up from 1.79 a year earlier, and S4 fired at strength 1.0 [s:S4].",
+   "cites": [
+    "s:S4"
+   ]
+  },
+  {
+   "text": "Chief executive John Fieldly bought 18,000 shares for $493,843 on 2026-09-10 [m:insider:ad9de4ed-30ce-4186-a908-e9eacb8a27a8].",
+   "cites": [
+    "m:insider:ad9de4ed-30ce-4186-a908-e9eacb8a27a8"
+   ]
+  },
+  {
+   "text": "Director Damon DeSantis bought 20,000 shares for $553,000 on 2026-09-14 and 16,000 shares for $447,200 on 2026-09-15, and director Hal Kravitz bought 12,000 shares for $336,000 on 2026-09-15 [m:insider:5439d105-ef3f-4078-8c0d-d8700d12d5f5] [m:insider:c821fb73-d40f-4cff-aee8-8cfe329e351b] [m:insider:0316ba7c-0cde-4867-9edb-a90991af0f42].",
+   "cites": [
+    "m:insider:5439d105-ef3f-4078-8c0d-d8700d12d5f5",
+    "m:insider:c821fb73-d40f-4cff-aee8-8cfe329e351b",
+    "m:insider:0316ba7c-0cde-4867-9edb-a90991af0f42"
+   ]
+  },
+  {
+   "text": "Institutional holders fell to 572 at 2026-03-31 from 613 at 2025-09-30 [m:inst_holders:2026-03-31] [m:inst_holders:2025-09-30].",
+   "cites": [
+    "m:inst_holders:2026-03-31",
+    "m:inst_holders:2025-09-30"
+   ]
+  }
+ ],
+ "why_mispriced": [
+  {
+   "text": "The trailing one-year return was -54.4%, at the 4th percentile of the 409-company comparison set [c:C3].",
+   "cites": [
+    "c:C3"
+   ]
+  },
+  {
+   "text": "C1 puts EV/EBIT of 42.5 at the 25.1st percentile of the company's own 517-week history [c:C1].",
+   "cites": [
+    "c:C1"
+   ]
+  },
+  {
+   "text": "S7 fired at strength 0.89 with 3 insiders buying after the fall [s:S7].",
+   "cites": [
+    "s:S7"
+   ]
+  }
+ ],
+ "inferences": [
+  "Inference: revenue more than doubled in one quarter while debt and equity rose, which is consistent with an acquisition; the latest quarter's year-over-year growth is the better guide to the combined business.",
+  "Inference: EV/sales sits at the bottom of its own history partly because the revenue base changed, so EV/EBIT is the more useful comparison.",
+  "Inference: institutional holders leaving while insiders buy suggests the market has lost interest faster than management has."
+ ],
+ "assumptions": [
+  "Assumption: year-over-year revenue growth stays positive through 2027.",
+  "Assumption: the operating margin recovers from its thin trailing level as one-off costs fade.",
+  "Assumption: free cash flow keeps servicing the debt without new share issuance."
+ ],
+ "risks": [
+  {
+   "text": "The trailing operating margin is thin, at 5.3% [m:op_margin_ttm].",
+   "cites": [
+    "m:op_margin_ttm"
+   ]
+  },
+  {
+   "text": "Quarterly cash flow is volatile: operating cash flow was -$119.4 million in the December 2025 quarter [m:cfo:2025-12-31].",
+   "cites": [
+    "m:cfo:2025-12-31"
+   ]
+  },
+  {
+   "text": "Institutional holders are falling, so the shares may stay out of favour [m:inst_holders:2026-03-31].",
+   "cites": [
+    "m:inst_holders:2026-03-31"
+   ]
+  },
+  {
+   "text": "C2 found no implied growth rate and C4 is missing, so the Gap score rests on C1 and C3 [c:C2] [c:C4].",
+   "cites": [
+    "c:C2",
+    "c:C4"
+   ]
+  }
+ ],
+ "kill_criteria": [
+  {
+   "metric_id": "m:revenue_q_yoy",
+   "operator": "<",
+   "threshold": 0,
+   "check_after": "2026-11-20",
+   "why": "A year-over-year decline on the combined base would end the growth part of the case."
+  },
+  {
+   "metric_id": "m:fcf_ttm",
+   "operator": "<",
+   "threshold": 200000000,
+   "check_after": "2026-11-20",
+   "why": "Free cash flow is what makes the debt manageable."
+  },
+  {
+   "metric_id": "m:op_margin_ttm",
+   "operator": "<",
+   "threshold": 0.03,
+   "check_after": "2026-11-20",
+   "why": "A margin below 3% would mean costs are not normalising."
+  }
+ ],
+ "read_next": [
+  {
+   "title": "Celsius Holdings: 10-Q and 10-K filings on EDGAR",
+   "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001341766&type=10-Q&dateb=&owner=include&count=40"
+  },
+  {
+   "title": "Celsius Holdings: insider (Form 4) filings on EDGAR",
+   "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001341766&type=4&dateb=&owner=include&count=40"
+  }
+ ]
+}
