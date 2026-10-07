@@ -1,7 +1,7 @@
 """The scores job's network stages are bounded (pipeline/signals/weekly.py). The first live run (2026-09-29) spent
-the job's 40 minutes without finishing: a GDELT failure didn't use up the query budget, and neither GDELT nor Stooq
-stopped being asked when every request failed, while each request waits for the site's rate limit (GDELT 5 s, Stooq
-2 s) and up to its timeout."""
+the job's 40 minutes without finishing: a GDELT failure didn't use up the query budget, and neither GDELT nor the
+price source (Stooq then, Yahoo since 2026-10) stopped being asked when every request failed, while each request
+waits for the site's rate limit (GDELT 5 s, prices 1-2 s) and up to its timeout."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import pytest
 from pipeline.db.models import Company
 from pipeline.net.gdelt import build_query, timeline_url
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import StooqClient, csv_url, stooq_symbol
+from pipeline.net.yahoo import HOSTS, YahooClient, chart_url, yahoo_symbol
 from pipeline.settings import Settings
 from pipeline.signals import weekly
 
@@ -24,7 +24,6 @@ WEEK = date(2026, 9, 25)
 NO_DB: Any = None  # the repo calls these stages make are replaced below
 THROTTLED = (FIX / "gdelt" / "rate_limit.txt").read_bytes()  # GDELT's "Please limit requests..." (HTTP 200)
 NO_ARTICLES = (FIX / "gdelt" / "empty.json").read_bytes()
-DAILY_LIMIT = (FIX / "px" / "limit.txt").read_bytes()  # Stooq's "Exceeded the daily hits limit"
 N = weekly.MAX_FAILURES_IN_A_ROW
 
 
@@ -72,27 +71,51 @@ def test_a_gdelt_answer_ends_a_run_of_failures(tmp_path: Path, nothing_to_reuse:
     assert len(http.calls) == 3 * N and (stats.gdelt_queried, stats.gdelt_not_asked) == (3, 0)
 
 
-def test_stooq_is_not_asked_again_after_failures_in_a_row_but_manual_imports_still_count(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    written: list[Any] = []
+@pytest.fixture
+def written(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    rows: list[Any] = []
     monkeypatch.setattr(weekly.repo, "priced_at", lambda conn, ids, week: set())
     monkeypatch.setattr(weekly.repo, "prices", lambda conn, ids, start, end: [])
-    monkeypatch.setattr(weekly.repo, "upsert_prices", lambda conn, rows: written.extend(rows))
+    monkeypatch.setattr(weekly.repo, "upsert_prices", lambda conn, new: rows.extend(new))
+    return rows
+
+
+def test_yahoo_is_not_asked_again_after_failures_in_a_row_but_manual_imports_still_count(
+    tmp_path: Path, written: list[Any]
+) -> None:
     http, cos = mock_http(tmp_path), us_companies(12)
     for c in cos:
         assert c.ticker
-        http.register_mock(csv_url(stooq_symbol(c.ticker)), DAILY_LIMIT)
+        for host in HOSTS:  # "Too Many Requests" from both
+            http.register_error(chart_url(yahoo_symbol(c.ticker), host), 429)
     imports = tmp_path / "imports"
     imports.mkdir()
     late = cos[N + 4]  # after the run of failures
     assert late.ticker
     (imports / f"{late.ticker.upper()}.csv").write_bytes((FIX / "px" / "aapl.us_w.csv").read_bytes())
     stats = weekly.ScoresStats(WEEK.isoformat())
-    weekly.ingest_us_prices(NO_DB, StooqClient(http), cos, WEEK, imports, stats, 10)
-    assert len(http.calls) == N
-    assert (stats.stooq_ok, stats.stooq_failed, stats.stooq_imported, stats.stooq_not_asked) == (0, N, 1, 12 - N - 1)
-    assert written and {r.company_id for r in written} == {late.id}
+    weekly.ingest_us_prices(NO_DB, YahooClient(http), cos, WEEK, imports, stats, 10)
+    assert len(http.calls) == N * len(HOSTS)
+    counts = (stats.prices_ok, stats.prices_failed, stats.prices_imported, stats.prices_not_asked)
+    assert counts == (0, N, 1, 12 - N - 1)
+    assert written and {r.company_id for r in written} == {late.id} and {r.source for r in written} == {"manual"}
+
+
+def test_symbols_yahoo_does_not_know_do_not_stop_the_stage(tmp_path: Path, written: list[Any]) -> None:
+    """A 404 ("No data found, symbol may be delisted") is an answer: the site is up, so it never counts toward the
+    failures in a row that stop the stage."""
+    http, cos = mock_http(tmp_path), us_companies(3 * N)
+    for i, c in enumerate(cos):
+        assert c.ticker
+        if i == len(cos) - 1:
+            http.register_mock(chart_url(c.ticker), (FIX / "px" / "yahoo" / "PWR.json").read_bytes())
+        else:
+            http.register_error(chart_url(c.ticker), 404)
+    stats = weekly.ScoresStats(WEEK.isoformat())
+    weekly.ingest_us_prices(NO_DB, YahooClient(http), cos, WEEK, tmp_path, stats, 10)
+    assert len(http.calls) == 3 * N
+    assert (stats.prices_ok, stats.prices_failed, stats.prices_not_asked) == (1, 3 * N - 1, 0)
+    assert {r.source for r in written} == {"yahoo"} and {r.company_id for r in written} == {cos[-1].id}
 
 
 def test_gdelt_source_health_follows_the_run(monkeypatch: pytest.MonkeyPatch) -> None:

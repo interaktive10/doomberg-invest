@@ -26,7 +26,6 @@ class Settings:
     groq_api_key: str | None = field(default=None, repr=False)
     openrouter_api_key: str | None = field(default=None, repr=False)
     eia_api_key: str | None = field(default=None, repr=False)
-    stooq_api_key: str | None = field(default=None, repr=False)  # Stooq's CSV needs one since 2026 (net/stooq.py)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -39,5 +38,4 @@ class Settings:
             groq_api_key=os.environ.get("GROQ_API_KEY") or None,
             openrouter_api_key=os.environ.get("OPENROUTER_API_KEY") or None,
             eia_api_key=os.environ.get("EIA_API_KEY") or None,
-            stooq_api_key=os.environ.get("STOOQ_API_KEY") or None,
         )

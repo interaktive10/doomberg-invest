@@ -1,9 +1,10 @@
-"""Weekly scoring run (BRIEF §2.1 "weekly", §4.4-§4.8): signals -> red flags -> Evidence -> candidate prices (Stooq)
+"""Weekly scoring run (BRIEF §2.1 "weekly", §4.4-§4.8): signals -> red flags -> Evidence -> candidate prices (Yahoo)
 -> context C1-C4 -> Gap -> buckets -> shortlist. `python -m pipeline.signals.weekly [--week YYYY-MM-DD]`.
 
 Everything as of week W reads through pipeline.db.pit.as_of(W), so a re-run over the same data gives the same rows
 whether or not later filings exist (M4-02). Evidence never uses price; prices enter only at the candidate stage
-(Evidence >= 40 this week or last): US closes come from Stooq for that set only, India from the bhavcopy (M3).
+(Evidence >= 40 this week or last): US closes come from Yahoo for that set only (Stooq until 2026-10,
+docs/SPEC_ISSUES.md 37), India from the bhavcopy (M3).
 
 Two passes over the universe in batches keep memory flat: the first collects the cross-sectional inputs (S8's
 revenue-size deciles, S12's sector medians), the second computes signals, flags and Evidence.
@@ -49,7 +50,8 @@ from pipeline.db.weights import read as read_weights
 from pipeline.db.weights import record_weights_in_use
 from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import Bar, StooqClient, StooqUnavailable
+from pipeline.net.stooq import Bar, parse_csv
+from pipeline.net.yahoo import YahooClient, YahooNoSuchSymbol, YahooUnavailable
 from pipeline.prices import benchmarks as bench
 from pipeline.prices.splits import Adjusted, SourceSplit, adjust, date_source_split, rebased
 from pipeline.settings import REPO_ROOT, Settings
@@ -61,7 +63,7 @@ from pipeline.signals.scores import Evidence, Weights, evidence, gap
 from pipeline.signals.series import Series
 
 BATCH = 300
-STOOQ_MAX_SYMBOLS = 400  # §4.4, benchmarks included
+US_PRICE_MAX_SYMBOLS = 400  # §4.4, benchmarks included
 GDELT_MAX_QUERIES = 100  # ~8 minutes at GDELT's 1 request / 5 s; the rest reuse a count under 28 days old
 GDELT_REUSE_DAYS = 28
 # A site that fails this many requests in a row is down or refusing the runner: it isn't asked again this run. Every
@@ -95,15 +97,15 @@ class ScoresStats:
     signals_fired: dict[str, int] = field(default_factory=dict)
     flags_fired: dict[str, int] = field(default_factory=dict)
     stage: int = 0  # companies at the candidate stage (Evidence >= 40)
-    stooq_ok: int = 0
-    stooq_failed: int = 0
-    stooq_imported: int = 0
-    stooq_skipped: int = 0  # already priced this week (a re-run)
-    stooq_not_asked: int = 0  # after MAX_FAILURES_IN_A_ROW failures
+    prices_ok: int = 0  # US closes downloaded from Yahoo
+    prices_failed: int = 0
+    prices_imported: int = 0  # from a manual CSV (imports/us_prices)
+    prices_skipped: int = 0  # already priced this week (a re-run)
+    prices_not_asked: int = 0  # after MAX_FAILURES_IN_A_ROW failures
     bench_ok: int = 0
     bench_failed: int = 0
     bench_skipped: int = 0
-    source_splits: list[str] = field(default_factory=list)  # splits a re-adjusted Stooq history showed
+    source_splits: list[str] = field(default_factory=list)  # splits a re-adjusted price history showed
     gdelt_queried: int = 0
     gdelt_reused: int = 0
     gdelt_failed: int = 0
@@ -367,7 +369,7 @@ def score_company(
 
 def ingest_us_prices(
     conn: psycopg.Connection[Any],
-    stooq: StooqClient,
+    yahoo: YahooClient,
     targets: Sequence[Company],
     week: date,
     imports: Path,
@@ -383,33 +385,32 @@ def ingest_us_prices(
     failures = 0  # in a row
     for c in targets:
         assert c.id is not None and c.ticker
-        if c.id in done:  # a re-run of the week: Stooq's daily hit limit is better spent elsewhere
-            stats.stooq_skipped += 1
+        if c.id in done:  # a re-run of the week: no need to ask again
+            stats.prices_skipped += 1
             continue
         manual = imports / f"{c.ticker.upper()}.csv"
         bars: list[Bar] | None = None
+        source = "yahoo"
         if failures < MAX_FAILURES_IN_A_ROW:
             try:
-                bars = stooq.weekly(c.ticker)
-                stats.stooq_ok += 1
+                bars = yahoo.weekly(c.ticker)
+                stats.prices_ok += 1
                 failures = 0
-            except (StooqUnavailable, httpx.HTTPError) as e:
-                failures += 1
+            except YahooUnavailable as e:
+                failures = 0 if isinstance(e, YahooNoSuchSymbol) else failures + 1  # an unknown symbol is an answer
                 if not manual.exists():
-                    stats.stooq_failed += 1
-                    stats.errors.append(f"stooq {c.ticker}: {type(e).__name__}: {e}"[:200])
+                    stats.prices_failed += 1
+                    stats.errors.append(f"yahoo {c.ticker}: {type(e).__name__}: {e}"[:200])
                     continue
         elif not manual.exists():
-            stats.stooq_not_asked += 1
+            stats.prices_not_asked += 1
             continue
         if bars is None:
-            from pipeline.net.stooq import parse_csv
-
-            bars = parse_csv(manual.read_bytes())
-            stats.stooq_imported += 1
+            bars, source = parse_csv(manual.read_bytes()), "manual"
+            stats.prices_imported += 1
         rows = [
             PriceW(
-                company_id=c.id, week_end=b.week_end, close=b.close, adj_close=b.close, volume=b.volume, source="stooq"
+                company_id=c.id, week_end=b.week_end, close=b.close, adj_close=b.close, volume=b.volume, source=source
             )
             for b in bars
             if start < b.week_end <= week
@@ -423,20 +424,20 @@ def ingest_us_prices(
             stats.source_splits.append(f"{c.ticker} {split.week_end} x{split.ratio}")
 
 
-def mark_stooq(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
-    """source_health for Stooq (M4 review R1-F3): stale when every download this run failed and nothing was priced
-    earlier this week (a manual CSV import may still have priced a company), so the web shows the banner; any
-    download that worked clears it. Failed retries after an earlier run of the week priced things record the error
-    without the banner; a run that downloaded nothing leaves it as it was."""
-    ok = stats.stooq_ok + stats.bench_ok
-    failed = stats.stooq_failed + stats.stooq_imported + stats.bench_failed
+def mark_prices(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
+    """source_health for the US price source, Yahoo (M4 review R1-F3): stale when every download this run failed and
+    nothing was priced earlier this week (a manual CSV import may still have priced a company), so the web shows the
+    banner; any download that worked clears it. Failed retries after an earlier run of the week priced things record
+    the error without the banner; a run that downloaded nothing leaves it as it was."""
+    ok = stats.prices_ok + stats.bench_ok
+    failed = stats.prices_failed + stats.prices_imported + stats.bench_failed
     if ok:
-        repo.mark_source_success(conn, "stooq")
+        repo.mark_source_success(conn, "yahoo")
     elif failed:
-        errors = [e for e in stats.errors if e.startswith(("stooq ", "benchmark "))]
-        stale = stats.stooq_skipped + stats.bench_skipped == 0
+        errors = [e for e in stats.errors if e.startswith(("yahoo ", "benchmark "))]
+        stale = stats.prices_skipped + stats.bench_skipped == 0
         msg = f"{failed} downloads failed: " + "; ".join(errors[:3])
-        repo.mark_source_error(conn, "stooq", ("stale: " if stale else "") + msg, stale)
+        repo.mark_source_error(conn, "yahoo", ("stale: " if stale else "") + msg, stale)
 
 
 def mark_gdelt(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
@@ -550,7 +551,7 @@ def run(
     http: HttpClient | None = None,
     root: Path = REPO_ROOT,
     imports: Path | None = None,
-    stooq_limit: int = STOOQ_MAX_SYMBOLS,
+    price_limit: int = US_PRICE_MAX_SYMBOLS,
     gdelt_limit: int = GDELT_MAX_QUERIES,
 ) -> ScoresStats:
     t0 = time.monotonic()
@@ -627,10 +628,10 @@ def run(
     progress(stats, t0, f"signals for {len(scored)} companies, stage {stats.stage}")
 
     if http is not None:
-        stooq = StooqClient(http)
+        yahoo = YahooClient(http)
         us_bench = list(cfgs.context["benchmarks"]["us"])
         have = repo.benchmarks_at(conn, us_bench, week)
-        rows, errs = bench.fetch_us(stooq, [b for b in us_bench if b not in have], week)
+        rows, errs = bench.fetch_us(yahoo, [b for b in us_bench if b not in have], week)
         repo.upsert_benchmarks(conn, rows)
         stats.bench_ok, stats.bench_failed, stats.bench_skipped = len({r.symbol for r in rows}), len(errs), len(have)
         stats.errors += errs
@@ -645,10 +646,10 @@ def run(
             ),
             key=lambda sc: -sc.evidence.score,
         )
-        targets = us[: max(0, stooq_limit - len(us_bench))]
+        targets = us[: max(0, price_limit - len(us_bench))]
         ingest_us_prices(
             conn,
-            stooq,
+            yahoo,
             [sc.company for sc in targets],
             week,
             imports or root / "imports" / "us_prices",
@@ -656,9 +657,10 @@ def run(
             int(cfgs.context["c1"]["history_years"]),
             {sc.company.id: shares_history(sc.series) for sc in targets if sc.company.id is not None},
         )
-        mark_stooq(conn, stats)
-        progress(stats, t0, f"stooq {stats.stooq_ok} ok, {stats.stooq_failed} failed, {stats.stooq_imported} imported, "
-                            f"{stats.stooq_skipped} already priced, {stats.stooq_not_asked} not asked")  # fmt: skip
+        mark_prices(conn, stats)
+        progress(stats, t0, f"benchmarks {stats.bench_ok} ok, {stats.bench_failed} failed; prices {stats.prices_ok} "
+                            f"ok, {stats.prices_failed} failed, {stats.prices_imported} imported, "
+                            f"{stats.prices_skipped} already priced, {stats.prices_not_asked} not asked")  # fmt: skip
 
     priced: dict[UUID, Priced] = {}
     for sc in stage:

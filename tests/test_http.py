@@ -20,7 +20,8 @@ def _settings(tmp_path: Path, mock: bool = True) -> Settings:
         "https://api.anthropic.com/v1/messages",
         "https://api.openai.com/v1/chat/completions",
         "https://api.kite.trade/orders",
-        "https://query1.finance.yahoo.com/v8/finance/chart/X",
+        # Yahoo's chart hosts serve the weekly US prices since 2026-10 (docs/SPEC_ISSUES.md 37); no other Yahoo host
+        "https://finance.yahoo.com/quote/X/history",
         "http://www.sec.gov/files/company_tickers.json",  # plain http
         "https://www.sec.gov.evil.example/x",
     ],

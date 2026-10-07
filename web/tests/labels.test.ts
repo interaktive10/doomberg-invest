@@ -52,6 +52,7 @@ describe("display labels (lib/labels.ts)", () => {
   it("writes sources, providers and units the usual way", () => {
     expect(sourceLabel("sec_13f")).toBe("SEC 13F");
     expect(sourceLabel("stooq")).toBe("Stooq");
+    expect(sourceLabel("yahoo")).toBe("Yahoo Finance");
     expect(sourceLabel("new_feed")).toBe("New feed");
     expect(providerLabel("openrouter")).toBe("OpenRouter");
     expect(unitLabel("usd")).toBe("USD");

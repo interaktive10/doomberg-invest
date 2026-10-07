@@ -20,8 +20,8 @@ describe("staleness (BRIEF §2.7; config/staleness.yaml, as the digest reads it)
 
   const now = new Date("2026-09-19T03:00:00Z");
   it("names a stale source and one past its SLA", () => {
-    const rows = [at("sec", "2026-09-01T06:00:00Z"), at("stooq", null, true), at("nse", "2026-09-12T06:00:00Z")];
-    expect(staleSources(rows, now)).toEqual(["sec (no success for 17 days; SLA 8)", "stooq (stale)"]);
+    const rows = [at("sec", "2026-09-01T06:00:00Z"), at("yahoo", null, true), at("nse", "2026-09-12T06:00:00Z")];
+    expect(staleSources(rows, now)).toEqual(["sec (no success for 17 days; SLA 8)", "yahoo (stale)"]);
     expect(sourceStatus(rows[2] as SourceHealth, rows, now)).toBe("ok");
   });
 

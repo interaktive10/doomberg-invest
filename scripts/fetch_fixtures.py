@@ -416,21 +416,23 @@ PX_SYMBOLS = ("aapl.us", "msft.us", "nvda.us", "cat.us", "orcl.us", "pwr.us", "j
 
 
 def fetch_f_px(client: HttpClient) -> list[str]:
-    """F-PX (BRIEF §9): Stooq weekly CSVs for 10 symbols, replacing the synthetic stand-ins of fixtures/px/make_px.py.
-    Stooq resets connections from some networks; run this where stooq.com answers (1 request / 2 s)."""
+    """F-PX (BRIEF §9): Yahoo's weekly charts for the 10 symbols (docs/SPEC_ISSUES.md 37), replacing the synthetic
+    stand-ins of fixtures/px/make_px.py in fixtures/px/yahoo/. Yahoo refuses some networks (the build container's
+    proxy); run this where query1.finance.yahoo.com answers (1 request / s)."""
     import httpx
 
-    from pipeline.net.stooq import StooqUnavailable, csv_url, parse_csv
+    from pipeline.net.yahoo import YahooUnavailable, chart_url, parse_chart, yahoo_symbol
 
-    out, errors = ROOT / "fixtures" / "px", []
+    out, errors = ROOT / "fixtures" / "px" / "yahoo", []
     for sym in PX_SYMBOLS:
+        ysym = yahoo_symbol(sym.removesuffix(".us"))
         try:
-            raw = client.get_bytes(csv_url(sym))
-            parse_csv(raw)  # refuse to write "No data" or a hit-limit page over a fixture
-        except (StooqUnavailable, httpx.HTTPError) as e:
-            errors.append(f"{sym}: {type(e).__name__}: {e}")
+            raw = client.get_bytes(chart_url(ysym))
+            parse_chart(raw)  # refuse to write an error page over a fixture
+        except (YahooUnavailable, httpx.HTTPError) as e:
+            errors.append(f"{ysym}: {type(e).__name__}: {e}")
             continue
-        (out / f"{sym.replace('^', '_')}_w.csv").write_bytes(raw)
+        (out / f"{ysym.replace('^', '_')}.json").write_bytes(raw)
     return errors
 
 
