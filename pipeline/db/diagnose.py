@@ -1,7 +1,8 @@
 """Why a scored week's companies landed in their buckets (BRIEF §4.8), read-only. For the candidate stage (Evidence
 >= 40) per market: how many were priced, which signal families contributed, how many had two families (Evidence
 above the single-family cap of 55 needs them), each of C1-C4, a Gap, a market cap above the §1.3 floor; why the
-priced ones that aren't candidates aren't; and the top of the stage with its numbers.
+priced ones that aren't candidates aren't; the top of the stage with its numbers; and the last scoring run's errors by
+source (a source that failed, such as GDELT for C4, shows here).
 
 `python -m pipeline.db.diagnose [--week YYYY-MM-DD]` (default: the latest scored week); the manual workflow
 diagnose.yml runs it against the live database. Market data only: no journal, positions or post-mortems."""
@@ -33,6 +34,12 @@ join companies c on c.id = s.company_id
 left join company_metrics m on m.company_id = s.company_id and m.week_end = s.week_end
 where s.week_end = %s and s.evidence >= %s
 order by s.evidence desc, symbol
+"""
+
+
+LAST_RUN_SQL = """
+select started_at, status, stats -> 'errors' from runs
+where kind = 'scores_weekly' and finished_at is not null order by started_at desc limit 1
 """
 
 
@@ -110,6 +117,26 @@ def report(rows: Sequence[Row], universe: Mapping[str, Mapping[str, Any]], bucke
     return out
 
 
+def run_errors(errors: Sequence[str], examples: int = 3) -> list[str]:
+    """A scoring run's errors ("gdelt Quanta: GdeltError: ...") grouped by their source, with the first examples."""
+    by: dict[str, list[str]] = {}
+    for e in errors:
+        by.setdefault(e.split(" ", 1)[0], []).append(e)
+    out = []
+    for source, items in sorted(by.items(), key=lambda kv: -len(kv[1])):
+        out.append(f"  {source}: {len(items)}")
+        out += [f"    {e[:200]}" for e in items[:examples]]
+    return out
+
+
+def last_run(conn: psycopg.Connection[Any]) -> list[str]:
+    row = conn.execute(LAST_RUN_SQL).fetchone()
+    if row is None:
+        return ["last scoring run: none"]
+    errors = [str(e) for e in (row[2] or [])]
+    return [f"last scoring run {row[0]:%Y-%m-%d %H:%M}Z: {row[1]}, {len(errors)} errors", *run_errors(errors)]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--week", type=date.fromisoformat, default=None, help="Friday to inspect (default: the latest)")
@@ -124,8 +151,9 @@ def main(argv: list[str] | None = None) -> int:
             print("diagnose: no scored week yet")
             return 0
         rows = stage_rows(conn, week, stage_min)
+        runs = last_run(conn)
     print(f"diagnose {week}:")
-    for line in report(rows, cfgs.universe, cfgs.signals["scores"]["buckets"]):
+    for line in [*report(rows, cfgs.universe, cfgs.signals["scores"]["buckets"]), *runs]:
         print(line)
     return 0
 
