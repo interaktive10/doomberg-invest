@@ -19,7 +19,7 @@ Embecta earns high margins and returns on capital, but revenue is shrinking, deb
 ## Inferences
 - Inference: the business earns high returns on capital but is shrinking and carries heavy debt, so small changes in operating results move the equity value a lot.
 - Inference: four officers and directors buying on the same day after a large fall suggests they see the decline as overdone.
-- Inference: the negative C2 comes from a reverse DCF run at the floor of its sales-to-capital range, which makes any growth look expensive, so it is weak evidence either way.
+- Inference: at this margin and the floor sales-to-capital ratio C2 uses, the reverse DCF values growth negatively, so the negative C2 reads backwards here and should be ignored.
 
 ## Assumptions
 - Assumption: the revenue decline slows rather than speeds up.

@@ -55,9 +55,10 @@
  ],
  "why_mispriced": [
   {
-   "text": "The reverse-DCF metric C2 puts the growth implied by the enterprise value at -2.1% a year, against 16.1% from the evidence-growth formula [c:C2].",
+   "text": "Two directors bought heavily while the trailing operating margin was negative [s:S7] [m:op_margin_ttm].",
    "cites": [
-    "c:C2"
+    "s:S7",
+    "m:op_margin_ttm"
    ]
   },
   {
@@ -70,7 +71,8 @@
  "inferences": [
   "Inference: the insider buying is the strongest evidence here; revenue is shrinking and the business is loss-making, so the buyers look to be betting on a turn rather than reacting to one.",
   "Inference: RPO is a small share of revenue, so S1 at full strength overstates how much future revenue is contracted.",
-  "Inference: the evidence-growth input to C2 leans on the same RPO jump, so the expectations gap and the order-book signal are not independent evidence."
+  "Inference: the evidence-growth input to C2 leans on the same RPO jump, so the expectations gap and the order-book signal are not independent evidence.",
+  "Inference: at this margin and the floor sales-to-capital ratio C2 uses, the reverse DCF values growth negatively, so its comparison of implied and evidence growth reads backwards here and is not evidence of mispricing."
  ],
  "assumptions": [
   "Assumption: coal prices and volumes stop falling within the next few quarters.",
@@ -104,9 +106,11 @@
    ]
   },
   {
-   "text": "News attention (C4) is missing, so the Gap score rests on C1 to C3 only [c:C4].",
+   "text": "C2 is unreliable here (see the inferences) and news attention (C4) is missing, so the Gap score rests mainly on C1, which is unfavourable, and C3 [c:C2] [c:C4] [c:gap].",
    "cites": [
-    "c:C4"
+    "c:C2",
+    "c:C4",
+    "c:gap"
    ]
   }
  ],
