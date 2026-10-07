@@ -339,7 +339,7 @@ CHECKS: list[Check] = [
     Check(
         "M4-04",
         "m4",
-        "Stooq and bhavcopy weekly ingestion; split detection needs share-count confirmation",
+        "Yahoo and bhavcopy weekly ingestion; split detection needs share-count confirmation",
         _both(
             ["tests/prices", "tests/signals/test_splits.py"],
             [

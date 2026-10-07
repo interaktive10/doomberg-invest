@@ -1,4 +1,4 @@
-"""M4 against the database: signals as of W ignore later filings (M4-02); the weekly scoring run on F-US with Stooq
+"""M4 against the database: signals as of W ignore later filings (M4-02); the weekly scoring run on F-US with Yahoo
 and GDELT served by mocks (prices, splits flagged, context, Gap, buckets, shortlist, metrics); history pruning
 (docs/SPEC_ISSUES.md 9); the screener API (screen() over screener_v)."""
 
@@ -19,7 +19,8 @@ from pipeline.db.models import Company, CorpEvent, InsiderEvent, OwnershipRow, P
 from pipeline.db.pit import cutoff_for
 from pipeline.net.gdelt import build_query, timeline_url
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import csv_url, parse_csv
+from pipeline.net.stooq import parse_csv
+from pipeline.net.yahoo import HOSTS, chart_url
 from pipeline.screener import MetricFilter, ScreenSpec, run_screen
 from pipeline.settings import Settings
 from pipeline.signals import weekly
@@ -140,9 +141,9 @@ def snapshot_in(conn: psycopg.Connection[Any], week: date) -> tuple[list[Any], l
 
 def mock_http(tmp_path: Path) -> HttpClient:
     http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
-    for sym in ("pwr.us", "jbl.us", "cat.us", "xlk.us"):
-        http.register_mock(csv_url(sym), (FIX / "px" / f"{sym}_w.csv").read_bytes())
-    http.register_mock(csv_url("^spx"), (FIX / "px" / "_spx_w.csv").read_bytes())
+    for sym in ("PWR", "JBL", "CAT", "XLK"):
+        http.register_mock(chart_url(sym), (FIX / "px" / "yahoo" / f"{sym}.json").read_bytes())
+    http.register_mock(chart_url("^GSPC"), (FIX / "px" / "yahoo" / "_GSPC.json").read_bytes())
     http.register_mock(timeline_url(build_query("QUANTA SERVICES, INC.", "PWR", "us")),
                        (FIX / "gdelt" / "timeline_pwr.json").read_bytes())  # fmt: skip
     http.register_mock(timeline_url(build_query("JABIL INC", "JBL", "us")), (FIX / "gdelt" / "empty.json").read_bytes())
@@ -171,12 +172,13 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     stats = weekly.run(conn, week, http=mock_http(tmp_path), imports=tmp_path / "imports")
 
     # the candidate stage: PWR and JBL by their theses, CAT by its Evidence (50: S1 fired)
-    assert stats.companies == 4 and stats.stage == 3 and stats.stooq_ok == 3 and stats.gdelt_queried == 3
+    assert stats.companies == 4 and stats.stage == 3 and stats.prices_ok == 3 and stats.gdelt_queried == 3
     n_signals = conn.execute("select count(*) from signal_values where week_end = %s", (week,)).fetchone()
     assert n_signals == (4 * 12,)
     prices = conn.execute("select count(*), min(week_end), max(week_end) from prices_w where company_id = %s", (pwr,))
     count, first, last = prices.fetchone() or (0, None, None)
     assert count == 260 and last == week and first is not None
+    assert conn.execute("select distinct source from prices_w where company_id = %s", (pwr,)).fetchall() == [("yahoo",)]
     # JBL's synthetic history halves in week 150 while its share count doesn't move: flagged, never adjusted
     assert any(j.startswith("JBL ") for j in stats.unconfirmed_jumps)
     unadjusted = conn.execute("select count(*) from prices_w where company_id = %s and adj_close <> close", (jbl,))
@@ -210,19 +212,21 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     assert (nxt.gdelt_queried, nxt.gdelt_reused) == (0, 3)
 
 
-def test_manual_price_import_when_stooq_fails(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+def test_manual_price_import_when_yahoo_fails(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     week = date(2026, 9, 18)
     cid = add(conn, "0001050915")
     fundamentals(conn, "0001050915", cid)
     thesis(conn, cid)
     http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
-    http.register_mock(csv_url("pwr.us"), (FIX / "px" / "limit.txt").read_bytes())  # "Exceeded the daily hits limit"
+    for host in HOSTS:
+        http.register_error(chart_url("PWR", host), 429)  # "Too Many Requests"
     imports = tmp_path / "imports"
     imports.mkdir()
     (imports / "PWR.csv").write_bytes((FIX / "px" / "pwr.us_w.csv").read_bytes())
     stats = weekly.run(conn, week, http=http, imports=imports, gdelt_limit=0)
-    assert (stats.stooq_ok, stats.stooq_imported) == (0, 1)
-    assert conn.execute("select count(*) from prices_w where company_id = %s", (cid,)).fetchone() == (260,)
+    assert (stats.prices_ok, stats.prices_imported) == (0, 1)
+    assert conn.execute("select count(*), min(source), max(source) from prices_w where company_id = %s",
+                        (cid,)).fetchone() == (260, "manual", "manual")  # fmt: skip
 
 
 def test_s7_amendment_filed_later_moving_the_trade_back_is_read(conn: psycopg.Connection[Any]) -> None:
@@ -257,35 +261,36 @@ def test_s7_amendment_filed_later_moving_the_trade_back_is_read(conn: psycopg.Co
     assert fired is False and inputs["insiders"] == 1
 
 
-def test_stooq_stale_when_every_download_fails_cleared_when_it_answers(
+def test_yahoo_stale_when_every_download_fails_cleared_when_it_answers(
     conn: psycopg.Connection[Any], tmp_path: Path
 ) -> None:
-    """M4 review R1-F3: a run where every Stooq download fails leaves source_health stale (the web's banner); a run
-    where Stooq answers clears it; a re-run of the week doesn't download what it already has."""
+    """M4 review R1-F3: a run where every price download fails leaves source_health stale (the web's banner); a run
+    where Yahoo answers clears it; a re-run of the week doesn't download what it already has."""
     week = date(2026, 9, 18)
     cid = add(conn, "0001050915")
     fundamentals(conn, "0001050915", cid)
     thesis(conn, cid)
     down = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path / "a"))
-    down.register_mock(csv_url("pwr.us"), (FIX / "px" / "limit.txt").read_bytes())  # benchmarks: no answer at all
+    for host in HOSTS:  # benchmarks: no answer at all
+        down.register_mock(chart_url("PWR", host), b"<!doctype html><html>Will be right back...")
     stats = weekly.run(conn, week, http=down, imports=tmp_path / "imports", gdelt_limit=0)
-    assert (stats.stooq_ok, stats.stooq_failed, stats.bench_ok, stats.bench_failed) == (0, 1, 0, 12)
+    assert (stats.prices_ok, stats.prices_failed, stats.bench_ok, stats.bench_failed) == (0, 1, 0, 12)
 
-    def stooq() -> Any:
-        return {h.source: h for h in repo.source_health(conn)}["stooq"]
+    def yahoo() -> Any:
+        return {h.source: h for h in repo.source_health(conn)}["yahoo"]
 
-    assert stooq().stale and (stooq().last_error or "").startswith("stale: 13 downloads failed")
+    assert yahoo().stale and (yahoo().last_error or "").startswith("stale: 13 downloads failed")
     up = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
-    assert up.stooq_ok == 1 and not stooq().stale and stooq().last_error is None and stooq().last_success
+    assert up.prices_ok == 1 and not yahoo().stale and yahoo().last_error is None and yahoo().last_success
     http = mock_http(tmp_path / "c")
     again = weekly.run(conn, week, http=http, imports=tmp_path / "imports", gdelt_limit=0)
-    assert (again.stooq_ok, again.stooq_skipped, again.bench_skipped) == (0, 1, 2)  # PWR, ^spx and XLK are priced
-    assert csv_url("pwr.us") not in http.calls and csv_url("^spx") not in http.calls
-    assert not stooq().stale  # the other ten benchmarks failed again, but this week's prices are in
+    assert (again.prices_ok, again.prices_skipped, again.bench_skipped) == (0, 1, 2)  # PWR, ^spx and XLK are priced
+    assert chart_url("PWR") not in http.calls and chart_url("^GSPC") not in http.calls
+    assert not yahoo().stale  # the other ten benchmarks failed again, but this week's prices are in
 
 
 def test_adjusted_source_split_moves_market_cap_to_the_new_basis(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """M4 review R1-F6: stored closes 10x the fresh download's (Stooq re-adjusted its history for a 10:1 split).
+    """M4 review R1-F6: stored closes 10x the fresh download's (the source re-adjusted its history for a 10:1 split).
     Until a 10-Q reports the new count, market cap is price x the pre-split count x 10."""
     week = date(2026, 9, 18)
     cid = add(conn, "0001050915")
@@ -299,7 +304,7 @@ def test_adjusted_source_split_moves_market_cap_to_the_new_basis(conn: psycopg.C
     with conn.transaction(force_rollback=True):
         weekly.run(conn, week, http=mock_http(tmp_path / "a"), imports=tmp_path / "imports", gdelt_limit=0)
         before = market_cap()
-    old = [PriceW(company_id=cid, week_end=b.week_end, close=b.close * 10, adj_close=b.close * 10, source="stooq")
+    old = [PriceW(company_id=cid, week_end=b.week_end, close=b.close * 10, adj_close=b.close * 10, source="yahoo")
            for b in parse_csv((FIX / "px" / "pwr.us_w.csv").read_bytes()) if b.week_end < week]  # fmt: skip
     repo.upsert_prices(conn, old)
     stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
@@ -347,7 +352,7 @@ def test_adjusted_source_split_in_a_gap_already_reported_keeps_market_cap_and_c1
     assert clean[0] is not None and clean[0][0] is not None and clean[1] is not None
     bars = [b for b in parse_csv((FIX / "px" / "pwr.us_w.csv").read_bytes()) if b.week_end <= date(2026, 1, 2)]
     repo.upsert_prices(conn, [PriceW(company_id=cid, week_end=b.week_end, close=b.close * 10, adj_close=b.close * 10,
-                                     source="stooq") for b in bars])  # fmt: skip
+                                     source="yahoo") for b in bars])  # fmt: skip
     stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
     assert stats.source_splits == ["PWR 2026-01-09 x10"]
     assert seen() == clean

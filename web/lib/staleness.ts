@@ -6,7 +6,7 @@ import type { SourceHealth } from "@/lib/data";
 // primary is fine (M6 review R2-F5).
 export const SLA_DAYS: Record<string, number> = {
   sec: 8,
-  stooq: 8,
+  yahoo: 8,
   gdelt: 8,
   fred: 8,
   eia: 8,
