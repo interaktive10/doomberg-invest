@@ -8,10 +8,19 @@ from pipeline.facts.html_text import Normalized
 MAX_PAGES = 400  # annual reports run to 300+ pages; anything longer is cut (logged by the caller)
 
 
+class PdfUnreadable(ValueError):
+    """A body PDFium can't open (an error page served as a .pdf, a truncated download). A ValueError, so the callers
+    that skip a broken document (the Capex Desk's annual reports, the daily run's previous version) skip this one: the
+    first run with the LLM on stopped the whole capex job on one (2026-10-08)."""
+
+
 def page_texts(data: bytes, max_pages: int = MAX_PAGES) -> list[str]:
     import pypdfium2 as pdfium
 
-    pdf = pdfium.PdfDocument(data)
+    try:
+        pdf = pdfium.PdfDocument(data)
+    except Exception as e:  # noqa: BLE001 — PDFium's error type differs across pypdfium2 versions
+        raise PdfUnreadable(str(e)) from e
     try:
         out = []
         for i in range(min(len(pdf), max_pages)):
