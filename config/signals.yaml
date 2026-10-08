@@ -12,6 +12,7 @@ s1_orderbook:
   min_growth_gap: 0.10          # g(ob) - g(TTM revenue) >= 0.10 ...
   consecutive_quarters: 2       # ... in each of the last 2 quarters
   coverage_must_rise_yoy: true  # ob/TTM(revenue) above its year-ago value
+  min_coverage: 0.25            # ... and at least 0.25: a smaller book can't lead revenue (SPEC_ISSUES 42)
   strength_divisor: 0.30        # clip((g(ob) - g(rev))/0.30, 0, 1)
 
 s2_incremental_roic:
@@ -35,6 +36,7 @@ s4_earnings_quality:
   min_ccr: 1.0
   min_ccr_rise_yoy: 0.2
   max_sloan: 0.05               # (TTM NI - TTM CFO)/mean(total_assets 4q) < 0.05 and falling YoY
+  cfo_must_rise_yoy: true       # TTM CFO above a year earlier, not only net income falling (SPEC_ISSUES 41)
   strength_divisor: 0.5         # clip((CCR - 1)/0.5, 0, 1)
 
 s5_capital_discipline:

@@ -1,5 +1,6 @@
 """S4 earnings-quality inflection (BRIEF §4.6): NI > 0; CCR = TTM(cfo) / TTM(net_income) >= 1.0 and up >= 0.2 YoY;
-Sloan (TTM NI - TTM CFO) / mean(total_assets 4q) < 0.05 and falling YoY. Strength clip((CCR - 1) / 0.5, 0, 1)."""
+Sloan (TTM NI - TTM CFO) / mean(total_assets 4q) < 0.05 and falling YoY; TTM CFO above a year earlier, so a fall in
+net income alone doesn't fire it (docs/SPEC_ISSUES.md 41). Strength clip((CCR - 1) / 0.5, 0, 1)."""
 
 from __future__ import annotations
 
@@ -31,12 +32,14 @@ def compute(ctx: Ctx) -> SignalResult:
     sl, sl_then = sloan(s, 0), sloan(s, 4)
     if sl is None or sl_then is None:
         return missing("sloan", ccr=num(ccr))
-    inputs = {"ccr": num(ccr), "ccr_year_ago": num(ccr_then), "sloan": num(sl), "sloan_year_ago": num(sl_then)}
+    inputs = {"ccr": num(ccr), "ccr_year_ago": num(ccr_then), "sloan": num(sl), "sloan_year_ago": num(sl_then),
+              "ttm_cfo": num(cfo), "ttm_cfo_year_ago": num(cfo_then)}  # fmt: skip
     ok = (
         ccr >= cfg_dec(c, "min_ccr")
         and ccr - ccr_then >= cfg_dec(c, "min_ccr_rise_yoy")
         and sl < cfg_dec(c, "max_sloan")
         and sl < sl_then
+        and (cfo > cfo_then or not c.get("cfo_must_rise_yoy", False))
     )
     if not ok:
         return quiet(**inputs)

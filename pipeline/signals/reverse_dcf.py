@@ -140,8 +140,14 @@ def c2(s: Series, ev: Decimal | None, market: str, cfg: Mapping[str, Any], g_ob:
         terminal_growth=float(cfg["terminal_growth"][market]), years=int(cfg["years"]),
     )  # fmt: skip
     lo, hi = (float(v) for v in cfg["brentq_bounds"])
+    growth_return = x.margin * (1 - x.tax) * x.s2c  # what a $ of revenue growth earns on the capital it needs
+    if cfg.get("growth_must_add_value", False) and growth_return <= x.discount:
+        # PV falls as g rises here, so g* reads backwards and C2 with it (docs/SPEC_ISSUES.md 43)
+        return C2(None, None, {"missing": ["value_creating_growth"], "growth_return": growth_return,
+                               "margin": x.margin, "s2c": x.s2c, "tax": x.tax, "discount": x.discount})  # fmt: skip
     g_star = implied_growth(x, lo, hi)
-    g_e = evidence_growth(g_ob, revenue_cagr3(s), latest_revenue_yoy(s), cfg)
+    yoy = s.ttm_yoy("revenue", 0) if cfg["evidence_growth"].get("latest_yoy_basis") == "ttm" else latest_revenue_yoy(s)
+    g_e = evidence_growth(g_ob, revenue_cagr3(s), yoy, cfg)
     inputs = {"g_star": g_star, "g_e": num(g_e), "margin": x.margin, "s2c": x.s2c, "tax": x.tax, "ev": x.ev,
               "revenue": x.revenue, "discount": x.discount, "terminal_growth": x.terminal_growth}  # fmt: skip
     if g_star is None or g_e is None:

@@ -362,7 +362,10 @@ def score_company(
     soft = sum(1 for f in flags if f.status == "fired" and not f.hard)
     hard = any(f.status == "fired" and f.hard for f in flags)
     ev = evidence(results, soft, cfgs.weights, cfgs.signals["scores"])
-    g_ob = s01_orderbook.orderbook_growth(ctx)  # a year back or None (M4 review R2-F3)
+    eg = cfgs.context["c2_reverse_dcf"]["evidence_growth"]
+    min_cov = eg.get("orderbook_min_coverage")
+    g_ob = s01_orderbook.orderbook_growth(ctx, min_coverage=None if min_cov is None else Decimal(str(min_cov)))
+    # a year back or None (M4 review R2-F3); None under min coverage (SPEC_ISSUES 42)
     return results, flags, Scored(c, s, ev, hard, fired, g_ob, company_metrics(s))
 
 
