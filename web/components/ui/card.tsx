@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 // shadcn/ui Card.
 export function Card({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cn("rounded-lg border border-gray-300 bg-white p-4", className)} {...props} />;
+  return <div className={cn("rounded-2xl border border-gray-200/80 bg-white p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)]", className)} {...props} />;
 }
 
 export function CardTitle({ className, ...props }: ComponentProps<"h3">) {

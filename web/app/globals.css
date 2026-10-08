@@ -1,5 +1,33 @@
 @import "tailwindcss";
 
+/* The look: Inter, zinc neutrals and an indigo accent. The palette keeps Tailwind's gray-* and blue-* names (every
+   screen uses them), so a shade means the same lightness as before and the contrast notes below still hold. */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --color-gray-50: oklch(98.5% 0 0);
+  --color-gray-100: oklch(96.7% 0.001 286.375);
+  --color-gray-200: oklch(92% 0.004 286.32);
+  --color-gray-300: oklch(87.1% 0.006 286.286);
+  --color-gray-400: oklch(70.5% 0.015 286.067);
+  --color-gray-500: oklch(55.2% 0.016 285.938);
+  --color-gray-600: oklch(44.2% 0.017 285.786);
+  --color-gray-700: oklch(37% 0.013 285.805);
+  --color-gray-800: oklch(27.4% 0.006 286.033);
+  --color-gray-900: oklch(21% 0.006 285.885);
+  --color-gray-950: oklch(14.1% 0.005 285.823);
+  --color-blue-50: oklch(96.2% 0.018 272.314);
+  --color-blue-100: oklch(93% 0.034 272.788);
+  --color-blue-200: oklch(87% 0.065 274.039);
+  --color-blue-300: oklch(78.5% 0.115 274.713);
+  --color-blue-400: oklch(67.3% 0.182 276.935);
+  --color-blue-500: oklch(58.5% 0.233 277.117);
+  --color-blue-600: oklch(51.1% 0.262 276.966);
+  --color-blue-700: oklch(45.7% 0.24 277.023);
+  --color-blue-800: oklch(39.8% 0.195 277.366);
+  --color-blue-900: oklch(35.9% 0.144 278.697);
+  --color-blue-950: oklch(25.7% 0.09 281.288);
+}
+
 /* BRIEF §6: readable at 390 px; axe 0 serious issues. Contrast: gray-700 and darker text, blue-800 links; secondary
    text on the gray-50 page background is gray-600 or darker. Everything here sits in Tailwind's layers, so a utility
    class on an element (a button-styled link's text-white, no-underline) still wins over these defaults. */
@@ -9,12 +37,13 @@
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-gray-50 text-[15px] text-gray-900 antialiased;
+    font-feature-settings: "cv11", "ss01";
   }
 
   /* Links in text are underlined, not told apart by colour alone (axe link-in-text-block). */
   a {
-    @apply text-blue-800 underline decoration-blue-800/40 underline-offset-2 hover:text-blue-950 hover:decoration-blue-950;
+    @apply text-blue-700 underline decoration-blue-300 underline-offset-4 transition-colors hover:text-blue-900 hover:decoration-blue-700;
   }
 
   :focus-visible {
@@ -44,7 +73,7 @@
 @layer components {
   /* A link that stands alone (a table's company name): weight tells it apart, the underline comes on hover. */
   .link-quiet {
-    @apply font-medium text-blue-800 no-underline hover:underline;
+    @apply font-medium text-gray-900 no-underline hover:text-blue-700;
   }
 
   /* Markdown the pipeline wrote (components/markdown.tsx): headings render two levels down (# -> h3, ## -> h4). */

@@ -15,15 +15,15 @@ export function Page({
   description?: ReactNode;
 }) {
   return (
-    <main id="main" className="mx-auto w-full max-w-6xl px-4 pt-6 pb-4 sm:pt-8">
-      <div className="mb-5 flex flex-wrap items-start gap-x-4 gap-y-3">
+    <main id="main" className="mx-auto w-full max-w-6xl px-4 pt-8 pb-6 sm:pt-12">
+      <div className="mb-8 flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{title}</h1>
-          {description ? <div className="mt-1.5 text-sm text-gray-700">{description}</div> : null}
+          <h1 className="text-3xl font-semibold tracking-tight text-gray-900">{title}</h1>
+          {description ? <div className="mt-2 text-[15px] text-gray-600">{description}</div> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      <div className="flex flex-col gap-5">{children}</div>
+      <div className="flex flex-col gap-6">{children}</div>
     </main>
   );
 }
@@ -46,15 +46,15 @@ export function Section({
 }) {
   return (
     <section
-      className={cn("scroll-mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5", className)}
+      className={cn("scroll-mt-20 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:p-6", className)}
       aria-labelledby={id}
     >
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h2 id={id} className="text-base font-semibold text-gray-900">
+          <h2 id={id} className="text-base font-semibold tracking-tight text-gray-900">
             {title}
           </h2>
-          {description ? <div className="mt-0.5 text-sm text-gray-700">{description}</div> : null}
+          {description ? <div className="mt-1 text-sm text-gray-600">{description}</div> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
@@ -64,7 +64,7 @@ export function Section({
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center text-sm text-gray-700">{children}</p>;
+  return <p className="rounded-xl border border-dashed border-gray-300 bg-gray-50/60 px-4 py-8 text-center text-sm text-gray-600">{children}</p>;
 }
 
 /** Small print under a table or a form. */
@@ -94,14 +94,14 @@ export function Flash({ error, ok }: { error?: string | undefined; ok?: string |
 export function Stat({ label, value, hint, href }: { label: string; value: ReactNode; hint?: ReactNode; href?: string }) {
   const body = (
     <>
-      <div className="text-xs font-medium tracking-wide text-gray-700 uppercase">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-gray-900 tabular-nums">{value}</div>
-      {hint ? <div className="mt-0.5 text-xs text-gray-700">{hint}</div> : null}
+      <div className="text-sm font-medium text-gray-600">{label}</div>
+      <div className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 tabular-nums">{value}</div>
+      {hint ? <div className="mt-1 text-xs text-gray-600">{hint}</div> : null}
     </>
   );
-  const box = "block rounded-xl border border-gray-200 bg-white p-4 shadow-sm";
+  const box = "block rounded-2xl border border-gray-200/80 bg-white p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)]";
   return href ? (
-    <Link href={href} className={cn(box, "no-underline transition-colors hover:border-blue-300 hover:bg-blue-50/40")}>
+    <Link href={href} className={cn(box, "no-underline transition-shadow hover:border-gray-300 hover:shadow-md")}>
       {body}
     </Link>
   ) : (

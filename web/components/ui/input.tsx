@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 // shadcn/ui Input, Textarea, Select (native), Label.
 const field =
-  "rounded-md border border-gray-400 bg-white px-2.5 py-1.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-600 " +
+  "rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-500 " +
   "focus-visible:border-blue-700 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-blue-700/30";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
