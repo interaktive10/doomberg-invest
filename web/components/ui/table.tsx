@@ -33,7 +33,7 @@ export function TableHead({ className, num, sticky, ...props }: ComponentProps<"
     <th
       scope="col"
       className={cn(
-        "px-3 py-2 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-gray-700 uppercase",
+        "px-3 py-2.5 text-left text-xs font-medium whitespace-nowrap text-gray-600",
         num && "text-right",
         sticky && STICKY,
         className,
@@ -47,7 +47,7 @@ export function TableCell({ className, num, sticky, ...props }: ComponentProps<"
   return (
     <td
       className={cn(
-        "px-3 py-2.5 align-top text-gray-900 group-hover:bg-gray-50",
+        "px-3 py-3 align-top text-gray-900 group-hover:bg-gray-50/80",
         num && "text-right whitespace-nowrap tabular-nums",
         sticky && STICKY,
         sticky && "group-hover:bg-gray-50",

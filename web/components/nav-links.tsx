@@ -28,8 +28,8 @@ export function NavLinks() {
           href={href}
           aria-current={current(href) ? "page" : undefined}
           className={cn(
-            "rounded-md px-1 py-1.5 text-center text-[13px] font-medium no-underline transition-colors sm:px-2.5 sm:text-sm",
-            current(href) ? "bg-gray-900 text-white hover:text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
+            "rounded-lg px-1 py-1.5 text-center text-[13px] font-medium no-underline transition-colors sm:px-3 sm:text-sm",
+            current(href) ? "bg-gray-100 text-gray-900 hover:text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
           )}
         >
           {label}

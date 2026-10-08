@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 // shadcn/ui Badge. Text colours are the 800/900 shades on their 50 tints (axe contrast).
 export const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
+  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
   {
     variants: {
       variant: {

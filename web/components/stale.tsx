@@ -10,7 +10,7 @@ export function StaleBanner({ sources, now }: { sources: SourceHealth[]; now: Da
   if (late.length === 0) return null;
   const names = late.map((s) => sourceLabel(s.source)).join(", ");
   return (
-    <aside aria-label="Stale data" className="border-b border-amber-300 bg-amber-50 text-sm text-amber-950">
+    <aside aria-label="Stale data" className="border-b border-amber-200 bg-amber-50/80 text-sm text-amber-950">
       <details className="mx-auto max-w-6xl px-4 py-2">
         <summary className="marker:text-amber-800">
           <strong className="font-semibold">Stale data:</strong> {late.length === 1 ? "1 source is" : `${late.length} sources are`} out

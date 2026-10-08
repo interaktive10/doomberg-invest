@@ -70,15 +70,15 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       description={week ? `The weekly scores for the week ending ${week}. Research only: nothing here is a trade.` : "The weekly scores, by bucket."}
     >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <nav aria-label="Buckets" className="grid grid-cols-4 gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-sm sm:inline-flex sm:self-start">
+      <nav aria-label="Buckets" className="grid grid-cols-4 gap-1 rounded-xl bg-gray-100 p-1 sm:inline-flex sm:self-start">
         {TABS.map(([b, text]) => (
           <Link
             key={b}
             href={href({ ...filters, bucket: b })}
             aria-current={b === bucket ? "page" : undefined}
             className={cn(
-              "rounded-md px-2 py-1.5 text-center text-sm font-medium no-underline transition-colors sm:px-4",
-              b === bucket ? "bg-gray-900 text-white hover:text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
+              "rounded-lg px-2 py-1.5 text-center text-sm font-medium no-underline transition-colors sm:px-4",
+              b === bucket ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200 hover:text-gray-900" : "text-gray-600 hover:text-gray-900",
             )}
           >
             {text}
