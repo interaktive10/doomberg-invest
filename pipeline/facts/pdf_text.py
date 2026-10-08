@@ -19,7 +19,7 @@ def page_texts(data: bytes, max_pages: int = MAX_PAGES) -> list[str]:
 
     try:
         pdf = pdfium.PdfDocument(data)
-    except pdfium.PdfiumError as e:
+    except Exception as e:  # noqa: BLE001 — PDFium's error type differs across pypdfium2 versions
         raise PdfUnreadable(str(e)) from e
     try:
         out = []
