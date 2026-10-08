@@ -24,7 +24,7 @@ export function StaleBanner({ sources, now }: { sources: SourceHealth[]; now: Da
           ))}
         </ul>
         <p className="mb-1 text-xs">
-          Each source&apos;s last success and error are under <Link href="/#sources">Source health</Link> on Home.
+          Each source&apos;s last success and error are under <Link href="/settings#sources">Sources</Link> in Settings.
         </p>
       </details>
     </aside>

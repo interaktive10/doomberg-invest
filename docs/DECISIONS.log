@@ -232,3 +232,4 @@
 2026-10-07 source_health rows are the sources the pipeline reports (SPEC_ISSUES 40): pipeline.db.seed.SOURCES names twelvedata, not stooq or fred, because quarterly.yml re-seeds it; migration 0014 drops the stooq and fred rows.
 2026-10-08 SPEC_ISSUES 41-43 applied (Manzoor): S4 needs TTM CFO up YoY; S1 and C2's g(ob) need ob >= 0.25 x TTM revenue; C2 null when m(1-t) x S2C <= discount; g_e reads TTM revenue YoY.
 2026-10-08 Gemini quotas from AI Studio (free tier): 15 RPM, 500 RPD per provider; thesis cards use gemini-3.5-flash-lite like extraction, because flash's 20 RPD would 429 and block the whole provider. EIA optional (SPEC_ISSUES 44): no seeded row, migration 0015.
+2026-10-08 Web simplified and sped up (SPEC_ISSUES 45): 3-item nav + More, Candidates as plain-language cards, Home = counts + digest, one Auth check per request, loading screen.

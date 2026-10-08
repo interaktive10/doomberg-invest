@@ -24,10 +24,12 @@ export async function middleware(request: NextRequest) {
       },
     },
   });
-  const { data } = await supabase.auth.getUser();
+  // The cookie's session (refreshed when due), not a round trip to Supabase Auth on every click: each page and server
+  // action verifies the user with Auth itself (lib/auth.ts requireUser), so this only keeps strangers on /login.
+  const { data } = await supabase.auth.getSession();
   const path = request.nextUrl.pathname;
   if (PUBLIC.some((p) => path === p || path.startsWith(`${p}/`))) return response;
-  if (!isAllowed(data.user?.email, process.env.APP_ALLOWED_EMAIL)) return toLogin(request);
+  if (!isAllowed(data.session?.user.email, process.env.APP_ALLOWED_EMAIL)) return toLogin(request);
   return response;
 }
 

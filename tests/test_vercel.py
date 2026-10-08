@@ -17,3 +17,10 @@ def test_vercel_builds_only_when_the_app_or_its_config_changes() -> None:
     assert doc["ignoreCommand"] == "git diff --quiet HEAD^ HEAD -- . ../config"
     traced = (ROOT / "web" / "next.config.ts").read_text(encoding="utf-8")
     assert '"../config/*.yaml"' in traced  # the only files outside web/ the deployment reads
+
+
+def test_only_main_deploys() -> None:
+    """Every PR push also made a preview deployment, which counts against the same daily limit; on 2026-10-08 the
+    previews of pipeline PRs held the production deploy of the simplified app back. Only main deploys now."""
+    doc = json.loads((ROOT / "web" / "vercel.json").read_text(encoding="utf-8"))
+    assert doc["git"]["deploymentEnabled"] == {"*": False, "main": True}
