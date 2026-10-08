@@ -41,6 +41,22 @@ export const SIGNAL_NAME: Record<string, string> = {
   S12: "Cycle position",
 };
 
+/** The same signals in everyday words, for the Candidates cards ("why it's here"). */
+export const SIGNAL_PLAIN: Record<string, string> = {
+  S1: "Order book growing faster than sales",
+  S2: "Returns on new investment rising",
+  S3: "Margins widening as sales grow",
+  S4: "Cash flow rising ahead of profits",
+  S5: "Buying back shares from free cash flow",
+  S6: "Debt paid down",
+  S7: "Insiders buying shares",
+  S8: "More funds starting to own it",
+  S9: "Verified wins in its filings",
+  S10: "Spin-off or special situation",
+  S11: "Riding a capex wave upstream",
+  S12: "Industry cycle turning up",
+};
+
 /** BRIEF §1.5. */
 export const RED_FLAG_NAME: Record<string, string> = {
   R1: "Accruals high or cash conversion weak",

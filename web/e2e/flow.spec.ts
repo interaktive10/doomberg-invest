@@ -21,6 +21,11 @@ test.afterEach(async ({ page }, info) => {
   console.log(`[page text] ${(await page.locator("body").innerText().catch(() => "")).slice(0, 1500)}`);
 });
 
+/** A company's card on the Candidates screen (one list item per company). */
+function card(page: Page, name: string) {
+  return page.getByRole("list", { name: "Candidates" }).getByRole("listitem").filter({ hasText: name });
+}
+
 async function flash(page: Page, text: string | RegExp): Promise<void> {
   await expect(page.getByRole("main").getByRole("status")).toContainText(text);
 }
@@ -35,16 +40,16 @@ async function journalEntry(page: Page, action: string, reason: string, override
 test("candidates: dismiss one with a reason, start research on another", async ({ page }) => {
   await page.goto("/candidates");
   await expect(page.getByRole("heading", { level: 1, name: "Candidates" })).toBeVisible();
-  const kappa = page.getByRole("row").filter({ hasText: "Kappa Cables Ltd" });
+  const kappa = card(page, "Kappa Cables Ltd");
   await kappa.locator("summary").click();
   await kappa.getByLabel("Reason").fill("Promoter pledge is rising");
   await kappa.getByRole("button", { name: "Dismiss for this week", exact: true }).click();
   await flash(page, "Dismissed for this week.");
-  await expect(page.getByRole("row").filter({ hasText: "Kappa Cables Ltd" })).toHaveCount(0);
-  await expect(page.getByRole("row").filter({ hasText: "Echo Grid Corp." })).toHaveCount(1);
+  await expect(card(page, "Kappa Cables Ltd")).toHaveCount(0);
+  await expect(card(page, "Echo Grid Corp.")).toHaveCount(1);
 
   await page.getByRole("link", { name: "Early" }).click();
-  await page.getByRole("row").filter({ hasText: "Delta Power Inc." }).getByRole("button", { name: "Research" }).click();
+  await card(page, "Delta Power Inc.").getByRole("button", { name: "Research" }).click();
   await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Delta Power Inc.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Research");
@@ -106,7 +111,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Closed");
   await expect(page.getByRole("heading", { name: "Post-mortem" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Journal" }).first().click();
+  await page.goto("/journal");
   const echo = page.getByRole("region", { name: "Journal entries" }).getByRole("row").filter({ hasText: "Echo Grid Corp." });
   for (const action of ["Start position", "Review", "Exit"]) await expect(echo.getByRole("cell", { name: action, exact: true })).toHaveCount(1);
   await expect(page.getByText("Backlog converted as expected.")).toBeVisible();
