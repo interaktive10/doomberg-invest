@@ -34,7 +34,9 @@ US_SNAPSHOT = REPO_ROOT / "data" / "universe" / "us_tickers_exchange.json"
 IN_SNAPSHOT = REPO_ROOT / "data" / "universe" / "nse_equity_list.csv"
 CAPEX_SEED = REPO_ROOT / "config" / "capex_seed.yaml"
 WEIGHTS = REPO_ROOT / "config" / "weights.yaml"
-SOURCES = ("sec", "sec_13f", "nse", "bse", "stooq", "gdelt", "fred", "eia")
+# The sources the pipeline records health for (quarterly.yml re-seeds, so a source listed here comes back after a
+# migration drops it): US prices are Twelve Data's since 2026-10 (SPEC_ISSUES 38); nothing reads FRED (40).
+SOURCES = ("sec", "sec_13f", "nse", "bse", "twelvedata", "gdelt", "eia")
 
 
 class SnapshotTooSmall(ValueError):
