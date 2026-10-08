@@ -42,7 +42,7 @@ def test_india_text_skips_an_unreadable_annual_report(monkeypatch: pytest.Monkey
     monkeypatch.setattr(run, "as_of", lambda week: NoEvents())
     monkeypatch.setattr(run.annual_report, "listing_path", lambda symbol: "x")
     monkeypatch.setattr(run.annual_report, "latest", lambda doc: Rep())
-    stats = run.CapexStats()
+    stats = run.CapexStats("2026-10-02")
     c = Company(id=uuid4(), market="in", name="X Ltd", nse_symbol="XLTD")
     assert run.india_text(None, Nse(), c, date(2026, 10, 2), stats) == []  # type: ignore[arg-type]
     assert stats.errors == ["annual report XLTD: PdfUnreadable"]
