@@ -1,6 +1,7 @@
 """S1 order-book acceleration (BRIEF §4.6): the order book (US RPO, else the latest verified `backlog` fact per
 quarter) grows faster than TTM revenue by >= 10 pp in each of the last 2 quarters, and coverage (ob / TTM revenue) is
-above its year-ago value. Strength clip((g(ob) - g(rev)) / 0.30, 0, 1)."""
+above its year-ago value and at least `min_coverage` (docs/SPEC_ISSUES.md 42: a book of 6% of revenue can't lead it).
+Strength clip((g(ob) - g(rev)) / 0.30, 0, 1)."""
 
 from __future__ import annotations
 
@@ -38,9 +39,14 @@ def book(s: Series, market: str, facts: Sequence[Fact]) -> tuple[Callable[[int],
     return from_facts, "backlog_fact"
 
 
-def orderbook_growth(ctx: Ctx, lag: int = 0) -> Decimal | None:
-    """g(ob) at `lag` against a year earlier (None without a year back; C2's evidence growth uses it too)."""
+def orderbook_growth(ctx: Ctx, lag: int = 0, min_coverage: Decimal | None = None) -> Decimal | None:
+    """g(ob) at `lag` against a year earlier (None without a year back; C2's evidence growth uses it too), and None
+    when the book is under `min_coverage` of TTM revenue (docs/SPEC_ISSUES.md 42)."""
     ob, _ = order_book(ctx)
+    if min_coverage is not None:
+        cov = ratio(ob(lag), ctx.series.ttm("revenue", lag))
+        if cov is None or cov < min_coverage:
+            return None
     return growth(ob(lag), ob(lag + 4)) if ctx.series.year_back_ok(lag) else None
 
 
@@ -65,6 +71,8 @@ def compute(ctx: Ctx) -> SignalResult:
     ok = all(g >= cfg_dec(c, "min_growth_gap") for g in gaps)
     if c.get("coverage_must_rise_yoy", True):
         ok = ok and cov_now > cov_then
+    if c.get("min_coverage") is not None:
+        ok = ok and cov_now >= cfg_dec(c, "min_coverage")
     if not ok:
         return quiet(**inputs)
     return fired(clip(gaps[0] / cfg_dec(c, "strength_divisor"), ZERO, Decimal(1)), **inputs)
