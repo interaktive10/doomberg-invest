@@ -2,10 +2,13 @@
 # (see docs/QUOTAS.md). null = not filled in yet -> the router treats that provider as unavailable.
 providers:
   gemini:
-    models: {extract: gemini-3.5-flash-lite, card: gemini-3.5-flash}  # 2.5 is closed to new keys (2026-09-29)
-    requests_per_day: null
-    requests_per_minute: null
-    tokens_per_day: null
+    # Free tier, AI Studio 2026-10-08: flash-lite 15 RPM / 250K TPM / 500 RPD; flash 5 RPM / 250K TPM / 20 RPD.
+    # One budget per provider and a 429 blocks all of Gemini until the next day, so cards use flash-lite too:
+    # flash's 20 a day would run out on one week's cards and take extraction down with it.
+    models: {extract: gemini-3.5-flash-lite, card: gemini-3.5-flash-lite}
+    requests_per_day: 500
+    requests_per_minute: 15
+    tokens_per_day: null        # no daily token cap shown
   groq:
     models: {extract: llama-3.3-70b-versatile}
     requests_per_day: null

@@ -57,7 +57,7 @@ def test_seed_lists_only_sources_the_pipeline_reports(conn: psycopg.Connection[A
     the digest and Settings listed two sources as "never succeeded" (docs/SPEC_ISSUES.md 40)."""
     seed.seed(conn)
     sources = {r[0] for r in conn.execute("select source from source_health")}
-    assert sources == set(seed.SOURCES) and "twelvedata" in sources and not sources & {"stooq", "fred", "yahoo"}
+    assert sources == set(seed.SOURCES) and "twelvedata" in sources and not sources & {"stooq", "fred", "yahoo", "eia"}
 
 
 def test_migration_0014_drops_the_rows_that_never_succeed(conn: psycopg.Connection[Any]) -> None:
