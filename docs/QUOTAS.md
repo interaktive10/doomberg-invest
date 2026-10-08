@@ -6,7 +6,7 @@ provider as unavailable (items stay `deferred`).
 
 | Provider | Where to read the live limits | Fields to copy into `config/quotas.yaml` | Filled on |
 |---|---|---|---|
-| Google AI Studio (Gemini) | aistudio.google.com → your project → rate-limit / usage page for the API key's project. Read the rows for the exact models in `providers.gemini.models` | `requests_per_minute`, `requests_per_day`, `tokens_per_day` (use tokens-per-minute × 1440 only if no daily token cap is shown) | — |
+| Google AI Studio (Gemini) | aistudio.google.com → your project → rate-limit / usage page for the API key's project. Read the rows for the exact models in `providers.gemini.models` | `requests_per_minute`, `requests_per_day`, `tokens_per_day` (use tokens-per-minute × 1440 only if no daily token cap is shown) | 2026-10-08: 15 RPM, 500 RPD (gemini-3.5-flash-lite) |
 | Groq | console.groq.com → Settings → Limits (per-model table) | same three, for the model in `providers.groq.models` | — |
 | OpenRouter | openrouter.ai → Settings / Keys; `GET https://openrouter.ai/api/v1/key` with the key returns the key's current limit and usage. `:free` models have their own per-day cap, which depends on account credit status | `requests_per_minute`, `requests_per_day` | — |
 
