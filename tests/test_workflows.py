@@ -159,6 +159,12 @@ def test_the_digest_always_runs() -> None:
     assert not any("pipeline.digest" in r for r in steps("weekly.yml", "thesis"))
 
 
+def test_the_digest_links_to_the_app_without_a_repository_variable() -> None:
+    """The 2026-W40 digest had no company links: APP_URL came only from a repository variable nobody had set."""
+    doc = yaml.safe_load((WF / "weekly.yml").read_text(encoding="utf-8"))
+    assert doc["jobs"]["digest"]["env"]["APP_URL"] == "${{ vars.APP_URL || 'https://doomberg-invest.vercel.app' }}"
+
+
 def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> None:
     ingest_doc = yaml.safe_load((WF / "thesis-ingest.yml").read_text(encoding="utf-8"))
     assert ingest_doc[True]["push"]["paths"] == ["data/thesis_cards/**"]

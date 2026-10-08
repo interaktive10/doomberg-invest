@@ -229,7 +229,8 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GITHUB_TOKEN: ${{ github.token }}
-      APP_URL: ${{ vars.APP_URL }}
+      # the digest's company links; the deployed app unless the APP_URL repository variable says otherwise
+      APP_URL: ${{ vars.APP_URL || 'https://doomberg-invest.vercel.app' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
