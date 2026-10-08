@@ -500,10 +500,10 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
 
 | ID | Fires when (all conditions) | Strength |
 |---|---|---|
-| S1 | ob = rpo (US) or the latest verified `backlog` fact; `g(ob) − g(TTM revenue) ≥ 0.10` in each of the last 2 quarters; `ob/TTM(revenue)` above its year-ago value | `clip((g(ob) − g(rev))/0.30, 0, 1)` |
+| S1 | ob = rpo (US) or the latest verified `backlog` fact; `g(ob) − g(TTM revenue) ≥ 0.10` in each of the last 2 quarters; `ob/TTM(revenue)` above its year-ago value and ≥ 0.25 (SPEC_ISSUES 42) | `clip((g(ob) − g(rev))/0.30, 0, 1)` |
 | S2 | `IncROIC = ΔNOPAT_12q / ΔIC_12q` (only if ΔIC_12q > 0.05 × IC 12q ago) ≥ 0.15; `0.03 ≤ ROIC ≤ 0.12`; ROIC up ≥ 0.03 vs 8 quarters ago | `0.5 + 0.5 × clip((IncROIC − 0.15)/0.25, 0, 1)` |
 | S3 | Quarterly revenue YoY growth rose in each of the last 2 quarters; OPM up ≥ 0.01 vs 4 quarters ago; `g(TTM opex) < g(TTM revenue)` with opex = revenue − op_income | `clip(ΔOPM/0.05, 0, 1)` |
-| S4 | NI > 0; `CCR = TTM(cfo)/TTM(net_income) ≥ 1.0` and up ≥ 0.2 YoY; Sloan `(TTM NI − TTM CFO)/mean(total_assets 4q) < 0.05` and falling YoY | `clip((CCR − 1)/0.5, 0, 1)` |
+| S4 | NI > 0; `CCR = TTM(cfo)/TTM(net_income) ≥ 1.0` and up ≥ 0.2 YoY; Sloan `(TTM NI − TTM CFO)/mean(total_assets 4q) < 0.05` and falling YoY; TTM CFO up YoY (SPEC_ISSUES 41) | `clip((CCR − 1)/0.5, 0, 1)` |
 | S5 | (A) diluted shares YoY ≤ −2%, FCF > 0, and ND not up > 10% YoY; **or** (B) share growth ≥ +5% in each of the 2 prior years and ≤ 0% in the latest year | A: `clip(−Δshares/0.06, 0, 1)`; B: 0.6 |
 | S6 | Max of `ND / TTM(op_income + da)` over quarters q−8…q−4 ≥ 3.0; current ≤ 1.5; `TTM(op_income)/TTM(interest)` ≥ 5 | 0.8 |
 | S7 | **US:** ≥ 2 distinct insiders with unplanned code-P buys of ≥ $25k each within 60 days, total ≥ $250k. **IN:** promoter-group market purchases ≥ ₹2 crore within 90 days, **or** promoter pledged % down ≥ 5 pp QoQ | `min(1, 0.5 + 0.1 × (n − 2) + 0.1 × log2(total/threshold))` (IN pledge path: 0.6) |
@@ -526,7 +526,8 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
   - `FCFF_t = rev_t × m × (1 − t) − Δrev_t / S2C`
   - discount rate: 9% US / 12% IN; terminal growth: 2.5% US / 4.5% IN (`config/context.yaml`)
   - solve for the constant growth `g*` over 10 years that makes PV = EV (`scipy.optimize.brentq` on [−0.20, 0.60]; no root → null)
-  - evidence growth: `g_e = 0.4 × clip(g(ob), −0.2, 0.6) [if ob exists] + 0.3 × 3-year revenue CAGR + 0.3 × latest revenue YoY`, capped to [−0.10, 0.40] (weights renormalize without ob)
+  - evidence growth: `g_e = 0.4 × clip(g(ob), −0.2, 0.6) [if ob ≥ 0.25 × TTM revenue] + 0.3 × 3-year revenue CAGR + 0.3 × TTM revenue YoY`, capped to [−0.10, 0.40] (weights renormalize without ob; SPEC_ISSUES 42, 43)
+  - C2 is null when `m × (1 − t) × S2C ≤ discount rate`: growth lowers PV there, so g* reads backwards (SPEC_ISSUES 43)
   - `C2 = g_e − g*`. Score = `clip(50 + 250 × C2, 0, 100)`
 - **C3:** 52-week return percentile within the market's candidate set plus a benchmark sample. Score = `100 − pct`. `already_ran` if pct ≥ 90.
 - **C4:** GDELT DOC API article count over the last 90 days for the company's quoted short name (disambiguated with the ticker or "Ltd"/"Inc"). Percentile within the candidate set. Score = `100 − pct`.

@@ -17,6 +17,9 @@ c2_reverse_dcf:
     w_latest_yoy: 0.3
     orderbook_clip: [-0.2, 0.6]
     cap: [-0.10, 0.40]
+    latest_yoy_basis: ttm   # TTM revenue YoY, not the latest quarter's: lumpy quarters hit the cap (SPEC_ISSUES 43)
+    orderbook_min_coverage: 0.25  # g(ob) counts only when ob/TTM(revenue) >= 0.25 (SPEC_ISSUES 42)
+  growth_must_add_value: true  # C2 null when m(1 - t) x S2C <= discount: growth lowers PV there (SPEC_ISSUES 43)
   score_center: 50
   score_slope: 250          # clip(50 + 250 x C2, 0, 100)
 c3_runup:

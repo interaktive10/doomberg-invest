@@ -81,3 +81,5 @@
     **Proposal:** C2 is null when m(1 − t) × S2C ≤ the discount rate, because the model can't read an expectation from the price there. g_e uses TTM revenue YoY rather than the latest quarter's. **Decision needed (Manzoor):** §4.7 and config/context.yaml are protected.
 
     **Combined effect on 2026-W40, if 41–43 were applied:** candidates CELH, EMBC, HHH and MTDR. AMR and PFE drop out. Other companies may enter, because a C2 that read backwards also pulled some Gap scores below 50; only a re-score shows which. The thesis cards for AMR and PFE (data/thesis_cards/2026-W40 on branch `thesis-cards-2026-w40`) already say this in their inferences.
+
+    **Applied 2026-10-08 (Manzoor):** 41, 42 and 43 as proposed; BRIEF §4.6 and §4.7 now say so.
