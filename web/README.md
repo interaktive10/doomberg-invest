@@ -32,3 +32,7 @@ In Supabase → Authentication:
 
 Root directory `web`, framework Next.js, the four variables above. Settings reads `../config/*.yaml`, which
 `next.config.ts` traces into the deployment.
+
+Vercel builds `main` only (`vercel.json` `git.deploymentEnabled`): PR previews counted against the Hobby plan's
+100 deployments a day and held production back on 2026-10-07/08. A push to `main` that changes neither `web/` nor
+`config/` is skipped (`ignoreCommand`), so the weekly thesis-queue commits don't build.
