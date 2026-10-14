@@ -3,10 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
 import { ReviewDiff } from "@/components/review-diff";
-import { Empty, Flash, Note, Page, Section } from "@/components/page";
+import { Empty, Flash, Kpi, KpiRibbon, Note, Page, Section } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
-import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { choiceChip, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { citeView, factOrder, stripSection, stripTitle } from "@/lib/cards";
 import { ensureReviews, journal, killCriteria, postmortem, reviews, setting, thesis as getThesis, thesisTitle } from "@/lib/data";
@@ -33,8 +33,8 @@ const STATE_BADGE = {
   dismissed: "outline",
 } as const;
 
-const choice =
-  "flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm has-checked:border-blue-700 has-checked:bg-blue-50";
+// The ribbon's Stage colour: accent for a thesis, up for a position, warn for a review.
+const STATE_TONE = { thesis: "accent", position: "up", review: "warn" } as const;
 
 function Hidden({ id }: { id: string }) {
   return <input type="hidden" name="thesis_id" value={id} />;
@@ -70,6 +70,9 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
   // repeats this page's header.
   const card = kills.length > 0 ? stripSection(stripTitle(t.card_md), "Kill criteria") : stripTitle(t.card_md);
   const cited = factOrder(card);
+  const triggered = kills.filter((k) => k.status === "triggered").length;
+  const ok = kills.filter((k) => k.status === "ok").length;
+  const tone = t.state === "thesis" || t.state === "position" || t.state === "review" ? STATE_TONE[t.state] : undefined;
   return (
     <Page
       title={
@@ -90,14 +93,35 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
       }
     >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
+      <KpiRibbon>
+        <Kpi label="Stage" value={STATE_LABEL[t.state]} tone={tone} />
+        <Kpi
+          label="Weeks since accepted"
+          value={t.accepted_at ? weeks : "not accepted"}
+          hint={`${num(minWeeks, 0)} needed before a position`}
+        />
+        <Kpi label="Review due" value={t.next_review ?? "–"} />
+        <Kpi
+          label="Kill criteria"
+          value={kills.length}
+          hint={`${triggered} triggered · ${ok} ok`}
+          tone={triggered > 0 ? "down" : undefined}
+        />
+        <Kpi label="Journal entries" value={entries.length} hint={open ? "position open" : "no position"} />
+      </KpiRibbon>
       {t.dismissed_reason ? (
-        <p className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm">
+        <p className="rounded-md border border-line bg-panel px-4 py-3 text-[13px]">
           <span className="font-medium">Dismissed:</span> {t.dismissed_reason}
         </p>
       ) : null}
 
       {canMove(t.state, "accept") ? (
-        <Section title="Decide" id="decide" description="Accept to watch its kill criteria and review it after each filing, or dismiss it with a reason.">
+        <Section
+          title="Decide"
+          id="decide"
+          description="Accept to watch its kill criteria and review it after each filing, or dismiss it with a reason."
+          className="border-l-2 border-l-accent"
+        >
           <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
             {acceptable(t) ? (
               <form action={accept}>
@@ -105,7 +129,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                 <SubmitButton>Accept as thesis</SubmitButton>
               </form>
             ) : (
-              <p className="max-w-md text-sm">
+              <p className="max-w-md text-[13px] text-muted">
                 Manual research: there is no validated card yet, so this can&apos;t become a thesis (a thesis needs the card&apos;s
                 kill criteria and review dates). The weekly routine writes cards for the week&apos;s shortlist.
               </p>
@@ -155,12 +179,12 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                   <TableCell className="whitespace-nowrap">
                     {OPS[k.operator] ?? k.operator} {k.threshold ?? ""}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">{k.check_after}</TableCell>
+                  <TableCell className="num whitespace-nowrap">{k.check_after}</TableCell>
                   <TableCell>
                     <Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{k.status}</Badge>
                   </TableCell>
                   <TableCell num>{measure(k.last_value)}</TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">{k.last_checked ?? ""}</TableCell>
+                  <TableCell className="num whitespace-nowrap">{k.last_checked ?? ""}</TableCell>
                   <TableCell className="max-w-sm min-w-48">{k.why ?? ""}</TableCell>
                 </TableRow>
               ))}
@@ -175,10 +199,12 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
         ) : (
           <ul className="flex flex-col gap-3">
             {revs.map((r) => (
-              <li key={r.id} className="rounded-lg border border-gray-200 p-3 sm:p-4">
+              <li key={r.id} className="rounded-sm border border-line bg-canvas p-3 sm:p-4">
                 <div className="mb-3 flex flex-wrap items-center gap-2 text-sm font-medium">
                   <span>{r.period_end ? `Quarter ${r.period_end}` : "A kill criterion triggered"}</span>
-                  <span className="font-normal text-gray-700">· created {r.created_at.slice(0, 10)}</span>
+                  <span className="font-normal text-muted">
+                    · created <span className="num">{r.created_at.slice(0, 10)}</span>
+                  </span>
                   {r.verdict ? (
                     <Badge variant={r.verdict === "broken" ? "destructive" : r.verdict === "weakened" ? "warning" : "success"}>{r.verdict}</Badge>
                   ) : (
@@ -186,16 +212,16 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                   )}
                 </div>
                 <ReviewDiff id={r.period_end ?? r.created_at.slice(0, 10)} diff={r.pack_diff as Partial<PackDiff>} />
-                {r.note ? <p className="mt-3 text-sm">Note: {r.note}</p> : null}
+                {r.note ? <p className="mt-3 text-[13px]">Note: {r.note}</p> : null}
                 {r.verdict === null && t.state === "review" ? (
-                  <form action={decideReview} className="mt-4 flex flex-col gap-3 border-t border-gray-200 pt-4">
+                  <form action={decideReview} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
                     <Hidden id={t.id} />
                     <input type="hidden" name="review_id" value={r.id} />
                     <fieldset className="min-w-0">
-                      <legend className="mb-2 text-sm font-medium">Verdict</legend>
+                      <legend className="mb-2 text-xs font-medium text-muted">Verdict</legend>
                       <div className="flex flex-wrap gap-2">
                         {(["intact", "weakened", "broken"] as const).map((v) => (
-                          <label key={v} className={choice}>
+                          <label key={v} className={choiceChip}>
                             <input type="radio" name="verdict" value={v} required />
                             {v}
                           </label>
@@ -206,7 +232,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                       <Label htmlFor={`note-${r.id}`}>Note</Label>
                       <Textarea id={`note-${r.id}`} name="note" />
                     </div>
-                    <label className="flex items-center gap-2 text-sm">
+                    <label className="flex items-center gap-2 text-[13px]">
                       <input type="checkbox" name="to_journal" /> Also add the note to the journal
                     </label>
                     <div>
@@ -237,7 +263,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
             <TableBody>
               {entries.map((e) => (
                 <TableRow key={e.id}>
-                  <TableCell className="whitespace-nowrap tabular-nums">{e.entry_date}</TableCell>
+                  <TableCell className="num whitespace-nowrap">{e.entry_date}</TableCell>
                   <TableCell className="whitespace-nowrap">{label(ACTION_LABEL, e.action)}</TableCell>
                   <TableCell num>{e.portfolio_pct === null ? "" : `${num(e.portfolio_pct)}%`}</TableCell>
                   <TableCell className="max-w-md min-w-48 break-words">{e.reason}</TableCell>
@@ -248,9 +274,9 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
           </Table>
         )}
         {t.state !== "dismissed" ? (
-          <form action={addJournal} className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4 md:grid-cols-2">
+          <form action={addJournal} className="mt-4 grid grid-cols-1 gap-4 rounded-sm border border-line bg-canvas p-3 sm:p-4 md:grid-cols-2">
             <Hidden id={t.id} />
-            <h3 className="font-semibold md:col-span-2">Add a journal entry</h3>
+            <h3 className="text-sm font-semibold md:col-span-2">Add a journal entry</h3>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="j-action">Action</Label>
               <Select id="j-action" name="action" defaultValue={t.state === "thesis" && !open ? "start_position" : "note"}>
@@ -297,10 +323,10 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
               <Textarea id="pm-what" name="what_happened" required />
             </div>
             <fieldset className="min-w-0">
-              <legend className="mb-2 text-sm font-medium">Was the thesis right?</legend>
+              <legend className="mb-2 text-xs font-medium text-muted">Was the thesis right?</legend>
               <div className="flex flex-wrap gap-2">
                 {(["yes", "no", "unclear"] as const).map((v) => (
-                  <label key={v} className={choice}>
+                  <label key={v} className={choiceChip}>
                     <input type="radio" name="thesis_right" value={v} defaultChecked={v === "unclear"} />
                     {v}
                   </label>
@@ -325,13 +351,13 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
       {pm ? (
         <Section title="Post-mortem" id="postmortem">
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)]">
-            <dt className="font-medium text-gray-700">What happened</dt>
+            <dt className="font-medium text-muted">What happened</dt>
             <dd className="whitespace-pre-wrap">{pm.what_happened}</dd>
-            <dt className="font-medium text-gray-700">Thesis right?</dt>
+            <dt className="font-medium text-muted">Thesis right?</dt>
             <dd>{pm.thesis_right === null ? "unclear" : pm.thesis_right ? "yes" : "no"}</dd>
-            <dt className="font-medium text-gray-700">What the signals said</dt>
+            <dt className="font-medium text-muted">What the signals said</dt>
             <dd className="whitespace-pre-wrap">{String(pm.signals_right?.note ?? "")}</dd>
-            <dt className="font-medium text-gray-700">Lessons</dt>
+            <dt className="font-medium text-muted">Lessons</dt>
             <dd className="whitespace-pre-wrap">{pm.lessons}</dd>
           </dl>
         </Section>

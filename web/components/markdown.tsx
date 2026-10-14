@@ -15,13 +15,13 @@ function heading(level: 1 | 2 | 3 | 4 | 5 | 6) {
 }
 
 function Cite({ view }: { view: CiteView }) {
-  const chip = "ml-1 inline-block rounded bg-gray-100 px-1 py-px align-baseline text-[0.75em] leading-snug font-medium whitespace-nowrap";
+  const chip = "ml-1 inline-block rounded-sm bg-raised px-1 py-px align-baseline font-mono text-[0.75em] leading-snug font-medium whitespace-nowrap";
   return view.href ? (
-    <Link href={view.href} title={view.title} className={`${chip} text-blue-900 no-underline ring-1 ring-gray-300 ring-inset hover:bg-blue-50 hover:underline`}>
+    <Link href={view.href} title={view.title} className={`${chip} text-accent no-underline ring-1 ring-line-strong ring-inset hover:bg-hover hover:underline`}>
       {view.label}
     </Link>
   ) : (
-    <span title={view.title} className={`${chip} text-gray-800`}>
+    <span title={view.title} className={`${chip} text-muted`}>
       {view.label}
     </span>
   );

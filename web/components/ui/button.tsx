@@ -3,21 +3,22 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-// shadcn/ui Button (BRIEF §2.2), with colours that keep axe's contrast rule (white on blue-800, gray-900 on white).
+// shadcn/ui Button (BRIEF §2.2) in the dark terminal look: on-accent on accent (9.5:1), fg on raised (15:1), down on
+// its own tint for the destructive one. Sizes are text-[13px]/text-xs (tailwind-merge reads both as font sizes).
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg text-sm font-medium no-underline " +
-    "transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 " +
-    "disabled:pointer-events-none disabled:opacity-60",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm text-[13px] font-medium no-underline " +
+    "transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent " +
+    "disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-gray-900 text-white shadow-sm hover:bg-gray-800 hover:text-white",
-        destructive: "bg-red-800 text-white shadow-sm hover:bg-red-900 hover:text-white",
-        outline: "border border-gray-200 bg-white text-gray-900 shadow-sm hover:bg-gray-50 hover:text-gray-900",
-        secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200 hover:text-gray-900",
-        ghost: "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
+        default: "bg-accent text-on-accent hover:bg-accent-hover hover:text-on-accent",
+        destructive: "bg-down/15 text-down ring-1 ring-inset ring-down/50 hover:bg-down/20 hover:text-down",
+        outline: "border border-edge bg-raised text-fg hover:bg-hover hover:text-fg",
+        secondary: "bg-raised text-fg ring-1 ring-inset ring-line-strong hover:bg-hover hover:text-fg",
+        ghost: "text-muted hover:bg-raised hover:text-fg",
       },
-      size: { default: "h-9 px-3.5", sm: "h-8 px-2.5 text-xs", xs: "h-7 px-2 text-xs", lg: "h-10 px-5" },
+      size: { default: "h-8 px-3", sm: "h-7 px-2.5 text-xs", xs: "h-7 px-2 text-xs", lg: "h-10 px-5 text-sm" },
     },
     defaultVariants: { variant: "default", size: "default" },
   },

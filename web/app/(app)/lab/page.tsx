@@ -1,5 +1,5 @@
 import { Markdown } from "@/components/markdown";
-import { Empty, Page, Section } from "@/components/page";
+import { Empty, Kpi, KpiRibbon, Page, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CAVEATS } from "@/lib/caveats";
@@ -13,6 +13,12 @@ export const metadata = { title: "Signal Lab" };
 // BRIEF §6 Signal Lab: results by signal, horizon and period; score deciles; weights versions; open proposals. §7:
 // the first four honest limits at the top of the screen.
 const DECILE = /^(EVIDENCE|GAP)_D(\d+)$/;
+
+/** An excess return's colour by its sign: up above zero, down below. */
+function sign(v: number | null): string | undefined {
+  const n = Number(v);
+  return v === null || !Number.isFinite(n) || n === 0 ? undefined : n > 0 ? "text-up" : "text-down";
+}
 
 function ResultRows({ rows }: { rows: LabResult[] }) {
   return (
@@ -28,16 +34,16 @@ function ResultRows({ rows }: { rows: LabResult[] }) {
             <Badge variant={r.period === "in_sample" ? "secondary" : "default"}>{r.period === "in_sample" ? "in sample" : "out of sample"}</Badge>
           </TableCell>
           <TableCell num>{r.n.toLocaleString("en-US")}</TableCell>
-          <TableCell num className={Number(r.excess_mean) < 0 ? "text-red-800" : undefined}>
+          <TableCell num className={sign(r.excess_mean)}>
             {pct(r.excess_mean, 2)}
           </TableCell>
-          <TableCell num className={Number(r.excess_median) < 0 ? "text-red-800" : undefined}>
+          <TableCell num className={sign(r.excess_median)}>
             {pct(r.excess_median, 2)}
           </TableCell>
           <TableCell num>{pct(r.hit_rate, 0)}</TableCell>
           <TableCell num>{pct(r.p10, 2)}</TableCell>
           <TableCell num>{num(r.t_nw, 2)}</TableCell>
-          <TableCell className="max-w-xs text-xs break-words text-gray-700">{r.notes ?? ""}</TableCell>
+          <TableCell className="max-w-xs text-xs break-words text-muted">{r.notes ?? ""}</TableCell>
         </TableRow>
       ))}
     </TableBody>
@@ -73,13 +79,20 @@ export default async function Lab() {
   const signals = results.filter((r) => !DECILE.test(r.signal_id));
   const approved = versions.filter((v) => v.approved_at !== null);
   const open = versions.filter((v) => v.approved_at === null);
+  const lastRun = results[0]?.run_at.slice(0, 10);
   return (
     <Page title="Signal Lab" description="Does each signal beat its market out of sample? The Lab measures it; weights change only through a reviewed pull request.">
-      <section aria-labelledby="limits" className="rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-sm sm:p-5">
-        <h2 id="limits" className="font-semibold text-amber-950">
+      <KpiRibbon>
+        <Kpi label="Last run" value={lastRun ?? "never"} />
+        <Kpi label="Signals tested" value={new Set(signals.map((r) => r.signal_id)).size} />
+        <Kpi label="Weights in use" value={approved[0]?.version ?? "none"} />
+        <Kpi label="Open proposals" value={open.length} tone={open.length > 0 ? "warn" : undefined} />
+      </KpiRibbon>
+      <section aria-labelledby="limits" className="rounded-md border border-warn/40 border-l-2 border-l-warn bg-warn/10 p-4">
+        <h2 id="limits" className="text-sm font-semibold text-warn">
           Honest limits
         </h2>
-        <div className="mt-1 [&_.prose-md]:max-w-none">
+        <div className="mt-1 text-fg [&_.prose-md]:max-w-none">
           <Markdown text={CAVEATS.join("\n")} />
         </div>
       </section>
@@ -111,49 +124,51 @@ export default async function Lab() {
           </Table>
         )}
       </Section>
-      <Section title="Open proposals (not approved)" id="proposals">
-        {open.length === 0 ? (
-          <Empty>No open weight proposals.</Empty>
-        ) : (
-          <ul className="flex flex-col gap-2 text-sm">
-            {open.map((v) => (
-              <li key={v.version} className="rounded-lg border border-gray-200 p-3">
-                <span className="font-medium">{v.version}</span> <Badge variant="warning">not approved</Badge>
-                <p className="mt-1 break-words">{v.reason}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-3 text-sm text-gray-700">
-          Weights change only through a pull request with the <code>human-approved</code> label (config/weights.yaml).
-        </p>
-      </Section>
-      <Section title="Weights versions" id="weights">
-        {approved.length === 0 ? (
-          <Empty>No approved weights version recorded yet.</Empty>
-        ) : (
-          <Table label="Weights versions">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Version</TableHead>
-                <TableHead>Approved</TableHead>
-                <TableHead>By</TableHead>
-                <TableHead>Reason</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {approved.map((v) => (
-                <TableRow key={v.version}>
-                  <TableCell className="font-medium">{v.version}</TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">{v.approved_at?.slice(0, 10)}</TableCell>
-                  <TableCell>{v.approved_by ?? ""}</TableCell>
-                  <TableCell className="max-w-md break-words">{v.reason}</TableCell>
-                </TableRow>
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+        <Section title="Open proposals (not approved)" id="proposals" className="xl:col-span-6">
+          {open.length === 0 ? (
+            <Empty>No open weight proposals.</Empty>
+          ) : (
+            <ul className="flex flex-col gap-2 text-[13px]">
+              {open.map((v) => (
+                <li key={v.version} className="rounded-sm border border-line bg-canvas p-3">
+                  <span className="font-medium">{v.version}</span> <Badge variant="warning">not approved</Badge>
+                  <p className="mt-1 break-words">{v.reason}</p>
+                </li>
               ))}
-            </TableBody>
-          </Table>
-        )}
-      </Section>
+            </ul>
+          )}
+          <p className="mt-3 text-[13px] text-muted">
+            Weights change only through a pull request with the <code>human-approved</code> label (config/weights.yaml).
+          </p>
+        </Section>
+        <Section title="Weights versions" id="weights" className="xl:col-span-6">
+          {approved.length === 0 ? (
+            <Empty>No approved weights version recorded yet.</Empty>
+          ) : (
+            <Table label="Weights versions">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Approved</TableHead>
+                  <TableHead>By</TableHead>
+                  <TableHead>Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {approved.map((v) => (
+                  <TableRow key={v.version}>
+                    <TableCell className="font-medium">{v.version}</TableCell>
+                    <TableCell className="num whitespace-nowrap">{v.approved_at?.slice(0, 10)}</TableCell>
+                    <TableCell>{v.approved_by ?? ""}</TableCell>
+                    <TableCell className="max-w-md break-words">{v.reason}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Section>
+      </div>
     </Page>
   );
 }

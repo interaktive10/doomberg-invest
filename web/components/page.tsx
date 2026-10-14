@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/** A screen: its h1 (with an optional line under it and actions on the right), then its sections. */
+/** A screen: its h1 (with an optional line under it and actions on the right) over a hairline, then its panels. */
 export function Page({
   title,
   children,
@@ -15,20 +15,20 @@ export function Page({
   description?: ReactNode;
 }) {
   return (
-    <main id="main" className="mx-auto w-full max-w-6xl px-4 pt-8 pb-6 sm:pt-12">
-      <div className="mb-8 flex flex-wrap items-start gap-x-4 gap-y-3">
+    <main id="main" className="mx-auto w-full max-w-[1440px] px-4 pt-5 pb-8 sm:px-6">
+      <div className="mb-3 flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-line pb-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-3xl font-semibold tracking-tight text-gray-900">{title}</h1>
-          {description ? <div className="mt-2 text-[15px] text-gray-600">{description}</div> : null}
+          <h1 className="text-xl font-semibold tracking-tight text-fg sm:text-2xl">{title}</h1>
+          {description ? <div className="mt-1 text-[13px] text-muted">{description}</div> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      <div className="flex flex-col gap-6">{children}</div>
+      <div className="flex flex-col gap-3">{children}</div>
     </main>
   );
 }
 
-/** A titled panel. The h2 names the section (a region landmark); `actions` sit on the right of the title. */
+/** A titled panel: a header bar with the h2 (a region landmark) and `actions` on its right, then the body. */
 export function Section({
   title,
   children,
@@ -45,44 +45,41 @@ export function Section({
   className?: string;
 }) {
   return (
-    <section
-      className={cn("scroll-mt-20 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:p-6", className)}
-      aria-labelledby={id}
-    >
-      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+    <section className={cn("min-w-0 scroll-mt-24 rounded-md border border-line bg-panel", className)} aria-labelledby={id}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-t-md border-b border-line bg-raised px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <h2 id={id} className="text-base font-semibold tracking-tight text-gray-900">
+          <h2 id={id} className="text-sm font-semibold tracking-tight text-fg">
             {title}
           </h2>
-          {description ? <div className="mt-1 text-sm text-gray-600">{description}</div> : null}
+          {description ? <div className="mt-0.5 text-xs text-muted">{description}</div> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      {children}
+      <div className="p-4">{children}</div>
     </section>
   );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-xl border border-dashed border-gray-300 bg-gray-50/60 px-4 py-8 text-center text-sm text-gray-600">{children}</p>;
+  return <p className="rounded-sm border border-dashed border-line-strong px-4 py-6 text-center text-[13px] text-muted">{children}</p>;
 }
 
 /** Small print under a table or a form. */
 export function Note({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn("text-xs text-gray-700", className)}>{children}</p>;
+  return <p className={cn("text-xs text-subtle", className)}>{children}</p>;
 }
 
-/** A message passed back in the query string by a server action (?error= / ?ok=). */
+/** A message passed back in the query string by a server action (?error= / ?ok=). The only status and alert in main. */
 export function Flash({ error, ok }: { error?: string | undefined; ok?: string | undefined }) {
   return (
     <>
       {error ? (
-        <p role="alert" className="rounded-lg border border-red-200 border-l-4 border-l-red-700 bg-red-50 px-4 py-3 text-sm text-red-950">
+        <p role="alert" className="rounded-sm border border-down/40 border-l-2 border-l-down bg-down/10 px-3 py-2 text-[13px] text-fg">
           {error}
         </p>
       ) : null}
       {ok ? (
-        <p role="status" className="rounded-lg border border-green-200 border-l-4 border-l-green-700 bg-green-50 px-4 py-3 text-sm text-green-950">
+        <p role="status" className="rounded-sm border border-up/40 border-l-2 border-l-up bg-up/10 px-3 py-2 text-[13px] text-fg">
           {ok}
         </p>
       ) : null}
@@ -90,21 +87,72 @@ export function Flash({ error, ok }: { error?: string | undefined; ok?: string |
   );
 }
 
-/** A labelled number for a summary row (Home, the Company page). */
-export function Stat({ label, value, hint, href }: { label: string; value: ReactNode; hint?: ReactNode; href?: string }) {
+/** The strip of key figures at the top of a screen: Kpi cells on hairlines, two to a row on a phone. */
+export function KpiRibbon({ children }: { children: ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-md border border-line bg-panel">
+      <div className="-mt-px -ml-px flex flex-wrap">{children}</div>
+    </div>
+  );
+}
+
+const TONE = {
+  up: "text-up",
+  down: "text-down",
+  warn: "text-warn",
+  accent: "text-accent",
+} as const;
+
+/** One key figure: a caps label, the value in monospace (coloured only when it is good, bad or needs a look), an
+ * optional 0–100 bar and a hint. With `href` the whole cell is a link. No role or label: it is plain text. */
+export function Kpi({
+  label,
+  value,
+  hint,
+  href,
+  tone,
+  bar,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  href?: string;
+  tone?: keyof typeof TONE;
+  bar?: number | null;
+}) {
+  const width = typeof bar === "number" && Number.isFinite(bar) ? Math.max(0, Math.min(100, bar)) : null;
   const body = (
     <>
-      <div className="text-sm font-medium text-gray-600">{label}</div>
-      <div className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 tabular-nums">{value}</div>
-      {hint ? <div className="mt-1 text-xs text-gray-600">{hint}</div> : null}
+      <div className="flex items-center justify-between gap-2">
+        <span className="caps">{label}</span>
+        {href ? (
+          <span aria-hidden="true" className="font-mono text-[11px] text-subtle group-hover:text-accent">
+            →
+          </span>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "mt-1 font-mono text-xl leading-7 font-semibold tracking-tight break-words sm:text-2xl sm:leading-8",
+          tone ? TONE[tone] : "text-fg",
+        )}
+      >
+        {value}
+      </div>
+      {width !== null ? (
+        <span aria-hidden="true" className="mt-2 block h-1 bg-line-strong">
+          <span className="block h-full bg-accent" style={{ width: `${width}%` }} />
+        </span>
+      ) : null}
+      {hint ? <div className="mt-0.5 text-xs text-muted">{hint}</div> : null}
     </>
   );
-  const box = "block rounded-2xl border border-gray-200/80 bg-white p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)]";
+  const cell = "min-w-[9.5rem] flex-1 border-t border-l border-line px-4 py-3";
   return href ? (
-    <Link href={href} className={cn(box, "no-underline transition-shadow hover:border-gray-300 hover:shadow-md")}>
+    <Link href={href} className={cn(cell, "group block no-underline transition-colors hover:bg-raised")}>
       {body}
     </Link>
   ) : (
-    <div className={box}>{body}</div>
+    <div className={cell}>{body}</div>
   );
 }

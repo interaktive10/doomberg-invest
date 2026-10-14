@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 // The Logo mark (components/logo.tsx) as the tab icon, inline: no request, so it shows on the sign-in page too.
@@ -12,6 +12,8 @@ const ICON =
   );
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+// Figures, dates, tickers and table headers (globals.css --font-mono). Self-hosted by next/font at build time, like Inter.
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono-face", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "Doomberg Invest", template: "%s · Doomberg Invest" },
@@ -20,11 +22,11 @@ export const metadata: Metadata = {
   icons: { icon: ICON },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#ffffff" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#07090c" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
       <body className="min-h-screen">{children}</body>
     </html>
   );

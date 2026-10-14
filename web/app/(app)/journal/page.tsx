@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Empty, Flash, Page, Section } from "@/components/page";
+import { Empty, Flash, Kpi, KpiRibbon, Page, Section } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label, Textarea } from "@/components/ui/input";
@@ -21,10 +21,17 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
   const q = await searchParams;
   const [entries, pms, ths] = await Promise.all([journal(), postmortems(), theses()]);
   const names = new Map(ths.map((t) => [t.id, t.companies ? `${t.companies.name} (${code(t.companies)})` : t.company_id]));
+  const count = (action: string) => entries.filter((e) => e.action === action).length;
   return (
     <Page title="Journal" description="Private: entries and post-mortems stay in your database and are never sent to any LLM.">
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+      <KpiRibbon>
+        <Kpi label="Entries" value={entries.length} />
+        <Kpi label="Positions started" value={count("start_position")} />
+        <Kpi label="Exits" value={count("exit")} />
+        <Kpi label="Thesis was right" value={pms.filter((p) => p.thesis_right === true).length} hint={`of ${pms.length} post-mortems`} />
+      </KpiRibbon>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <Section title="Entries" id="entries" description="Newest first. Entries about a thesis are added on its page.">
           {entries.length === 0 ? (
             <Empty>No entries yet.</Empty>
@@ -43,14 +50,14 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
               <TableBody>
                 {entries.map((e) => (
                   <TableRow key={e.id}>
-                    <TableCell className="whitespace-nowrap tabular-nums">{e.entry_date}</TableCell>
+                    <TableCell className="num whitespace-nowrap">{e.entry_date}</TableCell>
                     <TableCell className="min-w-40">
                       {e.thesis_id ? (
                         <Link href={`/theses/${e.thesis_id}`} className="link-quiet">
                           {names.get(e.thesis_id) ?? "thesis"}
                         </Link>
                       ) : (
-                        <span className="text-gray-700">general</span>
+                        <span className="text-muted">general</span>
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{label(ACTION_LABEL, e.action)}</TableCell>
@@ -85,21 +92,21 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {pms.map((p) => (
-              <li key={p.thesis_id} className="rounded-lg border border-gray-200 p-4 text-sm">
+              <li key={p.thesis_id} className="rounded-sm border border-line bg-canvas p-3 text-[13px] sm:p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Link href={`/theses/${p.thesis_id}`} className="link-quiet">
                     {names.get(p.thesis_id) ?? "thesis"}
                   </Link>
-                  <span className="text-xs text-gray-700 tabular-nums">{p.created_at.slice(0, 10)}</span>
+                  <span className="num text-xs text-muted">{p.created_at.slice(0, 10)}</span>
                   <Badge variant={p.thesis_right === null ? "secondary" : p.thesis_right ? "success" : "destructive"}>
                     thesis right: {p.thesis_right === null ? "unclear" : p.thesis_right ? "yes" : "no"}
                   </Badge>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap">{p.what_happened}</p>
                 <dl className="mt-2 grid gap-1">
-                  <dt className="text-xs font-medium tracking-wide text-gray-700 uppercase">Signals</dt>
+                  <dt className="text-xs font-medium text-muted">Signals</dt>
                   <dd className="whitespace-pre-wrap">{String(p.signals_right?.note ?? "")}</dd>
-                  <dt className="mt-1 text-xs font-medium tracking-wide text-gray-700 uppercase">Lessons</dt>
+                  <dt className="mt-1 text-xs font-medium text-muted">Lessons</dt>
                   <dd className="whitespace-pre-wrap">{p.lessons}</dd>
                 </dl>
               </li>

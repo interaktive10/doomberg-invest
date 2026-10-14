@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { INK, SERIES } from "@/lib/palette";
 
-// BRIEF §6 Capex Desk: the counterparty graph (Cytoscape.js). Companies are blue, counterparties grey; the table next
-// to it lists the same edges as text. Zoom is capped, so a small graph isn't blown up to fill the box.
+// BRIEF §6 Capex Desk: the counterparty graph (Cytoscape.js). Companies are blue (the accent), counterparties grey; the
+// table next to it lists the same edges as text. Zoom is capped, so a small graph isn't blown up to fill the box.
+// Colours come from lib/palette.ts (cytoscape styles can't read CSS variables).
 export interface GraphData {
   nodes: { id: string; label: string; kind: "company" | "entity" }[];
   edges: { id: string; source: string; target: string; label: string }[];
@@ -17,29 +19,29 @@ const STYLE = [
       width: 18,
       height: 18,
       "font-size": 11,
-      color: "#111827",
+      color: INK.fg,
       "text-valign": "bottom",
       "text-margin-y": 5,
       "text-wrap": "ellipsis",
       "text-max-width": "120px",
-      "text-background-color": "#ffffff",
+      "text-background-color": INK.panel,
       "text-background-opacity": 0.85,
       "text-background-padding": "2px",
     },
   },
-  { selector: "node[kind = 'company']", style: { "background-color": "#1e40af" } },
-  { selector: "node[kind = 'entity']", style: { "background-color": "#6b7280" } },
+  { selector: "node[kind = 'company']", style: { "background-color": SERIES[0] } },
+  { selector: "node[kind = 'entity']", style: { "background-color": "#6b7c8f" } },
   {
     selector: "edge",
     style: {
       width: 1.5,
       label: "data(label)",
       "font-size": 9,
-      color: "#374151",
-      "text-background-color": "#ffffff",
+      color: INK.muted,
+      "text-background-color": INK.panel,
       "text-background-opacity": 0.85,
-      "line-color": "#9ca3af",
-      "target-arrow-color": "#9ca3af",
+      "line-color": "#3d4c5c",
+      "target-arrow-color": "#3d4c5c",
       "target-arrow-shape": "triangle",
       "curve-style": "bezier",
     },
@@ -74,7 +76,7 @@ export function CapexGraph({ data }: { data: GraphData }) {
       ref={ref}
       role="img"
       aria-label={`Counterparty graph: ${data.nodes.length} companies and counterparties, ${data.edges.length} links (listed in the table)`}
-      className="h-80 w-full rounded-lg border border-gray-200 bg-gray-50 sm:h-96"
+      className="h-80 w-full rounded-sm border border-line bg-canvas sm:h-96"
     />
   );
 }

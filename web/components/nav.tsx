@@ -3,12 +3,13 @@ import { Logo } from "@/components/logo";
 import { NavLinks } from "@/components/nav-links";
 import { Button } from "@/components/ui/button";
 
+/** The top bar: the name, the main navigation (one row under the name on a phone) and Sign out. */
 export function Nav({ email }: { email: string }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-200/70 bg-white/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3">
-        <Link href="/" className="order-1 flex items-center gap-2.5 font-semibold tracking-tight text-gray-900 no-underline hover:text-gray-900">
-          <Logo />
+    <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
+      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-6 px-4 sm:px-6">
+        <Link href="/" className="order-1 flex h-12 items-center gap-2 text-sm font-semibold tracking-tight text-fg no-underline hover:text-fg">
+          <Logo className="size-6" />
           Doomberg Invest
         </Link>
         <NavLinks />

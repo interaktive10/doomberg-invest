@@ -4,22 +4,22 @@ import { sourceLabel } from "@/lib/labels";
 import { lateSources } from "@/lib/staleness";
 
 /** BRIEF §2.7: a banner when a source is stale or past its SLA (the same rule as the digest). One line; the reasons
- * open under it. */
+ * open under it. Text is fg, warn or muted on the warn tint (>= 7.9:1). */
 export function StaleBanner({ sources, now }: { sources: SourceHealth[]; now: Date }) {
   const late = lateSources(sources, now);
   if (late.length === 0) return null;
   const names = late.map((s) => sourceLabel(s.source)).join(", ");
   return (
-    <aside aria-label="Stale data" className="border-b border-amber-200 bg-amber-50/80 text-sm text-amber-950">
-      <details className="mx-auto max-w-6xl px-4 py-2">
-        <summary className="marker:text-amber-800">
-          <strong className="font-semibold">Stale data:</strong> {late.length === 1 ? "1 source is" : `${late.length} sources are`} out
+    <aside aria-label="Stale data" className="border-b border-warn/30 bg-warn/10 text-[13px] text-fg">
+      <details className="mx-auto max-w-[1440px] px-4 py-1.5 sm:px-6">
+        <summary className="marker:text-warn">
+          <strong className="font-semibold text-warn">Stale data:</strong> {late.length === 1 ? "1 source is" : `${late.length} sources are`} out
           of date ({names}). Scores that read {late.length === 1 ? "it" : "them"} may be behind.
         </summary>
-        <ul className="mt-2 mb-1 grid grid-cols-1 gap-1 pl-5 sm:grid-cols-2">
+        <ul className="mt-2 mb-1 grid grid-cols-1 gap-1 pl-5 text-muted sm:grid-cols-2">
           {late.map((s) => (
             <li key={s.source} className="list-disc">
-              <span className="font-medium">{sourceLabel(s.source)}</span>: {s.why}
+              <span className="font-medium text-fg">{sourceLabel(s.source)}</span>: {s.why}
             </li>
           ))}
         </ul>

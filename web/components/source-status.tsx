@@ -14,7 +14,7 @@ export function SourceStatus({ source, all, now }: { source: SourceHealth; all: 
   return (
     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <Badge variant={variant}>{head}</Badge>
-      {detail ? <span className="text-xs whitespace-nowrap text-gray-700">{detail}</span> : null}
+      {detail ? <span className="text-xs whitespace-nowrap text-muted">{detail}</span> : null}
     </span>
   );
 }

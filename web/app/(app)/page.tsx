@@ -1,5 +1,5 @@
 import { Markdown } from "@/components/markdown";
-import { Empty, Page, Section, Stat } from "@/components/page";
+import { Empty, Kpi, KpiRibbon, Page, Section } from "@/components/page";
 import { requireUser } from "@/lib/auth";
 import { stripSection } from "@/lib/cards";
 import { latestDigest, overview } from "@/lib/data";
@@ -17,11 +17,19 @@ export default async function Home() {
       title="This week"
       description={o.week ? `Scores for the week ending ${o.week}. Research only: no orders, no price alerts.` : "No week has been scored yet."}
     >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="New candidates" value={o.buckets.candidate} hint="strong evidence, not priced in" href="/candidates" />
-        <Stat label="Theses to review" value={o.review} hint="need your verdict" href="/theses" />
-        <Stat label="Open positions" value={o.position} hint="theses you hold" href="/theses" />
-      </div>
+      <KpiRibbon>
+        <Kpi
+          label="New candidates"
+          value={o.buckets.candidate}
+          hint="strong evidence, not priced in"
+          href="/candidates"
+          tone={o.buckets.candidate > 0 ? "up" : undefined}
+        />
+        <Kpi label="Early" value={o.buckets.early} hint="evidence building" href="/candidates?bucket=early" />
+        <Kpi label="Priced-in" value={o.buckets.priced_in} hint="evidence already in the price" href="/candidates?bucket=priced_in" />
+        <Kpi label="Theses to review" value={o.review} hint="need your verdict" href="/theses" tone={o.review > 0 ? "warn" : undefined} />
+        <Kpi label="Open positions" value={o.position} hint="theses you hold" href="/theses" />
+      </KpiRibbon>
       <Section title={digest ? digest.title : "Weekly digest"} id="digest">
         {digest ? (
           <Markdown text={body} />
