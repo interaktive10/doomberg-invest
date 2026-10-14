@@ -10,17 +10,17 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const q = await searchParams;
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+      <div className="w-full max-w-sm rounded-md border border-line bg-panel p-6 sm:p-8">
         <Logo className="size-10" />
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight">Doomberg Invest</h1>
-        <p className="mt-1 text-sm text-gray-700">Sign in with a one-time link sent to the allowed email.</p>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-fg">Doomberg Invest</h1>
+        <p className="mt-1 text-[13px] text-muted">Sign in with a one-time link sent to the allowed email.</p>
         {q.sent ? (
-          <p role="status" className="mt-5 rounded-lg border border-green-200 border-l-4 border-l-green-700 bg-green-50 px-3 py-2.5 text-sm text-green-950">
+          <p role="status" className="mt-5 rounded-sm border border-up/40 border-l-2 border-l-up bg-up/10 px-3 py-2 text-[13px] text-fg">
             If that address is allowed, a sign-in link is on its way. Open it on this device.
           </p>
         ) : null}
         {q.error ? (
-          <p role="alert" className="mt-5 rounded-lg border border-red-200 border-l-4 border-l-red-700 bg-red-50 px-3 py-2.5 text-sm text-red-950">
+          <p role="alert" className="mt-5 rounded-sm border border-down/40 border-l-2 border-l-down bg-down/10 px-3 py-2 text-[13px] text-fg">
             {q.error}
           </p>
         ) : null}
@@ -32,7 +32,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </SubmitButton>
         </form>
       </div>
-      <p className="mt-6 max-w-sm text-center text-xs text-gray-700">
+      <p className="mt-6 max-w-sm text-center font-mono text-[11px] text-subtle">
         Research only: no orders, no price alerts. Nothing here is investment advice.
       </p>
     </main>

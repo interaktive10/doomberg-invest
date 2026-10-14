@@ -1,25 +1,30 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-// shadcn/ui Input, Textarea, Select (native), Label.
+// shadcn/ui Input, Textarea, Select (native), Label. Control borders are the edge colour (>= 3:1 on every surface).
 const field =
-  "rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-500 " +
-  "focus-visible:border-blue-700 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-blue-700/30";
+  "rounded-sm border border-edge bg-field px-2.5 text-[13px] text-fg placeholder:text-subtle " +
+  "focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent/40";
+
+/** A radio or checkbox inside its label, read as a chip (thesis verdicts, post-mortem, screener filters); the box
+ * stays visible for keyboard and screen-reader users. */
+export const choiceChip =
+  "flex cursor-pointer items-center gap-2 rounded-sm border border-edge bg-field px-2.5 py-1 text-[13px] text-fg has-checked:border-accent has-checked:bg-accent/10";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input className={cn(field, "h-9", className)} {...props} />;
+  return <input className={cn(field, "h-8", className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
-  return <textarea className={cn(field, "min-h-20 w-full", className)} {...props} />;
+  return <textarea className={cn(field, "min-h-20 w-full py-1.5", className)} {...props} />;
 }
 
 export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select className={cn(field, "h-9 pr-8", className)} {...props} />;
+  return <select className={cn(field, "h-8 pr-8", className)} {...props} />;
 }
 
 export function Label({ className, ...props }: ComponentProps<"label">) {
-  return <label className={cn("text-sm font-medium text-gray-900", className)} {...props} />;
+  return <label className={cn("text-xs font-medium text-muted", className)} {...props} />;
 }
 
 /** A label above its control, with an optional hint under it. */
@@ -28,7 +33,7 @@ export function Field({ label, htmlFor, hint, children, className }: { label: Re
     <div className={cn("flex flex-col gap-1.5", className)}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {hint ? <p className="text-xs text-gray-700">{hint}</p> : null}
+      {hint ? <p className="text-xs text-subtle">{hint}</p> : null}
     </div>
   );
 }

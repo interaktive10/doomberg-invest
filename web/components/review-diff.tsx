@@ -50,7 +50,7 @@ function KillTable({ label, kills, state }: { label: string; kills: readonly Kil
             <TableCell>
               {k.operator} {k.threshold ?? ""}
             </TableCell>
-            <TableCell className="whitespace-nowrap tabular-nums">{arrow(before.get(k.metric) ?? null, k.last_value, ratio)}</TableCell>
+            <TableCell className="num whitespace-nowrap">{arrow(before.get(k.metric) ?? null, k.last_value, ratio)}</TableCell>
             <TableCell>
               <Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{k.status}</Badge>
             </TableCell>
@@ -84,7 +84,7 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
             {state.context.map((c) => (
               <TableRow key={c.id}>
                 <TableCell>{humanize(c.id)}</TableCell>
-                <TableCell className="whitespace-nowrap tabular-nums">{arrow(c.before, c.now, ratio)}</TableCell>
+                <TableCell className="num whitespace-nowrap">{arrow(c.before, c.now, ratio)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -154,7 +154,7 @@ export function ReviewDiff({ id, diff }: { id: string; diff: Partial<PackDiff> }
             {figures.map((f) => (
               <TableRow key={f.name}>
                 <TableCell>{FIGURE_LABEL[f.name] ?? f.name}</TableCell>
-                <TableCell className="whitespace-nowrap tabular-nums">{arrow(f.before, f.now, big)}</TableCell>
+                <TableCell className="num whitespace-nowrap">{arrow(f.before, f.now, big)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

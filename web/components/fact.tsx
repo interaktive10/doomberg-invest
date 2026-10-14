@@ -17,21 +17,24 @@ export function factValue(f: Pick<FactRow, "value_num" | "value_low" | "value_hi
 export function FactItem({ f, company }: { f: FactRow & { company_id: string }; company?: boolean }) {
   const value = factValue(f);
   return (
-    <li id={`fact-${f.id}`} className="scroll-mt-4 rounded-lg border border-gray-200 bg-white p-3 target:border-blue-700 target:ring-2 target:ring-blue-700/20">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+    <li
+      id={`fact-${f.id}`}
+      className="scroll-mt-24 rounded-sm border border-line bg-canvas p-3 target:border-accent target:ring-1 target:ring-accent/40 sm:p-4"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
         {company && f.companies ? (
           <Link href={`/company/${f.company_id}`} className="link-quiet">
             {f.companies.name}
           </Link>
         ) : null}
-        <span className="font-semibold text-gray-900">{humanize(f.fact_type)}</span>
-        {value ? <span className="font-medium text-gray-900 tabular-nums">{value}</span> : null}
-        <span className="text-gray-700">
+        <span className="font-semibold text-fg">{humanize(f.fact_type)}</span>
+        {value ? <span className="num font-medium text-fg">{value}</span> : null}
+        <span className="text-muted">
           {f.period_label ? `${f.period_label} · ` : ""}as of {f.as_of}
         </span>
-        <code className="ml-auto text-xs break-all text-gray-700">{f.subject_key}</code>
+        <code className="ml-auto text-xs break-all text-muted">{f.subject_key}</code>
       </div>
-      <blockquote className="mt-2 border-l-2 border-gray-300 pl-3 text-sm text-gray-900">“{f.quote}”</blockquote>
+      <blockquote className="mt-2 border-l-2 border-line-strong pl-3 text-sm text-fg">“{f.quote}”</blockquote>
       {f.documents ? (
         <a href={f.documents.url} rel="noreferrer" target="_blank" className="mt-2 inline-block text-xs">
           {f.documents.kind} {f.documents.published_at.slice(0, 10)}

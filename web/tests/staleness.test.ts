@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceHealth } from "@/lib/data";
-import { FALLBACK_OF, SLA_DAYS, sourceStatus, staleSources } from "@/lib/staleness";
+import { FALLBACK_OF, SLA_DAYS, onTimeCount, sourceStatus, staleSources } from "@/lib/staleness";
 import { repoFile, yamlBlock } from "./repo";
 
 const at = (source: string, lastSuccess: string | null, stale = false): SourceHealth => ({
@@ -31,5 +31,14 @@ describe("staleness (BRIEF §2.7; config/staleness.yaml, as the digest reads it)
     expect(sourceStatus(fine[0] as SourceHealth, fine, now)).toBe("fallback, not needed (nse ok)");
     const down = [at("bse", "2026-08-01T06:00:00Z"), at("nse", null, true)];
     expect(staleSources(down, now)).toEqual(["bse (no success for 48 days; SLA 10)", "nse (stale)"]);
+  });
+
+  it("counts a resting fallback as on time, like the banner (Settings 'Sources on time')", () => {
+    const fine = [at("nse", "2026-09-18T06:00:00Z"), at("bse", "2026-08-01T06:00:00Z")];
+    expect(onTimeCount(fine, now)).toBe(2);
+    const oneStale = [at("sec", "2026-09-18T06:00:00Z"), at("twelvedata", "2026-09-18T06:00:00Z", true)];
+    expect(onTimeCount(oneStale, now)).toBe(1);
+    const nseDown = [at("nse", null, true), at("bse", "2026-08-01T06:00:00Z")];
+    expect(onTimeCount(nseDown, now)).toBe(0);
   });
 });

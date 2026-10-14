@@ -2,18 +2,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-// shadcn/ui Badge. Text colours are the 800/900 shades on their 50 tints (axe contrast).
+// shadcn/ui Badge: a colour's own text on its 15% tint (the tightest, down on a hovered row, is 4.8:1). No uppercase.
 export const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
+  "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
   {
     variants: {
       variant: {
-        default: "bg-blue-50 text-blue-900 ring-blue-700/25",
-        secondary: "bg-gray-100 text-gray-800 ring-gray-500/25",
-        destructive: "bg-red-50 text-red-900 ring-red-700/25",
-        warning: "bg-amber-50 text-amber-950 ring-amber-700/30",
-        success: "bg-green-50 text-green-900 ring-green-700/25",
-        outline: "bg-white text-gray-800 ring-gray-300",
+        default: "bg-accent/15 text-accent ring-accent/30",
+        secondary: "bg-raised text-muted ring-line-strong",
+        destructive: "bg-down/15 text-down ring-down/35",
+        warning: "bg-warn/15 text-warn ring-warn/35",
+        success: "bg-up/15 text-up ring-up/35",
+        outline: "bg-transparent text-muted ring-line-strong",
       },
     },
     defaultVariants: { variant: "default" },
