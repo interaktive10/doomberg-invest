@@ -141,7 +141,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           <a
             key={hash}
             href={`#${hash}`}
-            className="inline-flex h-10 items-center px-3 text-[13px] font-medium whitespace-nowrap text-muted no-underline hover:text-fg"
+            className="inline-flex h-10 items-center px-3 text-[13px] font-medium whitespace-nowrap text-muted no-underline hover:text-fg focus-visible:outline-offset-[-2px]"
           >
             {name}
           </a>
@@ -198,7 +198,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           </ChartGrid>
         )}
       </Section>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start">
         <Section title="Signal timeline" id="signals" description="The weeks a signal fired, newest first." className="xl:col-span-5">
           {weeks.size === 0 ? (
             <Empty>No signal has fired.</Empty>

@@ -99,8 +99,8 @@ export function LineChartCard({
                   stroke={SERIES[i % SERIES.length]}
                   strokeWidth={1.5}
                   strokeDasharray={i > 0 ? "4 3" : undefined}
-                  dot={points <= 3 ? { r: 2.5 } : false}
-                  activeDot={{ r: 3 }}
+                  dot={points <= 3 ? { r: 2.5, fill: SERIES[i % SERIES.length], stroke: INK.panel, strokeWidth: 1 } : false}
+                  activeDot={{ r: 3, stroke: INK.panel, strokeWidth: 2 }}
                   isAnimationActive={false}
                 />
               ))}

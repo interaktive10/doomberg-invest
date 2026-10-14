@@ -57,7 +57,7 @@ export default async function Capex({ searchParams }: { searchParams: Promise<Qu
         <Kpi label="Falling" value={falling} tone={falling > 0 ? "down" : undefined} />
         <Kpi label="Waiting for your decision" value={proposed.length} href="#memberships" tone={proposed.length > 0 ? "warn" : undefined} />
       </KpiRibbon>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start">
         <Section
           title="Demand index by category"
           id="index"

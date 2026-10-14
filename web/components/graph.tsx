@@ -30,7 +30,7 @@ const STYLE = [
     },
   },
   { selector: "node[kind = 'company']", style: { "background-color": SERIES[0] } },
-  { selector: "node[kind = 'entity']", style: { "background-color": "#6b7c8f" } },
+  { selector: "node[kind = 'entity']", style: { "background-color": INK.muted } },
   {
     selector: "edge",
     style: {
@@ -40,8 +40,8 @@ const STYLE = [
       color: INK.muted,
       "text-background-color": INK.panel,
       "text-background-opacity": 0.85,
-      "line-color": "#3d4c5c",
-      "target-arrow-color": "#3d4c5c",
+      "line-color": INK.edge,
+      "target-arrow-color": INK.edge,
       "target-arrow-shape": "triangle",
       "curve-style": "bezier",
     },

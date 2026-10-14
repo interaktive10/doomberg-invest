@@ -148,8 +148,9 @@ export function Kpi({
     </>
   );
   const cell = "min-w-[9.5rem] flex-1 border-t border-l border-line px-4 py-3";
+  // KpiRibbon clips its overflow (outer hairlines, rounded hover), so a link cell draws its focus ring inside itself.
   return href ? (
-    <Link href={href} className={cn(cell, "group block no-underline transition-colors hover:bg-raised")}>
+    <Link href={href} className={cn(cell, "group block no-underline transition-colors hover:bg-raised focus-visible:outline-offset-[-2px]")}>
       {body}
     </Link>
   ) : (

@@ -9,7 +9,7 @@ import { env } from "@/lib/env";
 import { num } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
 import { sourceLabel } from "@/lib/labels";
-import { sourceStatus } from "@/lib/staleness";
+import { onTimeCount } from "@/lib/staleness";
 import { saveDiscipline } from "./actions";
 import { requireUser } from "@/lib/auth";
 
@@ -44,7 +44,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const tally = (m: string, inside: boolean) => counts.find((c) => c.market === m && c.in_universe === inside)?.count ?? 0;
   const current = versions.find((v) => v.approved_at !== null);
   const now = new Date();
-  const onTime = sources.filter((s) => sourceStatus(s, sources, now) === "ok").length;
+  const onTime = onTimeCount(sources, now);
   return (
     <Page title="Settings" description="Most settings live in the repository's config files and change through pull requests; they are shown here read-only.">
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
@@ -59,7 +59,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <Kpi label="Weights in use" value={current?.version ?? "none"} />
         <Kpi label="Wait before a position" value={`${num(weeks, 0)} weeks`} />
       </KpiRibbon>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start">
         <Section title="Sign-in" id="signin" className="xl:col-span-6">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted">Signed in as</dt>

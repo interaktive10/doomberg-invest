@@ -55,6 +55,12 @@ export function lateSources(sources: readonly SourceHealth[], now: Date): { sour
   return out;
 }
 
+/** How many sources are on time (Settings "Sources on time"): "ok", or a resting fallback, which lateSources and the
+ * stale banner don't count as late either. */
+export function onTimeCount(sources: readonly SourceHealth[], now: Date): number {
+  return sources.filter((s) => resting(s, sources, now) || sourceStatus(s, sources, now) === "ok").length;
+}
+
 /** The banner's list as text, "sec (no success for 11 days; SLA 8)". */
 export function staleSources(sources: readonly SourceHealth[], now: Date): string[] {
   return lateSources(sources, now).map((s) => `${s.source} (${s.why})`);

@@ -26,7 +26,7 @@ const TABS: readonly [Bucket, string][] = [
   ["excluded", "Excluded"],
 ];
 
-const COLUMNS = "lg:grid-cols-[minmax(0,1.6fr)_10rem_10rem_minmax(0,2.4fr)_15rem]";
+const COLUMNS = "lg:grid-cols-[minmax(0,1.6fr)_7rem_7rem_minmax(0,2.4fr)_15rem]";
 
 function href(q: Record<string, string | undefined>): string {
   const p = new URLSearchParams();
@@ -178,7 +178,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         </Empty>
       ) : (
         <div className="rounded-md border border-line bg-panel">
-          <div aria-hidden="true" className={cn("caps hidden rounded-t-md border-b border-line-strong bg-raised px-4 py-2 lg:grid lg:gap-x-6", COLUMNS)}>
+          <div aria-hidden="true" className={cn("caps hidden rounded-t-md border-b border-line-strong bg-raised px-4 py-2 lg:grid lg:items-end lg:gap-x-4", COLUMNS)}>
             <span>Company</span>
             <span>Strength of evidence</span>
             <span>Not priced in yet</span>
@@ -194,7 +194,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
                 <li
                   key={r.company_id}
                   className={cn(
-                    "flex flex-col gap-3 border-t border-line p-4 first:border-t-0 lg:grid lg:items-start lg:gap-x-6 lg:gap-y-0 lg:py-3",
+                    "flex flex-col gap-3 border-t border-line p-4 first:border-t-0 lg:grid lg:items-start lg:gap-x-4 lg:gap-y-0 lg:py-3",
                     COLUMNS,
                   )}
                 >

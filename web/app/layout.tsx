@@ -6,9 +6,9 @@ import "./globals.css";
 const ICON =
   "data:image/svg+xml," +
   encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#111827"/>' +
-      '<rect x="7" y="17" width="4.5" height="8" rx="1.2" fill="#93c5fd"/><rect x="13.75" y="12" width="4.5" height="13" rx="1.2" fill="#bfdbfe"/>' +
-      '<rect x="20.5" y="7" width="4.5" height="18" rx="1.2" fill="#ffffff"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="0.5" y="0.5" width="31" height="31" rx="6.5" fill="#121821" stroke="#2c3947" stroke-width="1"/>' +
+      '<rect x="7" y="17" width="4.5" height="8" rx="1.2" fill="#1f8fc8"/><rect x="13.75" y="12" width="4.5" height="13" rx="1.2" fill="#4cc3ff"/>' +
+      '<rect x="20.5" y="7" width="4.5" height="18" rx="1.2" fill="#e7edf3"/></svg>',
   );
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });

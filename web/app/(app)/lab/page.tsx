@@ -124,7 +124,7 @@ export default async function Lab() {
           </Table>
         )}
       </Section>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start">
         <Section title="Open proposals (not approved)" id="proposals" className="xl:col-span-6">
           {open.length === 0 ? (
             <Empty>No open weight proposals.</Empty>
