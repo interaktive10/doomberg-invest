@@ -18,8 +18,8 @@ from pipeline.db import repo
 from pipeline.db.models import Company, CorpEvent, InsiderEvent, OwnershipRow, PriceW, Score, SignalValue
 from pipeline.db.pit import cutoff_for
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import parse_csv
 from pipeline.net.twelvedata import series_url
+from pipeline.prices.bars import parse_csv
 from pipeline.screener import MetricFilter, ScreenSpec, run_screen
 from pipeline.settings import Settings
 from pipeline.signals import weekly

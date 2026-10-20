@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from decimal import Decimal as D
 from pathlib import Path
 
-from pipeline.net.stooq import parse_csv
+from pipeline.prices.bars import parse_csv
 from pipeline.prices.splits import (
     RATIOS,
     TOL,
@@ -50,7 +50,7 @@ def test_unconfirmed_jump_is_flagged_not_adjusted() -> None:
 
 
 def test_split_without_a_price_jump_means_prices_were_already_adjusted() -> None:
-    """Stooq's history is split-adjusted: no jump, but older share counts move to today's basis."""
+    """Twelve Data's history is split-adjusted: no jump, but older share counts move to today's basis."""
     shares = list(zip(QUARTERS, (D(100), D(100), D(300)), strict=True))
     a = adjust(closes(None), shares)
     assert a.confirmed == [] and a.unconfirmed == [] and a.adj_close[FRIDAYS[0]] == D(100)
@@ -89,8 +89,9 @@ NVDA_SHARES = D("2460000000")  # the pre-split count the last 10-Q reported
 
 
 def test_adjusted_source_rebased_history_is_a_split_before_any_filing_shows_it() -> None:
-    """Stooq re-adjusts its whole history for a 10:1 split: every stored close is 10x the fresh one. Until the next
-    10-Q reports the new count, market cap is price x the pre-split count x 10, never price x the pre-split count."""
+    """A split-adjusted source re-adjusts its whole history for a 10:1 split: every stored close is 10x the fresh one.
+    Until the next 10-Q reports the new count, market cap is price x the pre-split count x 10, never price x the
+    pre-split count."""
     stored = [(d, D(1200)) for d in FRIDAYS[:19]]
     fresh = [(d, D(120)) for d in FRIDAYS]  # the split took effect in the new week
     split = rebased(stored, fresh)

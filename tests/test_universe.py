@@ -1,9 +1,9 @@
-"""Universe seed parsers (BRIEF §1.3) and the M0-05 snapshot counts."""
+"""Universe seed parsers (BRIEF §1.3) and the M0-05 snapshot counts. The capex seed was resolved once in M0; its
+resolver went with the Capex Desk (docs/SPEC_ISSUES.md 52) and the result is in config/capex_seed.yaml."""
 
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -15,9 +15,6 @@ from pipeline.us.universe import load_snapshot as load_sec
 from pipeline.us.universe import parse_tickers_exchange
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-
-import resolve_capex_seed  # noqa: E402
 
 SEC_SAMPLE = json.dumps(
     {
@@ -60,38 +57,9 @@ def test_nse_parser_rejects_changed_schema() -> None:
         parse_equity_list("SYMBOL,NAME\nABB,ABB India\n")
 
 
-def test_resolve_marks_unresolved_without_snapshots() -> None:
-    seed = yaml.safe_load((ROOT / "config" / "capex_seed.yaml").read_text(encoding="utf-8"))
-    r = resolve_capex_seed.resolve(seed, None, None)
-    assert r.us_total == 61 and r.in_total == 41 and r.unresolved == 102
-    assert "Why unresolved" in resolve_capex_seed.render_issues(r)
-
-
-def test_resolve_with_snapshots() -> None:
-    seed = {"us": {"g": ["CAT", "ZZZZ"]}, "india": [{"name": "ABB India", "nse": "ABB"}, {"name": "X", "nse": "NOPE"}]}
-    r = resolve_capex_seed.resolve(seed, {"CAT"}, {"ABB": "ABB India Limited"})
-    assert r.in_resolved == ["ABB"]
-    assert [u.split()[0] for u in r.us_unresolved] == ["ZZZZ"]
-    assert [x[1] for x in r.in_unresolved] == ["NOPE"]
-
-
-def test_resolve_explains_non_eq_listing() -> None:
-    seed = {"us": {}, "india": [{"name": "HFCL", "nse": "HFCL"}]}
-    r = resolve_capex_seed.resolve(seed, set(), {"ABB": "ABB India Limited"}, {"HFCL": "BE"})
-    assert r.in_unresolved == [
-        ("HFCL", "HFCL", "listed on NSE in series BE, not EQ; outside the BRIEF §1.3 India universe")
-    ]
-
-
 def test_nse_parser_all_series() -> None:
     rows = parse_equity_list(NSE_SAMPLE, series=None)
     assert [(r.symbol, r.series) for r in rows] == [("ABB", "EQ"), ("LT", "EQ"), ("SOMEBE", "BE")]
-
-
-def test_mark_verified_only_flips_resolved() -> None:
-    text = "  - {name: A, group: g, nse: ABB, verified: false}\n  - {name: B, group: g, nse: GVT&D, verified: false}\n"
-    out = resolve_capex_seed.mark_verified(text, {"GVT&D"})
-    assert "nse: ABB, verified: false" in out and "nse: GVT&D, verified: true" in out
 
 
 # ------------------------------------------------------------------ M0-05 (needs the fetched snapshots)
@@ -107,16 +75,3 @@ def test_us_universe_count() -> None:
 def test_india_eq_count() -> None:
     cfg = yaml.safe_load((ROOT / "config" / "universe_in.yaml").read_text(encoding="utf-8"))
     assert len(load_nse(ROOT / cfg["snapshot"])) >= cfg["min_count_check"]
-
-
-@pytest.mark.snapshots
-def test_capex_seed_resolved_or_listed() -> None:
-    seed = yaml.safe_load((ROOT / "config" / "capex_seed.yaml").read_text(encoding="utf-8"))
-    us = {t for f in load_sec(ROOT / "data/universe/us_tickers_exchange.json") for t in f.tickers}
-    nse = {s.symbol: s.name for s in load_nse(ROOT / "data/universe/nse_equity_list.csv")}
-    r = resolve_capex_seed.resolve(seed, us, nse)
-    issues = (ROOT / "docs" / "UNIVERSE_ISSUES.md").read_text(encoding="utf-8")
-    for u in r.us_unresolved:
-        assert u.split()[0] in issues
-    for name, sym, _ in r.in_unresolved:
-        assert f"`{sym}`" in issues, f"{name} unresolved and not listed"

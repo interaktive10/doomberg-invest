@@ -17,8 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 NSE_EQUITY_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
-ASM_API = "reportASM"  # https://www.nseindia.com/api/reportASM
-GSM_API = "reportGSM"
 REQUIRED = ("SYMBOL", "NAME OF COMPANY", "SERIES", "ISIN NUMBER")
 
 

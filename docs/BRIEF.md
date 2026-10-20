@@ -1,9 +1,7 @@
 # DOOMBERG — Long-term investing research app (US + India)
 **Builder: Claude Code Projects (cloud threads) · Thread model: Opus 5.5 · Thread effort: High · Running cost: $0**
 
-Doomberg is a private, single-user research app for long-term investing. It has two desks:
-- **Opportunities Desk** covers all sectors, US and India. It finds companies where the **evidence of fundamental change is strong but the market's attention and expectations haven't caught up**, and turns each one into a thesis card with cited evidence, kill criteria and review dates.
-- **Capex Desk** covers AI and infrastructure capex. It tracks where the money is going across the supply chain in filings, and feeds second- and third-order candidates, including Indian suppliers riding US capex, into the Opportunities Desk.
+Doomberg is a private, single-user research app for long-term investing. It covers all sectors, US and India. It finds companies where the **evidence of fundamental change is strong but the market's attention and expectations haven't caught up**, and turns each one into a thesis card with cited evidence, kill criteria and review dates. (The Capex Desk, which tracked AI and infrastructure capex, was deleted: SPEC_ISSUES 52.)
 
 The app tests its own signals against history before trusting them, keeps a decision journal, and runs on free resources only.
 
@@ -36,7 +34,6 @@ This document is the complete spec. It replaces the Capex Ledger brief. Build it
   archives.nseindia.com
   www.bseindia.com
   api.bseindia.com
-  stooq.com
   ```
 - **Environment variables:**
   ```
@@ -73,8 +70,7 @@ After that, at most two build threads at a time, in the order given in §8.
 | Google AI Studio | Gemini API free-tier key |
 | Groq | Free-tier key |
 | OpenRouter | Free models; optional fallback |
-| FRED | Free API key |
-| EIA | Free API key |
+| Twelve Data | Free API key (US weekly prices; the Signal Lab's history) |
 
 GitHub Actions free minutes run the pipeline. The weekly thesis-writing routine runs on the Claude plan you already have, so there's no API spend.
 
@@ -83,12 +79,11 @@ GitHub Actions free minutes run the pipeline. The weekly thesis-writing routine 
 ## 1. Product and method
 
 ### 1.1 Where a patient individual can still have an edge
-Screens everyone runs (low P/E, high ROE, momentum, RSI and chart patterns, analyst upgrades, "AI stocks" lists) are crowded; by the time they fire, the move is usually priced. Doomberg looks for five other kinds of edge instead:
+Screens everyone runs (low P/E, high ROE, momentum, RSI and chart patterns, analyst upgrades, "AI stocks" lists) are crowded; by the time they fire, the move is usually priced. Doomberg looks for four other kinds of edge instead:
 1. **Inflections, not levels.** Second derivatives: backlog accelerating faster than revenue, returns on *new* capital rising from a low base, margins turning, balance sheets finishing repair. Static screens only catch these after they're obvious.
 2. **Processing edge.** The facts are public but costly to read: footnotes, remaining performance obligations, capacity commitments, supplier and customer links, and Indian exchange filings that few people parse.
 3. **Corroboration.** A candidate needs at least two *independent* evidence families to agree, for example fundamentals + insider buying, or backlog + text evidence. One signal alone is noise.
 4. **Neglect and structure.** Low and rising institutional ownership, low news attention, spin-offs, demergers, holding-company discounts: places where selling or neglect isn't about fundamentals.
-5. **Cross-border propagation.** US AI and grid capex shows up in US filings first. Indian suppliers (transformers, cables, switchgear, electronics manufacturing, data-center builders) often report it later. Linking the two is a genuine processing edge.
 
 The app then asks one question: **is this already priced in?** Candidates are generated **without looking at price**. Price, valuation and attention are added afterwards as a separate score, so "great company, already priced" is its own bucket, not a buy idea.
 
@@ -120,10 +115,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
   - excludes SME, and anything on the ASM/GSM surveillance lists
   - candidate stage: market cap ≥ ₹500 crore (price × shares from shareholding filings)
   - **paused** (SPEC_ISSUES 46): the India code and stored data stay, but no schedule fetches India and the weekly run scores the US only; SPEC_ISSUES 46 says how to restart it
-- **Capex Desk:**
-  - the 60 US companies from the Capex Ledger seed (Appendix H)
-  - the India capex-linked seed (Appendix H), resolved to NSE symbols in M0
-  - unresolved names → `docs/UNIVERSE_ISSUES.md`
+- **Capex seed:** the Capex Ledger's US and India names (Appendix H, resolved in M0; unresolved names in `docs/UNIVERSE_ISSUES.md`) are flagged `companies.capex_desk`. The Capex Desk that read them was deleted (SPEC_ISSUES 52).
 
 ### 1.4 Evidence signals (price-free; formulas in §4.6)
 | ID | Family | Signal | Markets |
@@ -138,8 +130,9 @@ The app then asks one question: **is this already priced in?** Candidates are ge
 | S8 | Behavior | Discovery: low-but-rising institutional ownership (13F holder count; FII+DII %) | US, IN |
 | S9 | Text | Verified text facts: order/customer wins, committed capacity additions, price increases, lead-time extensions, new segments, removed material weakness or going-concern language | US, IN |
 | S10 | Structural | Special situations: spin-offs/demergers (≤ 18 months), post-reorganization, holding-company structures, rights issues | US, IN |
-| S11 | Capex | Capex propagation: linked to a rising upstream demand category while the company's own response lags | US, IN |
 | S12 | Cycle | Cycle position: the sector underinvested for 3 years (capex ≤ D&A), demand turning, text evidence of tightness | US, IN |
+
+There is no S11: capex propagation was deleted with the Capex Desk (SPEC_ISSUES 52). Without EIA it could never fire.
 
 ### 1.5 Red flags (`R*`; hard ones exclude, soft ones subtract)
 | ID | Rule | Type |
@@ -172,7 +165,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
   | **Priced-in** | Evidence ≥ 60, Gap < 50 |
   | **Early** | Evidence 40–59 with ≥ 2 families, Gap ≥ 50 (watch for corroboration) |
   | **Excluded** | Any hard red flag |
-- **Weekly focus:** at most **10 new candidates** a week across both desks (not seen in the last 12 weeks), ranked by Evidence then Gap. Focus beats volume.
+- **Weekly focus:** at most **10 new candidates** a week (not seen in the last 12 weeks), ranked by Evidence then Gap. Focus beats volume.
 
 ### 1.8 Thesis workflow and journal (§4.9)
 **States:** Research → Thesis → Position → Review → Closed.
@@ -182,7 +175,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
 - **Review:** after each quarterly filing the app evaluates the kill criteria. He records intact / weakened / broken.
 - **Closed:** requires a post-mortem (what happened vs the thesis; what the signals said).
 
-### 1.9 Text fact types (Appendix F extraction; used by both desks)
+### 1.9 Text fact types (Appendix F extraction)
 The Capex Ledger types, plus general types:
 | fact_type | Definition |
 |---|---|
@@ -194,17 +187,9 @@ The Capex Ledger types, plus general types:
 | `governance_flag` | Auditor change, material weakness, going concern, restatement (added or removed) |
 | `export_exposure` | A stated export share or overseas order book (India: US/data-center exports) |
 
-### 1.10 Capex Desk (§4.11)
-- **The ledger:** facts, diffs and a counterparty graph for the capex universe.
-- **Upstream demand index:**
-  - hyperscaler capex guidance
-  - utility large-load pipelines
-  - EIA generator additions
-  - stated equipment lead times
-- **Category map:** compute, networking, optical, power equipment, grid, cooling, construction, on-site power, electronics manufacturing.
-- **Cross-border map:** Indian companies → categories (P-06), with evidence.
-- **S11 propagation signal** fed into the Opportunities Desk.
-- **Weekly private Capex brief** in the digest.
+### 1.10 Capex Desk (deleted)
+- **Deleted** in the overhaul (SPEC_ISSUES 52): the upstream demand index, the category map, the cross-border map (P-06), the S11 propagation signal, the weekly Capex brief and the Capex Desk screen. Without EIA, S11 could never fire.
+- **Kept:** the counterparty links the text run writes (Appendix F.2), the capex tables and Manzoor's capex memberships (no migration).
 
 
 ---
@@ -213,10 +198,10 @@ The Capex Ledger types, plus general types:
 
 ### 2.1 Components
 ```
-GitHub Actions (free minutes, cron) ──▶ pipeline/ (Python 3.12, uv, DuckDB/Polars on the runner)
-  daily   : SEC events (Form 4, 8-K items, NT filings), NSE/BSE announcements, capex-desk filings → text facts
+GitHub Actions (free minutes, cron) ──▶ pipeline/ (Python 3.12, uv, Polars on the runner)
+  daily   : SEC events (Form 4, 8-K items, NT filings), NSE/BSE announcements, thesis and stage-name filings → text facts
   weekly  : SEC bulk companyfacts → fundamentals · NSE bhavcopy + shareholding + PIT + results XBRL
-            → signals → red flags → candidate prices (Stooq) → context (C1–C3) → scores/buckets
+            → signals → red flags → candidate prices (Twelve Data) → context (C1–C3) → scores/buckets
             → evidence packs → thesis queue file → digest issue
   quarterly: 13F data sets · universe rebuild
         │ writes compact tables                          ▲ raw bulk files stay on the runner / Actions cache
@@ -232,15 +217,14 @@ Fallback, if no routine output by Monday 06:00 UTC: Gemini free tier writes the 
 ### 2.2 Stack (pin versions in lockfiles; record them in `docs/VERSIONS.md`)
 - **Pipeline:**
   - Python 3.12 (uv)
-  - `polars`, `duckdb`, `pyarrow`, `httpx`, `tenacity`, `pydantic` 2, `psycopg[binary]` 3
-  - `edgartools` (MIT; SEC filings, XBRL, Form 4, 13F helpers), `selectolax`, `lxml`, `pypdfium2`
-  - `rapidfuzz`, `python-dateutil`, `feedparser`, `scipy` (root finding, stats), `statsmodels` (Newey-West)
-  - `jinja2`, `pyyaml`, `vcrpy`, `pytest`, `ruff`, `mypy`
-- **LLM clients:** `google-genai` (Gemini), `groq`, and the `openai` package pointed **only** at the OpenRouter base URL. No Anthropic or OpenAI paid endpoints at runtime (guard, Appendix E).
+  - `polars`, `httpx`, `pydantic` 2, `psycopg[binary]` 3, `pypdfium2`, `rapidfuzz`, `scipy` (root finding, stats), `pyyaml`
+  - `pytest`, `ruff`, `mypy`
+  - the packages nothing imported were removed (SPEC_ISSUES 52): SEC, NSE and XBRL parsing, Newey-West and the LLM calls are this repo's own code
+- **LLM clients:** plain HTTPS calls (no SDK) to Gemini, Groq and OpenRouter, the last **only** at the OpenRouter base URL in `config/quotas.yaml`. No Anthropic or OpenAI paid endpoints at runtime (guard, Appendix E).
 - **Web:**
   - Node 22, pnpm 9, Next.js 15, React 19, TypeScript strict
   - Tailwind 4, shadcn/ui, `@supabase/ssr`, zod
-  - Recharts (fundamentals charts), Cytoscape.js (capex graph)
+  - Recharts (fundamentals charts)
   - Playwright, Vitest, `@axe-core/playwright`
 - **Dev and test database:** the pre-installed PostgreSQL 16 in cloud sessions. Production: Supabase free.
 
@@ -250,16 +234,15 @@ doomberg-invest/
   CLAUDE.md README.md Makefile .env.example pyproject.toml uv.lock
   .claude/{settings.json,agents/reviewer.md}  .github/workflows/*.yml  .github/CODEOWNERS
   config/ universe_us.yaml universe_in.yaml capex_seed.yaml signals.yaml weights.yaml redflags.yaml
-          context.yaml quotas.yaml guards.yaml terms.yaml subject_keys.yaml sectors.yaml categories.yaml
+          context.yaml quotas.yaml guards.yaml terms.yaml subject_keys.yaml sectors.yaml
   db/migrations/*.sql
   pipeline/
-    net/ (http.py allowlist+rate limits+cache, sec.py, nse.py, bse.py, stooq.py, fred.py, eia.py)
+    net/ (http.py allowlist+rate limits+cache, sec.py, nse.py, bse.py, twelvedata.py)
     us/ (fundamentals.py, events.py, form4.py, thirteenf.py, specials.py)
     india/ (bhavcopy.py, securities.py, shareholding.py, pit.py, pledges.py, results_xbrl.py, announcements.py, manual_import.py)
-    prices/ (weekly.py, benchmarks.py)
+    prices/ (bars.py, benchmarks.py, source.py, splits.py)
     facts/ (Appendix F: extract, ground, numbers, periods, verify1)
     signals/ (s01_orderbook.py … s12_cycle.py, redflags.py, context.py, reverse_dcf.py, scores.py, buckets.py)
-    capex/ (ledger.py, diffs.py, links.py, demand_index.py, crossborder.py, propagation.py, brief.py)
     thesis/ (evidence_pack.py, queue.py, validate.py, render.py, ingest.py, fallback_writer.py, kill_criteria.py)
     lab/ (panel.py, pit.py, evaluate.py, report.py, legacy_doomberg.py)
     llm/ (router.py, providers/, prompts/P-0X.yaml, cassettes/, privacy.py)
@@ -275,7 +258,7 @@ doomberg-invest/
 - **GitHub Actions secrets:**
   - `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
   - `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` (optional)
-  - `FRED_API_KEY`, `EIA_API_KEY`
+  - `TWELVEDATA_API_KEY`
   - `SEC_USER_AGENT`
   - `GH_ISSUES_TOKEN`: none needed; the workflow's `GITHUB_TOKEN` with `issues: write` suffices
 - **Web env:** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server only), `APP_ALLOWED_EMAIL`.
@@ -303,7 +286,7 @@ doomberg-invest/
 ### 2.6 LLM on free tiers (`pipeline/llm/router.py`, `config/quotas.yaml`)
 | Task | Primary | Fallbacks |
 |---|---|---|
-| Fact extraction P-01, entities P-02, announcement triage P-07, cross-border map P-06 | Gemini Flash-Lite/Flash (free tier) | Groq free (Llama 3.3 70B class) → OpenRouter `:free` models |
+| Fact extraction P-01, entities P-02, announcement triage P-07 | Gemini Flash-Lite/Flash (free tier) | Groq free (Llama 3.3 70B class) → OpenRouter `:free` models |
 | Thesis cards P-04 | **Claude Code routine** (weekly; existing plan) | Gemini Flash (free) in `thesis-fallback.yml` |
 | Claim support P-05 | Gemini Flash | Groq |
 
@@ -318,15 +301,14 @@ doomberg-invest/
 ### 2.7 Data sources (all free; personal use; fragility noted)
 | Data | Source | Cadence | Notes |
 |---|---|---|---|
-| US fundamentals | SEC bulk `companyfacts.zip` (nightly) + `submissions.zip`; `edgartools` for parsing | weekly | Point-in-time from filing acceptance dates |
+| US fundamentals | SEC bulk `companyfacts.zip` (nightly) + `submissions.zip`, parsed by this repo's own code | weekly | Point-in-time from filing acceptance dates |
 | US events | EDGAR daily index / submissions: Form 4, 8-K items (4.01 auditor, 1.01, 2.02, 2.03), NT 10-K/10-Q, Form 10-12B (spin-offs) | daily | SEC fair access: user agent, ≤ 8 req/s |
 | US ownership | SEC Form 13F data sets | quarterly | Holder counts per CUSIP → mapped to companies |
-| US prices | Stooq per-symbol weekly CSV, **candidate set + benchmarks only** (≤ 400 symbols/week) | weekly | Fragile; polite (1 req/2 s); cache; manual CSV import fallback |
+| US prices | Twelve Data weekly bars (free key), **candidate set + benchmarks only** (≤ 400 symbols/week; ^spx asked as SPY) | weekly | Free plan: 8 credits a minute, 800 a day (1 req/8 s); manual CSV import fallback (SPEC_ISSUES 38) |
 | US prices, Signal Lab | Twelve Data daily closes (monthly if the free plan's daily history doesn't reach 2010), downloaded by `lab-prices.yml` with **no human step**: resumable, ≤ 650 credits and 90 minutes a run, Sunday to Thursday → month-end bars in the private GitHub release `lab-data-v1` | once (November 2026) | Survivorship bias warning (§7) |
 | India prices | NSE CM-UDiFF Common Bhavcopy (daily file; use the Friday file) | weekly | BSE bhavcopy fallback |
 | India securities list, ASM/GSM lists | NSE reports | weekly | |
 | India fundamentals | NSE corporate filings: financial results (XBRL), shareholding patterns, insider trading (PIT), pledged data, announcements | weekly (announcements daily) | NSE site needs session cookies and polite rates (≤ 1 req/3 s); BSE fallback; **manual CSV import** from the pages' own "Download (.csv)" when blocked |
-| Macro/context | FRED (free key), EIA (free key; generator additions for the capex desk) | weekly | |
 
 - **Staleness is visible:** each source has a health row. Stale beyond its SLA (US weekly 8 days; India weekly 10 days) → a banner in the app and the digest.
 
@@ -481,7 +463,7 @@ All thresholds live in `config/signals.yaml` (a protected path) with the default
 ### 4.4 Prices (`pipeline/prices/*`, weekly)
 - **India:** all EQ closes from the bhavcopy → `prices_w`.
 - **US:** only the **candidate set** (Evidence ≥ 40 this week or last) plus theses/positions plus benchmarks (`^spx`, sector ETFs in `config/context.yaml`).
-  - Stooq per-symbol weekly CSV, 1 request per 2 s, ≤ 400 symbols/week, cached
+  - Twelve Data weekly bars (`time_series`, `interval=1week`), 1 request per 8 s, ≤ 400 symbols/week; ^spx is asked as SPY, the ETF that tracks it (SPEC_ISSUES 38)
   - failures → `stale` plus manual CSV import
 - **Adjustments:** splits and bonuses are detected from price discontinuities, confirmed with the share-count change, and recorded in `prices_w.adj_close`. Unconfirmed jumps → flagged, never silently adjusted.
 
@@ -512,8 +494,9 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
 | S8 | **US:** 13F holder count ≤ 40th percentile within its revenue-size decile, **and** holders up ≥ 15% QoQ in each of the last 2 quarters. **IN:** FII + DII ≤ 15% and up ≥ 2 pp over 2 quarters | `clip(growth/0.5, 0, 1)` (IN: `clip(Δpp/6, 0, 1)`) |
 | S9 | ≥ 1 verified fact in the last 2 quarters of types `order_win`, `customer_win`, `capacity_addition` (with a named counterparty or commitment), `price_increase`, `lead_time` (longer than before), `new_segment`, or `governance_flag` (removal) | `min(1, 0.4 × count)` |
 | S10 | Spin-off/demerger ≤ 18 months ago; reorganization ≤ 24 months; listed in `config/holdcos.yaml`; rights issue ≤ 6 months | 0.6 (config) |
-| S11 | §4.11 rules | §4.11 |
 | S12 | The company's sector (`config/sectors.yaml`) is flagged: median capex/da ≤ 1.0 in each of the last 3 fiscal years; median revenue YoY growth > 0 in the last 2 quarters after ≤ 0 before; ≥ 2 verified `price_increase` or longer-`lead_time` facts in the sector in 2 quarters; **and** the company fires S2 or S6 | 0.6 |
+
+There is no S11 (SPEC_ISSUES 52).
 
 **Red flags** (`redflags.py`) implement §1.5 with the same shared definitions. Missing inputs never fire a flag; they're recorded as `unknown`.
 
@@ -536,7 +519,7 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
 - There is no C4: the GDELT news-attention percentile was deleted (SPEC_ISSUES 48).
 
 ### 4.8 Scores and buckets (`scores.py`, `buckets.py`)
-1. **Families:** Fundamentals {S1–S6}, Behavior {S7, S8}, Text {S9}, Structural {S10}, Capex {S11}, Cycle {S12}.
+1. **Families:** Fundamentals {S1–S6}, Behavior {S7, S8}, Text {S9}, Structural {S10}, Cycle {S12}.
 2. **Family contribution:** `min(1, sum of the top 2 (weight_s × strength_s) in the family)`.
 3. **Evidence:**
    - `raw = Σ_family W_f × contribution_f` (W_f = 1 by default, from `config/weights.yaml`)
@@ -545,7 +528,7 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
    - each soft red flag subtracts 10, floored at 0
 4. **Gap:** the mean of the available C1–C3 scores (needs ≥ 2, else null → bucket `none`).
 5. **Bucket:** per §1.7.
-6. **Weekly shortlist:** top 10 new candidates, both markets and desks combined, ranked by Evidence then Gap, excluding any seen in the last 12 weeks.
+6. **Weekly shortlist:** top 10 new candidates, both markets combined, ranked by Evidence then Gap, excluding any seen in the last 12 weeks.
 7. **Provenance:** every score row stores the `weights_version`.
 
 ### 4.9 Thesis engine (`pipeline/thesis/*`)
@@ -603,29 +586,14 @@ Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:
 6. **Report:** `docs/LAB_REPORT.md` plus a Lab screen, with the caveats from §7 printed at the top.
 7. **India lab:** enabled after 8 quarters of collected India data (config flag).
 
-### 4.11 Capex Desk (`pipeline/capex/*`)
-- **Ledger:** Appendix F. Watch → fetch → normalize → extract → verify-1 → diff → scout for the capex universe (US + India seed), facts per §1.9. The counterparty graph goes into `links`.
-- **Demand index per category** (`config/categories.yaml`, weekly):
-  - hyperscaler capex guidance (latest fiscal-year guidance per anchor company, in USD)
-  - utility large-load pipeline (GW, verified facts)
-  - EIA planned generator additions (MW by technology)
-  - stated lead times (months) for transformers, turbines and switchgear
-  - each input's YoY change is z-scored and averaged per category
-  - direction: `rising` (≥ +0.5σ), `flat`, `falling` (≤ −0.5σ)
-- **Membership:** US companies by industry map plus facts. Indian companies by **P-06** on their business description, annual-report text and announcements, with evidence quotes. Manzoor confirms new memberships in the web app before they count.
-- **S11 fires when** the company is a confirmed member of a `rising` category **and** has order evidence (S1, S9 order/customer/export facts, or `export_exposure` rising) **and** either:
-  - its revenue growth lags the category's input growth by ≥ 10 pp, **or**
-  - it's second-order (graph distance 2 from an anchor)
-
-  Strength: 0.5 base, +0.25 for India export exposure with a verified US/data-center quote, +0.25 if S1 also fires; capped at 1.
-- **Weekly Capex brief** (markdown): category index moves, the 10 most material new verified facts, new links, new India cross-border memberships, and the S11 companies. It goes into the digest.
+### 4.11 Capex Desk (deleted)
+Deleted in the overhaul with S11, P-06, `config/categories.yaml` and the Capex brief (§1.10, SPEC_ISSUES 52).
 
 ### 4.12 Weekly digest (`pipeline/digest/*`)
 - **Where:** a GitHub issue in the private repo, "Doomberg weekly — {week}", created by `weekly.yml` (GitHub notifies Manzoor by email for free). The same content appears on the web Home screen.
 - **Sections:**
   - new candidates (≤ 10, one line each: families fired, Evidence, Gap, link)
   - theses needing attention (kill criteria triggered, reviews due)
-  - the Capex brief
   - source health and staleness
   - LLM quota use
   - Lab notes, if a new run happened
@@ -633,7 +601,7 @@ Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:
 
 ---
 
-## 5. Prompts (P-01 and P-02 carried over verbatim in Appendix F; the new prompts are below; P-03 is not called, SPEC_ISSUES 50)
+## 5. Prompts (P-01 and P-02 carried over verbatim in Appendix F; the new prompts are below; P-03 is not called, SPEC_ISSUES 50; P-06 was deleted with the Capex Desk, SPEC_ISSUES 52)
 ### P-04 THESIS_CARD · routine (Opus 5.5 via Claude Code) or Gemini Flash (fallback) · temp 0.3
 **System:**
 ```
@@ -659,21 +627,6 @@ no certainty words, no price targets.
 ### P-05 CLAIM_SUPPORT
 Carried over from the Capex Ledger brief (Appendix F). Used by `validate.py` on the `facts` and `why_mispriced` sentences when a number check alone can't confirm support.
 
-### P-06 CROSS_BORDER_MAP · Gemini Flash (free) · temp 0
-**System:**
-```
-Map an Indian listed company to infrastructure demand categories using only the text given (business description,
-annual-report excerpts, exchange announcements). For each category, quote the exact supporting text. Categories:
-{{categories}}. If the text doesn't support a category, leave it out. Also report any stated export share or
-overseas order book, with its quote. Return only JSON.
-```
-**Schema:**
-```
-{categories: [{category: enum[...], quote: str(≤60 words), confidence: number}],
- export_exposure: {share_pct: number|null, overseas_order_book: str|null, quote: str|null}}
-```
-Quotes are grounded like Appendix F; ungrounded entries are dropped.
-
 ### P-07 ANNOUNCEMENT_TRIAGE · Gemini Flash-Lite (free) · temp 0
 **System:**
 ```
@@ -689,16 +642,16 @@ Return only JSON.
 ## 6. Web app (`web/`, single user)
 | Screen | Content |
 |---|---|
-| **Home** | The digest for this week; source health; LLM quota use; a stale-data banner |
-| **Candidates** | Tabs: Candidate · Early · Priced-in · Excluded. Filters: market, desk, sector, family. Columns: company, market, Evidence, Gap, families, top signals, red flags, C1–C4. Actions: open card, research, dismiss (reason required) |
-| **Company** | Fundamentals charts (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA, RPO/backlog); signal timeline; verified facts with quotes and links; ownership and insiders; events; context (valuation percentile chart, reverse-DCF inputs and implied growth); thesis link |
-| **Theses** | Kanban by state; thesis page with the card, kill-criteria status, review history, journal entries |
+| **Home** | The digest for this week; the stale-data banner (the only screen with it: sec, twelvedata, sec_13f) |
+| **Candidates** | Tabs: Candidate · Early · Priced-in. Filters: market, sector, family, show dismissed. One row per company: Evidence with its change since the previous scored week, Gap, why it's here (fired signals), red flags, NEW (first week in that bucket in 12 weeks). Actions: open card, research, dismiss (reason required; it holds until a new signal or family fires or Evidence moves 10 or more) |
+| **Company** | The latest scored week's Evidence, Gap, bucket and families under the name; fundamentals charts (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA, RPO/backlog); verified facts with quotes and links; insiders; events; reverse DCF (C2 inputs and implied growth); thesis link. Tables with no rows are left out |
+| **Theses** | Needs you (cards to accept or dismiss, reviews to decide), Watching (theses and positions), Closed (closed and dismissed, folded); each row: Evidence at the card's week and now, kill criteria n of m triggered, next review. Thesis page: the card, kill criteria in words with their status, review history, journal entries; each form opens from its button and is left out when it can't be used |
 | **Journal** | Private entries and post-mortems (never sent to any LLM) |
-| **Screener** | Filter builder over fundamentals, signals and context; saved screens; CSV export (personal use) |
-| **Capex Desk** | Category demand indices; ledger facts; counterparty graph (Cytoscape); India cross-border memberships (confirm/reject); brief archive |
-| **Signal Lab** | Results by signal, horizon and period; score deciles; weights versions; open proposals |
-| **Settings** | Universes, quotas, sources, allowed email; weights shown read-only (they change only through a PR) |
+| **Signal Lab** | The price download's progress (the lab_prices runs row); each signal's verdict (works / unproven / hurts, §4.10.5; S7–S12 not testable yet) with the weight in use (weights_versions); results by signal, horizon and period; score deciles; open proposals |
+| **Settings** | Source health for the US sources; the discipline weeks (§11.9); LLM calls and rate-limited calls per provider over 7 days. Universes, quotas and weights live in config/ and change through PRs |
 
+- No screen but Home has a KPI ribbon or the stale banner; the footer carries the research-only line once.
+- **Deleted** (SPEC_ISSUES 52): the Screener screen (its filter builder, saved screens and CSV export; the screener API, M4-05, stays) and the Capex Desk screen. `/screener` redirects to Candidates and `/capex` to Home (307).
 - **Auth:** Supabase magic link for `APP_ALLOWED_EMAIL` only.
 - **Quality:** responsive at 390 px; axe 0 serious issues.
 
@@ -710,7 +663,7 @@ Return only JSON.
 2. **Survivorship bias:** the free US price file may miss delisted companies, so Lab results are an optimistic upper bound.
 3. Lab returns exclude dividends (v1), taxes and costs.
 4. The reverse DCF is a rough lens (one growth rate, generic discount rates). It ranks expectations; it doesn't value companies.
-5. **Free sources break:** NSE/BSE access and Stooq endpoints can change or block. Staleness banners and manual imports keep the app usable.
+5. **Free sources break:** NSE/BSE access and Twelve Data's free plan can change or block. Staleness banners and manual imports keep the app usable.
 6. **India:** balance sheets and cash flows are half-yearly, and XBRL quality varies. Signals record which periods they used.
 7. **Free LLM quotas vary:** text coverage can lag in results season, and deferred items catch up.
 8. **13F** data is quarterly and ~45 days old.
@@ -751,7 +704,7 @@ Return only JSON.
 | M0-02 | `make guard` passes, and fails on each seeded case (broker SDK import, `anthropic` import in `pipeline/`, a paid runtime domain, an order-placement identifier, journal data passed to `llm/`) |
 | M0-03 | The hook exits 2 on an edit adding `import kiteconnect` |
 | M0-04 | The audit exists with every section; each claimed rule has a `file:line`. Old repo not attachable → BLOCKED(human) |
-| M0-05 | US universe ≥ 3,000 listed filers; India EQ ≥ 1,500; capex seed resolved, or listed in `docs/UNIVERSE_ISSUES.md` |
+| M0-05 | US universe ≥ 3,000 listed filers; India EQ ≥ 1,500 (the capex seed was resolved in M0, or listed in `docs/UNIVERSE_ISSUES.md`; its resolver went with the Capex Desk, SPEC_ISSUES 52) |
 | M0-06 | `test_config_matches_brief.py`: every default in §4.6–4.8 equals the config value |
 | M0-07 | Protected-path check fails without the `human-approved` label (synthetic diff) |
 
@@ -797,10 +750,10 @@ Return only JSON.
 **Done:**
 | Check | Condition |
 |---|---|
-| M4-01 | Every S1–S12 and R1–R6: a true case, a false case, and a just-below-threshold case on F-SYNQ, all passing |
+| M4-01 | Every signal (S1–S10, S12) and R1–R6: a true case, a false case, and a just-below-threshold case on F-SYNQ, all passing |
 | M4-02 | Signals as of W are identical whether or not later filings exist |
 | M4-03 | Reverse DCF recovers a known g within ±0.1 pp from a synthetic EV; monotonic; null when there's no root |
-| M4-04 | Stooq and bhavcopy weekly ingestion; split detection needs share-count confirmation |
+| M4-04 | Twelve Data and bhavcopy weekly ingestion; split detection needs share-count confirmation |
 | M4-05 | Evidence/Gap/bucket math, including the 2-family cap, soft-flag penalties and the 12-week novelty rule |
 | M4-06 | Context percentiles C1 and C3 (C3 null below a comparison group of 30); no GDELT client (SPEC_ISSUES 48) |
 
@@ -812,9 +765,9 @@ Return only JSON.
 | M5-02 | 100% grounding invariant on stored verified facts |
 | M5-03 | Router: a 429 falls back to the next provider; all exhausted → `deferred`; picked up the next day (simulated clock) |
 | M5-04 | Passing journal/post-mortem objects to the router raises `PrivacyViolation` |
-| M5-05 | Demand index and direction on synthetic inputs |
-| M5-06 | P-06 ungrounded categories dropped; memberships count only after confirmation |
-| M5-07 | S11 rules on a synthetic graph |
+| M5-05 | Retired with the Capex Desk (SPEC_ISSUES 52); was: demand index and direction on synthetic inputs |
+| M5-06 | Retired with the Capex Desk (SPEC_ISSUES 52); was: P-06 ungrounded categories dropped; memberships count only after confirmation |
+| M5-07 | Retired with the Capex Desk (SPEC_ISSUES 52); was: S11 rules on a synthetic graph |
 
 ### M6 — Thesis engine and digest
 **Done:**
@@ -831,7 +784,7 @@ Return only JSON.
 **Done:**
 | Check | Condition |
 |---|---|
-| M7-01 | Playwright: allowlist login; candidates → company → thesis → journal → review → close with post-mortem; screener save/load; capex membership confirm |
+| M7-01 | Playwright: allowlist login; candidates → company → thesis → journal entry → review → close with a post-mortem |
 | M7-02 | The web app makes no LLM calls at all (network assertion) |
 | M7-03 | axe 0 serious; 390 px layouts |
 
@@ -853,7 +806,7 @@ Return only JSON.
 | M9-02 | Estimated Actions minutes ≤ 1,200/month |
 | M9-03 | Size-guard test |
 | M9-04 | Weekly `pg_dump` → private release asset (keep 8), plus a restore test |
-| M9-05 | Live smoke with free keys: US weekly on a 300-company subset + India bhavcopy + one capex document extraction + 2 fallback thesis cards → report. BLOCKED(key) until keys exist |
+| M9-05 | Live smoke with free keys: US weekly on a 300-company subset + India bhavcopy + one text document extraction + 2 fallback thesis cards → report. BLOCKED(key) until keys exist |
 | M9-06 | RUNBOOK, VERSIONS and QUOTAS docs complete |
 
 ---
@@ -865,12 +818,12 @@ Return only JSON.
 | F-F4 | 10 real Form 4 XMLs (including 10b5-1 checkbox cases) + a synthetic insider cluster |
 | F-13F | A small slice of one 13F data set |
 | F-IN | 1 UDiFF bhavcopy, the NSE securities list, the ASM/GSM lists, 3 results XBRL, 3 shareholding XBRL, a PIT CSV, an announcements feed sample. Fetched once by `scripts/fetch_fixtures.py`; if NSE blocks it, Manzoor downloads them (BLOCKED(human)) |
-| F-PX | Stooq weekly CSVs for 10 symbols |
+| F-PX | Synthetic weekly series for 10 symbols, as the manual import's CSV and as Twelve Data's answers |
 | F-SYNQ | Synthetic quarterly series: true, false and boundary cases per signal and red flag |
 | F-SYN | `scripts/make_synthetic.py` (seed 7): 12 fictional-company documents with planted facts and a ground-truth JSON (4 press releases, 4 10-Q-style HTML documents, 2 risk-factor versions, 2 investor-presentation PDFs) |
 | F-LAB | Synthetic panel: 500 companies × 60 months, one planted signal, one noise signal |
 | F-CARD | 1 good and 5 bad thesis cards |
-| Cassettes | P-01, P-02, P-05, P-06, P-07 and fallback P-04, recorded by `record-cassettes.yml` with free keys; hash manifest |
+| Cassettes | P-01, P-02, P-05, P-07 and fallback P-04, recorded by `record-cassettes.yml` with free keys; hash manifest |
 
 **`scripts/verify.py`:**
 - a registry of `Check(id, milestone, description, command, requires)`
@@ -1209,7 +1162,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 | V1-CONF | confidence ≥ 0.70 | needs_review below |
 | V1-DUP | The same document already has an identical `subject_key` + value | dropped as a duplicate |
 
-`needs_review` facts appear in the web app's review queue (Company page and Capex Desk). Manzoor verifies or rejects them (a reason is required). Only verified facts feed diffs, signals, packs and briefs.
+`needs_review` facts appear in the web app's review queue (Company page). Manzoor verifies or rejects them (a reason is required). Only verified facts feed diffs, signals, packs and briefs.
 
 ### F.6 Diff (`diff/facts_diff.py`)
 **Fact diffs:**
@@ -1308,7 +1261,7 @@ Commit and push your branch. Edit nothing else. Do not open a PR. Final message:
 ```
 - **Fallback:** if the routine hits a plan limit, its turn stops. `thesis-fallback.yml` covers the week on Monday.
 
-## Appendix H — Capex Desk seed
+## Appendix H — Capex Desk seed (now only `companies.capex_desk`; the desk was deleted, SPEC_ISSUES 52)
 - **US (60):** the list from the Capex Ledger brief, carried over unchanged into `config/capex_seed.yaml`:
   - MSFT, GOOGL, AMZN, META, ORCL, CRWV
   - NVDA, AMD, AVGO, MRVL, MU, INTC, ANET

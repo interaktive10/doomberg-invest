@@ -2,7 +2,7 @@
 
 /* The look: a dark terminal. Near-black canvas, flat hairline panels, numbers in monospace columns, and colour only for
    meaning (up = good, down = bad, warn = needs a look). Dark only.
-   Mirror: lib/palette.ts holds the same hex values for SVG (recharts, cytoscape). Change both together
+   Mirror: lib/palette.ts holds the same hex values for SVG (the recharts charts). Change both together
    (tests/palette.test.ts pins them). Font sizes are plain or arbitrary utilities (text-[13px]), never custom text
    tokens: tailwind-merge reads an unknown text-<name> as a colour and would drop the size. */
 @theme {

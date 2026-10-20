@@ -1,7 +1,7 @@
 """Prompt specs (BRIEF §5 and Appendix F.7). The system and user templates are the files in pipeline/llm/prompts/,
-verbatim from the brief (tests/llm/test_prompts.py compares them); the brief gives no user message for P-06 and P-07,
-so theirs are the simplest ones that carry the inputs (docs/DECISIONS.log). P-03 (risk tags) is no longer called:
-its risk_changes rows had no reader (docs/SPEC_ISSUES.md 50).
+verbatim from the brief (tests/llm/test_prompts.py compares them); the brief gives no user message for P-07, so its
+is the simplest one that carries the inputs (docs/DECISIONS.log). P-03 (risk tags) is no longer called: its
+risk_changes rows had no reader (docs/SPEC_ISSUES.md 50). P-06 (cross-border map) went with the Capex Desk (52).
 
 A router input is a `PromptInput`: public data (llm/privacy.py) that names its prompt and supplies the template
 variables and the response schema, so every character sent to a provider comes from a checked public value.
@@ -37,7 +37,6 @@ PROMPTS: dict[str, PromptSpec] = {
     "P-02": PromptSpec("P-02", "tool", "record_matches", 0.0, "extract"),
     "P-04": PromptSpec("P-04", "json", "thesis_card", 0.3, "card", route="P-04-fallback"),
     "P-05": PromptSpec("P-05", "tool", "record_support", 0.0, "card"),
-    "P-06": PromptSpec("P-06", "json", "cross_border_map", 0.0, "card"),
     "P-07": PromptSpec("P-07", "json", "announcement_triage", 0.0, "extract"),
 }
 

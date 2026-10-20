@@ -30,8 +30,9 @@ In Supabase → Authentication:
 
 ## Deploy (Vercel Hobby or Cloudflare Pages, §2.1)
 
-Root directory `web`, framework Next.js, the four variables above. Settings reads `../config/*.yaml`, which
-`next.config.ts` traces into the deployment.
+Root directory `web`, framework Next.js, the four variables above. The app reads no file outside `web/` (Settings
+stopped showing `../config/*.yaml` in overhaul PR 4). `next.config.ts` redirects the old `/screener` and `/capex` links
+to Candidates and This week.
 
 Vercel builds `main` only (`vercel.json` `git.deploymentEnabled`): PR previews counted against the Hobby plan's
 100 deployments a day and held production back on 2026-10-07/08. A push to `main` that changes neither `web/` nor

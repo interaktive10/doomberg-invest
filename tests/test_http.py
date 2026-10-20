@@ -20,8 +20,11 @@ def _settings(tmp_path: Path, mock: bool = True) -> Settings:
         "https://api.anthropic.com/v1/messages",
         "https://api.openai.com/v1/chat/completions",
         "https://api.kite.trade/orders",
-        # Yahoo's chart hosts serve the weekly US prices since 2026-10 (docs/SPEC_ISSUES.md 37); no other Yahoo host
-        "https://finance.yahoo.com/quote/X/history",
+        # the dead price and macro sources (overhaul PR 4, docs/SPEC_ISSUES.md 52): Twelve Data is the only price source
+        "https://query1.finance.yahoo.com/v8/finance/chart/AAPL",
+        "https://stooq.com/q/d/l/?s=aapl.us&i=w",
+        "https://api.eia.gov/v2/electricity/",
+        "https://api.stlouisfed.org/fred/series",
         "http://www.sec.gov/files/company_tickers.json",  # plain http
         "https://www.sec.gov.evil.example/x",
     ],
@@ -41,10 +44,10 @@ def test_banned_paid_hosts_never_allowlisted() -> None:
 
 def test_mock_mode_serves_registered_and_refuses_the_rest(tmp_path: Path) -> None:
     c = HttpClient(_settings(tmp_path))
-    c.register_mock("https://stooq.com/q/d/l/?s=aapl.us&i=w", b"Date,Close\n")
-    assert c.get_bytes("https://stooq.com/q/d/l/?s=aapl.us&i=w") == b"Date,Close\n"
+    c.register_mock("https://api.twelvedata.com/time_series?symbol=AAPL", b"{}")
+    assert c.get_bytes("https://api.twelvedata.com/time_series?symbol=AAPL") == b"{}"
     with pytest.raises(MockNotRegistered):
-        c.get_bytes("https://stooq.com/q/d/l/?s=msft.us&i=w")
+        c.get_bytes("https://api.twelvedata.com/time_series?symbol=MSFT")
 
 
 def test_rate_limiter_spaces_requests_per_host() -> None:
@@ -59,7 +62,7 @@ def test_rate_limiter_spaces_requests_per_host() -> None:
     for _ in range(3):
         rl.wait("www.nseindia.com")
     assert slept == [3.0, 3.0]  # BRIEF §4.3: <= 1 request per 3 s
-    rl.wait("stooq.com")  # a different host is not delayed by NSE
+    rl.wait("api.twelvedata.com")  # a different host is not delayed by NSE
     assert slept == [3.0, 3.0]
 
 

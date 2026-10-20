@@ -1,4 +1,5 @@
-"""Counterparties -> entities -> links (Appendix F.2, P-02): the counterparty graph of the Capex Desk (§4.11).
+"""Counterparties -> entities -> links (Appendix F.2, P-02): the counterparty graph (`links`, read by
+the evidence pack).
 
 For each verified fact with a counterparty, the candidates are the SEC company list plus the existing entities, top
 5 by rapidfuzz token_set_ratio on normalized names; P-02 picks one or none (it may not invent an entity). A pick of a

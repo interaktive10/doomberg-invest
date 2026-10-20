@@ -30,7 +30,7 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
-      - name: Record F-SYN (P-01), the P-02, P-06, P-07 samples and fallback P-04 with P-05
+      - name: Record F-SYN (P-01), the P-02 and P-07 samples and fallback P-04 with P-05
         id: record
         run: |
           if [ -z "$GEMINI_API_KEY$GROQ_API_KEY$OPENROUTER_API_KEY" ]; then

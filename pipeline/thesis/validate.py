@@ -209,7 +209,6 @@ YEAR_AFTER = frozenset("fiscal financial calendar year years quarter quarters gu
                        "vs was were is will when as compared levels level peak low high first second third fourth full "
                        "half season period gaap ebitda ebit eps".split())  # fmt: skip
 ASSUMED = re.compile(r"^[^.;,]{0,25}?\(assumed\)", re.I)
-OPERATORS = ("<", "<=", ">", ">=", "==", "changes")
 
 
 class Strict(BaseModel):

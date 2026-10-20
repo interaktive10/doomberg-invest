@@ -1,6 +1,6 @@
 # Capex Desk seed (BRIEF Appendix H). US list carried over unchanged (61 tickers; the brief says 60 — see
-# docs/SPEC_ISSUES.md). India: names from the brief with PROPOSED NSE symbols. `verified: false` until
-# scripts/resolve_capex_seed.py confirms each symbol against the NSE securities list (EQUITY_L.csv).
+# docs/SPEC_ISSUES.md). India: names from the brief with PROPOSED NSE symbols; `verified: true` where M0's resolver
+# (deleted with the Capex Desk, SPEC_ISSUES 52) confirmed it against the NSE securities list. Sets companies.capex_desk.
 us:
   hyperscalers_cloud: [MSFT, GOOGL, AMZN, META, ORCL, CRWV]
   compute_semis: [NVDA, AMD, AVGO, MRVL, MU, INTC, ANET]

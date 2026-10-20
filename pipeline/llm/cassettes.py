@@ -1,6 +1,6 @@
 """Cassettes (BRIEF §9): recorded provider responses that make LLM tests offline and repeatable.
 
-`record-cassettes.yml` runs the F-SYN corpus (P-01) and the P-02, P-06 and P-07 samples
+`record-cassettes.yml` runs the F-SYN corpus (P-01) and the P-02 and P-07 samples
 (pipeline.facts.samples) through the real free-tier providers
 with a `Recorder` around each client; every request/response pair is written to
 pipeline/llm/cassettes/<prompt>/<key>.json, where the key is a hash of the whole request (provider, model, prompt,

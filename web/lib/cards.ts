@@ -68,7 +68,8 @@ export function citeView(id: string, companyId: string | null, facts: readonly s
       return { label: dated ? `${name} ${dated[2]}` : name, title: `Metric ${body}`, href: at("fundamentals") };
     }
     case "s":
-      return { label: body, title: SIGNAL_NAME[body] ?? RED_FLAG_NAME[body] ?? `Signal ${body}`, href: at("signals") };
+      // the Company page has no signal timeline any more (overhaul PR 4): its score line is at the top
+      return { label: body, title: SIGNAL_NAME[body] ?? RED_FLAG_NAME[body] ?? `Signal ${body}`, href: page };
     case "c":
       return { label: body, title: CONTEXT_NAME[body] ?? `Context ${body}`, href: at("context") };
     default:

@@ -29,7 +29,6 @@ from pipeline.lab.legacy_doomberg import quantile
 from pipeline.lab.panel import PanelRow
 from pipeline.lab.prices import month_end
 
-PERIODS = ("in_sample", "out_of_sample")
 Z_LOWER = 1.6449
 
 

@@ -6,7 +6,7 @@ from pipeline.facts.canonical import canonical, join_blocks
 from pipeline.facts.chunk import prefilter, score, select, split
 from pipeline.facts.ground import ground, grounded_quote
 from pipeline.facts.html_text import normalize_html
-from pipeline.facts.pdf_text import normalize_pages, page_of
+from pipeline.facts.pdf_text import normalize_pages
 
 TEN_Q = """<html><head><title>t</title><style>p { x }</style></head><body>
 <div style="display: none"><ix:header>Hidden 999</ix:header></div>
@@ -45,7 +45,7 @@ def test_pdf_pages_and_page_map() -> None:
     n = normalize_pages(["Title line\r\nSecond  line", "", "Page three text"])
     assert n.text == "Title line\nSecond line\n\nPage three text"
     assert [p["page"] for p in n.page_map] == [1, 2, 3]
-    assert page_of(n.page_map, n.text.index("Page three")) == 3
+    assert n.page_map[2]["char_start"] == n.text.index("Page three")
 
 
 def test_chunks_cover_mdna_and_notes_but_not_risk_factors() -> None:

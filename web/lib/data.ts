@@ -2,6 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { db } from "@/lib/supabase/admin";
 import { allPages } from "@/lib/paging";
+import type { Baseline, ScorePoint } from "@/lib/candidates";
+import type { LabPricesRun } from "@/lib/lab";
 import type { ScreenSpec } from "@/lib/screener";
 import type { QuarterRow, SeriesPoint } from "@/lib/metrics";
 import {
@@ -34,7 +36,6 @@ export interface ScreenerRow {
   nse_symbol: string | null;
   sector: string | null;
   industry: string | null;
-  capex_desk: boolean;
   week_end: string;
   evidence: number;
   gap: number | null;
@@ -43,11 +44,6 @@ export interface ScreenerRow {
   fired_signals: string[];
   red_flags: string[];
   hard_flag: boolean;
-  c1: number | null;
-  c2: number | null;
-  c3: number | null;
-  c4: number | null;
-  metrics: Record<string, number | null>;
 }
 
 export interface Company {
@@ -60,7 +56,6 @@ export interface Company {
   isin: string | null;
   sector: string | null;
   industry: string | null;
-  capex_desk: boolean;
   in_universe: boolean;
   excluded_reason: string | null;
   fiscal_year_end: string | null;
@@ -218,18 +213,59 @@ export async function llmUse(): Promise<LlmUse[]> {
   }));
 }
 
-// ---------------------------------------------------------------- Candidates and the screener
+// ---------------------------------------------------------------- Candidates
 
 /** screen(spec) rows up to spec.limit (the SQL function's default is 500), a page at a time (lib/paging.ts). */
 export async function screen(spec: ScreenSpec): Promise<ScreenerRow[]> {
   return allPages<ScreenerRow>((from, to) => db().rpc("screen", { p: spec }).range(from, to), spec.limit ?? 500);
 }
 
-export async function dismissedThisWeek(week: string): Promise<Set<string>> {
-  const data = rows<{ company_id: string }>(
-    await db().from("candidate_actions").select("company_id").eq("week_end", week).eq("action", "dismiss"),
-  );
-  return new Set(data.map((r) => r.company_id));
+type PageQuery = (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+
+/** A read filtered on a list of ids, 100 ids per request (the URL stays short) and a page at a time (max_rows). */
+async function byIds<T>(ids: readonly string[], query: (chunk: string[]) => PageQuery): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += 100) out.push(...(await allPages<T>(query(ids.slice(i, i + 100)), 1_000_000)));
+  return out;
+}
+
+/** The companies' scores rows in [from, before): what the NEW badge and the Evidence change read (lib/candidates.ts). */
+export async function scoreHistory(ids: readonly string[], from: string, before: string): Promise<Map<string, ScorePoint[]>> {
+  const data = await byIds<ScorePoint & { company_id: string }>(ids, (chunk) => (a, b) =>
+    db().from("scores").select("company_id, week_end, evidence, bucket").in("company_id", chunk).gte("week_end", from)
+      .lt("week_end", before).order("company_id").order("week_end").range(a, b)); // prettier-ignore
+  const out = new Map<string, ScorePoint[]>();
+  for (const r of data) out.set(r.company_id, [...(out.get(r.company_id) ?? []), r]);
+  return out;
+}
+
+/** Each company's latest dismissal (candidate_actions) with what it was dismissed on: that week's Evidence, families
+ * and fired signals (lib/candidates.ts dismissalHolds). A dismissal without a scores row for its week has no baseline
+ * (null). */
+export async function dismissals(ids: readonly string[]): Promise<Map<string, { week_end: string; reason: string | null; baseline: Baseline | null }>> {
+  const acts = await byIds<{ company_id: string; week_end: string; reason: string | null }>(ids, (chunk) => (a, b) =>
+    db().from("candidate_actions").select("company_id, week_end, reason").in("company_id", chunk).eq("action", "dismiss")
+      .order("created_at", { ascending: false }).order("id").range(a, b)); // prettier-ignore
+  const latest = new Map<string, { week_end: string; reason: string | null }>();
+  for (const x of acts) if (!latest.has(x.company_id)) latest.set(x.company_id, { week_end: x.week_end, reason: x.reason });
+  const who = [...latest.keys()];
+  const weeks = [...new Set([...latest.values()].map((x) => x.week_end))];
+  if (who.length === 0) return new Map();
+  const [scored, fired] = await Promise.all([
+    byIds<{ company_id: string; week_end: string; evidence: number | string; families: string[] }>(who, (chunk) => (a, b) =>
+      db().from("scores").select("company_id, week_end, evidence, families").in("company_id", chunk).in("week_end", weeks)
+        .order("company_id").order("week_end").range(a, b)), // prettier-ignore
+    byIds<{ company_id: string; week_end: string; signal_id: string }>(who, (chunk) => (a, b) =>
+      db().from("signal_values").select("company_id, week_end, signal_id").in("company_id", chunk).in("week_end", weeks)
+        .eq("fired", true).order("company_id").order("week_end").order("signal_id").range(a, b)), // prettier-ignore
+  ]);
+  const out = new Map<string, { week_end: string; reason: string | null; baseline: Baseline | null }>();
+  for (const [id, d] of latest) {
+    const s = scored.find((r) => r.company_id === id && r.week_end === d.week_end);
+    const signals = fired.filter((r) => r.company_id === id && r.week_end === d.week_end).map((r) => r.signal_id);
+    out.set(id, { ...d, baseline: s ? { evidence: s.evidence, families: s.families, signals } : null });
+  }
+  return out;
 }
 
 export async function latestThesisByCompany(ids: string[]): Promise<Map<string, Pick<Thesis, "id" | "state" | "author">>> {
@@ -243,17 +279,12 @@ export async function latestThesisByCompany(ids: string[]): Promise<Map<string, 
   return out;
 }
 
-export async function screens(): Promise<{ id: string; name: string; spec: ScreenSpec }[]> {
-  return rows(await db().from("screens").select("id, name, spec").order("name"));
-}
-
 // ---------------------------------------------------------------- Company
 
 /** Cached per request: the page and its tab title (generateMetadata) read the same row once. */
 export const company = cache(async (id: string): Promise<Company | null> => {
   return one(await db().from("companies").select(
-    "id, market, name, ticker, nse_symbol, cik, isin, sector, industry, capex_desk, in_universe, excluded_reason, " +
-      "fiscal_year_end",
+    "id, market, name, ticker, nse_symbol, cik, isin, sector, industry, in_universe, excluded_reason, fiscal_year_end",
   ).eq("id", id).maybeSingle());
 });
 
@@ -273,12 +304,6 @@ export async function fundamentals(id: string): Promise<(QuarterRow & { currency
 /** The Company page's chart series: company_series, written by the weekly signals run (M7 review R1-F5). */
 export async function companySeries(id: string): Promise<{ week_end: string; points: SeriesPoint[] } | null> {
   return one(await db().from("company_series").select("week_end, points").eq("company_id", id).maybeSingle());
-}
-
-export async function ownership(id: string): Promise<Record<string, unknown>[]> {
-  return rows(await db().from("ownership_display_v").select(
-    "quarter_end, filed_at, inst_holders, fii_pct, dii_pct, promoter_pct, promoter_pledged_pct, source",
-  ).eq("company_id", id).order("quarter_end", { ascending: false }).limit(8));
 }
 
 export async function insiders(id: string): Promise<Record<string, unknown>[]> {
@@ -316,11 +341,6 @@ export async function facts(companyIds: string[], limit = 30): Promise<(FactRow 
     .limit(limit));
 }
 
-export async function signalTimeline(id: string): Promise<{ week_end: string; signal_id: string; strength: number }[]> {
-  return rows(await db().from("signal_values").select("week_end, signal_id, strength").eq("company_id", id)
-    .eq("fired", true).order("week_end", { ascending: false }).limit(300));
-}
-
 export async function contextHistory(id: string): Promise<{ week_end: string; metric_id: string; value: number | null; pct: number | null; inputs: Record<string, unknown> }[]> {
   return rows(await db().from("context_values").select("week_end, metric_id, value, pct, inputs").eq("company_id", id)
     .order("week_end").limit(1000));
@@ -338,6 +358,38 @@ export async function theses(): Promise<Thesis[]> {
     "id, company_id, state, card_md, card_json, evidence_pack, author, validation, created_week, next_review, " +
       "accepted_at, dismissed_reason, updated_at, companies(name, market, ticker, nse_symbol, fiscal_year_end)",
   ).order("updated_at", { ascending: false }));
+}
+
+/** For the Theses list: each thesis's Evidence at its card's week and now (the latest scored week), and its kill
+ * criteria's statuses. A company without a scores row in that week has none (null). */
+export async function thesisFigures(list: readonly Pick<Thesis, "id" | "company_id" | "created_week">[]): Promise<Map<string, { atCard: number | null; now: number | null; kills: KillCriterion["status"][] }>> {
+  const out = new Map<string, { atCard: number | null; now: number | null; kills: KillCriterion["status"][] }>();
+  if (list.length === 0) return out;
+  const latest = one<{ week_end: string }>(
+    await db().from("scores").select("week_end").order("week_end", { ascending: false }).limit(1).maybeSingle(),
+  );
+  const companies = [...new Set(list.map((t) => t.company_id))];
+  const weeks = [...new Set([...list.map((t) => t.created_week), ...(latest ? [latest.week_end] : [])])];
+  const [scored, kills] = await Promise.all([
+    byIds<{ company_id: string; week_end: string; evidence: number | string }>(companies, (chunk) => (a, b) =>
+      db().from("scores").select("company_id, week_end, evidence").in("company_id", chunk).in("week_end", weeks)
+        .order("company_id").order("week_end").range(a, b)), // prettier-ignore
+    byIds<{ thesis_id: string; status: KillCriterion["status"] }>(list.map((t) => t.id), (chunk) => (a, b) =>
+      db().from("kill_criteria").select("thesis_id, status").in("thesis_id", chunk).order("thesis_id").order("id")
+        .range(a, b)), // prettier-ignore
+  ]);
+  const at = (company: string, week: string | undefined) => {
+    const r = week === undefined ? undefined : scored.find((x) => x.company_id === company && x.week_end === week);
+    return r === undefined ? null : number(r.evidence);
+  };
+  for (const t of list) {
+    out.set(t.id, {
+      atCard: at(t.company_id, t.created_week),
+      now: at(t.company_id, latest?.week_end),
+      kills: kills.filter((k) => k.thesis_id === t.id).map((k) => k.status),
+    });
+  }
+  return out;
 }
 
 /** A thesis page's tab title: its company's name and code (not cached: the page's own reads must see the moves its
@@ -515,62 +567,6 @@ export async function setting<T>(key: string, fallback: T): Promise<T> {
   return r === null ? fallback : r.value;
 }
 
-// ---------------------------------------------------------------- Capex Desk
-
-export interface CapexIndexRow {
-  category: string;
-  week_end: string;
-  value: number | null;
-  direction: "rising" | "flat" | "falling";
-  input_growth: number | null;
-}
-
-export async function capexIndex(): Promise<CapexIndexRow[]> {
-  const data = rows<CapexIndexRow>(await db().from("capex_index").select("category, week_end, value, direction, input_growth")
-    .order("week_end", { ascending: false }).limit(500));
-  const latest = new Map<string, CapexIndexRow>();
-  for (const r of data) if (!latest.has(r.category)) latest.set(r.category, r);
-  return [...latest.values()].sort((a, b) => a.category.localeCompare(b.category));
-}
-
-export interface Membership {
-  company_id: string;
-  category: string;
-  source: "industry_map" | "p06";
-  status: "proposed" | "confirmed" | "rejected";
-  evidence: string;
-  quote: string | null;
-  decision_reason: string | null;
-  companies: Pick<Company, "name" | "market" | "ticker" | "nse_symbol"> | null;
-}
-
-export async function memberships(): Promise<Membership[]> {
-  return rows(await db().from("capex_memberships").select(
-    "company_id, category, source, status, evidence, quote, decision_reason, companies(name, market, ticker, nse_symbol)",
-  ).order("status").order("category").limit(1000));
-}
-
-export async function capexDeskIds(): Promise<string[]> {
-  return rows<{ id: string }>(await db().from("companies").select("id").eq("capex_desk", true).limit(2000)).map((r) => r.id);
-}
-
-export interface GraphEdge {
-  from_company_id: string;
-  to_entity_id: string;
-  relation: string;
-  companies: { name: string } | null;
-  entities: { name: string; kind: string } | null;
-}
-
-export async function graphEdges(limit = 400): Promise<GraphEdge[]> {
-  return rows(await db().from("links").select("from_company_id, to_entity_id, relation, companies(name), entities(name, kind)")
-    .order("first_seen_at", { ascending: false }).limit(limit));
-}
-
-export async function capexBriefs(): Promise<{ week_end: string; body_md: string }[]> {
-  return rows(await db().from("capex_briefs").select("week_end, body_md").order("week_end", { ascending: false }).limit(26));
-}
-
 // ---------------------------------------------------------------- Signal Lab and Settings
 
 export interface LabResult {
@@ -598,18 +594,15 @@ export async function labResults(): Promise<LabResult[]> {
   ).gte("run_at", `${day}T00:00:00Z`).order("signal_id").order("horizon_m").order("period"));
 }
 
+/** The Signal Lab's price download (pipeline/lab/price_history.py): the latest finished lab_prices runs row that
+ * recorded its progress (stats.tickers; a run that failed before that is passed over, like repo.latest_run_stats). */
+export async function labPricesRun(): Promise<LabPricesRun | null> {
+  return one(await db().from("runs").select("started_at, status, error, stats").eq("kind", "lab_prices")
+    .not("finished_at", "is", null).not("stats->tickers", "is", null).order("started_at", { ascending: false })
+    .limit(1).maybeSingle());
+}
+
 export async function weightsVersions(): Promise<{ version: string; weights: Record<string, unknown>; reason: string; approved_by: string | null; approved_at: string | null }[]> {
   return rows(await db().from("weights_versions").select("version, weights, reason, approved_by, approved_at")
     .order("approved_at", { ascending: false, nullsFirst: true }));
-}
-
-/** Company counts per market, in and outside the universe (head-only counts: PostgREST caps rows at max_rows). */
-export async function universeCounts(): Promise<{ market: "us" | "in"; in_universe: boolean; count: number }[]> {
-  const cells = (["us", "in"] as const).flatMap((market) => [true, false].map((inside) => ({ market, inside })));
-  return Promise.all(cells.map(async ({ market, inside }) => {
-    const res = await db().from("companies").select("id", { count: "exact", head: true }).eq("market", market)
-      .eq("in_universe", inside);
-    if (res.error) throw new Error(res.error.message);
-    return { market, in_universe: inside, count: res.count ?? 0 };
-  }));
 }

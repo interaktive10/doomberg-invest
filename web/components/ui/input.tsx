@@ -6,7 +6,7 @@ const field =
   "rounded-sm border border-edge bg-field px-2.5 text-[13px] text-fg placeholder:text-subtle " +
   "focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent/40";
 
-/** A radio or checkbox inside its label, read as a chip (thesis verdicts, post-mortem, screener filters); the box
+/** A radio or checkbox inside its label, read as a chip (thesis verdicts, post-mortem); the box
  * stays visible for keyboard and screen-reader users. */
 export const choiceChip =
   "flex cursor-pointer items-center gap-2 rounded-sm border border-edge bg-field px-2.5 py-1 text-[13px] text-fg has-checked:border-accent has-checked:bg-accent/10";

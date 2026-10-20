@@ -2,8 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { nextFiling } from "../lib/filing";
 import { OMEGA_THESIS } from "./seed";
 
-// BRIEF §8 M7-01: candidates → company → thesis → journal → review → close with post-mortem; screener save/load;
-// capex membership confirm (the allowlist login is e2e/auth.setup.ts). One seeded world, so the steps run in order.
+// BRIEF §8 M7-01 (restated in overhaul PR 4): login → candidates → company → thesis → journal entry → review → close
+// with a post-mortem (the allowlist login is e2e/auth.setup.ts); the Screener's and the Capex Desk's old links
+// redirect. One seeded world, so the steps run in order.
 test.describe.configure({ mode: "serial" });
 
 // When a step fails, the job log shows where the page was, what it said and any browser errors (the trace is in the
@@ -30,12 +31,34 @@ async function flash(page: Page, text: string | RegExp): Promise<void> {
   await expect(page.getByRole("main").getByRole("status")).toContainText(text);
 }
 
+/** Opens a form that sits behind its button (a <details> whose summary reads `name`), unless it is open already. */
+async function openForm(page: Page, name: string): Promise<void> {
+  const summary = page.getByRole("main").locator("summary", { hasText: name });
+  if ((await summary.locator("xpath=..").getAttribute("open")) === null) await summary.click();
+}
+
 async function journalEntry(page: Page, action: string, reason: string, override?: string): Promise<void> {
+  await openForm(page, "Add a journal entry");
   await page.getByLabel("Action").selectOption(action);
   await page.getByLabel("Reason", { exact: true }).fill(reason);
   if (override !== undefined) await page.getByLabel(/^Override reason/).fill(override);
   await page.getByRole("button", { name: "Add entry" }).click();
 }
+
+test("the nav has three places and More; the Screener's and the Capex Desk's old links redirect", async ({ page }) => {
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  for (const name of ["This week", "Candidates", "Theses"]) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(1);
+  await nav.locator("summary", { hasText: "More" }).click();
+  for (const name of ["Journal", "Signal Lab", "Settings"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+  await expect(nav.getByRole("link")).toHaveCount(6);
+  await page.goto("/screener");
+  await expect(page).toHaveURL(/\/candidates$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Candidates" })).toBeVisible();
+  await page.goto("/capex");
+  await expect(page).toHaveURL(/localhost:3000\/$/);
+  await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
+});
 
 test("candidates: dismiss one with a reason, start research on another", async ({ page }) => {
   await page.goto("/candidates");
@@ -43,10 +66,13 @@ test("candidates: dismiss one with a reason, start research on another", async (
   const kappa = card(page, "Kappa Cables Ltd");
   await kappa.locator("summary").click();
   await kappa.getByLabel("Reason").fill("Promoter pledge is rising");
-  await kappa.getByRole("button", { name: "Dismiss for this week", exact: true }).click();
-  await flash(page, "Dismissed for this week.");
+  await kappa.getByRole("button", { name: "Confirm dismissal", exact: true }).click();
+  await flash(page, "Dismissed until a new signal fires or Evidence moves 10.");
+  // the dismissal holds while the evidence stays as it was (overhaul PR 4)
   await expect(card(page, "Kappa Cables Ltd")).toHaveCount(0);
   await expect(card(page, "Echo Grid Corp.")).toHaveCount(1);
+  await page.goto("/candidates?dismissed=1");
+  await expect(card(page, "Kappa Cables Ltd").getByText("dismissed", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Early" }).click();
   await card(page, "Delta Power Inc.").getByRole("button", { name: "Research" }).click();
@@ -102,6 +128,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await journalEntry(page, "exit", "The thesis played out.");
   await flash(page, "Journal entry added.");
 
+  await openForm(page, "Close with a post-mortem");
   await page.getByLabel("What happened, compared with the thesis").fill("Backlog converted as expected.");
   await page.getByLabel("yes", { exact: true }).check();
   await page.getByLabel("What the signals said").fill("S1 and S9 fired early.");
@@ -115,36 +142,6 @@ test("company → thesis → journal → review → close with a post-mortem", a
   const echo = page.getByRole("region", { name: "Journal entries" }).getByRole("row").filter({ hasText: "Echo Grid Corp." });
   for (const action of ["Start position", "Review", "Exit"]) await expect(echo.getByRole("cell", { name: action, exact: true })).toHaveCount(1);
   await expect(page.getByText("Backlog converted as expected.")).toBeVisible();
-});
-
-test("screener: save a screen, load it, export CSV", async ({ page }) => {
-  await page.goto("/screener");
-  await page.getByLabel("Min Evidence (0–100)").fill("60");
-  await page.getByRole("button", { name: "Run screen" }).click();
-  await expect(page.getByRole("heading", { name: "Results (3)" })).toBeVisible();
-  await page.getByLabel("Save as").fill("e2e evidence 60");
-  await page.getByRole("button", { name: "Save screen" }).click();
-  await flash(page, 'Saved "e2e evidence 60".');
-
-  await page.goto("/screener");
-  await expect(page.getByRole("heading", { name: /Results/ })).toHaveCount(0);
-  await page.getByRole("link", { name: "e2e evidence 60" }).click();
-  await expect(page.getByRole("heading", { name: "Results (3)" })).toBeVisible();
-  await expect(page.getByText("loaded", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Min Evidence (0–100)")).toHaveValue("60");
-
-  const csv = await page.request.get("/screener/export?min_evidence=60");
-  expect(csv.ok()).toBe(true);
-  expect(csv.headers()["content-type"]).toContain("text/csv");
-  expect(await csv.text()).toContain("Echo Grid Corp.");
-});
-
-test("capex desk: confirm a membership", async ({ page }) => {
-  await page.goto("/capex");
-  await expect(page.getByRole("heading", { name: "Memberships waiting for a decision (1)" })).toBeVisible();
-  await page.getByRole("button", { name: "Confirm Kappa Cables Ltd (KAPPA) in Power equipment" }).click();
-  await flash(page, "Confirmed: Power equipment.");
-  await expect(page.getByRole("heading", { name: "Memberships waiting for a decision (0)" })).toBeVisible();
 });
 
 test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-F1)", async ({ page }) => {

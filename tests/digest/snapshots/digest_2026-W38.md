@@ -1,6 +1,6 @@
 Week ending 2026-09-18. Research only: no orders, no price alerts.
 
-**Stale data:** stooq (stale), twelvedata (no success for 11 days; SLA 8). Signals and scores that read these sources may be out of date.
+**Stale data:** twelvedata (no success for 11 days; SLA 8). Signals and scores that read these sources may be out of date.
 
 ## New candidates
 
@@ -10,12 +10,6 @@ Week ending 2026-09-18. Research only: no orders, no price alerts.
 ## Theses needing attention
 
 - **Kappa Cables**: kill criterion `m:revenue_ttm_yoy` < 0.05 met (now 0.0310); moved to review
-
-## Capex brief
-
-### Demand index
-
-- grid: rising (+1.2σ)
 
 ## Source health
 

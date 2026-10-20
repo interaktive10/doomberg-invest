@@ -68,7 +68,7 @@ describe("every page checks the session (M7 review R1-F10)", () => {
   }
   it("calls requireUser() in every page under app/(app)", () => {
     const all = pages(`${WEB}/app/(app)`);
-    expect(all.length).toBeGreaterThanOrEqual(10);
+    expect(all.length).toBeGreaterThanOrEqual(8); // 10 until the Screener and the Capex Desk went (overhaul PR 4)
     expect(all.filter((p) => !readFileSync(p, "utf8").includes("await requireUser()"))).toEqual([]);
   });
 });

@@ -91,18 +91,6 @@ class SectorView:
 
 
 @dataclass(frozen=True)
-class CapexView:
-    """S11's inputs from the Capex Desk (M5): confirmed memberships and the category demand index."""
-
-    categories: Sequence[str] = ()  # confirmed memberships
-    direction: Mapping[str, str] = field(default_factory=dict)  # category -> rising | flat | falling
-    input_growth: Mapping[str, Decimal] = field(default_factory=dict)  # category -> YoY growth of its inputs
-    graph_distance: int | None = None  # from an anchor company (0 = anchor)
-    export_exposure_rising: bool = False
-    export_quote: bool = False  # India: a verified US/data-center export quote
-
-
-@dataclass(frozen=True)
 class Ctx:
     company_id: str
     market: str  # 'us' | 'in'
@@ -116,7 +104,6 @@ class Ctx:
     holdco: bool = False
     holder_pct_in_size_decile: Decimal | None = None  # S8 (US), cross-sectional
     sector: SectorView | None = None
-    capex: CapexView | None = None
     surveillance: str | None = None  # India ASM/GSM reason (R5)
     fired: Mapping[str, bool] = field(default_factory=dict)  # signals computed earlier this week
     sic: str | None = None  # US SIC code (S4's exclusion): the company's current one, not point-in-time

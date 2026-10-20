@@ -10,7 +10,7 @@
   fetch_fixtures.py f-in                    # M3: NSE/BSE bhavcopy, securities, ASM/GSM, results + shareholding
                                             #     XBRL, PIT, announcements -> fixtures/in/ (patient: NSE blocks bursts)
 
-Later milestones add their fixture sets (F-F4, F-13F, F-IN, F-PX) as further subcommands.
+F-PX stays synthetic (fixtures/px/make_px.py): its one price source, Twelve Data, needs a key.
 Needs SEC_USER_AGENT and a network policy that allows the BRIEF §0.2 domains. MOCK_EXTERNALS is ignored here.
 """
 
@@ -308,7 +308,6 @@ def fetch_f_events(client: HttpClient) -> list[str]:
 # Q4 of FY2026 consolidated (half-yearly balance sheet and cash flow in Q2/Q4), plus a standalone Q3 (the basis rule)
 # and the FY2027 Q1 standalone original + revision (a restatement). Shareholding: KEI plus two companies whose
 # promoters pledge shares. Files already present are kept (the fetch is resumable).
-F_IN_DAY = "20260605"  # a Friday
 F_IN_ARCH = "https://nsearchives.nseindia.com/corporate/xbrl"
 F_IN_FILES: list[tuple[str, str]] = [
     ("bhavcopy/BhavCopy_NSE_CM_0_0_0_20260605_F_0000.csv.zip",
@@ -333,8 +332,6 @@ F_IN_FILES: list[tuple[str, str]] = [
     ("shareholding/SHP_JSWSTEEL_2026-06-30.xml", f"{F_IN_ARCH}/SHP_1698632_21072026062045_WEB.xml"),
     ("shareholding/SHP_JPPOWER_2026-06-30.xml", f"{F_IN_ARCH}/SHP_1691416_13072026035716_WEB.xml"),
     ("pit/pit.json", "https://www.nseindia.com/api/corporates-pit-gg?index=equities"),  # the page's activeApiName
-    ("pit/pit.csv", "https://www.nseindia.com/api/corporates-pit-gg?index=equities&csv=true"),
-    ("pit/Insider_Trading.xml", "https://nsearchives.nseindia.com/content/RSS/Insider_Trading.xml"),
     ("announcements/announcements.json", "https://www.nseindia.com/api/corporate-announcements?index=equities"),
     # the pages' "Download (.csv)" files, the manual import's input (review F4 on M3)
     ("announcements/announcements_2026-09-19.csv",
@@ -412,33 +409,9 @@ def fetch_f_in(client: HttpClient, cooldown_s: float = 600.0, rounds: int = 4) -
     return errors
 
 
-PX_SYMBOLS = ("aapl.us", "msft.us", "nvda.us", "cat.us", "orcl.us", "pwr.us", "jbl.us", "gev.us", "xlk.us", "^spx")
-
-
-def fetch_f_px(client: HttpClient) -> list[str]:
-    """F-PX (BRIEF §9): Yahoo's weekly charts for the 10 symbols (docs/SPEC_ISSUES.md 37), replacing the synthetic
-    stand-ins of fixtures/px/make_px.py in fixtures/px/yahoo/. Yahoo refuses some networks (the build container's
-    proxy); run this where query1.finance.yahoo.com answers (1 request / s)."""
-    import httpx
-
-    from pipeline.net.yahoo import YahooUnavailable, chart_url, parse_chart, yahoo_symbol
-
-    out, errors = ROOT / "fixtures" / "px" / "yahoo", []
-    for sym in PX_SYMBOLS:
-        ysym = yahoo_symbol(sym.removesuffix(".us"))
-        try:
-            raw = client.get_bytes(chart_url(ysym))
-            parse_chart(raw)  # refuse to write an error page over a fixture
-        except (YahooUnavailable, httpx.HTTPError) as e:
-            errors.append(f"{ysym}: {type(e).__name__}: {e}")
-            continue
-        (out / f"{ysym.replace('^', '_')}.json").write_bytes(raw)
-    return errors
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["universe", "f-us", "f-f4", "f-13f", "f-events", "f-in", "f-px"])
+    ap.add_argument("what", choices=["universe", "f-us", "f-f4", "f-13f", "f-events", "f-in"])
     ap.add_argument("--source", choices=["all", *UNIVERSE_SOURCES], default="all")
     a = ap.parse_args(argv)
     settings = dataclasses.replace(Settings.from_env(), mock_externals=False)
@@ -454,8 +427,6 @@ def main(argv: list[str] | None = None) -> int:
         errors = fetch_f_13f(client)
     elif a.what == "f-in":
         errors = fetch_f_in(client)
-    elif a.what == "f-px":
-        errors = fetch_f_px(client)
     else:
         errors = fetch_f_events(client)
     for e in errors:

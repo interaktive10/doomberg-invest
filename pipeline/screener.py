@@ -1,8 +1,10 @@
-"""The screener API (BRIEF §6 "Screener", §8 M4): a typed filter spec over the latest scored week.
+"""The screener API (BRIEF §8 M4-05): a typed filter spec over the latest scored week.
 
-The database does the filtering: `screen(spec jsonb)` over `screener_v` (db/migrations/0007). The web app calls the
-same function as an RPC with service_role, validating the spec with a zod schema that mirrors ScreenSpec; saved
-screens store the spec JSON. Every field is optional; metric filters use the keys of company_metrics."""
+The database does the filtering: `screen(spec jsonb)` over `screener_v` (db/migrations/0007). The web app's Candidates
+screen calls the same function as an RPC with service_role, sending part of this spec (web/lib/screener.ts, a plain
+TypeScript type: one bucket, market, families and a limit); the Screener UI that built full specs and saved them in
+`saved_screens` was deleted in overhaul PR 4 (docs/SPEC_ISSUES.md 52). Every field is optional; metric filters use
+the keys of company_metrics."""
 
 from __future__ import annotations
 

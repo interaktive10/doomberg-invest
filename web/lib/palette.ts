@@ -1,4 +1,4 @@
-// Mirror of app/globals.css @theme; SVG attributes (recharts, cytoscape) can't read CSS vars. Change both together:
+// Mirror of app/globals.css @theme; SVG attributes (the recharts charts) can't read CSS vars. Change both together:
 // tests/palette.test.ts pins these to the theme.
 export const INK = {
   grid: "#1d2632", // --color-line

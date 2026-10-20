@@ -29,6 +29,3 @@ Non-LLM sources (documented fair-use limits, enforced in `pipeline/net/http.py`)
 | SEC EDGAR | ≤ 8 req/s, declared `SEC_USER_AGENT` | SEC fair-access policy (10 req/s max); BRIEF §2.7 |
 | NSE / BSE | 1 request per 3 s, cookie warm-up | BRIEF §4.3; old Doomberg measured about 3-4/min/IP (`docs/DOOMBERG_AUDIT.md` §4) |
 | Twelve Data (US weekly prices; the Signal Lab's history) | 1 request per 8 s, ≤ 400 symbols/week (one credit each, Saturday); the Lab's download (lab-prices.yml) ≤ 650 credits a run, Sunday to Thursday in November and December | free plan: 8 credits a minute, 800 a day, no card; key in `TWELVEDATA_API_KEY`; docs/SPEC_ISSUES.md 38, 51 |
-| Yahoo chart endpoint (`PRICE_SOURCE=yahoo` only) | 1 request per s | unofficial; refuses GitHub's runners (HTTP 429); docs/SPEC_ISSUES.md 37, 38 |
-| GDELT DOC 2.0 | 1 request per 5 s (GDELT's own limit), ≤ 100 new queries a week, candidates only | BRIEF §2.7; DECISIONS.log (M4 C4) |
-| FRED / EIA | 2 req/s; EIA: one monthly series a week (planned generator additions, 5 years) | free keys; BRIEF §2.7 |

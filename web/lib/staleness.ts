@@ -2,15 +2,13 @@ import type { SourceHealth } from "@/lib/data";
 
 // BRIEF §2.7: "Stale beyond its SLA (US weekly 8 days; India weekly 10 days) -> a banner in the app and the digest".
 // The same SLAs and fallbacks as config/staleness.yaml (pipeline.digest.weekly); tests/staleness.test.ts pins them to
-// that file. A fallback source (BSE for NSE) records a success only in weeks it stood in, so it isn't late while its
-// primary is fine (M6 review R2-F5). India is paused (docs/SPEC_ISSUES.md 46): its nse and bse rows and the BSE
-// fallback come back with it.
+// that file. They are the sources the pipeline reads (overhaul PR 4): Home's banner and Settings show only these, so a
+// dead source's leftover health row (yahoo, stooq, fred, eia, gdelt) raises no alarm. A fallback source (BSE for NSE)
+// records a success only in weeks it stood in, so it isn't late while its primary is fine (M6 review R2-F5). India is
+// paused (docs/SPEC_ISSUES.md 46): its nse and bse rows and the BSE fallback come back with it.
 export const SLA_DAYS: Record<string, number> = {
   sec: 8,
   twelvedata: 8,
-  yahoo: 8,
-  fred: 8,
-  eia: 8,
   sec_13f: 100,
 };
 
@@ -42,21 +40,20 @@ export function sourceStatus(s: SourceHealth, all: readonly SourceHealth[], now:
   return "ok";
 }
 
-/** Every source that is stale or past its SLA (a fallback only when its primary isn't fine), with why. */
+/** The health rows of the sources the pipeline reads (those with an SLA), in their order. */
+export function watched(sources: readonly SourceHealth[]): SourceHealth[] {
+  return sources.filter((s) => SLA_DAYS[s.source] !== undefined);
+}
+
+/** Every watched source that is stale or past its SLA (a fallback only when its primary isn't fine), with why. */
 export function lateSources(sources: readonly SourceHealth[], now: Date): { source: string; why: string }[] {
   const out: { source: string; why: string }[] = [];
-  for (const s of sources) {
+  for (const s of watched(sources)) {
     if (resting(s, sources, now)) continue;
     if (s.stale) out.push({ source: s.source, why: "stale" });
     else if (late(s, now)) out.push({ source: s.source, why: `no success for ${Math.floor(ageDays(s, now) ?? 0)} days; SLA ${SLA_DAYS[s.source]}` });
   }
   return out;
-}
-
-/** How many sources are on time (Settings "Sources on time"): "ok", or a resting fallback, which lateSources and the
- * stale banner don't count as late either. */
-export function onTimeCount(sources: readonly SourceHealth[], now: Date): number {
-  return sources.filter((s) => resting(s, sources, now) || sourceStatus(s, sources, now) === "ok").length;
 }
 
 /** The banner's list as text, "sec (no success for 11 days; SLA 8)". */

@@ -70,3 +70,18 @@ export function acceptable(t: { state: ThesisState; author: string; card_md: str
 export function markMoved<T extends { id: string; state: ThesisState }>(list: readonly T[], moved: ReadonlySet<string>): T[] {
   return list.map((t) => (moved.has(t.id) ? { ...t, state: "review" as const } : t));
 }
+
+/** The Theses screen's groups (overhaul PR 4): Needs you (a card to accept or dismiss, a review to decide), Watching
+ * (theses and positions) and Closed (closed and dismissed, folded). */
+export type Group = "needs" | "watching" | "closed";
+
+export const GROUP_LABEL: Record<Group, string> = { needs: "Needs you", watching: "Watching", closed: "Closed" };
+
+export function group(state: ThesisState): Group {
+  return state === "research" || state === "review" ? "needs" : state === "thesis" || state === "position" ? "watching" : "closed";
+}
+
+/** Kill criteria as "n of m triggered" ("none" without any). */
+export function killTally(statuses: readonly string[]): string {
+  return statuses.length === 0 ? "none" : `${statuses.filter((s) => s === "triggered").length} of ${statuses.length} triggered`;
+}

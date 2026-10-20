@@ -3,8 +3,8 @@ import type { SourceHealth } from "@/lib/data";
 import { sourceLabel } from "@/lib/labels";
 import { lateSources } from "@/lib/staleness";
 
-/** BRIEF §2.7: a banner when a source is stale or past its SLA (the same rule as the digest). One line; the reasons
- * open under it. Text is fg, warn or muted on the warn tint (>= 7.9:1). */
+/** BRIEF §2.7: Home's banner when a source the pipeline reads (sec, twelvedata, sec_13f) is stale or past its SLA (the
+ * digest's rule). One line; the reasons open under it. Text is fg, warn or muted on the warn tint (>= 7.9:1). */
 export function StaleBanner({ sources, now }: { sources: SourceHealth[]; now: Date }) {
   const late = lateSources(sources, now);
   if (late.length === 0) return null;

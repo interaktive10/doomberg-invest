@@ -1,4 +1,4 @@
-"""The daily text-facts run (BRIEF §4.5, §4.11 ledger, §2.6 router; daily.yml, the step after SEC events;
+"""The daily text-facts run (BRIEF §4.5, §2.6 router; daily.yml, the step after SEC events;
 docs/SPEC_ISSUES.md 50). `python -m pipeline.facts.run [--day D]`.
 
 1. Scope, in work order: companies with a live thesis or research entry, then the stage names (Evidence >=

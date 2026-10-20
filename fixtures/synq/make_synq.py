@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """F-SYNQ (BRIEF §9): synthetic quarterly series with a true, a false and a just-below-threshold case for every
-signal S1-S12 and red flag R1-R6 (M4-01). Deterministic; writes fixtures/synq/cases.json.
+signal (S1-S10 and S12: S11 went with the Capex Desk, docs/SPEC_ISSUES.md 52) and red flag R1-R6 (M4-01).
+Deterministic; writes fixtures/synq/cases.json.
 
 `python fixtures/synq/make_synq.py` rewrites the file; `--check` exits 1 if it differs from the committed one.
 
@@ -208,19 +209,6 @@ def s10() -> list[dict[str, Any]]:
     ]  # fmt: skip
 
 
-def s11() -> list[dict[str, Any]]:
-    grow = quarters(revenue={ALL: "1000", (0, 3): "1050"})  # TTM revenue +5%
-
-    def capex(direction: str, input_growth: str) -> dict[str, Any]:
-        return {"categories": ["grid"], "direction": {"grid": direction}, "input_growth": {"grid": input_growth}}
-
-    return [
-        case("S11-true", "S11", "true", True, "0.75", q=grow, capex=capex("rising", "0.30"), prior={"S1": True}),
-        case("S11-false", "S11", "false", False, q=grow, capex=capex("flat", "0.30"), prior={"S1": True}),
-        case("S11-boundary", "S11", "boundary", False, q=grow, capex=capex("rising", "0.1499"), prior={"S1": True}),
-    ]
-
-
 def s12() -> list[dict[str, Any]]:
     def sector(capex: list[str], tight: int) -> dict[str, Any]:
         return {"sector": "industrials", "capex_da_medians": capex, "revenue_yoy_medians": ["0.02", "0.01", "-0.01"],
@@ -273,7 +261,7 @@ def flags() -> list[dict[str, Any]]:
 
 
 def build() -> list[dict[str, Any]]:
-    return [*s1(), *s2(), *s3(), *s4(), *s5(), *s6(), *s7(), *s8(), *s9(), *s10(), *s11(), *s12(), *flags()]
+    return [*s1(), *s2(), *s3(), *s4(), *s5(), *s6(), *s7(), *s8(), *s9(), *s10(), *s12(), *flags()]
 
 
 def render() -> str:

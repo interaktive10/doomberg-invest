@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import parse_csv
 from pipeline.net.twelvedata import (
     HISTORY_SIZE,
     INTERVALS,
@@ -29,24 +28,18 @@ from pipeline.net.twelvedata import (
     td_symbol,
     week_end,
 )
+from pipeline.prices.bars import parse_csv
 from pipeline.prices.source import NoSuchSymbol
 from pipeline.settings import Settings
-from pipeline.signals.weekly import price_source
 
 PX = Path(__file__).resolve().parents[2] / "fixtures" / "px"
 TD = PX / "twelvedata"
 KEY = "td-key-0123456789abcdef"
 
 
-def mock_http(tmp_path: Path, key: str | None = KEY, source: str = "twelvedata") -> HttpClient:
-    settings = Settings(
-        database_url="x",
-        mock_externals=True,
-        sec_user_agent="t",
-        cache_dir=tmp_path,
-        twelvedata_api_key=key,
-        price_source=source,
-    )
+def mock_http(tmp_path: Path, key: str | None = KEY) -> HttpClient:
+    settings = Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path,
+                        twelvedata_api_key=key)  # fmt: skip
     return HttpClient(settings)
 
 
@@ -143,9 +136,16 @@ def test_http_errors_are_classified_and_never_carry_the_key(tmp_path: Path, monk
     assert KEY not in str(echoed.value) and "***" in str(echoed.value)
 
 
-def test_the_source_follows_price_source(tmp_path: Path) -> None:
-    assert price_source(mock_http(tmp_path)).name == "twelvedata"
-    assert price_source(mock_http(tmp_path, source="yahoo")).name == "yahoo"
+def test_twelve_data_is_the_only_price_source() -> None:
+    """Overhaul PR 4 (docs/SPEC_ISSUES.md 52): the Yahoo and Stooq clients and PRICE_SOURCE are gone; the weekly run
+    asks Twelve Data, and a manual CSV import still reads through pipeline/prices/bars.py."""
+    import importlib.util
+
+    from pipeline.signals import weekly
+
+    assert all(importlib.util.find_spec(f"pipeline.net.{m}") is None for m in ("yahoo", "stooq"))
+    assert not hasattr(weekly, "price_source") and "price_source" not in Settings.__dataclass_fields__
+    assert weekly.parse_csv is parse_csv
 
 
 def test_the_daily_url_and_parse(tmp_path: Path) -> None:

@@ -1,5 +1,0 @@
-COMPANY: {{name}} ({{symbol}})
-TEXT:
-<<<
-{{text}}
->>>

@@ -14,7 +14,6 @@ test("no LLM calls, from the browser or the server", async ({ page }) => {
     await page.goto(path);
     await expect(page.locator("main h1").first()).toBeVisible();
   }
-  expect((await page.request.get("/screener/export?min_evidence=10")).ok()).toBe(true);
 
   const hosts = [...new Set(requests.filter((u) => u.startsWith("http")).map((u) => new URL(u).host))];
   expect(hosts).toEqual(["localhost:3000"]);

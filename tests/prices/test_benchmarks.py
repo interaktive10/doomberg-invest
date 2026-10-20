@@ -1,4 +1,4 @@
-"""Benchmarks (BRIEF §4.4): NSE's index-close file (real, 2026-06-05) and the US histories from Yahoo."""
+"""Benchmarks (BRIEF §4.4): NSE's index-close file (real, 2026-06-05) and the US histories from Twelve Data."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from decimal import Decimal as D
 from pathlib import Path
 
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import parse_csv
-from pipeline.net.yahoo import HOSTS, YahooClient, chart_url
+from pipeline.net.twelvedata import TwelveDataClient, series_url
+from pipeline.prices.bars import parse_csv
 from pipeline.prices.benchmarks import fetch_us, index_close_url, india_rows, parse_index_closes, us_rows
 from pipeline.settings import Settings
 
@@ -32,13 +32,18 @@ def test_us_history_window() -> None:
 
 
 def test_us_benchmarks_keep_their_config_symbols(tmp_path: Path) -> None:
-    """config/context.yaml names the S&P 500 the way Stooq did (^spx); Yahoo calls it ^GSPC. Rows keep the config's
-    symbol (C3 reads them back by it), and one symbol Yahoo doesn't answer never stops the others."""
-    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
-    http.register_mock(chart_url("^GSPC"), (ROOT / "px" / "yahoo" / "_GSPC.json").read_bytes())
-    http.register_mock(chart_url("XLK"), (ROOT / "px" / "yahoo" / "XLK.json").read_bytes())
-    for host in HOSTS:
-        http.register_error(chart_url("XLI", host), 429)
-    rows, errors = fetch_us(YahooClient(http), ["^spx", "XLI", "XLK"], date(2026, 9, 18))
+    """config/context.yaml names the S&P 500 ^spx; Twelve Data is asked SPY, the ETF that tracks it (the index needs a
+    paid plan). Rows keep the config's symbol (C3 reads them back by it), and one symbol Twelve Data doesn't answer
+    never stops the others."""
+    settings = Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path,
+                        twelvedata_api_key="td-key")  # fmt: skip
+    http = HttpClient(settings)
+    http.register_mock(series_url("SPY"), (ROOT / "px" / "twelvedata" / "SPY.json").read_bytes())
+    http.register_mock(series_url("XLK"), (ROOT / "px" / "twelvedata" / "XLK.json").read_bytes())
+    http.register_error(series_url("XLI"), 429)
+    rows, errors = fetch_us(TwelveDataClient(http), ["^spx", "XLI", "XLK"], date(2026, 9, 18))
     assert {r.symbol for r in rows} == {"^spx", "XLK"} and len(rows) == 2 * 260
-    assert errors == ["benchmark XLI: YahooUnavailable: Yahoo request failed (429)"]
+    assert errors == ["benchmark XLI: TwelveDataUnavailable: 429: Twelve Data request failed"]
+    assert http.calls == [series_url("SPY"), series_url("XLI"), series_url("XLK")]
+    spx = parse_csv((ROOT / "px" / "_spx_w.csv").read_bytes())
+    assert [(r.week_end, r.close) for r in rows if r.symbol == "^spx"] == [(b.week_end, b.close) for b in spx]

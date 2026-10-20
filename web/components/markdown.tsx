@@ -27,7 +27,7 @@ function Cite({ view }: { view: CiteView }) {
   );
 }
 
-/** The digest, the Capex brief and thesis cards are markdown the pipeline wrote; raw HTML in it is not rendered.
+/** The digest and thesis cards are markdown the pipeline wrote; raw HTML in it is not rendered.
  * Its headings sit under the Section's h2 (h1 -> h3). Tables scroll sideways in a focusable box on a phone (axe
  * scrollable-region-focusable). With `cite`, inline citations ([f:...], [m:...], [s:...], [c:...]) show as chips. */
 export function Markdown({ text, cite }: { text: string; cite?: (id: string) => CiteView }) {

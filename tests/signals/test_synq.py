@@ -1,5 +1,6 @@
-"""M4-01: every signal S1-S12 and red flag R1-R6 on F-SYNQ (fixtures/synq): a true case, a false case and a
-just-below-threshold case, all passing. Strengths are checked to 8 decimals."""
+"""M4-01: every signal (S1-S10 and S12; S11 was deleted with the Capex Desk) and red flag R1-R6 on F-SYNQ
+(fixtures/synq): a true case, a false case and a just-below-threshold case, all passing. Strengths are checked to 8
+decimals."""
 
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import yaml
 
 from pipeline.settings import REPO_ROOT
 from pipeline.signals import redflags
-from pipeline.signals.base import CapexView, Ctx, Event, Fact, Holding, Insider, SectorView
+from pipeline.signals.base import Ctx, Event, Fact, Holding, Insider, SectorView
 from pipeline.signals.registry import SIGNALS
 from pipeline.signals.series import Quarter, Series
 
@@ -57,12 +58,6 @@ def sector_view(sec: dict[str, Any] | None) -> SectorView | None:
     return SectorView(sec["sector"], capex, yoy, sec["tightness_facts"])
 
 
-def capex_view(cap: dict[str, Any] | None) -> CapexView | None:
-    if cap is None:
-        return None
-    return CapexView(cap["categories"], cap["direction"], {k: Decimal(v) for k, v in cap["input_growth"].items()})
-
-
 def ctx_for(case: dict[str, Any]) -> Ctx:
     quarters = [
         Quarter(date.fromisoformat(q["end"]), {k: d(v) for k, v in {**DOC["base"], **q["values"]}.items()})
@@ -80,7 +75,6 @@ def ctx_for(case: dict[str, Any]) -> Ctx:
         facts=[fact(f) for f in case.get("facts", [])],
         holder_pct_in_size_decile=d(case.get("holder_pct_in_size_decile")),
         sector=sector_view(case.get("sector")),
-        capex=capex_view(case.get("capex")),
         fired=case.get("prior", {}),
     )
 
@@ -109,7 +103,8 @@ def test_every_signal_and_flag_has_true_false_and_boundary_cases() -> None:
     kinds: dict[str, set[str]] = defaultdict(set)
     for c in CASES:
         kinds[c["target"]].add(c["kind"])
-    assert set(kinds) == {f"S{i}" for i in range(1, 13)} | {f"R{i}" for i in range(1, 7)}
+    assert set(kinds) == {m.ID for m in SIGNALS} | {f"R{i}" for i in range(1, 7)}
+    assert {m.ID for m in SIGNALS} == {f"S{i}" for i in range(1, 13)} - {"S11"}  # S11 went with the Capex Desk
     assert all({"true", "false", "boundary"} <= k for k in kinds.values()), kinds
 
 
