@@ -39,7 +39,7 @@ MAX_CATCH_UP_DAYS = 14  # an older cursor is read from 14 days back (and reporte
 PIT_LOOKBACK_DAYS = 7
 MAX_PIT_FETCH = 80  # ~4 min at 3 s per request
 SEEN_KEEP_DAYS = 200
-TIME_BUDGET_S = 10 * 60  # no NSE request after 10 min (daily.yml's India job times out at 15 min)
+TIME_BUDGET_S = 10 * 60  # no NSE request after 10 min (daily.yml's India job had 15 min; paused: SPEC_ISSUES 46)
 
 
 @dataclass

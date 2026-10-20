@@ -571,6 +571,21 @@ def finish_run(conn: Conn, run_id: UUID, status: str, stats: dict[str, Any], err
     )
 
 
+def latest_run_days(conn: Conn, kind: str) -> list[dict[str, Any]]:
+    """The `days` stats of the latest `kind` run that read a day (pipeline.us.daily records one entry per EDGAR day
+    and resumes from them when its state file is lost). Runs that read none (failed, cut off by the job's timeout,
+    nothing new, only listing errors) and one-day runs (`--date`, recorded as stats.date) are passed over."""
+    row = conn.execute(
+        _q(
+            "select stats->'days' from runs where kind = %s and stats->>'date' is null "
+            "and jsonb_path_exists(stats, '$.days[*].day ? (@ like_regex \"^[0-9]{4}-[0-9]{2}-[0-9]{2}$\")') "
+            "order by started_at desc limit 1"
+        ),
+        (kind,),
+    ).fetchone()
+    return list(row[0]) if row is not None else []
+
+
 @contextmanager
 def tracked_run(conn: Conn, kind: str, source: str | None = None) -> Iterator[dict[str, Any]]:
     """A pipeline job's `runs` row (committed at once, so a crash still leaves a record). Yields a JSON-able stats

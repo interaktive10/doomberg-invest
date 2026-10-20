@@ -20,43 +20,41 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      ready: ${{ steps.secrets.outputs.ready }}
-    steps:
-      - id: secrets
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
-        run: |
-          if [ -n "$DATABASE_URL" ] && [ -n "$SEC_USER_AGENT" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::DATABASE_URL and SEC_USER_AGENT secrets are not set (BRIEF §2.4): nothing to do"; fi
-
   us:
-    needs: check
-    if: needs.check.outputs.ready == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
+    outputs:
+      ran: ${{ steps.secrets.outputs.ok }}   # the Lab re-runs only on a rebuilt universe
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
       DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
       WINDOWS: ${{ github.event.inputs.windows || '1' }}
     steps:
+      - name: Secrets (BRIEF §2.4; without them the steps below are skipped, with a notice)
+        id: secrets
+        run: |
+          if [ -n "$DATABASE_URL" ] && [ -n "$SEC_USER_AGENT" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::DATABASE_URL and SEC_USER_AGENT secrets are not set (BRIEF §2.4): nothing to do"; fi
       - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
       - uses: astral-sh/setup-uv@v6
+        if: steps.secrets.outputs.ok == 'true'
         with:
           enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - run: uv run --frozen python -m pipeline.db.migrate
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv python install 3.12
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv sync --frozen --no-dev
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
       # 13F first: it maps CUSIPs against the universe the weekly run decided. The re-seed below puts every listed
       # filer back in until the next weekly run re-applies the rules (review F9 on M2).
       - name: 13F holder counts
+        if: steps.secrets.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.us.quarterly --windows "$WINDOWS"
       - name: universe rebuild (fresh SEC listing on the runner; the committed NSE list stays)
+        if: steps.secrets.outputs.ok == 'true'
         run: |
           uv run --frozen python scripts/fetch_fixtures.py universe --source sec
           uv run --frozen python -m pipeline.db.seed
@@ -65,7 +63,8 @@ jobs:
     # §2.1 "quarterly: ... Signal Lab re-run": a quarterly re-run of lab.yml once the universe is rebuilt (lab.yml
     # itself says BLOCKED(human) until the Stooq bulk file is attached to the lab-data-v1 release).
     needs: us
-    runs-on: ubuntu-latest
+    if: needs.us.outputs.ran == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       actions: write   # dispatches lab.yml; only this job's token can (M8 review R2 idea: least privilege)

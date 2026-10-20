@@ -13,6 +13,7 @@ from typing import Any
 
 import psycopg
 import pytest
+from psycopg.types.json import Jsonb
 
 from pipeline.db import repo
 from pipeline.db.models import Company
@@ -287,6 +288,48 @@ def test_catch_up_on_the_first_day_of_a_quarter(conn: psycopg.Connection[Any], t
     stats = run_catch_up(conn, client, date(2025, 4, 1), pending, day_state)
     assert [s.day for s in stats] == ["2025-03-04"] and stats[0].corp_events == 1
     assert load_last_day(day_state) == date(2025, 3, 4)
+
+
+def test_a_lost_state_file_resumes_from_the_latest_us_daily_run(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """Overhaul PR 1 (EDGAR cursor recovery): the Actions cache is evicted after 7 days unused. Without daily_state.json
+    the run resumes after the newest day the latest us_daily run read, not from the latest few days; tests/us/
+    test_daily.py has the other cases."""
+    from pipeline.us.daily import load_last_day, run_catch_up
+
+    add(conn, "0000886744", "GERON CORP")
+    conn.execute("insert into runs (kind, started_at, finished_at, status, stats) values "
+                 "('us_daily', '2025-03-01 01:30+00', '2025-03-01 01:31+00', 'ok', %s)",
+                 (Jsonb({"date": None, "days": [{"day": "2025-02-28", "retry": 0}], "errors": []}),))  # fmt: skip
+    day_state, pending = tmp_path / "day.json", tmp_path / "pending.json"
+    stats = run_catch_up(conn, catch_up_client(tmp_path), date(2025, 3, 5), pending, day_state)
+    assert [(s.day, s.purchases) for s in stats] == [("2025-03-03", 3), ("2025-03-04", 0)]  # 02-28 isn't read again
+    assert load_last_day(day_state) == date(2025, 3, 4)
+
+
+def test_latest_run_days_is_the_last_catch_up_that_read_a_day(conn: psycopg.Connection[Any]) -> None:
+    """A run that failed or was cut off records no days, one with nothing new an empty list or only its listing
+    errors; a --date run names its date (one day, not a cursor). The latest catch-up that read a day is the one."""
+    kind = f"test_{uuid.uuid4().hex[:8]}"
+    days = [{"day": "2026-10-15", "retry": 0, "purchases": 1}, {"day": "2026-10-16", "retry": 0, "purchases": 0}]
+    rows = [
+        ("2026-10-16 01:30+00", "ok", {"date": None, "days": [{"day": "2026-10-14", "retry": 0}], "errors": []}),
+        ("2026-10-17 01:30+00", "ok", {"date": None, "days": days, "errors": []}),
+        ("2026-10-18 01:30+00", "ok", {"date": None, "days": [], "errors": []}),
+        ("2026-10-19 01:30+00", "partial", {"date": None, "errors": ["x"],
+                                            "days": [{"day": "listings as of 2026-10-19", "errors": ["x"]}]}),
+        ("2026-10-20 01:30+00", "ok", {"date": "2026-09-01", "days": [{"day": "2026-09-01", "retry": 0}],
+                                       "errors": []}),
+        ("2026-10-21 01:30+00", "failed", {}),
+        ("2026-10-22 01:30+00", "running", {}),
+    ]  # fmt: skip
+    for started, status, stats in rows:
+        conn.execute("insert into runs (kind, started_at, status, stats) values (%s, %s, %s, %s)",
+                     (kind, started, status, Jsonb(stats)))  # fmt: skip
+    assert repo.latest_run_days(conn, kind) == days
+    conn.execute("insert into runs (kind, started_at, status, stats) values (%s, '2026-10-23 01:30+00', 'ok', %s)",
+                 (kind, Jsonb({"days": [{"day": "2026-10-19", "retry": 1}], "errors": []})))  # fmt: skip
+    assert repo.latest_run_days(conn, kind) == [{"day": "2026-10-19", "retry": 1}]  # a row from before stats.date
+    assert repo.latest_run_days(conn, f"{kind}_none") == []
 
 
 def test_companies_outside_the_universe_are_ignored(conn: psycopg.Connection[Any], tmp_path: Path) -> None:

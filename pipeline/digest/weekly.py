@@ -7,7 +7,7 @@ no scores, it says the candidates are missing); theses needing attention (kill c
 due); the Capex brief; source health and staleness; LLM quota use; Lab notes when a run happened this week. No
 price-move content: no gainers, losers or returns.
 
-`python -m pipeline.digest.weekly [--week D]` (weekly.yml `digest` job: every week, whatever the other jobs did).
+`python -m pipeline.digest.weekly [--week D]` (weekly.yml `publish` job: every week, whatever the other jobs did).
 The issue is published with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true)
 it is only stored.
 """
@@ -42,7 +42,7 @@ def sla_days(root: Any = REPO_ROOT) -> dict[str, int]:
 
 
 def fallbacks(root: Any = REPO_ROOT) -> dict[str, str]:
-    """Fallback source -> its primary (config/staleness.yaml `fallback_of`: bse -> nse)."""
+    """Fallback source -> its primary (config/staleness.yaml `fallback_of`: bse -> nse, none while India is paused)."""
     doc = yaml.safe_load((root / "config" / "staleness.yaml").read_text(encoding="utf-8"))
     return {str(k): str(v) for k, v in (doc.get("fallback_of") or {}).items()}
 

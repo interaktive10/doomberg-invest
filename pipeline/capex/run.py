@@ -1,4 +1,4 @@
-"""The weekly Capex Desk run (BRIEF §4.11; weekly.yml `capex` job before `scores`, and the brief after it).
+"""The weekly Capex Desk run (BRIEF §4.11; no weekly.yml job since overhaul PR 1: without EIA, S11 can't fire).
 `python -m pipeline.capex.run --stage index|brief [--week D]`.
 
 index (before scoring):

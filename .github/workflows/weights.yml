@@ -17,34 +17,31 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      db: ${{ steps.secrets.outputs.db }}
-    steps:
-      - id: secrets
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -n "$DATABASE_URL" ]; then echo "db=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
-
   weights:
-    needs: check
     # approvals come from main only: a dispatch on another branch records nothing
-    if: needs.check.outputs.db == 'true' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
+      - name: Secrets (BRIEF §2.4; without the database the steps below are skipped, with a notice)
+        id: secrets
+        run: |
+          if [ -n "$DATABASE_URL" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
       - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
       - uses: astral-sh/setup-uv@v6
+        if: steps.secrets.outputs.ok == 'true'
         with:
           enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - run: uv run --frozen python -m pipeline.db.migrate
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv python install 3.12
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv sync --frozen --no-dev
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
       - name: Record and approve the weights version on main
+        if: steps.secrets.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.db.weights

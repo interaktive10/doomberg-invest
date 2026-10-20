@@ -1,0 +1,28 @@
+name: protected
+# BRIEF Appendix D: a PR that changes a protected path needs the human-approved label. Its own workflow, so adding or
+# removing the label re-runs only this check (a few seconds), not ci.yml's Python job. The job keeps the name
+# `protected`, the required check's name.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: protected-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  protected:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: protected paths need the human-approved label (BRIEF Appendix D)
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE_REF: ${{ github.base_ref }}
+        run: python3 scripts/protected_check.py --base "origin/${BASE_REF}" --labels "${LABELS}"

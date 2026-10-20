@@ -1,9 +1,10 @@
 name: ci
+# Pull requests only: main gets no run after a merge (with the branch rule 'require branches to be up to date', the
+# PR's last run tested the merged code), and a label change runs only protected.yml. verify-m8's M0-01 runs the whole
+# offline suite, so there is no separate `make test`.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -14,7 +15,7 @@ permissions:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       MOCK_EXTERNALS: "true"
@@ -39,25 +40,10 @@ jobs:
       - run: make lint
       - run: make type
       - run: make guard
-      - run: make test
-      - name: verify (every milestone up to the latest that has checks)
+      - name: verify (every milestone up to the latest that has checks; M0-01 is the whole test suite)
         run: make verify-m8
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verify-report
           path: docs/VERIFY_REPORT.md
-
-  protected:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: protected paths need the human-approved label (BRIEF Appendix D)
-        env:
-          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          BASE_REF: ${{ github.base_ref }}
-        run: python3 scripts/protected_check.py --base "origin/${BASE_REF}" --labels "${LABELS}"

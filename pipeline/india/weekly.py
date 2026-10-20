@@ -76,7 +76,7 @@ KEEP_YEARS = 3  # financial years of parsed results kept per company in the stat
 MAX_FETCH = 600  # XBRL downloads per run (30 min at 3 s each)
 SHARES = (("results", 0.40), ("shareholding", 0.35), ("backfill", 0.25))  # of MAX_FETCH; a share not needed moves on
 BACKFILL_PER_RUN = 60  # companies whose filing history is queued per run (capex desk first, then by traded value)
-TIME_BUDGET_S = 36 * 60  # no NSE request after 36 min (weekly.yml's India job times out at 45 min)
+TIME_BUDGET_S = 36 * 60  # no NSE request after 36 min (weekly.yml's India job had 45 min; paused: SPEC_ISSUES 46)
 MIN_SURVEILLANCE = 20  # fewer ASM/GSM entries than this means the lists changed format: keep last week's flags
 
 

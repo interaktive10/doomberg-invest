@@ -1,18 +1,14 @@
 name: web
 # BRIEF §8 M7: the web app's checks. Type check, unit tests (Vitest), a production build, then Playwright (M7-01 the
 # flow, M7-02 no LLM calls, M7-03 axe at 390 px) against a local Supabase stack with the repo's migrations and
-# scripts/seed_e2e.py. Runs when the web app, the schema or the seed change, or a file its tests pin it to (the
-# staleness SLAs, the screener spec, the §4.6 series and S1's order book, next_filing, the guard lists, BRIEF §7; M7
-# review R1-F14, R3).
+# scripts/seed_e2e.py. Runs on a pull request that changes the web app, the schema or the seed, or a file its tests
+# pin it to (the staleness SLAs, the screener spec, the §4.6 series and S1's order book, next_filing, the guard lists,
+# BRIEF §7; M7 review R1-F14, R3). The type check and Vitest (whose parity tests read the pinned files) run on every
+# such PR; the Supabase stack, the build and Playwright only when the PR changes web/, the migrations, supabase/, the
+# e2e scripts or this file (the `changes` step), which keeps a config-only PR to a few minutes.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ["web/**", "db/migrations/**", "scripts/seed_e2e.py", "scripts/e2e_report.py", "scripts/verify.py",
-            "supabase/**", ".github/workflows/web.yml", "config/staleness.yaml", "config/signals.yaml",
-            "config/guards.yaml", "pipeline/screener.py", "pipeline/signals/weekly.py", "pipeline/signals/series.py",
-            "pipeline/signals/s01_orderbook.py", "pipeline/thesis/evidence_pack.py", "docs/BRIEF.md"]
-  push:
-    branches: [main]
     paths: ["web/**", "db/migrations/**", "scripts/seed_e2e.py", "scripts/e2e_report.py", "scripts/verify.py",
             "supabase/**", ".github/workflows/web.yml", "config/staleness.yaml", "config/signals.yaml",
             "config/guards.yaml", "pipeline/screener.py", "pipeline/signals/weekly.py", "pipeline/signals/series.py",
@@ -27,7 +23,7 @@ permissions:
 
 jobs:
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
@@ -37,6 +33,20 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # the PR's merge commit and its first parent, the base branch's tip
+      - name: does the PR change the app, the schema or the seed? (gates the Supabase, build and Playwright steps)
+        id: changes
+        working-directory: .
+        run: |
+          if ! changed="$(git diff --name-only HEAD^1 HEAD)"; then
+            echo "::warning::could not list the PR's changed files: running every step"
+            echo "e2e=true" >> "$GITHUB_OUTPUT"
+          elif grep -qE '^(web/|db/migrations/|supabase/|scripts/seed_e2e\.py$|scripts/e2e_report\.py$|\.github/workflows/web\.yml$)' <<< "$changed"; then
+            echo "e2e=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::no change to web/, the migrations, supabase/ or the e2e scripts: type check and Vitest only"
+          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.9
@@ -50,14 +60,17 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - uses: supabase/setup-cli@v1
+        if: steps.changes.outputs.e2e == 'true'
         with:
           version: 2.118.0  # docs/VERSIONS.md (M7 review R1-F15)
       - name: local Supabase stack (Postgres, Auth, PostgREST, mail)
+        if: steps.changes.outputs.e2e == 'true'
         working-directory: .
         run: |
           supabase --version
           supabase start
       - name: stack settings for the app and the seed
+        if: steps.changes.outputs.e2e == 'true'
         working-directory: .
         run: |
           supabase status -o env > "$RUNNER_TEMP/supabase.env"
@@ -69,9 +82,11 @@ jobs:
             echo "DATABASE_URL=$DB_URL"
           } >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v6
+        if: steps.changes.outputs.e2e == 'true'
         with:
           enable-cache: true
       - name: migrations and seed data
+        if: steps.changes.outputs.e2e == 'true'
         working-directory: .
         run: |
           uv python install 3.12
@@ -79,11 +94,14 @@ jobs:
           uv run --frozen python -m pipeline.db.migrate --database-url "$DATABASE_URL"
           uv run --frozen python scripts/seed_e2e.py --database-url "$DATABASE_URL"
           psql "$DATABASE_URL" -c "notify pgrst, 'reload schema'"
-      - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm e2e
+      - if: steps.changes.outputs.e2e == 'true'
+        run: pnpm build
+      - if: steps.changes.outputs.e2e == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.changes.outputs.e2e == 'true'
+        run: pnpm e2e
       - name: verify M7 (reads web/e2e-report.json)
-        if: always()
+        if: always() && steps.changes.outputs.e2e == 'true'
         working-directory: .
         run: python3 scripts/verify.py --milestone m7 --only M7-
       - uses: actions/upload-artifact@v4

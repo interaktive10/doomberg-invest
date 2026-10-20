@@ -1,4 +1,4 @@
-"""The daily text-facts run (BRIEF §4.5, §4.11 ledger, §2.6 router; daily.yml `text` job).
+"""The daily text-facts run (BRIEF §4.5, §4.11 ledger, §2.6 router; daily.yml, the step after SEC events).
 `python -m pipeline.facts.run [--day D]`.
 
 1. Scope, in config/quotas.yaml work order: capex-desk companies, the candidate shortlist (top 100 by Evidence in the
@@ -55,7 +55,7 @@ TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
 RETRY_DAYS = 14  # a filing whose documents can't be fetched is tried daily this long after it was queued, then
 # `failed` (M5 review R2-F4)
-TIME_BUDGET_MIN = 4.0  # document starts: daily.yml stays ~8 min with the SEC/NSE jobs before it (SPEC_ISSUES 29)
+TIME_BUDGET_MIN = 4.0  # document starts: daily.yml stays ~8 min with the SEC step before it (SPEC_ISSUES 29)
 LINK_BATCH = 20
 RANK = {"capex_desk": 0, "candidate_shortlist": 1, "other": 2}
 SKIP_TRIAGE = (
