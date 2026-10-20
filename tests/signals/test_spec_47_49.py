@@ -2,17 +2,17 @@
 numbers where they show the problem.
 - 47: S4 needs TTM net income >= 0.9x a year earlier (Matador: -15% with CFO +8% fired at full strength) and is quiet
   for banks, lenders and insurers (SIC 6000-6411; REITs at 6798 are scored); R2 compares receivables growth with the
-  same quarter's revenue growth, not TTM revenue's.
-- 48: C2 is null unless ROIC beats the discount rate (Howard Hughes' other inputs with a ROIC of 5.4%: null), and null
-  when ROIC is unknown; C3 is null when its comparison group has fewer than 30 members; C4 is gone, and the C4 weight
-  config/weights.yaml still carries is never read.
+  same quarter's revenue growth, not TTM revenue's (India: the half-year end's quarter).
+- 48: C2 is null unless ROIC beats the discount rate (Howard Hughes' W40 inputs with its ROIC of 5.4%: null), and null
+  when ROIC is unknown; the weekly run and the Signal Lab give C3 its floor of 30 (its own null below 30 and GDELT's
+  absence are M4-06's, in test_context.py); C4 is gone, and the C4 weight config/weights.yaml still carries is never
+  read.
 - 49: S7 doesn't count a filer whose only role is 10% owner; a joint "director; 10% owner" filing and one without a
   role still count."""
 
 from __future__ import annotations
 
 import copy
-import importlib.util
 import uuid
 from dataclasses import replace
 from datetime import UTC, date, datetime
@@ -23,10 +23,8 @@ from typing import Any
 import pytest
 import yaml
 
-from pipeline.db import seed
 from pipeline.db.models import Company, InsiderEvent
 from pipeline.lab import panel
-from pipeline.net.http import ALLOWED_HOSTS
 from pipeline.settings import REPO_ROOT
 from pipeline.signals import context, redflags, reverse_dcf, s04_earnings_quality, s07_insider, weekly
 from pipeline.signals.base import Ctx, Insider
@@ -144,7 +142,36 @@ def test_r2_compares_receivables_with_the_same_quarters_revenue() -> None:
 
 def test_r2_still_fires_when_receivables_outgrow_the_quarter() -> None:
     r = r2(1650)  # +65% vs +40%
-    assert r.status == "fired" and r.inputs["gap_pp"] == 25.0
+    assert r.status == "fired" and r.inputs["gap_pp"] == 25.0 and r.inputs["quarter_end"] == "2026-06-30"
+
+
+def test_r2_is_unknown_without_the_same_quarter_a_year_back() -> None:
+    """No TTM fallback under the quarter basis (DECISIONS.log): June 2025's revenue missing leaves R2 unknown."""
+    rev: list[int | None] = [1000] * 7 + [1400]
+    rev[3] = None
+    s = Series([Quarter(e, {"revenue": None if v is None else D(v), "receivables": D(1000 if i < 7 else 1650)})
+                for i, (e, v) in enumerate(zip(ENDS, rev, strict=True))], "us")  # fmt: skip
+    r = redflags.r2(Ctx("c", "us", WEEK, s, SIGNALS), FLAGS["R2"])
+    assert r.status == "unknown" and r.inputs == {"missing": ["revenue_growth"]}
+
+
+def india_r2(revenue: list[int]) -> redflags.FlagResult:
+    """India's receivables are half-yearly, on the September and March rows only: 100 -> 160 March to March (+60%)."""
+    receivables = {date(2024, 9, 30): 100, date(2025, 3, 31): 100, date(2025, 9, 30): 130, date(2026, 3, 31): 160}
+    s = Series([Quarter(e, {"revenue": D(r), "receivables": None if e not in receivables else D(receivables[e])})
+                for e, r in zip(ENDS[: len(revenue)], revenue, strict=True)], "in")  # fmt: skip
+    return redflags.r2(Ctx("c", "in", WEEK, s, SIGNALS), FLAGS["R2"])
+
+
+def test_r2_india_compares_the_half_year_ends_receivables_with_that_quarters_revenue() -> None:
+    """PR 2 review math-L1: a June row carries March's receivables (Series.point), so R2 reads the March quarter's
+    revenue (+10%: a 50 pp gap), not the June quarter's (+50%: the 10 pp gap the mismatch read, which cleared)."""
+    revenue = [100, 100, 100, 100, 100, 100, 110, 150]
+    june = india_r2(revenue)
+    assert june.status == "fired" and june.inputs["quarter_end"] == "2026-03-31"
+    assert june.inputs["receivables_growth"] == 0.6 and june.inputs["revenue_growth"] == 0.1
+    march = india_r2(revenue[:-1])  # the latest row is March's, with its own balance sheet
+    assert march.status == "fired" and march.inputs == june.inputs
 
 
 # ---------------------------------------------------------------- 48: C2, C3 and Gap without C4
@@ -158,7 +185,7 @@ HHH_EV = D(6704451)
 
 
 @pytest.mark.parametrize(("equity", "roic", "scored"), [
-    (9_061_778, 0.054, False),  # under the 9% US discount rate, as Howard Hughes' own 6.9% is
+    (9_061_778, 0.054, False),  # Howard Hughes' own W40 ROIC (§4.6), under the 9% US discount rate
     (4_077_800, 0.12, True),
     (None, None, False),  # no equity reported, so no invested capital: ROIC unknown
 ])  # fmt: skip
@@ -172,11 +199,16 @@ def test_c2_needs_roic_above_the_discount_rate(equity: int | None, roic: float |
         assert got.value is None and got.inputs == {"missing": ["roic_above_discount"], "roic": roic, "discount": 0.09}
 
 
-def test_c3_needs_a_comparison_group_of_30() -> None:
-    assert context.c3(D("0.01"), [D(x) / 100 for x in range(-2, 3)], D(90), 30).inputs == {
-        "missing": ["population"], "return_52w": 0.01, "population": 5, "min_population": 30}  # fmt: skip
-    got = context.c3(D("0.01"), [D(x) / 100 for x in range(-15, 15)], D(90), 30)  # 30 returns, -15% to +14%
-    assert got.score == D(45) and got.inputs["population"] == 30  # 16 below, 1 tie: pct 55
+@pytest.mark.parametrize(("equity", "gated"), [(10_000, True), (9_999, False)])
+def test_c2_roic_exactly_at_the_discount_rate_is_null(equity: int, gated: bool) -> None:
+    """ROIC = TTM NOPAT 900 (op income 1,200 taxed at 25%) / invested capital 10,000 = 0.09 exactly, which doesn't
+    beat the 9% US rate; one less unit of capital does."""
+    s = series(revenue=[1000] * 8, op_income=[300] * 8, pretax_income=[300] * 8, tax_expense=[75] * 8, cash=[0] * 8,
+               total_debt=[0] * 8, total_assets=[100_000] * 8, equity=[equity] * 8)  # fmt: skip
+    assert (s.roic(0) == D("0.09")) is gated
+    got = reverse_dcf.c2(s, D(20_000), "us", C2_CFG)
+    assert ("roic_above_discount" in got.inputs.get("missing", [])) is gated
+    assert (got.score is None) is gated
 
 
 def staged(n: int) -> tuple[dict[uuid.UUID, weekly.Scored], dict[uuid.UUID, weekly.Priced]]:
@@ -191,17 +223,25 @@ def staged(n: int) -> tuple[dict[uuid.UUID, weekly.Scored], dict[uuid.UUID, week
     return scored, priced
 
 
-@pytest.mark.parametrize(("n", "min_population", "scored"), [(29, 30, False), (30, 30, True), (5, 5, True)])
+@pytest.mark.parametrize(("n", "benchmarks", "min_population", "scored"), [
+    (29, 0, 30, False),
+    (30, 0, 30, True),
+    (5, 0, 5, True),
+    (25, 5, 30, True),  # the benchmarks count toward the 30 (SPEC_ISSUES 48)
+    (24, 5, 30, False),
+])  # fmt: skip
 def test_the_weekly_run_takes_c3_min_population_from_config_and_writes_no_c4(
-    n: int, min_population: int, scored: bool, monkeypatch: pytest.MonkeyPatch
+    n: int, benchmarks: int, min_population: int, scored: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(weekly, "benchmark_returns", lambda conn, symbols, week, weeks=52: [])
+    bench = [D(-i) / 100 for i in range(1, benchmarks + 1)]
+    monkeypatch.setattr(weekly, "benchmark_returns", lambda conn, symbols, week, weeks=52: bench)
     cfgs = weekly.Configs.load()
     assert cfgs.context["c3_runup"]["min_population"] == 30 and "c4_attention" not in cfgs.context
     c3_cfg = {**cfgs.context["c3_runup"], "min_population": min_population}
     rows = weekly.context_rows(None, WEEK, replace(cfgs, context={**cfgs.context, "c3_runup": c3_cfg}), *staged(n))
     assert len(rows) == 3 * n and {r.metric_id for r in rows} == {"C1", "C2", "C3"}
-    assert all((r.inputs["score"] is not None) is scored for r in rows if r.metric_id == "C3")
+    c3_rows = [r for r in rows if r.metric_id == "C3"]
+    assert all((r.inputs["score"] is not None) is scored and r.inputs["population"] == n + benchmarks for r in c3_rows)
 
 
 def test_the_lab_gap_takes_c3_min_population_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -232,15 +272,6 @@ def test_gap_never_reads_the_c4_weight_left_in_weights_yaml() -> None:
     assert gap({"C1": D(60), "C2": None, "C3": None}, w, 2) is None
     heavy = Weights(w.version, w.families, w.signals, {**w.context, "C4": D(5)})
     assert gap({"C1": D(60), "C2": D(30), "C3": D(30)}, heavy, 2) == D(40)
-
-
-def test_gdelt_is_gone_end_to_end() -> None:
-    """No client, no allowlisted host, no seeded health row and no fixtures; the old source_health row stays (no
-    migration) and simply stops being updated."""
-    assert importlib.util.find_spec("pipeline.net.gdelt") is None
-    assert not any("gdelt" in host for host in ALLOWED_HOSTS) and "gdelt" not in seed.SOURCES
-    assert not (REPO_ROOT / "fixtures" / "gdelt").exists() and not hasattr(context, "c4")
-    assert not hasattr(weekly, "attention") and not hasattr(weekly, "mark_gdelt")
 
 
 # ---------------------------------------------------------------- 49: S7
@@ -284,6 +315,19 @@ def test_s7_counts_a_director_who_is_also_a_10pct_owner() -> None:
 def test_s7_counts_a_filing_without_a_role() -> None:
     r = s7(buy("UNKNOWN ROLE", 200_000, None), buy("DIRECTOR ONE", 100_000, "director"))
     assert r.fired and r.inputs["insiders"] == 2
+
+
+@pytest.mark.parametrize(("role", "counted"), [
+    ("10% Owner", False),
+    (" 10% owner ", False),
+    ("10% owner; 10% owner", False),
+    ("10% owner; See Remarks", True),  # a role outside the list
+    ("", True),  # an empty role is no role recorded
+])  # fmt: skip
+def test_s7_compares_roles_case_and_space_insensitively(role: str, counted: bool) -> None:
+    r = s7(buy("FILER", 200_000, role), buy("DIRECTOR ONE", 100_000, "director"))
+    assert r.fired is counted and ("FILER" in r.inputs["buyers"]) is counted
+    assert r.inputs.get("ignored_by_role", []) == ([] if counted else ["FILER"])
 
 
 def test_the_weekly_run_reads_the_filer_role() -> None:

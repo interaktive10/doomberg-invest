@@ -145,7 +145,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
 | ID | Rule | Type |
 |---|---|---|
 | R1 | Sloan accruals ≥ 10% of assets, or CFO/NI < 0.5 with positive NI | soft |
-| R2 | Receivables growth − revenue growth ≥ 20 pp YoY, both for the latest quarter against the same quarter a year earlier (SPEC_ISSUES 47) | soft |
+| R2 | Receivables growth − revenue growth ≥ 20 pp YoY, both for the latest quarter (India: the latest half-year end, as its receivables are half-yearly) against the same quarter a year earlier (SPEC_ISSUES 47) | soft |
 | R3 | Auditor change (8-K Item 4.01) in the last 12 months; NT 10-K/10-Q; going-concern or material-weakness language (verified text) | hard |
 | R4 | Share count +10% YoY without an acquisition | soft |
 | R5 | India: promoter pledge ≥ 20% of promoter holding; on ASM/GSM; related-party revenue ≥ 10% of revenue (when disclosed) | hard (pledge, ASM/GSM), soft (RPT) |
@@ -164,7 +164,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
   - at most 2 signals count per family
   - **≥ 60 requires at least 2 families**
   - initial weights are equal; the Signal Lab proposes changes, and Manzoor approves them
-- **Gap score (0–100):** C1–C4, equal weights initially.
+- **Gap score (0–100):** C1–C3, equal weights initially.
 - **Buckets:**
   | Bucket | Rule |
   |---|---|
@@ -216,7 +216,7 @@ The Capex Ledger types, plus general types:
 GitHub Actions (free minutes, cron) ──▶ pipeline/ (Python 3.12, uv, DuckDB/Polars on the runner)
   daily   : SEC events (Form 4, 8-K items, NT filings), NSE/BSE announcements, capex-desk filings → text facts
   weekly  : SEC bulk companyfacts → fundamentals · NSE bhavcopy + shareholding + PIT + results XBRL
-            → signals → red flags → candidate prices (Stooq) → context (C1–C4) → scores/buckets
+            → signals → red flags → candidate prices (Stooq) → context (C1–C3) → scores/buckets
             → evidence packs → thesis queue file → digest issue
   quarterly: 13F data sets · universe rebuild · Signal Lab re-run
         │ writes compact tables                          ▲ raw bulk files stay on the runner / Actions cache
@@ -253,7 +253,7 @@ doomberg-invest/
           context.yaml quotas.yaml guards.yaml terms.yaml subject_keys.yaml sectors.yaml categories.yaml
   db/migrations/*.sql
   pipeline/
-    net/ (http.py allowlist+rate limits+cache, sec.py, nse.py, bse.py, stooq.py, gdelt.py, fred.py, eia.py)
+    net/ (http.py allowlist+rate limits+cache, sec.py, nse.py, bse.py, stooq.py, fred.py, eia.py)
     us/ (fundamentals.py, events.py, form4.py, thirteenf.py, specials.py)
     india/ (bhavcopy.py, securities.py, shareholding.py, pit.py, pledges.py, results_xbrl.py, announcements.py, manual_import.py)
     prices/ (weekly.py, benchmarks.py)
@@ -327,7 +327,6 @@ doomberg-invest/
 | India securities list, ASM/GSM lists | NSE reports | weekly | |
 | India fundamentals | NSE corporate filings: financial results (XBRL), shareholding patterns, insider trading (PIT), pledged data, announcements | weekly (announcements daily) | NSE site needs session cookies and polite rates (≤ 1 req/3 s); BSE fallback; **manual CSV import** from the pages' own "Download (.csv)" when blocked |
 | Macro/context | FRED (free key), EIA (free key; generator additions for the capex desk) | weekly | |
-| Attention | GDELT DOC 2.0 API | weekly, candidates only | Free, no key |
 
 - **Staleness is visible:** each source has a health row. Stale beyond its SLA (US weekly 8 days; India weekly 10 days) → a banner in the app and the digest.
 

@@ -5,7 +5,6 @@ sla_days:
   sec: 8        # US weekly (companyfacts, submissions); the daily events run refreshes it too
   twelvedata: 8 # US weekly prices (candidate set and benchmarks; Stooq, then Yahoo until 2026-10: SPEC_ISSUES 37, 38)
   yahoo: 8      # the same, with PRICE_SOURCE=yahoo
-  gdelt: 8      # weekly attention counts
   fred: 8       # weekly macro context
   eia: 8        # the Capex Desk's weekly input
   nse: 10       # India weekly

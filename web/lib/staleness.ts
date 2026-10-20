@@ -8,7 +8,6 @@ export const SLA_DAYS: Record<string, number> = {
   sec: 8,
   twelvedata: 8,
   yahoo: 8,
-  gdelt: 8,
   fred: 8,
   eia: 8,
   nse: 10,

@@ -64,18 +64,25 @@ def r1(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
 def r2(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
     """Receivables growth - revenue growth >= 20 pp YoY. Receivables at the quarter end follow that quarter's sales,
     so `revenue_basis: quarter` compares them with the same quarter's revenue a year earlier; TTM revenue lags a fast
-    grower's receivables and fired the flag on growth alone (`ttm`, before SPEC_ISSUES 47)."""
+    grower's receivables and fired the flag on growth alone (`ttm`, before SPEC_ISSUES 47). India's receivables are
+    half-yearly: a June or December row carries the half-year end's (Series.point), so the quarter basis compares
+    them with that March or September quarter's revenue (PR 2 review math-L1)."""
     s = ctx.series
     basis = str(c.get("revenue_basis", "ttm"))
-    g_rec = growth(s.point("receivables", 0), s.point("receivables", 4)) if s.year_back_ok(0) else None
-    g_rev = s.quarterly_yoy("revenue", 0) if basis == "quarter" else s.ttm_yoy("revenue", 0)
+    carried = s.value("receivables", 0) is None and s.point("receivables", 0) is not None
+    lag = 1 if basis == "quarter" and carried else 0  # the quarter the receivables belong to
+    g_rec = growth(s.point("receivables", lag), s.point("receivables", lag + 4)) if s.year_back_ok(lag) else None
+    g_rev = s.quarterly_yoy("revenue", lag) if basis == "quarter" else s.ttm_yoy("revenue", 0)
     if g_rec is None or g_rev is None:
         return FlagResult(
             "R2", "unknown", _hard(c), {"missing": ["receivables_growth" if g_rec is None else "revenue_growth"]}
         )
     gap_pp = (g_rec - g_rev) * 100
-    inputs = {"receivables_growth": num(g_rec), "revenue_growth": num(g_rev), "gap_pp": num(gap_pp),
-              "revenue_basis": basis}  # fmt: skip
+    inputs: dict[str, Any] = {"receivables_growth": num(g_rec), "revenue_growth": num(g_rev), "gap_pp": num(gap_pp),
+                              "revenue_basis": basis}  # fmt: skip
+    q = s.at(lag)
+    if basis == "quarter" and q is not None:
+        inputs["quarter_end"] = q.end.isoformat()
     return FlagResult(
         "R2", "fired" if gap_pp >= _dec(c, "receivables_minus_revenue_growth_pp") else "clear", _hard(c), inputs
     )
