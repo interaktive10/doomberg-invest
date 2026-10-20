@@ -6,7 +6,7 @@ import type { Baseline, ScorePoint } from "@/lib/candidates";
 import type { LabPricesRun } from "@/lib/lab";
 import type { ScreenSpec } from "@/lib/screener";
 import type { SearchHit } from "@/lib/search";
-import type { ContextRow, SignalRow } from "@/lib/why";
+import { firingTimeline, type ContextRow, type SignalRow } from "@/lib/why";
 import type { QuarterRow, SeriesPoint } from "@/lib/metrics";
 import {
   dayAfter,
@@ -289,7 +289,7 @@ export async function latestScore(id: string): Promise<{ week_end: string; evide
 
 export interface WhyData {
   signals: SignalRow[]; // the scored week's signal rows
-  scoredWeeks: string[]; // the weeks the company was scored or fired a signal, through it ("firing since" walks them)
+  weeks: string[]; // every week with a scores row or any signal row, through the scored week (lib/why.ts firingTimeline)
   fired: Map<string, Set<string>>; // signal -> the weeks it fired, through the scored week
   flags: { flag_id: string; hard: boolean; inputs: Record<string, unknown> | null }[]; // fired in the scored week
   context: ContextRow[];
@@ -302,11 +302,11 @@ export interface WhyData {
  * nothing after the scored week. */
 export async function whyScore(id: string, score: { week_end: string; weights_version: string }): Promise<WhyData> {
   const week = score.week_end;
-  const [signals, firedRows, weeks, flags, context, version, lab] = await Promise.all([
+  const [signals, history, scored, flags, context, version, lab] = await Promise.all([
     db().from("signal_values").select("signal_id, fired, strength, inputs").eq("company_id", id).eq("week_end", week)
       .order("signal_id"),
-    allPages<{ week_end: string; signal_id: string }>((a, b) =>
-      db().from("signal_values").select("week_end, signal_id").eq("company_id", id).eq("fired", true).lte("week_end", week)
+    allPages<{ week_end: string; signal_id: string; fired: boolean }>((a, b) =>
+      db().from("signal_values").select("week_end, signal_id, fired").eq("company_id", id).lte("week_end", week)
         .order("week_end").order("signal_id").range(a, b), 1_000_000), // prettier-ignore
     allPages<{ week_end: string }>((a, b) =>
       db().from("scores").select("week_end").eq("company_id", id).lte("week_end", week).order("week_end").range(a, b), 1_000_000),
@@ -317,12 +317,9 @@ export async function whyScore(id: string, score: { week_end: string; weights_ve
     db().from("weights_versions").select("weights").eq("version", score.weights_version).maybeSingle(),
     labResults(),
   ]);
-  const fired = new Map<string, Set<string>>();
-  for (const r of firedRows) fired.set(r.signal_id, (fired.get(r.signal_id) ?? new Set()).add(r.week_end));
   return {
     signals: rows<SignalRow>(signals),
-    scoredWeeks: [...new Set([...weeks.map((w) => w.week_end), ...firedRows.map((r) => r.week_end)])].sort(),
-    fired,
+    ...firingTimeline(scored.map((w) => w.week_end), history),
     flags: rows(flags),
     context: rows<ContextRow>(context),
     weights: one<{ weights: Record<string, unknown> }>(version)?.weights ?? null,

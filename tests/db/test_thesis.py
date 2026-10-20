@@ -76,7 +76,9 @@ def week_rows(conn: psycopg.Connection[Any], cid: uuid.UUID, evidence: str = "62
                  "(%s, %s, 'C2', 0.06, null, %s)", (cid, W, c2))  # fmt: skip
 
 
-def verified_fact(conn: psycopg.Connection[Any], cid: uuid.UUID, published: datetime, quote: str) -> uuid.UUID:
+def verified_fact(conn: psycopg.Connection[Any], cid: uuid.UUID, published: datetime, quote: str,
+                  stored: datetime | None = None) -> uuid.UUID:  # fmt: skip
+    """A verified order-win fact; `stored` is when the text run wrote it (facts.created_at; now by default)."""
     doc = conn.execute(
         "insert into documents (company_id, kind, url, published_at, sha256, raw_path) values "
         "(%s, 'EX-99.1', %s, %s, 'x', 'raw') returning id",
@@ -85,9 +87,10 @@ def verified_fact(conn: psycopg.Connection[Any], cid: uuid.UUID, published: date
     assert doc is not None
     row = conn.execute(
         "insert into facts (company_id, document_id, fact_type, subject, subject_key, value_num, unit, as_of, quote, "
-        "char_start, char_end, extraction_model, confidence, verification_status) values (%s, %s, 'order_win', "
-        "'order', 'order_win:hyperscaler', 600000000, 'usd', %s, %s, 0, %s, 'test', 0.9, 'verified') returning id",
-        (cid, doc[0], published.date(), quote, len(quote)),
+        "char_start, char_end, extraction_model, confidence, verification_status, created_at) values (%s, %s, "
+        "'order_win', 'order', 'order_win:hyperscaler', 600000000, 'usd', %s, %s, 0, %s, 'test', 0.9, 'verified', "
+        "coalesce(%s, now())) returning id",
+        (cid, doc[0], published.date(), quote, len(quote), stored),
     ).fetchone()
     assert row is not None
     return uuid.UUID(str(row[0]))
@@ -639,8 +642,8 @@ def diff(conn: psycopg.Connection[Any], cid: uuid.UUID, fact: uuid.UUID, kind: s
 
 def test_what_changed_reads_this_and_last_week_and_the_weeks_facts(conn: psycopg.Connection[Any]) -> None:
     """Overhaul PR 5: the previous scored week against this one (a fired red flag counts, an `unknown` one doesn't),
-    then the scope's verified facts published in the week (point in time: not after the week's cutoff), with their
-    diffs, reaffirmed ones left out; the funnel counts the week's stored rows."""
+    then the scope's verified facts stored in the week (point in time: published and stored before the week's cutoff),
+    with their diffs, reaffirmed ones left out; the funnel counts the week's stored rows."""
     prev = W - timedelta(days=7)
     mtdr = company(conn, "00000000-0000-4000-8000-0000000000a1", "Matador Test", "MTDR")
     quiet = company(conn, "00000000-0000-4000-8000-0000000000a2", "Quiet Test", "QUIE")
@@ -653,13 +656,17 @@ def test_what_changed_reads_this_and_last_week_and_the_weeks_facts(conn: psycopg
     scored_week(conn, flag, prev, "52", "early", "S1 S9")
     scored_week(conn, flag, W, "52", "early", "S1 S9", flags=(("R1", False, "fired"),))
     scored_week(conn, other, W, "30", "none", "S1")
-    raised = verified_fact(conn, mtdr, datetime(2026, 9, 15, 20, tzinfo=UTC), "a $600 million order from a customer")
+
+    def fact(cid: uuid.UUID, published: datetime, quote: str) -> uuid.UUID:
+        return verified_fact(conn, cid, published, quote, stored=published + timedelta(hours=2))
+
+    raised = fact(mtdr, datetime(2026, 9, 15, 20, tzinfo=UTC), "a $600 million order from a customer")
     diff(conn, mtdr, raised, "raised", "$400.0M → $600.0M (+50.0%)")
-    same = verified_fact(conn, mtdr, datetime(2026, 9, 16, 20, tzinfo=UTC), "the order book is unchanged at $600m")
+    same = fact(mtdr, datetime(2026, 9, 16, 20, tzinfo=UTC), "the order book is unchanged at $600m")
     diff(conn, mtdr, same, "reaffirmed", "$600.0M → $600.0M (+0.0%)")
-    verified_fact(conn, mtdr, datetime(2026, 9, 19, 1, tzinfo=UTC), "published after the week's cutoff")
-    verified_fact(conn, mtdr, datetime(2026, 9, 10, 20, tzinfo=UTC), "published before the week began")
-    verified_fact(conn, other, datetime(2026, 9, 15, 20, tzinfo=UTC), "a company outside the scope")
+    fact(mtdr, datetime(2026, 9, 19, 1, tzinfo=UTC), "published after the week's cutoff")
+    fact(mtdr, datetime(2026, 9, 10, 20, tzinfo=UTC), "published and read before the week began")
+    fact(other, datetime(2026, 9, 15, 20, tzinfo=UTC), "a company outside the scope")
     _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
     assert "## This week\n\nUS 4 → stage 3 → candidates 0 → new 0 · 1 of 3 fire one family, capped at 55\n" in body
     section = body.split("## What changed\n\n", 1)[1].split("\n\n## ", 1)[0]
@@ -668,6 +675,27 @@ def test_what_changed_reads_this_and_last_week_and_the_weeks_facts(conn: psycopg
         f"- [FLAG](/company/{flag}) R1 soft flag",
         f"- [MTDR](/company/{mtdr}) order win raised: $400.0M → $600.0M (+50.0%)",
     ]  # fmt: skip
+
+
+def test_a_fact_read_a_week_late_is_in_the_next_digest_once(conn: psycopg.Connection[Any]) -> None:
+    """PR 5 review: the daily reader defers documents, so a fact is often stored a week or more after its filing was
+    published. What changed selects facts by when they were stored (and published before the week's cutoff), so one
+    published in week 1 and read in week 2 is in week 2's digest, and in no other."""
+    w1, w2, w3 = W - timedelta(days=7), W, W + timedelta(days=7)
+    cid = company(conn, "00000000-0000-4000-8000-0000000000a5", "Late Read Test", "LATE")
+    for week in (w1, w2, w3):
+        scored_week(conn, cid, week, "62", "candidate", "S1 S9")  # nothing else changes
+    # published in week 1, read in week 2
+    verified_fact(conn, cid, datetime(2026, 9, 9, 20, tzinfo=UTC), "a $600 million order from a customer",
+                  stored=datetime(2026, 9, 15, 2, tzinfo=UTC))  # fmt: skip
+    line = f"- [LATE](/company/{cid}) new verified order win: order"
+    seen = {}
+    for week in (w1, w2, w3):
+        _, body = digest.build(conn, week, now=datetime.combine(week + timedelta(days=1), datetime.min.time(), UTC))
+        seen[week] = body.split("## What changed\n\n", 1)[1].split("\n\n## ", 1)[0].count("new verified order win")
+    assert seen == {w1: 0, w2: 1, w3: 0}
+    _, body = digest.build(conn, w2, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
+    assert line in body
 
 
 def test_the_digest_never_carries_private_fields(conn: psycopg.Connection[Any]) -> None:

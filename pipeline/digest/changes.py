@@ -7,9 +7,9 @@ Two kinds of line, at most MAX_LINES in all, each '- [TICKER](APP_URL/company/<i
    62 → 48" or "now priced in (Gap 48)". The week's shortlist comes first, in rank order. Then a bucket change, then an
    Evidence move of EVIDENCE_MOVE or more (exactly 10 counts, as for a dismissal's hold), then a signal or red flag
    that started or stopped; the bigger Evidence move first within each. A week without scores has no such lines.
-2. The scope's new verified facts of the week (documents published in the 7 days to the week's cutoff, the
-   pipeline.db.pit rule), newest first, with their diff (Appendix F.6): raised, lowered, widened, narrowed, changed or
-   new; a reaffirmed one is left out.
+2. The scope's new verified facts of the week (stored in the 7 days to the week's cutoff, from a document published
+   before it: the pipeline.db.pit rule; a fact read late still comes once), newest document first, with their diff
+   (Appendix F.6): raised, lowered, widened, narrowed, changed or new; a reaffirmed one is left out.
 
 No LLM, and no price moves: Gap is named only as a level ("now priced in (Gap 48)"), never a return or a gain. The rows
 read here are scores, signal_values, redflag_values, shortlists, facts, documents and diffs, and the ids of companies
@@ -230,8 +230,8 @@ def week_rows(scores: Sequence[Mapping[str, Any]], fired: Sequence[Mapping[str, 
 
 def gather(conn: psycopg.Connection[Any], week: date, companies: Mapping[UUID, Company]
            ) -> tuple[list[Name], list[FactNews]]:  # fmt: skip
-    """The scope's rows of `week` and of the previous scored week, and the week's verified facts. Without scores this
-    week, no company lines (everyone would read as not scored); the facts still come."""
+    """The scope's rows of `week` and of the previous scored week, and the verified facts stored in the week. Without
+    scores this week, no company lines (everyone would read as not scored); the facts still come."""
     scored = thesis_repo.scored(conn, week) > 0
     prev = thesis_repo.previous_scored_week(conn, week)
     weeks = [week] + ([prev] if prev is not None else [])

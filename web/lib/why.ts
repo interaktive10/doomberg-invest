@@ -103,13 +103,26 @@ export function capWords(b: Breakdown): string {
     : `${one}; at ${b.uncapped.toFixed(0)} the cap does not bind yet.${flags}`;
 }
 
+/** firingSince's inputs from the stored rows: the timeline (every week with a scores row or any signal_values row) and
+ * each signal's fired weeks. repo.prune_scoring_history drops old bucket 'none' scores rows but keeps the first unfired
+ * signal_values row after each firing streak, so that row keeps the break in the timeline (PR 5 review). */
+export function firingTimeline(
+  scoredWeeks: readonly string[],
+  signalRows: readonly { week_end: string; signal_id: string; fired: boolean }[],
+): { weeks: string[]; fired: Map<string, Set<string>> } {
+  const fired = new Map<string, Set<string>>();
+  for (const r of signalRows) if (r.fired) fired.set(r.signal_id, (fired.get(r.signal_id) ?? new Set<string>()).add(r.week_end));
+  return { weeks: [...new Set([...scoredWeeks, ...signalRows.map((r) => r.week_end)])].sort(), fired };
+}
+
 /** The first week of the signal's current unbroken run of fired weeks, ending at `week`: walking back through the
- * company's scored weeks, a scored week where it did not fire ends the run. null when it did not fire in `week`. */
-export function firingSince(week: string, scoredWeeks: readonly string[], firedWeeks: ReadonlySet<string> | readonly string[]): string | null {
+ * company's weeks (lib/data.ts whyScore: a scores row or any stored signal row), a week where it did not fire ends the
+ * run. null when it did not fire in `week`. */
+export function firingSince(week: string, weeks: readonly string[], firedWeeks: ReadonlySet<string> | readonly string[]): string | null {
   const fired = firedWeeks instanceof Set ? firedWeeks : new Set(firedWeeks as readonly string[]);
   if (!fired.has(week)) return null;
   let since = week;
-  for (const w of [...new Set(scoredWeeks)].filter((x) => x < week).sort().reverse()) {
+  for (const w of [...new Set(weeks)].filter((x) => x < week).sort().reverse()) {
     if (!fired.has(w)) break;
     since = w;
   }

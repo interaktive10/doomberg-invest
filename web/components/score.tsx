@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { WhyData } from "@/lib/data";
 import { num, pct } from "@/lib/format";
 import { verdict, type Verdict } from "@/lib/lab";
-import { CONTEXT_NAME, dcfRows, FAMILY_LABEL, label, RED_FLAG_NAME, SIGNAL_NAME } from "@/lib/labels";
+import { BUCKET_LABEL, CONTEXT_NAME, dcfRows, FAMILY_LABEL, label, RED_FLAG_NAME, SIGNAL_NAME } from "@/lib/labels";
 import { breakdown, capWords, EVIDENCE_DIVISOR, firingSince, gapParts, inputRows, SOFT_FLAG_PENALTY, type InputRow } from "@/lib/why";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +56,7 @@ export function WhyThisScore({
   score,
   why,
 }: {
-  score: { week_end: string; evidence: number | string; gap: number | string | null; weights_version: string } | null;
+  score: { week_end: string; evidence: number | string; gap: number | string | null; bucket: string; weights_version: string } | null;
   why: WhyData | null;
 }) {
   if (score === null || why === null) {
@@ -126,7 +126,7 @@ export function WhyThisScore({
           ) : (
             <ul className="flex flex-col">
               {fired.map((s) => {
-                const since = firingSince(score.week_end, why.scoredWeeks, why.fired.get(s.signal_id) ?? new Set());
+                const since = firingSince(score.week_end, why.weeks, why.fired.get(s.signal_id) ?? new Set());
                 const v = verdict(s.signal_id, why.lab);
                 return (
                   <li key={s.signal_id} className="flex flex-col gap-2 border-t border-line py-3 first:border-t-0 first:pt-0">
@@ -209,7 +209,7 @@ export function WhyThisScore({
           </ul>
           <p className="mt-2 text-[13px] text-fg">
             {gap.mean === null
-              ? `Gap needs at least 2 of C1-C3; with ${gap.parts.filter((p) => p.score !== null).length}, it has none (bucket "No bucket").`
+              ? `Gap needs at least 2 of C1-C3; with ${gap.parts.filter((p) => p.score !== null).length}, it has none (bucket: ${label(BUCKET_LABEL, score.bucket)}).`
               : `Gap = the mean of ${gap.parts.filter((p) => p.score !== null).map((p) => p.id).join(", ")} = ${gap.mean.toFixed(1)}`}
             {gap.mean !== null ? (
               <span className="text-muted">

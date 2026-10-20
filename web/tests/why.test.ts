@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breakdown, capWords, firingSince, gapParts, inputRows, type SignalRow } from "@/lib/why";
+import { breakdown, capWords, firingSince, firingTimeline, gapParts, inputRows, type SignalRow } from "@/lib/why";
 
 // Overhaul PR 5: the Company page's "Why this score" (BRIEF §4.8): Evidence by family, the one-family cap in words,
 // each signal's stored inputs (named when known, raw otherwise), how long it has fired, and the Gap's parts.
@@ -54,8 +54,22 @@ describe("why this score", () => {
     expect(firingSince("2026-10-02", weeks, new Set(weeks))).toBe("2026-09-04");
     expect(firingSince("2026-10-02", weeks, ["2026-10-02"])).toBe("2026-10-02");
     expect(firingSince("2026-10-02", weeks, ["2026-09-25"])).toBeNull(); // not firing this week
-    // a week the company wasn't scored doesn't break the run; later weeks are not read
+    // a week with neither a scores row nor a signal row (a skipped run) doesn't break the run; later weeks are not read
     expect(firingSince("2026-09-25", ["2026-09-04", "2026-09-25", "2026-10-02"], ["2026-09-04", "2026-09-25"])).toBe("2026-09-04");
+  });
+
+  it("a pruned week's unfired signal row still breaks the run (PR 5 review)", () => {
+    // S1 fires in weeks 1-3; week 4's scores row was pruned (bucket none, older than 13 weeks) but its unfired S1 row
+    // is kept (repo.prune_scoring_history); S1 fires again from week 5.
+    const scored = ["2026-01-02", "2026-01-09", "2026-01-16", "2026-01-30", "2026-02-06"];
+    const rows = ["2026-01-02", "2026-01-09", "2026-01-16", "2026-01-23", "2026-01-30", "2026-02-06"].map((w) => ({
+      week_end: w, signal_id: "S1", fired: w !== "2026-01-23",
+    })); // prettier-ignore
+    const t = firingTimeline(scored, rows);
+    expect(t.weeks).toEqual(["2026-01-02", "2026-01-09", "2026-01-16", "2026-01-23", "2026-01-30", "2026-02-06"]);
+    expect(firingSince("2026-02-06", t.weeks, t.fired.get("S1") ?? new Set<string>())).toBe("2026-01-30");
+    // reading only the fired rows and the scores weeks reached back over the break
+    expect(firingSince("2026-02-06", scored, t.fired.get("S1") ?? new Set<string>())).toBe("2026-01-02");
   });
 
   it("splits the Gap into C1-C3 with the missing parts marked", () => {

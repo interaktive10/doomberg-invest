@@ -5,6 +5,7 @@ import { GroupSection } from "@/components/thesis-list";
 import { requireUser } from "@/lib/auth";
 import { ensureReviews, latestDigest, sourceHealth, theses, thesisFigures } from "@/lib/data";
 import { homeSections } from "@/lib/home";
+import { lateSources } from "@/lib/staleness";
 import { group, markMoved } from "@/lib/theses";
 
 export const metadata = { title: "This week" };
@@ -20,6 +21,7 @@ export default async function Home() {
   const needs = all.filter((t) => group(t) === "needs");
   const figures = await thesisFigures(needs);
   const { funnel, changed } = homeSections(digest?.body_md ?? "");
+  const now = new Date();
   return (
     <Page title="This week" description={digest ? `${digest.title} · week ending ${digest.week_end}` : "No digest yet."}>
       <section aria-labelledby="funnel" className="rounded-md border border-line bg-panel px-4 py-2.5">
@@ -38,9 +40,11 @@ export default async function Home() {
       <Section title="What changed" id="changed" description="Each company's biggest change this week and why, then new verified facts and guidance or backlog changes.">
         {changed ? <Markdown text={changed} /> : <Empty>Nothing to compare yet: What changed comes with the weekly digest.</Empty>}
       </Section>
-      <div className="overflow-hidden rounded-md">
-        <StaleBanner sources={sources} now={new Date()} />
-      </div>
+      {lateSources(sources, now).length > 0 ? (
+        <div className="overflow-hidden rounded-md">
+          <StaleBanner sources={sources} now={now} />
+        </div>
+      ) : null}
     </Page>
   );
 }

@@ -150,4 +150,4 @@
     - **Research cards** (closes 35). The Research button records a research entry (a thesis in research by `manual`, no card) for the latest scored week. The queue packs open entries after the shortlist, oldest first, within its 10 packs (one that doesn't fit waits a week); ingest fills the entry in place (the same row takes the card, author routine or fallback, the validation result and the card's week), so a re-run updates the same row (M6-03) and an entry whose card fails validation keeps no card and can't be accepted.
     - **Quarterly.** quarterly.yml runs `python -m pipeline.us.backfill` for the latest candidate stage after 13F and before the re-seed (about 17 minutes a quarter); its rows are the daily run's own, so names read before insert nothing twice. backfill.yml and diagnose.yml stay.
 
-    **Applied 2026-10-20 (Manzoor):** BRIEF §4.12 and §6 (Home) now say so. To be done at the next spec edit: §4.9 step 1 names the research entries after the shortlist.
+    **Applied 2026-10-20 (Manzoor):** BRIEF §4.9 (weekly flow steps 1 and 3), §4.12, and §6 (the Home, Company and Theses rows) now say so.
