@@ -1,5 +1,5 @@
 """Weekly scoring run (BRIEF §2.1 "weekly", §4.4-§4.8): signals -> red flags -> Evidence -> candidate prices
--> context C1-C4 -> Gap -> buckets -> shortlist. `python -m pipeline.signals.weekly [--week YYYY-MM-DD]
+-> context C1-C3 -> Gap -> buckets -> shortlist. `python -m pipeline.signals.weekly [--week YYYY-MM-DD]
 [--markets us,in]`.
 
 Everything as of week W reads through pipeline.db.pit.as_of(W), so a re-run over the same data gives the same rows
@@ -29,7 +29,6 @@ from types import ModuleType
 from typing import Any
 from uuid import UUID
 
-import httpx
 import psycopg
 import yaml
 
@@ -51,7 +50,6 @@ from pipeline.db.models import (
 from pipeline.db.pit import as_of, cutoff_for, select_as_of
 from pipeline.db.weights import read as read_weights
 from pipeline.db.weights import record_weights_in_use
-from pipeline.net.gdelt import GdeltClient, GdeltError
 from pipeline.net.http import HttpClient
 from pipeline.net.stooq import Bar, parse_csv
 from pipeline.net.twelvedata import TwelveDataClient
@@ -71,8 +69,6 @@ BATCH = 300
 MARKETS = ("us", "in")
 US_PRICE_MAX_SYMBOLS = 400  # §4.4, benchmarks included
 US_PRICE_FILL_MAX = 250  # P8: one-family filler is priced only up to this many symbols, benchmarks included
-GDELT_MAX_QUERIES = 100  # ~8 minutes at GDELT's 1 request / 5 s; the rest reuse a count under 28 days old
-GDELT_REUSE_DAYS = 28
 # A site that fails this many requests in a row is down or refusing the runner: it isn't asked again this run. Every
 # request waits for the site's rate limit and up to the 60 s timeout, and the first live run (2026-09-29) spent the
 # scores job's 40 minutes without finishing.
@@ -114,10 +110,6 @@ class ScoresStats:
     bench_failed: int = 0
     bench_skipped: int = 0
     source_splits: list[str] = field(default_factory=list)  # splits a re-adjusted price history showed
-    gdelt_queried: int = 0
-    gdelt_reused: int = 0
-    gdelt_failed: int = 0
-    gdelt_not_asked: int = 0  # the budget (failures count) was spent, or GDELT failed MAX_FAILURES_IN_A_ROW in a row
     unconfirmed_jumps: list[str] = field(default_factory=list)
     buckets: dict[str, int] = field(default_factory=dict)
     shortlist: list[str] = field(default_factory=list)
@@ -176,7 +168,7 @@ def holding(o: OwnershipRow) -> Holding:
 
 def insider(i: InsiderEvent) -> Insider:
     return Insider(str(i.company_id), i.person, i.event_date, i.filed_at, i.kind, i.value, i.planned, i.source_url,
-                   i.currency, i.amends)  # fmt: skip
+                   i.currency, i.amends, i.role)  # fmt: skip
 
 
 def event(e: CorpEvent) -> Event:
@@ -361,6 +353,7 @@ def score_company(
         sector=cross.sectors.get((c.market, c.sector)) if c.sector else SectorView(None),
         capex=cross.capex.get(c.id, CapexView()),
         surveillance=surveillance,
+        sic=c.sic,
     )
     results = registry.evaluate(ctx, modules)
     fired = {k: v.fired for k, v in results.items()}
@@ -493,17 +486,6 @@ def mark_prices(conn: psycopg.Connection[Any], stats: ScoresStats, source: str) 
         repo.mark_source_error(conn, source, ("stale: " if stale else "") + msg, stale)
 
 
-def mark_gdelt(conn: psycopg.Connection[Any], stats: ScoresStats) -> None:
-    """source_health for GDELT, which nothing recorded before (the first live run, 2026-10-01, queried it and Settings
-    still said "never succeeded"): any answer marks success; a run whose queries all failed records the first errors,
-    not stale (C4 re-uses a count under 28 days old); a run that asked nothing leaves it as it was."""
-    if stats.gdelt_queried:
-        repo.mark_source_success(conn, "gdelt")
-    elif stats.gdelt_failed:
-        errors = [e for e in stats.errors if e.startswith("gdelt ")]
-        repo.mark_source_error(conn, "gdelt", f"{stats.gdelt_failed} queries failed: " + "; ".join(errors[:3]), False)
-
-
 def shares_history(s: Series) -> list[tuple[date, Decimal]]:
     out = []
     for q in s.quarters:
@@ -605,7 +587,6 @@ def run(
     root: Path = REPO_ROOT,
     imports: Path | None = None,
     price_limit: int = US_PRICE_MAX_SYMBOLS,
-    gdelt_limit: int = GDELT_MAX_QUERIES,
     markets: Collection[str] = MARKETS,
 ) -> ScoresStats:
     """A market not in `markets` is skipped entirely: no signals, prices, context or scores. A re-run replaces the
@@ -721,11 +702,8 @@ def run(
             priced[sc.company.id] = p
 
     progress(stats, t0, f"{len(priced)} priced")
-    ctx_rows = context_rows(conn, week, cfgs, scored, priced, http, gdelt_limit, stats)
+    ctx_rows = context_rows(conn, week, cfgs, scored, priced)
     repo.upsert_context_values(conn, ctx_rows)
-    mark_gdelt(conn, stats)
-    progress(stats, t0, f"gdelt {stats.gdelt_queried} queried, {stats.gdelt_failed} failed, {stats.gdelt_reused} "
-                        f"reused, {stats.gdelt_not_asked} not asked")  # fmt: skip
     gaps = gap_scores(ctx_rows, cfgs)
 
     score_rows, ranked = [], []
@@ -800,32 +778,22 @@ def context_rows(
     cfgs: Configs,
     scored: Mapping[UUID, Scored],
     priced: Mapping[UUID, Priced],
-    http: HttpClient | None,
-    gdelt_limit: int,
-    stats: ScoresStats,
 ) -> list[ContextValue]:
     rows: list[ContextValue] = []
-    c3_cfg, c4_cfg = cfgs.context["c3_runup"], cfgs.context["c4_attention"]
-    # one GDELT budget for both markets, spent on the highest Evidence first (M4 review R1-F7)
-    by_evidence = sorted(priced, key=lambda cid: (-scored[cid].evidence.score, str(cid)))
-    counts = attention(
-        conn, week, [scored[cid].company for cid in by_evidence], http, gdelt_limit, stats,
-        int(c4_cfg["lookback_days"]),
-    )  # fmt: skip
+    c3_cfg = cfgs.context["c3_runup"]
+    ran, min_pop = Decimal(str(c3_cfg["already_ran_pct"])), int(c3_cfg["min_population"])
     for market in ("us", "in"):
         ids = [cid for cid in priced if scored[cid].company.market == market]
         if not ids:
             continue
         pop = [r for r in (priced[cid].ret_52w for cid in ids) if r is not None]
         pop += benchmark_returns(conn, cfgs.context["benchmarks"][market], week, int(c3_cfg["lookback_weeks"]))
-        count_pop = [counts[cid] for cid in ids if cid in counts]
         for cid in ids:
             p = priced[cid]
             metrics = {
                 "C1": p.c1,
                 "C2": context.Metric(p.c2.value, None, p.c2.score, p.c2.inputs),
-                "C3": context.c3(p.ret_52w, pop, Decimal(str(c3_cfg["already_ran_pct"]))),
-                "C4": context.c4(counts.get(cid), count_pop),
+                "C3": context.c3(p.ret_52w, pop, ran, min_pop),
             }
             for mid, m in metrics.items():
                 rows.append(
@@ -839,45 +807,6 @@ def context_rows(
                     )
                 )
     return rows
-
-
-def attention(
-    conn: psycopg.Connection[Any],
-    week: date,
-    companies: Sequence[Company],
-    http: HttpClient | None,
-    limit: int,
-    stats: ScoresStats,
-    days: int = 90,
-) -> dict[UUID, int]:
-    """GDELT article counts over the last `days` (config/context.yaml c4_attention.lookback_days): re-used for 28
-    days, at most `limit` new queries a run, spent in the caller's order (highest Evidence first)."""
-    reuse = repo.recent_attention(conn, week, week - timedelta(days=GDELT_REUSE_DAYS))
-    out: dict[UUID, int] = {}
-    client = GdeltClient(http) if http is not None else None
-    failures = 0  # in a row
-    for c in companies:
-        assert c.id is not None
-        if c.id in reuse:
-            out[c.id] = reuse[c.id]
-            stats.gdelt_reused += 1
-            continue
-        if client is None:
-            continue
-        if stats.gdelt_queried + stats.gdelt_failed >= limit or failures >= MAX_FAILURES_IN_A_ROW:
-            stats.gdelt_not_asked += 1
-            continue
-        try:
-            out[c.id] = client.article_count(
-                c.name, c.ticker if c.market == "us" else c.nse_symbol, c.market, days=days
-            )
-            stats.gdelt_queried += 1
-            failures = 0
-        except (GdeltError, httpx.HTTPError) as e:
-            stats.gdelt_failed += 1
-            failures += 1
-            stats.errors.append(f"gdelt {c.name}: {type(e).__name__}: {e}"[:200])
-    return out
 
 
 def gap_scores(rows: Sequence[ContextValue], cfgs: Configs) -> dict[UUID, Decimal | None]:

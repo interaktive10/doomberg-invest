@@ -1,9 +1,9 @@
-# PROTECTED (BRIEF Appendix D). Context metrics C1-C4, BRIEF §4.7; US benchmarks, BRIEF §4.4.
+# PROTECTED (BRIEF Appendix D). Context metrics C1-C3, BRIEF §4.7; US benchmarks, BRIEF §4.4.
 c1:
   history_years: 10
 c2_reverse_dcf:
   years: 10
-  discount_rate: {us: 0.09, in: 0.12}
+  discount_rate: {us: 0.09, in: 0.12}  # also the ROIC (§4.6) C2 needs to beat, else C2 is null (SPEC_ISSUES 48)
   terminal_growth: {us: 0.025, in: 0.045}
   margin_floor: 0.02
   margin_median_years: 5
@@ -25,9 +25,7 @@ c2_reverse_dcf:
 c3_runup:
   lookback_weeks: 52
   already_ran_pct: 90
-c4_attention:
-  lookback_days: 90
-  source: gdelt_doc_2
+  min_population: 30  # C3 null when its comparison group (candidate set + benchmarks) is smaller (SPEC_ISSUES 48)
 benchmarks:
   us: ["^spx", XLK, XLI, XLU, XLE, XLB, XLV, XLF, XLY, XLP, XLRE, XLC]
   in: ["NIFTY 50", "NIFTY 500"]

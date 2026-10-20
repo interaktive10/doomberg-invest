@@ -56,6 +56,7 @@ class Insider:
     source_url: str
     currency: str | None = None
     amends: date | None = None  # a Form 4/A: the filing date of the Form 4 it amends (insiders.latest_versions)
+    role: str | None = None  # the filer's roles as filed, "; "-joined ("director; 10% owner"); None if not given
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,7 @@ class Ctx:
     capex: CapexView | None = None
     surveillance: str | None = None  # India ASM/GSM reason (R5)
     fired: Mapping[str, bool] = field(default_factory=dict)  # signals computed earlier this week
+    sic: str | None = None  # US SIC code (S4's exclusion): the company's current one, not point-in-time
 
     def section(self, name: str) -> Mapping[str, Any]:
         sec: Mapping[str, Any] = self.cfg[name]
