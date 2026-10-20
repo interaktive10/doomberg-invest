@@ -119,6 +119,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
   - NSE equity series `EQ` (from NSE's securities list)
   - excludes SME, and anything on the ASM/GSM surveillance lists
   - candidate stage: market cap ≥ ₹500 crore (price × shares from shareholding filings)
+  - **paused** (SPEC_ISSUES 46): the India code and stored data stay, but no schedule fetches India and the weekly run scores the US only; SPEC_ISSUES 46 says how to restart it
 - **Capex Desk:**
   - the 60 US companies from the Capex Ledger seed (Appendix H)
   - the India capex-linked seed (Appendix H), resolved to NSE symbols in M0
@@ -144,7 +145,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
 | ID | Rule | Type |
 |---|---|---|
 | R1 | Sloan accruals ≥ 10% of assets, or CFO/NI < 0.5 with positive NI | soft |
-| R2 | Receivables growth − revenue growth ≥ 20 pp YoY | soft |
+| R2 | Receivables growth − revenue growth ≥ 20 pp YoY, both for the latest quarter against the same quarter a year earlier (SPEC_ISSUES 47) | soft |
 | R3 | Auditor change (8-K Item 4.01) in the last 12 months; NT 10-K/10-Q; going-concern or material-weakness language (verified text) | hard |
 | R4 | Share count +10% YoY without an acquisition | soft |
 | R5 | India: promoter pledge ≥ 20% of promoter holding; on ASM/GSM; related-party revenue ≥ 10% of revenue (when disclosed) | hard (pledge, ASM/GSM), soft (RPT) |
@@ -154,9 +155,8 @@ The app then asks one question: **is this already priced in?** Candidates are ge
 | ID | Metric | What it tells you |
 |---|---|---|
 | C1 | Valuation percentile vs the company's own 10-year history (EV/Sales, EV/EBIT) | Cheap or rich vs itself |
-| C2 | **Expectations gap:** evidence-based growth minus reverse-DCF implied growth | Has the market priced the change? |
-| C3 | Run-up: 12-month return percentile in its universe (≥ 90th = "already ran") | Late or early |
-| C4 | Attention: GDELT news-mention percentile (free) | Underfollowed or crowded |
+| C2 | **Expectations gap:** evidence-based growth minus reverse-DCF implied growth (null unless ROIC beats the discount rate) | Has the market priced the change? |
+| C3 | Run-up: 12-month return percentile in its universe (≥ 90th = "already ran"; null with a comparison group under 30) | Late or early |
 
 ### 1.7 Scores and buckets (§4.8)
 - **Evidence score (0–100):**
@@ -284,13 +284,15 @@ doomberg-invest/
 ### 2.5 Schedules and the minutes budget (GitHub Actions, UTC)
 | Workflow | Schedule | Target runtime |
 |---|---|---|
-| `daily.yml` | `30 1 * * 2-6` | ≤ 8 min |
-| `weekly.yml` | `0 2 * * 6` (Saturday) | ≤ 45 min |
+| `daily.yml` | `13 1 * * 2-6` | ≤ 8 min |
+| `weekly.yml` | `7 2 * * 6` (Saturday) | ≤ 45 min |
 | `thesis-fallback.yml` | `0 6 * * 1` | ≤ 10 min, only if no cards |
 | `thesis-ingest.yml` | on push touching `data/thesis_cards/**` | ≤ 3 min |
 | `quarterly.yml` | `0 3 20 1,4,7,10 *` | ≤ 60 min |
 | `lab.yml` | manual | ≤ 90 min |
-| `ci.yml` | PRs | — |
+| `ci.yml` | PRs only (no push to `main`; a label change doesn't re-run it) | — |
+| `protected.yml` | PRs, label changes included: the `protected` job (Appendix D) | — |
+| `web.yml` | PRs touching the web app or a file its tests pin; Supabase, build and Playwright only when `web/**`, `db/migrations/**`, `supabase/**`, `scripts/seed_e2e.py`, `scripts/e2e_report.py` or `web.yml` change | — |
 | `record-cassettes.yml` | manual | — |
 | `live-smoke.yml` | manual | — |
 
@@ -459,6 +461,7 @@ All thresholds live in `config/signals.yaml` (a protected path) with the default
   - unmapped CUSIPs are logged
 
 ### 4.3 India (`pipeline/india/*`)
+**Paused** (SPEC_ISSUES 46): no workflow runs these steps and the weekly scoring run scores the US only. The code and the stored India data stay as described below; SPEC_ISSUES 46 says how to restart it.
 - **Securities and prices:**
   - the NSE securities list gives the EQ-series universe, ISINs and symbols
   - the weekly Friday **CM-UDiFF Common Bhavcopy** is parsed by column names (`TckrSymb`, `ISIN`, `SctySrs`, `ClsPric`, `TtlTradgVol`, …)
@@ -503,10 +506,10 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
 | S1 | ob = rpo (US) or the latest verified `backlog` fact; `g(ob) − g(TTM revenue) ≥ 0.10` in each of the last 2 quarters; `ob/TTM(revenue)` above its year-ago value and ≥ 0.25 (SPEC_ISSUES 42) | `clip((g(ob) − g(rev))/0.30, 0, 1)` |
 | S2 | `IncROIC = ΔNOPAT_12q / ΔIC_12q` (only if ΔIC_12q > 0.05 × IC 12q ago) ≥ 0.15; `0.03 ≤ ROIC ≤ 0.12`; ROIC up ≥ 0.03 vs 8 quarters ago | `0.5 + 0.5 × clip((IncROIC − 0.15)/0.25, 0, 1)` |
 | S3 | Quarterly revenue YoY growth rose in each of the last 2 quarters; OPM up ≥ 0.01 vs 4 quarters ago; `g(TTM opex) < g(TTM revenue)` with opex = revenue − op_income | `clip(ΔOPM/0.05, 0, 1)` |
-| S4 | NI > 0; `CCR = TTM(cfo)/TTM(net_income) ≥ 1.0` and up ≥ 0.2 YoY; Sloan `(TTM NI − TTM CFO)/mean(total_assets 4q) < 0.05` and falling YoY; TTM CFO up YoY (SPEC_ISSUES 41) | `clip((CCR − 1)/0.5, 0, 1)` |
+| S4 | NI > 0; `CCR = TTM(cfo)/TTM(net_income) ≥ 1.0` and up ≥ 0.2 YoY; Sloan `(TTM NI − TTM CFO)/mean(total_assets 4q) < 0.05` and falling YoY; TTM CFO up YoY (SPEC_ISSUES 41); TTM NI ≥ 0.9 × TTM NI a year earlier; never for SIC 6000–6411 (banks, lenders, brokers, insurers; REITs at 6798 are scored) (SPEC_ISSUES 47) | `clip((CCR − 1)/0.5, 0, 1)` |
 | S5 | (A) diluted shares YoY ≤ −2%, FCF > 0, and ND not up > 10% YoY; **or** (B) share growth ≥ +5% in each of the 2 prior years and ≤ 0% in the latest year | A: `clip(−Δshares/0.06, 0, 1)`; B: 0.6 |
 | S6 | Max of `ND / TTM(op_income + da)` over quarters q−8…q−4 ≥ 3.0; current ≤ 1.5; `TTM(op_income)/TTM(interest)` ≥ 5 | 0.8 |
-| S7 | **US:** ≥ 2 distinct insiders with unplanned code-P buys of ≥ $25k each within 60 days, total ≥ $250k. **IN:** promoter-group market purchases ≥ ₹2 crore within 90 days, **or** promoter pledged % down ≥ 5 pp QoQ | `min(1, 0.5 + 0.1 × (n − 2) + 0.1 × log2(total/threshold))` (IN pledge path: 0.6) |
+| S7 | **US:** ≥ 2 distinct insiders with unplanned code-P buys of ≥ $25k each within 60 days, total ≥ $250k; a filer whose only role is 10% owner is not counted, a joint "director; 10% owner" filing is (SPEC_ISSUES 49). **IN:** promoter-group market purchases ≥ ₹2 crore within 90 days, **or** promoter pledged % down ≥ 5 pp QoQ | `min(1, 0.5 + 0.1 × (n − 2) + 0.1 × log2(total/threshold))` (IN pledge path: 0.6) |
 | S8 | **US:** 13F holder count ≤ 40th percentile within its revenue-size decile, **and** holders up ≥ 15% QoQ in each of the last 2 quarters. **IN:** FII + DII ≤ 15% and up ≥ 2 pp over 2 quarters | `clip(growth/0.5, 0, 1)` (IN: `clip(Δpp/6, 0, 1)`) |
 | S9 | ≥ 1 verified fact in the last 2 quarters of types `order_win`, `customer_win`, `capacity_addition` (with a named counterparty or commitment), `price_increase`, `lead_time` (longer than before), `new_segment`, or `governance_flag` (removal) | `min(1, 0.4 × count)` |
 | S10 | Spin-off/demerger ≤ 18 months ago; reorganization ≤ 24 months; listed in `config/holdcos.yaml`; rights issue ≤ 6 months | 0.6 (config) |
@@ -528,9 +531,10 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
   - solve for the constant growth `g*` over 10 years that makes PV = EV (`scipy.optimize.brentq` on [−0.20, 0.60]; no root → null)
   - evidence growth: `g_e = 0.4 × clip(g(ob), −0.2, 0.6) [if ob ≥ 0.25 × TTM revenue] + 0.3 × 3-year revenue CAGR + 0.3 × TTM revenue YoY`, capped to [−0.10, 0.40] (weights renormalize without ob; SPEC_ISSUES 42, 43)
   - C2 is null when `m × (1 − t) × S2C ≤ discount rate`: growth lowers PV there, so g* reads backwards (SPEC_ISSUES 43)
+  - C2 is null when ROIC (§4.6) is unknown or ≤ the discount rate: a business that doesn't earn its cost of capital has no expectations gap to read (SPEC_ISSUES 48)
   - `C2 = g_e − g*`. Score = `clip(50 + 250 × C2, 0, 100)`
-- **C3:** 52-week return percentile within the market's candidate set plus a benchmark sample. Score = `100 − pct`. `already_ran` if pct ≥ 90.
-- **C4:** GDELT DOC API article count over the last 90 days for the company's quoted short name (disambiguated with the ticker or "Ltd"/"Inc"). Percentile within the candidate set. Score = `100 − pct`.
+- **C3:** 52-week return percentile within the market's candidate set plus a benchmark sample. Score = `100 − pct`. `already_ran` if pct ≥ 90. Null when that comparison group has fewer than 30 members (`c3_runup.min_population`; SPEC_ISSUES 48).
+- There is no C4: the GDELT news-attention percentile was deleted (SPEC_ISSUES 48).
 
 ### 4.8 Scores and buckets (`scores.py`, `buckets.py`)
 1. **Families:** Fundamentals {S1–S6}, Behavior {S7, S8}, Text {S9}, Structural {S10}, Capex {S11}, Cycle {S12}.
@@ -540,7 +544,7 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
    - `Evidence = 100 × min(1, raw / 2.0)`
    - if fewer than 2 families fired → `Evidence = min(Evidence, 55)`
    - each soft red flag subtracts 10, floored at 0
-4. **Gap:** the mean of the available C1–C4 scores (needs ≥ 2, else null → bucket `none`).
+4. **Gap:** the mean of the available C1–C3 scores (needs ≥ 2, else null → bucket `none`).
 5. **Bucket:** per §1.7.
 6. **Weekly shortlist:** top 10 new candidates, both markets and desks combined, ranked by Evidence then Gap, excluding any seen in the last 12 weeks.
 7. **Provenance:** every score row stores the `weights_version`.
@@ -799,7 +803,7 @@ Return only JSON.
 | M4-03 | Reverse DCF recovers a known g within ±0.1 pp from a synthetic EV; monotonic; null when there's no root |
 | M4-04 | Stooq and bhavcopy weekly ingestion; split detection needs share-count confirmation |
 | M4-05 | Evidence/Gap/bucket math, including the 2-family cap, soft-flag penalties and the 12-week novelty rule |
-| M4-06 | GDELT client (mock) and percentiles |
+| M4-06 | Context percentiles C1 and C3 (C3 null below a comparison group of 30); no GDELT client (SPEC_ISSUES 48) |
 
 ### M5 — Text facts and Capex Desk
 **Done:**

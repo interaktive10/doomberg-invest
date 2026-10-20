@@ -49,7 +49,6 @@ ALLOWED_HOSTS: dict[str, float] = {
     "query1.finance.yahoo.com": 1.0,  # US weekly prices (pipeline/net/yahoo.py); one site, one limit
     "query2.finance.yahoo.com": 1.0,
     "api.twelvedata.com": 8.0,  # US weekly prices (pipeline/net/twelvedata.py): the free plan's 8 credits a minute
-    "api.gdeltproject.org": 5.0,  # GDELT asks for at most one request every 5 s
     "api.stlouisfed.org": 0.5,
     "api.eia.gov": 0.5,
     "generativelanguage.googleapis.com": 0.0,

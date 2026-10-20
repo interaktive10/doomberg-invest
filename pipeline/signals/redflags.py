@@ -62,16 +62,20 @@ def r1(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
 
 
 def r2(ctx: Ctx, c: Mapping[str, Any]) -> FlagResult:
-    """Receivables growth - revenue growth >= 20 pp YoY (receivables at the quarter end vs TTM revenue)."""
+    """Receivables growth - revenue growth >= 20 pp YoY. Receivables at the quarter end follow that quarter's sales,
+    so `revenue_basis: quarter` compares them with the same quarter's revenue a year earlier; TTM revenue lags a fast
+    grower's receivables and fired the flag on growth alone (`ttm`, before SPEC_ISSUES 47)."""
     s = ctx.series
+    basis = str(c.get("revenue_basis", "ttm"))
     g_rec = growth(s.point("receivables", 0), s.point("receivables", 4)) if s.year_back_ok(0) else None
-    g_rev = s.ttm_yoy("revenue", 0)
+    g_rev = s.quarterly_yoy("revenue", 0) if basis == "quarter" else s.ttm_yoy("revenue", 0)
     if g_rec is None or g_rev is None:
         return FlagResult(
             "R2", "unknown", _hard(c), {"missing": ["receivables_growth" if g_rec is None else "revenue_growth"]}
         )
     gap_pp = (g_rec - g_rev) * 100
-    inputs = {"receivables_growth": num(g_rec), "revenue_growth": num(g_rev), "gap_pp": num(gap_pp)}
+    inputs = {"receivables_growth": num(g_rec), "revenue_growth": num(g_rev), "gap_pp": num(gap_pp),
+              "revenue_basis": basis}  # fmt: skip
     return FlagResult(
         "R2", "fired" if gap_pp >= _dec(c, "receivables_minus_revenue_growth_pp") else "clear", _hard(c), inputs
     )

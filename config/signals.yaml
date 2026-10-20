@@ -37,6 +37,8 @@ s4_earnings_quality:
   min_ccr_rise_yoy: 0.2
   max_sloan: 0.05               # (TTM NI - TTM CFO)/mean(total_assets 4q) < 0.05 and falling YoY
   cfo_must_rise_yoy: true       # TTM CFO above a year earlier, not only net income falling (SPEC_ISSUES 41)
+  ni_min_ratio_yoy: 0.9         # TTM NI >= 0.9 x TTM NI a year earlier (SPEC_ISSUES 47)
+  exclude_sic: [[6000, 6411]]   # quiet for banks, lenders, brokers, insurers; REITs (6798) stay (SPEC_ISSUES 47)
   strength_divisor: 0.5         # clip((CCR - 1)/0.5, 0, 1)
 
 s5_capital_discipline:
@@ -60,6 +62,7 @@ s7_insider:
   us_min_buy_usd: 25000
   us_window_days: 60
   us_min_total_usd: 250000
+  us_ignore_roles: ["10% owner"]      # a filer with only these roles isn't counted (SPEC_ISSUES 49)
   in_min_promoter_buy_inr: 20000000   # Rs 2 crore
   in_window_days: 90
   in_pledge_drop_pp: 5.0

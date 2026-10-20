@@ -57,8 +57,8 @@ def test_soft_flags_subtract_ten_each_floored_at_zero() -> None:
 
 
 def test_gap_is_the_mean_of_available_context_scores() -> None:
-    assert gap({"C1": D(60), "C2": D(40), "C3": None, "C4": None}, W, 2) == D(50)
-    assert gap({"C1": D(60), "C2": None, "C3": None, "C4": None}, W, 2) is None
+    assert gap({"C1": D(60), "C2": D(40), "C3": None}, W, 2) == D(50)
+    assert gap({"C1": D(60), "C2": None, "C3": None}, W, 2) is None
 
 
 @pytest.mark.parametrize(

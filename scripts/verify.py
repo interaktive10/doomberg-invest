@@ -361,7 +361,7 @@ CHECKS: list[Check] = [
     Check(
         "M4-06",
         "m4",
-        "GDELT client (mock) and percentiles",
+        "context percentiles C1 and C3 (C3 null below a comparison group of 30); no GDELT client",
         [*PYTEST, "tests/signals/test_context.py"],
     ),
     Check(

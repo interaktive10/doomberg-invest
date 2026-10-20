@@ -697,19 +697,6 @@ def upsert_company_series(conn: Conn, week: date, series: Mapping[UUID, Sequence
         )
 
 
-def recent_attention(conn: Conn, week: date, since: date) -> dict[UUID, int]:
-    """The latest GDELT article count per company from C4 rows in [since, week): C4 is re-queried monthly."""
-    rows = conn.execute(
-        _q(
-            "select distinct on (company_id) company_id, (inputs->>'articles_90d')::int from context_values "
-            "where metric_id = 'C4' and week_end >= %s and week_end < %s and inputs ? 'articles_90d' "
-            "order by company_id, week_end desc"
-        ),
-        (since, week),
-    ).fetchall()
-    return {r[0]: int(r[1]) for r in rows}
-
-
 def research_company_ids(conn: Conn) -> set[UUID]:
     """Companies with a live thesis or position: priced and scored even outside the universe (BRIEF §4.4)."""
     rows = conn.execute(

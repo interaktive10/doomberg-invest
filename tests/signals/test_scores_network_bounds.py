@@ -1,7 +1,7 @@
 """The scores job's network stages are bounded (pipeline/signals/weekly.py). The first live run (2026-09-29) spent
-the job's 40 minutes without finishing: a GDELT failure didn't use up the query budget, and neither GDELT nor the
-price source (Stooq then, Yahoo since 2026-10) stopped being asked when every request failed, while each request
-waits for the site's rate limit (GDELT 5 s, prices 1-2 s) and up to its timeout."""
+the job's 40 minutes without finishing: the price source (Stooq then, Yahoo since 2026-10) kept being asked when
+every request failed, while each request waits for the site's rate limit (1-2 s) and up to its timeout. (GDELT, the
+other network stage then, went with C4: docs/SPEC_ISSUES.md 48.)"""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from uuid import uuid4
 import pytest
 
 from pipeline.db.models import Company
-from pipeline.net.gdelt import build_query, timeline_url
 from pipeline.net.http import HttpClient
 from pipeline.net.yahoo import HOSTS, YahooClient, chart_url, yahoo_symbol
 from pipeline.settings import Settings
@@ -22,8 +21,6 @@ from pipeline.signals import weekly
 FIX = Path(__file__).resolve().parents[2] / "fixtures"
 WEEK = date(2026, 9, 25)
 NO_DB: Any = None  # the repo calls these stages make are replaced below
-THROTTLED = (FIX / "gdelt" / "rate_limit.txt").read_bytes()  # GDELT's "Please limit requests..." (HTTP 200)
-NO_ARTICLES = (FIX / "gdelt" / "empty.json").read_bytes()
 N = weekly.MAX_FAILURES_IN_A_ROW
 
 
@@ -33,42 +30,6 @@ def mock_http(tmp_path: Path) -> HttpClient:
 
 def us_companies(n: int) -> list[Company]:
     return [Company(id=uuid4(), market="us", name=f"Company {i:02d} Inc", ticker=f"TK{i:02d}") for i in range(n)]
-
-
-def gdelt(http: HttpClient, companies: list[Company], answers: list[bytes]) -> None:
-    for c, body in zip(companies, answers, strict=True):
-        http.register_mock(timeline_url(build_query(c.name, c.ticker, "us")), body)
-
-
-@pytest.fixture
-def nothing_to_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(weekly.repo, "recent_attention", lambda conn, week, since: {})
-
-
-def test_failed_gdelt_queries_use_up_the_budget(tmp_path: Path, nothing_to_reuse: None) -> None:
-    http, cos = mock_http(tmp_path), us_companies(10)
-    gdelt(http, cos, [THROTTLED if i % 2 else NO_ARTICLES for i in range(10)])
-    stats = weekly.ScoresStats(WEEK.isoformat())
-    counts = weekly.attention(NO_DB, WEEK, cos, http, 6, stats)
-    assert len(http.calls) == 6
-    assert (stats.gdelt_queried, stats.gdelt_failed, stats.gdelt_not_asked) == (3, 3, 4)
-    assert set(counts) == {cos[0].id, cos[2].id, cos[4].id}
-
-
-def test_gdelt_is_not_asked_again_after_failures_in_a_row(tmp_path: Path, nothing_to_reuse: None) -> None:
-    http, cos = mock_http(tmp_path), us_companies(40)
-    gdelt(http, cos, [THROTTLED] * 40)
-    stats = weekly.ScoresStats(WEEK.isoformat())
-    assert weekly.attention(NO_DB, WEEK, cos, http, 100, stats) == {}
-    assert len(http.calls) == N and (stats.gdelt_failed, stats.gdelt_not_asked) == (N, 40 - N)
-
-
-def test_a_gdelt_answer_ends_a_run_of_failures(tmp_path: Path, nothing_to_reuse: None) -> None:
-    http, cos = mock_http(tmp_path), us_companies(3 * N)
-    gdelt(http, cos, ([THROTTLED] * (N - 1) + [NO_ARTICLES]) * 3)
-    stats = weekly.ScoresStats(WEEK.isoformat())
-    weekly.attention(NO_DB, WEEK, cos, http, 100, stats)
-    assert len(http.calls) == 3 * N and (stats.gdelt_queried, stats.gdelt_not_asked) == (3, 0)
 
 
 @pytest.fixture
@@ -116,23 +77,3 @@ def test_symbols_yahoo_does_not_know_do_not_stop_the_stage(tmp_path: Path, writt
     assert len(http.calls) == 3 * N
     assert (stats.prices_ok, stats.prices_failed, stats.prices_not_asked) == (1, 3 * N - 1, 0)
     assert {r.source for r in written} == {"yahoo"} and {r.company_id for r in written} == {cos[-1].id}
-
-
-def test_gdelt_source_health_follows_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Nothing recorded GDELT's health before: Settings and the digest said "never succeeded" while it answered."""
-    calls: list[tuple[Any, ...]] = []
-    monkeypatch.setattr(weekly.repo, "mark_source_success", lambda conn, source: calls.append(("ok", source)))
-    monkeypatch.setattr(
-        weekly.repo,
-        "mark_source_error",
-        lambda conn, source, error, stale: calls.append(("error", source, error, stale)),
-    )
-    answered, failed, idle = (weekly.ScoresStats(WEEK.isoformat()) for _ in range(3))
-    answered.gdelt_queried, answered.gdelt_failed = 1, 2
-    failed.gdelt_failed, failed.errors = 2, ["stooq PWR: StooqUnavailable: x", "gdelt Quanta: GdeltError: Please limit"]
-    for stats in (answered, failed, idle):
-        weekly.mark_gdelt(NO_DB, stats)
-    assert calls == [
-        ("ok", "gdelt"),
-        ("error", "gdelt", "2 queries failed: gdelt Quanta: GdeltError: Please limit", False),
-    ]
