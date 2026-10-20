@@ -7,13 +7,14 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal as D
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from pipeline.lab import price_history as ph
 from pipeline.lab import run
-from pipeline.lab.prices import DownloadState, MonthBar, TickerState, read_prices
+from pipeline.lab.prices import DownloadState, MonthBar, TickerState, read_prices, write_month_csv
 from pipeline.net.twelvedata import (
     Close,
     TwelveDataDayCredits,
@@ -26,7 +27,7 @@ TD = Path(__file__).resolve().parents[2] / "fixtures" / "px" / "twelvedata"
 CLOSES = parse_closes((TD / "daily_AAPL.json").read_bytes())  # 2010-01-04 .. 2026-10-16
 TODAY = date(2026, 10, 20)
 REACH = date(2010, 1, 31)  # config/lab.yaml start
-Answer = list[Close] | Exception
+Answer = list[Close] | BaseException
 
 
 @dataclass
@@ -47,7 +48,7 @@ class Fake:
         self.now += self.step
         seq = self.answers.get((interval, ticker)) or self.answers.get(ticker) or [CLOSES]
         answer = seq.pop(0) if len(seq) > 1 else seq[0]
-        if isinstance(answer, Exception):
+        if isinstance(answer, BaseException):
             raise answer
         return answer
 
@@ -236,4 +237,55 @@ def test_the_runs_row(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _, _, got, stats, error = rows.pop()
         assert (got, error) == (expected, None)
         assert stats == {"status": status, "interval": "1day", "tickers": 2, "ok": 1, "no_such_symbol": 0,
-                         "error": 0, "pending": 1, "credits": 7, "stopped": "credits"}  # fmt: skip
+                         "error": 0, "pending": 1, "credits": 7, "stopped": "credits", "lost": 0}  # fmt: skip
+
+
+def test_ok_tickers_missing_from_the_price_file_are_asked_again(tmp_path: Path) -> None:
+    """PR 3 review lab-F2: a state that says `ok` for tickers whose rows the price file lacks (the state was uploaded
+    but not the prices, or the price asset is lost) asks them again, so the Lab never runs without them. A ticker
+    with no complete month yet (listed this month) has no rows to lose and isn't asked again."""
+    fake = Fake({"NEW": [[(date(2026, 10, 1), D(10))]]})
+    tickers = ["A", "B", "NEW"]
+    assert go(fake, tickers, tmp_path).state.status == "complete"
+    assert state(tmp_path).tickers["NEW"] == TickerState("ok", 0, None, 0) and state(tmp_path).tickers["A"].months
+    prices = tmp_path / "prices.csv.gz"
+    write_month_csv(prices, {"A": read_prices(prices)["A"]})  # the release's older price file: A's rows alone
+    fake.asked.clear()
+    out = go(fake, tickers, tmp_path)
+    assert fake.tickers() == ["B"] and out.lost == 1 and out.state.status == "complete"
+    assert sorted(read_prices(prices)) == ["A", "B"]
+    prices.unlink()  # no price file at all
+    fake.asked.clear()
+    out = go(fake, tickers, tmp_path)
+    assert fake.tickers() == ["A", "B"] and out.lost == 2 and sorted(read_prices(prices)) == ["A", "B"]
+    fake.asked.clear()
+    assert go(fake, tickers, tmp_path).lost == 0 and fake.asked == []
+
+
+def test_a_cancelled_run_keeps_what_it_fetched(tmp_path: Path) -> None:
+    """PR 3 review lab-F5: a run cancelled mid-batch (a manual cancel, the job's timeout as SIGINT, an unexpected
+    error) saves the tickers fetched since the last save before it stops, so their credits aren't spent again."""
+    fake = Fake({"C": [KeyboardInterrupt(), CLOSES]})
+    tickers = ["A", "B", "C", "D"]
+    with pytest.raises(KeyboardInterrupt):
+        go(fake, tickers, tmp_path)  # save_every 50: no save before C
+    saved = state(tmp_path)
+    assert saved.interval == "1day" and saved.count("ok") == 2 and saved.tickers["C"] == TickerState()
+    assert sorted(read_prices(tmp_path / "prices.csv.gz")) == ["A", "B"]
+    fake.asked.clear()
+    assert go(fake, tickers, tmp_path).state.status == "complete" and fake.tickers() == ["C", "D"]
+
+
+def test_the_digest_counts_the_tickers_still_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR 3 review spec-F2: the digest's minutes projection reads the latest lab_prices run's pending tickers; none
+    once the download is complete or blocked; before any run, every ticker the Lab reads plus the probe."""
+    latest: list[dict[str, Any] | None] = [None]
+    asked = ("lab_prices", "tickers")
+    monkeypatch.setattr(ph.repo, "latest_run_stats", lambda _c, kind, key: latest[0] if (kind, key) == asked else {})
+    kept = [SimpleNamespace(ticker=t) for t in ("A", "B", "B", None)]
+    monkeypatch.setattr(ph.run, "lab_companies", lambda _c, market: (kept, 0) if market == "us" else ([], 0))
+    assert ph.pending_tickers(None) == 2 + 1  # type: ignore[arg-type]
+    for status, pending, expected in (("partial", 1200, 1200), ("pending", 5000, 5000), ("complete", 0, 0),
+                                      ("blocked", 5200, 0)):  # fmt: skip
+        latest[0] = {"status": status, "tickers": 5200, "pending": pending}
+        assert ph.pending_tickers(None) == expected, status  # type: ignore[arg-type]

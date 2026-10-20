@@ -449,6 +449,58 @@ def test_skipped_filings_come_back_when_the_name_becomes_a_thesis(conn: psycopg.
     assert status()["0000999021-25-000003"] == "new"
 
 
+def test_a_filing_back_for_a_new_thesis_gets_its_retry_days(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """PR 3 review TXT-3: a 10-Q first queued long ago, skipped, and back when its company becomes a research entry
+    counts RETRY_DAYS from its return: one 503 leaves it `new` (not `failed`), and the next day reads it."""
+    x = us_company(conn, "Next Thesis Co", "NXT")
+    x_10q = f"{ARCH}/000099902126000001/nxt-10q.htm"
+    repo.insert_filings(conn, [filing(x, "0000999021-26-000001", "10-Q", at(200), url=x_10q)])
+    conn.execute("update filings set created_at = %s", (at(200),))  # queued 200 days ago, under the old scope
+    assert facts_repo.skip_stale_filings(conn, [], at(120), at(400)) == (1, 0)
+    research_entry(conn, x)
+    http = mock_http(tmp_path)
+    http.register_error(x_10q, 503)
+    http.register_mock(x_10q, (SYN / "nmbs_10q_q1.htm").read_bytes())
+    first = run.run(conn, DAY, router(), http, None, tmp_path)
+    assert first.reset_filings == 1 and first.errors and first.extracted == 0
+    assert conn.execute("select status from filings").fetchone() == ("new",)
+    second = run.run(conn, DAY + timedelta(days=1), router(), http, None, tmp_path)
+    assert second.extracted == 1 and conn.execute("select status from filings").fetchone() == ("extracted",)
+
+
+def test_a_stage_names_old_deferred_documents_are_not_read(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """PR 3 review TXT-2: a stage name reads its 120 days alone, deferred documents included. Its 10-Q deferred 300
+    days ago, and one of 110 days ago whose filing is skipped (a later 10-Q is read), make no request and stay
+    deferred; a thesis's deferred 10-Q of 300 days ago is read."""
+    t, s = us_company(conn, "Nimbus Compute Corp.", "NMBS"), us_company(conn, "Voltara Grid Systems", "VOLT")
+    research_entry(conn, t)
+    stage_name(conn, s)
+    repo.insert_filings(conn, [filing(s, "0000999051-26-000001", "10-Q", at(110)),
+                               filing(s, "0000999051-26-000002", "10-Q", at(30))])  # fmt: skip
+    conn.execute("update filings set status = 'extracted' where accession_no = '0000999051-26-000002'")
+    skipped = conn.execute("select id from filings where accession_no = '0000999051-26-000001'").fetchone()
+    assert skipped is not None
+    http = mock_http(tmp_path)
+    docs = {"t-300": (t, at(300), None, "nmbs_10q_q1.htm"), "s-300": (s, at(300), None, "volt_10q.htm"),
+            "s-110": (s, at(110), skipped[0], "volt_10q.htm")}  # fmt: skip
+    for k, (cid, published, filing_id, f) in docs.items():
+        http.register_mock(f"{ARCH}/{k}/{f}", (SYN / f).read_bytes())
+        facts_repo.upsert_document(conn, company_id=cid, filing_id=filing_id, kind="10-Q", url=f"{ARCH}/{k}/{f}",
+                                   title="Form 10-Q", published_at=published, sha256="0" * 64, raw_path="x",
+                                   status="deferred")  # fmt: skip
+    conn.execute("update documents set created_at = published_at")  # the stage name was last read 110 days ago: due
+    oracle = MultiOracle(TRUTH)
+    stats = run.run(conn, DAY, Router({"gemini": oracle}, quotas(["gemini"], rpd=10_000), FakeClock()), http, None,
+                    tmp_path)  # fmt: skip
+    assert (stats.theses, stats.stage, stats.skipped_filings, stats.extracted) == (1, 1, 1, 1), stats
+    assert [u.rsplit("/", 2)[1] for u in http.calls] == ["t-300"]
+    got = dict(conn.execute("select url, status from documents").fetchall())
+    assert {u.rsplit("/", 2)[1]: st for u, st in got.items()} == {"t-300": "extracted", "s-300": "deferred",
+                                                                  "s-110": "deferred"}  # fmt: skip
+    p01 = [r.user for r in oracle.requests if r.prompt_id == "P-01"]
+    assert p01 and all("Voltara" not in u for u in p01)
+
+
 def test_theses_are_read_before_stage_names_each_newest_first(conn: psycopg.Connection[Any],
                                                               tmp_path: Path) -> None:  # fmt: skip
     """With one document a day: the thesis's newer 10-Q, then its older one, then the stage name's, although the
@@ -475,19 +527,29 @@ def empty_submissions(cik: str) -> bytes:
     return json.dumps({"cik": cik, "name": "X", "filings": {"recent": {"accessionNumber": []}, "files": []}}).encode()
 
 
-@pytest.mark.parametrize(("index_ok", "fetched"), [(True, "BC"), (False, "ABC")], ids=["indexed", "index-unreadable"])
+@pytest.mark.parametrize(
+    ("index_ok", "sec_cut_off", "fetched"),
+    [(True, None, "BC"), (False, None, "ABC"), (True, "failed", "ABC"), (True, "running", "ABC")],
+    ids=["indexed", "index-unreadable", "sec-step-failed", "sec-step-cut-off"],
+)
 def test_submissions_are_read_only_for_new_or_indexed_names(conn: psycopg.Connection[Any], tmp_path: Path,
-                                                            index_ok: bool, fetched: str) -> None:  # fmt: skip
+                                                            index_ok: bool, sec_cut_off: str | None,
+                                                            fetched: str) -> None:  # fmt: skip
     """Three stage names: A is in the last text run's record, B is new to the scope, and C is in the record and filed
     an 8-K on a day whose EDGAR index the SEC step read since (A's Form 4 that day is no text filing): only B's and
-    C's submissions are read. When that index can't be read, every name's are."""
+    C's submissions are read. When that index can't be read, every name's are. So too when an SEC step between the
+    two text runs failed or was cut off by the job's timeout (PR 3 review TXT-1): the days it committed moved its
+    cursor on, but its runs row has no `days`, so a filing of those days would never be queued."""
     ciks = {"A": "0000999031", "B": "0000999032", "C": "0000999033"}
     for k, cik in ciks.items():
         stage_name(conn, us_company(conn, f"{k} Co", k, cik))
-    runs = "insert into runs (kind, started_at, finished_at, status, stats) values (%s, %s, %s, 'ok', %s)"
-    conn.execute(runs, ("text", "2026-09-24 01:20+00", "2026-09-24 01:30+00",
+    runs = "insert into runs (kind, started_at, finished_at, status, stats) values (%s, %s, %s, %s, %s)"
+    conn.execute(runs, ("text", "2026-09-24 01:20+00", "2026-09-24 01:30+00", "ok",
                         Jsonb({"checked": {ciks["A"]: 1, ciks["C"]: 1}})))  # fmt: skip
-    conn.execute(runs, ("us_daily", "2026-09-25 01:14+00", "2026-09-25 01:16+00",
+    if sec_cut_off is not None:  # the catch-up of 2026-09-24 13:00 read a day, then raised or hit the timeout
+        conn.execute(runs, ("us_daily", "2026-09-24 13:00+00", "2026-09-24 13:20+00" if sec_cut_off == "failed"
+                            else None, sec_cut_off, Jsonb({})))  # fmt: skip
+    conn.execute(runs, ("us_daily", "2026-09-25 01:14+00", "2026-09-25 01:16+00", "ok",
                         Jsonb({"days": [{"day": "listings as of 2026-09-25", "index_rows": 0},
                                         {"day": "2026-09-24", "index_rows": 2}]})))  # fmt: skip
     index = ("CIK|Company Name|Form Type|Date Filed|File Name\n" + "-" * 80 + "\n"
@@ -504,7 +566,9 @@ def test_submissions_are_read_only_for_new_or_indexed_names(conn: psycopg.Connec
     assert [u for u in http.calls if "/submissions/" in u] == [submissions_url(ciks[k]) for k in fetched]
     assert stats.submissions == len(fetched) and stats.indexed == (1 if index_ok else 0)
     assert stats.checked == dict.fromkeys(ciks.values(), run.RANK["stage"])
-    assert bool(stats.errors) is not index_ok  # the unreadable index is logged
+    assert bool(stats.errors) is (fetched == "ABC")  # the unreadable index, or the SEC step's failure, is logged
+    after = datetime(2026, 9, 24, 1, 20, tzinfo=UTC)
+    assert (facts_repo.sec_days_since(conn, after) is None) is (sec_cut_off is not None)
 
 
 def test_india_announcements_are_triaged_once(conn: psycopg.Connection[Any]) -> None:

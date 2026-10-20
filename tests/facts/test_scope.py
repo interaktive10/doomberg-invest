@@ -14,6 +14,7 @@ from pipeline.db.models import Company
 from pipeline.facts import run
 from pipeline.facts.fetch import FILING_DAYS, STAGE_DAYS, FilingRef, scope_filings
 from pipeline.llm.prompt import PROMPT_DIR, PROMPTS
+from pipeline.llm.quotas import Quotas
 from pipeline.us.submissions import Submissions, parse_submissions
 
 DAY = date(2026, 9, 25)
@@ -108,6 +109,8 @@ def test_theses_come_before_stage_names_each_newest_first() -> None:
     t, s = run.RANK["thesis"], run.RANK["stage"]
     jobs = [job(s, 1, "stage-new"), job(t, 90, "thesis-old"), job(s, 30, "stage-old"), job(t, 2, "thesis-new")]
     assert [j[2].company.name for j in run.work_order(jobs)] == ["thesis-new", "thesis-old", "stage-new", "stage-old"]
+    # config/quotas.yaml work_order names the same ranks in the same order (PR 3 review TXT-4)
+    assert Quotas.load().work_order == tuple(sorted(run.RANK, key=run.RANK.__getitem__)) == ("thesis", "stage")
 
 
 def test_p03_is_no_longer_called() -> None:

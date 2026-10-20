@@ -158,6 +158,13 @@ def test_lab_prices_gates_stops_itself_and_keeps_its_progress() -> None:
     assert upload["if"].startswith("always() && ") and d < u
     _, resume = step("lab-prices.yml", "prices", "gh release download lab-data-v1")
     assert "--clobber ||" not in resume["run"]  # a failed resume fails the step: no fresh start over the progress
+    # PR 3 review lab-F1: the asset listing is a statement of its own (`bash -e` ignores a failure inside an `if`
+    # condition or before a pipe), so a transient `gh release view` error fails the step instead of starting over.
+    listing = [ln.strip() for ln in resume["run"].splitlines() if "gh release view lab-data-v1 --json assets" in ln]
+    assert listing == ["assets=\"$(gh release view lab-data-v1 --json assets --jq '.assets[].name')\""], listing
+    assert all("|" not in ln.split("--jq", 1)[0] and not ln.startswith(("if ", "elif ")) for ln in listing)
+    # PR 3 review lab-F2: the prices are uploaded before the state, so the state never runs ahead of them
+    assert upload["run"].index("us_month_prices.csv.gz") < upload["run"].index("us_prices_state.json")
     done, dispatch = step("lab-prices.yml", "prices", "gh workflow run lab.yml")
     assert u < done and dispatch["if"] == "steps.download.outputs.complete == 'true'"
     assert "--ref" in dispatch["run"] and "gh workflow disable lab-prices.yml" in dispatch["run"]

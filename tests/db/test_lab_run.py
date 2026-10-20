@@ -13,11 +13,12 @@ from typing import Any
 import psycopg
 import pytest
 import yaml
+from psycopg.types.json import Jsonb
 
 from pipeline.db import repo
 from pipeline.db.models import Company
 from pipeline.db.weights import INITIAL_REASON, MERGED_BY, MERGED_REASON, WeightsMismatch, record_weights_in_use
-from pipeline.lab import run
+from pipeline.lab import price_history, run
 from pipeline.lab.prices import write_month_csv
 from pipeline.lab.proposals import Proposal
 from pipeline.lab.report import CAVEATS
@@ -196,3 +197,23 @@ def test_a_run_off_main_never_approves_weights(conn: psycopg.Connection[Any], mo
     assert record_weights_in_use(conn, proposal) is False
     by, at = conn.execute(sql, (proposal["version"],)).fetchone() or (None, None)
     assert by == MERGED_BY and at is not None
+
+
+def test_the_digest_reads_the_downloads_pending_tickers(conn: psycopg.Connection[Any]) -> None:
+    """PR 3 review spec-F2: the digest's minutes projection reads the latest finished lab_prices run that recorded its
+    progress (a run that failed before recording any, or one still running, is passed over); before any run, every
+    ticker the Lab reads plus the probe; none once the download is complete."""
+    repo.upsert_us_companies(conn, [Company(market="us", name=f"{t} Co", cik=f"{990000 + i:010d}", ticker=t)
+                                    for i, t in enumerate(("AAA", "BBB", "CCC"))])  # fmt: skip
+    assert price_history.pending_tickers(conn) == 3 + 1
+    runs = "insert into runs (kind, started_at, finished_at, status, stats) values ('lab_prices', %s, %s, %s, %s)"
+    conn.execute(runs, ("2026-11-01 10:07+00", "2026-11-01 11:37+00", "partial",
+                        Jsonb({"status": "partial", "tickers": 5200, "pending": 4550})))  # fmt: skip
+    conn.execute(runs, ("2026-11-02 10:07+00", "2026-11-02 10:08+00", "failed", Jsonb({})))
+    conn.execute(runs, ("2026-11-03 10:07+00", None, "running", Jsonb({})))
+    assert repo.latest_run_stats(conn, "lab_prices", "tickers") == {"status": "partial", "tickers": 5200,
+                                                                     "pending": 4550}  # fmt: skip
+    assert price_history.pending_tickers(conn) == 4550
+    conn.execute(runs, ("2026-11-10 10:07+00", "2026-11-10 11:30+00", "ok",
+                        Jsonb({"status": "complete", "tickers": 5200, "pending": 0})))  # fmt: skip
+    assert price_history.pending_tickers(conn) == 0

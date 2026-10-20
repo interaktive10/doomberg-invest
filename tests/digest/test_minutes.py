@@ -155,6 +155,25 @@ def test_the_projection_adds_the_cycles_remaining_scheduled_runs(tmp_path: Path)
     assert meter.projected(120, 180) == 10 + 120 + 180 + 214
 
 
+def test_the_digest_projects_the_runs_the_lab_download_still_needs(tmp_path: Path) -> None:
+    """PR 3 review spec-F2: lab-prices.yml costs 0 in the schedule (each run is gated for its own 120 minutes), so the
+    digest adds the runs the download still needs: its pending tickers at 650 a run, at most the 9 its cron has left
+    from 2026-11-17 to the reset, at 95 minutes each; none once it is done. The gate leaves them out."""
+    root = workflows(tmp_path, REPO_CRONS)
+    now = datetime(2026, 11, 17, 12, tzinfo=UTC)
+    budget = replace(BUDGET, download_run=95)
+    base = minutes.measure(MockRuns(runs={1: [job(600)]}), budget, now, root)
+    assert base.download == 0 and base.projected() == 10 + 214  # the gate's meter: no download runs
+    for pending, runs in ((1500, 3), (650, 1), (100_000, 9), (0, 0)):
+        m = minutes.measure(MockRuns(runs={1: [job(600)]}), budget, now, root, pending, 650)
+        assert m.download == runs * 95 and m.projected() == 10 + 214 + runs * 95, pending
+    line = minutes.digest_line(minutes.measure(MockRuns(runs={1: [job(600)]}), budget, now, root, 5200, 650))
+    assert line == "Actions: 10 of 2,000 this cycle, projected 984."  # 10 + 214 + 8 runs (5,200 / 650) x 95
+    january = datetime(2027, 1, 1, tzinfo=UTC)  # a cycle with no lab-prices runs left: nothing projected
+    assert minutes.measure(MockRuns(), budget, january, root, 5200, 650).download == 0
+    assert minutes.download_minutes(5, 1300, 650, 95) == 2 * 95 and minutes.download_minutes(5, 1301, 650, 95) == 285
+
+
 def test_a_run_that_fires_now_is_still_ahead(tmp_path: Path) -> None:
     root = workflows(tmp_path, {"daily.yml": ["13 1 * * 2-6"]})
     now = datetime(2026, 11, 28, 1, 13, tzinfo=UTC)  # the cycle's last daily run, a Saturday
@@ -168,6 +187,7 @@ def test_every_scheduled_workflow_has_a_typical_cost() -> None:
     nov = datetime(2026, 11, 1, tzinfo=UTC)
     scheduled = minutes.scheduled_runs(nov, datetime(2027, 11, 1, tzinfo=UTC))
     assert set(scheduled) == set(budget.typical) and budget.typical["lab-prices.yml"] == 0
+    assert budget.download_run == 95  # the digest's projection of the download's remaining runs
     assert (budget.included, budget.gate_max, budget.reserve, budget.warn_above) == (2000, 1900, 180, 1600)
 
 

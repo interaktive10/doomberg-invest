@@ -1,4 +1,4 @@
-"""The other prompts' samples for record-cassettes.yml (BRIEF §9 "P-01, P-02, P-03, P-05, P-06, P-07 ..."; M5 review
+"""The other prompts' samples for record-cassettes.yml (BRIEF §9 "P-01, P-02, P-05, P-06, P-07 ..."; M5 review
 R1-F7). Besides F-SYN's P-01 corpus (evaluate.run_corpus): one P-02 batch (F-SYN's counterparties against its
 companies), one P-06 profile (ARVL's order announcement) and P-07 triage of F-SYN's India press releases. They run
 from files alone, with the inputs the pipeline builds (run.link_pending, capex.run.cross_border,

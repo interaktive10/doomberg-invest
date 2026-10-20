@@ -115,6 +115,16 @@ def read_month_csv(text: str) -> dict[str, list[MonthBar]]:
     return {t: [bars[m] for m in sorted(bars)] for t, bars in out.items()}
 
 
+def month_csv_tickers(path: Path) -> set[str]:
+    """The tickers with at least one row in the price asset; none when the file is missing."""
+    if not path.exists():
+        return set()
+    with gzip.open(path, "rt", encoding="utf-8") if path.suffix == ".gz" else path.open(encoding="utf-8") as fh:
+        rows = csv.reader(fh)
+        next(rows, None)  # the header (the first gzip member's)
+        return {r[0] for r in rows if r}
+
+
 def read_prices(path: Path, tickers: Iterable[str] | None = None) -> dict[str, list[MonthBar]]:
     """The Lab's month bars (the release asset write_month_csv builds), for the wanted tickers (e.g. "AAPL", "BRK-B")
     or all; tickers without rows are left out."""
@@ -130,6 +140,7 @@ class TickerState:
     status: str = "pending"  # pending | ok | no_such_symbol | error (FINAL: never asked again)
     attempts: int = 0  # failed requests so far (a spent day of credits isn't one)
     error: str | None = None  # the last failure
+    months: int = 0  # month bars saved for an `ok` ticker (0: Twelve Data had no complete month of it yet)
 
 
 @dataclass

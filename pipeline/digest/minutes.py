@@ -8,7 +8,9 @@ inside the free minutes.
   rounded up to a whole minute as GitHub bills it. A job that never started (blocked, or still queued) or hasn't ended
   counts 0. Other repositories' minutes are `actions.other_repos`, copied by hand from github.com/settings/billing.
 - Projected: used plus the cycle's remaining scheduled runs (the crons in .github/workflows/*.yml, UTC) at their
-  typical cost (`actions.typical`).
+  typical cost (`actions.typical`). The Lab download (lab-prices.yml) is gated, so its typical cost is 0; the digest
+  adds the runs it still needs instead (its pending tickers at `max_credits` a run, at most its cron's remaining runs)
+  at `actions.download_run` each (PR 3 review spec-F2). The gate leaves them out: each of those runs asks for itself.
 - `python -m pipeline.digest.minutes gate --need N` (lab-prices.yml and lab.yml, first step; the job needs
   `permissions: actions: read`): the run is allowed when used + N + `actions.reserve` + the scheduled runs stays at or
   below `actions.gate_max`. It prints one line, writes allowed=true|false to $GITHUB_OUTPUT and exits 0 either way: a
@@ -56,6 +58,7 @@ class Budget:
     reserve: int  # minutes no schedule shows (CI, thesis-ingest, a re-run), held back by the gate
     warn_above: int  # the digest warns above this projection
     typical: Mapping[str, int] = field(default_factory=dict)  # workflow file -> billed minutes of a scheduled run
+    download_run: int = 0  # billed minutes of one Lab download run (lab-prices.yml), for the digest's projection
 
     @classmethod
     def from_doc(cls, doc: Mapping[str, Any]) -> Budget:
@@ -68,6 +71,7 @@ class Budget:
             reserve=int(a["reserve"]),
             warn_above=int(a["warn_above"]),
             typical={str(k): int(v) for k, v in (a.get("typical") or {}).items()},
+            download_run=int(a.get("download_run") or 0),
         )
         if not 1 <= budget.cycle_day <= 31:
             raise ValueError(f"config/quotas.yaml actions.cycle_day must be 1-31, not {budget.cycle_day}")
@@ -168,6 +172,17 @@ def scheduled_minutes(runs: Mapping[str, int], typical: Mapping[str, int]) -> in
     return sum(n * typical.get(name, 0) for name, n in runs.items())
 
 
+DOWNLOAD = "lab-prices.yml"
+
+
+def download_minutes(runs_left: int, pending: int, per_run: int, run_minutes: int) -> int:
+    """The Lab download's remaining runs at `run_minutes` each: as many as its `pending` tickers need at `per_run`
+    tickers a run (config/lab.yaml prices.max_credits), at most the `runs_left` its cron has this cycle."""
+    if pending <= 0 or per_run <= 0:
+        return 0
+    return min(runs_left, math.ceil(pending / per_run)) * run_minutes
+
+
 # ---------------------------------------------------------------- this repository's runs
 
 
@@ -241,20 +256,26 @@ class Meter:
     end: date
     here: int  # this repository's billed minutes this cycle
     scheduled: int  # the cycle's remaining scheduled runs at their typical cost
+    download: int = 0  # the Lab download's remaining runs (download_minutes); the digest's projection only
 
     @property
     def used(self) -> int:
         return self.here + self.budget.other_repos
 
     def projected(self, need: int = 0, reserve: int = 0) -> int:
-        return self.used + need + reserve + self.scheduled
+        return self.used + need + reserve + self.scheduled + self.download
 
 
-def measure(runs: Runs, budget: Budget, now: datetime, root: Path = REPO_ROOT) -> Meter:
+def measure(runs: Runs, budget: Budget, now: datetime, root: Path = REPO_ROOT, download_pending: int = 0,
+            tickers_per_run: int = 0) -> Meter:  # fmt: skip
+    """`download_pending`, `tickers_per_run`: the Lab download's pending tickers and a run's share of them (the
+    digest passes them; the gate doesn't, so they count 0 there)."""
     start, end = cycle(now.date(), budget.cycle_day)
     here = sum(job_minutes(j) for run_id in runs.run_ids(start) for j in runs.jobs(run_id))
     until = datetime.combine(end, time(0), tzinfo=UTC)
-    return Meter(budget, start, end, here, scheduled_minutes(scheduled_runs(now, until, root), budget.typical))
+    fires_left = scheduled_runs(now, until, root)
+    download = download_minutes(fires_left.get(DOWNLOAD, 0), download_pending, tickers_per_run, budget.download_run)
+    return Meter(budget, start, end, here, scheduled_minutes(fires_left, budget.typical), download)
 
 
 def gate(meter: Meter, need: int) -> tuple[bool, str]:
@@ -283,11 +304,13 @@ def digest_line(meter: Meter) -> str:
 
 
 def digest_lines(settings: Settings, http: HttpClient, now: datetime | None = None,
-                 env: Mapping[str, str] | None = None, root: Path = REPO_ROOT) -> list[str]:  # fmt: skip
-    """The digest's line; the digest goes out also when the runs can't be read, saying so."""
+                 env: Mapping[str, str] | None = None, root: Path = REPO_ROOT, download_pending: int = 0,
+                 tickers_per_run: int = 0) -> list[str]:  # fmt: skip
+    """The digest's line, the Lab download's remaining runs projected (pipeline/lab/price_history.pending_tickers);
+    the digest goes out also when the runs can't be read, saying so."""
     try:
         runs = runs_client(settings, http, os.environ if env is None else env)
-        meter = measure(runs, Budget.load(root), now or datetime.now(UTC), root)
+        meter = measure(runs, Budget.load(root), now or datetime.now(UTC), root, download_pending, tickers_per_run)
     except Exception as e:  # noqa: BLE001 — httpx errors and the like: the digest still goes out
         return [f"Actions: minutes not read this week ({type(e).__name__}: {e})."]
     return [digest_line(meter)]

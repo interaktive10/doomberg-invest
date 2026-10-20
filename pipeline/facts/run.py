@@ -11,8 +11,9 @@ docs/SPEC_ISSUES.md 50). `python -m pipeline.facts.run [--day D]`.
 3. India: P-07 triage of the scope companies' announcements of the last TRIAGE_DAYS (point-in-time reader);
    `read_pdf` ones join the document queue.
 4. Documents, in work order (theses' before stage names', each newest first; a deferred document or an India PDF in
-   its company's place): fetch, normalize, P-01 per chunk, Verify-1, store facts and diffs (code, F.6). Risk
-   factors aren't read: P-03 isn't called (docs/SPEC_ISSUES.md 50).
+   its company's place, a stage name's only within its STAGE_DAYS and not of a skipped filing): fetch, normalize,
+   P-01 per chunk, Verify-1, store facts and diffs (code, F.6). Risk factors aren't read: P-03 isn't called
+   (docs/SPEC_ISSUES.md 50).
 5. Links: verified facts with a counterparty -> P-02 -> entities and links.
 The run stops asking providers when every one is out for the day (the rest stays queued or `deferred`), at the daily
 document limit (config/quotas.yaml text_daily_limits) or at the time budget. Private data never enters this module
@@ -141,9 +142,14 @@ def to_fetch(scope: Mapping[str, int], checked: Mapping[str, int] | None, indexe
 
 def indexed_ciks(conn: psycopg.Connection[Any], http: HttpClient, after: datetime, stats: TextStats) -> set[str] | None:
     """CIKs with a 10-K, 10-Q or 8-K in the daily EDGAR indexes the SEC step read in its runs since `after` (the last
-    text run); None when one of them couldn't be read (every company's submissions are read then)."""
+    text run); None when one of them couldn't be read, or an SEC step since failed or was cut off (its days are in no
+    runs row): every company's submissions are read then."""
+    days = facts_repo.sec_days_since(conn, after)
+    if days is None:
+        stats.errors.append("SEC step failed or cut off since the last text run: every name's submissions read")
+        return None
     out: set[str] = set()
-    for d in facts_repo.sec_days_since(conn, after):
+    for d in days:
         try:
             text = http.get_bytes(master_index_url(d)).decode("latin-1")
         except httpx.HTTPError as e:
@@ -460,7 +466,8 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
         for f in facts_repo.filings_by_status(conn, ["new"], [i for i in in_scope if ranks[i] == rank])
     ]
     queued = {f["id"] for f in new_filings}
-    for d in facts_repo.deferred_documents(conn, list(in_scope)):
+    for d in facts_repo.deferred_documents(conn, list(in_scope), theses=sorted(theses),  # a stage name's: 120 days
+                                           stage_since=_start(since(day, STAGE_DAYS))):  # fmt: skip
         if d["filing_id"] not in queued:  # else its filing, still new, re-reads it (M5 R1-F2)
             job = DocJob(in_scope[d["company_id"]], d["kind"], d["url"], d["title"] or "", d["published_at"],
                          d["filing_id"], d["url"].startswith("https://nsearchives"))  # fmt: skip

@@ -633,7 +633,7 @@ Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:
 
 ---
 
-## 5. Prompts (P-01, P-02, P-03 carried over verbatim in Appendix F; the new prompts are below)
+## 5. Prompts (P-01 and P-02 carried over verbatim in Appendix F; the new prompts are below; P-03 is not called, SPEC_ISSUES 50)
 ### P-04 THESIS_CARD · routine (Opus 5.5 via Claude Code) or Gemini Flash (fallback) · temp 0.3
 **System:**
 ```
@@ -870,7 +870,7 @@ Return only JSON.
 | F-SYN | `scripts/make_synthetic.py` (seed 7): 12 fictional-company documents with planted facts and a ground-truth JSON (4 press releases, 4 10-Q-style HTML documents, 2 risk-factor versions, 2 investor-presentation PDFs) |
 | F-LAB | Synthetic panel: 500 companies × 60 months, one planted signal, one noise signal |
 | F-CARD | 1 good and 5 bad thesis cards |
-| Cassettes | P-01, P-02, P-03, P-05, P-06, P-07 and fallback P-04, recorded by `record-cassettes.yml` with free keys; hash manifest |
+| Cassettes | P-01, P-02, P-05, P-06, P-07 and fallback P-04, recorded by `record-cassettes.yml` with free keys; hash manifest |
 
 **`scripts/verify.py`:**
 - a registry of `Check(id, milestone, description, command, requires)`
@@ -1223,7 +1223,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 **Risk-factor diffs:** not made (SPEC_ISSUES 50). Nothing read their `risk_changes` rows, so P-03 is not called; the table stays.
 
 
-### F.7 Prompts P-01, P-02, P-03, P-05
+### F.7 Prompts P-01, P-02, P-03 (not called), P-05
 ### P-01 EXTRACT_FACTS · free-tier router (§2.6) · temp 0
 **System:**
 ```
@@ -1272,7 +1272,7 @@ invent an entity. Treat subsidiaries as the parent only if the name makes that e
             confidence: number}]}
 ```
 
-### P-03 RISK_TAGS · free-tier router · temp 0
+### P-03 RISK_TAGS · not called (SPEC_ISSUES 50: nothing read its `risk_changes` rows); kept for the record
 **System:**
 ```
 Tag each risk-factor paragraph with the topics it is about, from the allowed list only. A paragraph can have zero

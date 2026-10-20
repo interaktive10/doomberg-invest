@@ -31,6 +31,8 @@ from pipeline.db import repo, thesis_repo
 from pipeline.db.models import Company, SourceHealth
 from pipeline.digest import minutes
 from pipeline.digest.github_issue import GitHubIssues, Issues, MockIssues, publish
+from pipeline.lab import price_history
+from pipeline.lab.run import lab_config
 from pipeline.net.http import HttpClient
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals.weekly import last_friday
@@ -244,8 +246,9 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     http = HttpClient(settings)
     api = issues_client(settings, http)
-    actions = minutes.digest_lines(settings, http)
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "digest") as tracked:
+        actions = minutes.digest_lines(settings, http, download_pending=price_history.pending_tickers(conn),
+                                       tickers_per_run=int(lab_config()["prices"]["max_credits"]))  # fmt: skip
         title, body = build(conn, a.week, os.environ.get("APP_URL", ""), why_unscored=unscored_why(os.environ),
                             actions=actions)  # fmt: skip
         number = publish(api, title, body) if api is not None else None

@@ -11,7 +11,8 @@ Lab reads (run.lab_companies), with the files lab-prices.yml keeps in the privat
 - A run stops itself after `max_minutes` or `max_credits` (lab-prices.yml's job limit is 120 minutes, the free plan's
   day 800 credits), when Twelve Data says the day's credits are spent, or after MAX_FAILURES_IN_A_ROW failures in a
   row (Twelve Data is down or refuses the key: the rest of the run would bill minutes for nothing). The prices and the
-  state are saved every `save_every` tickers and when it stops.
+  state are saved every `save_every` tickers and when it stops, also when it is cancelled or fails.
+- An `ok` ticker whose rows the price file lacks is asked again (`Outcome.lost`).
 - `complete` once every ticker has a final status; then $GITHUB_OUTPUT gets complete=true, and lab-prices.yml
   dispatches the first Lab run and disables itself (blocked=true disables it too).
 - Each run records a `lab_prices` runs row (the Lab page's progress line): ok when complete, partial while tickers
@@ -36,7 +37,15 @@ import psycopg
 
 from pipeline.db import repo
 from pipeline.lab import run
-from pipeline.lab.prices import FINAL, DownloadState, MonthBar, TickerState, complete_months, write_month_csv
+from pipeline.lab.prices import (
+    FINAL,
+    DownloadState,
+    MonthBar,
+    TickerState,
+    complete_months,
+    month_csv_tickers,
+    write_month_csv,
+)
 from pipeline.net.http import HttpClient
 from pipeline.net.twelvedata import Close, TwelveDataClient, TwelveDataDayCredits
 from pipeline.prices.source import NoSuchSymbol, PriceUnavailable
@@ -73,12 +82,13 @@ class Outcome:
     credits: int = 0  # requests this run made (one credit each)
     stopped: str | None = None  # minutes | credits | day_credits | failures | None (nothing left to ask)
     saved: list[int] = field(default_factory=list)  # tickers settled at each save
+    lost: int = 0  # `ok` tickers whose rows the price file didn't have: asked again (PR 3 review lab-F2)
 
     def stats(self) -> dict[str, Any]:
         s = self.state
         return {"status": s.status, "interval": s.interval, "tickers": len(s.tickers), "ok": s.count("ok"),
                 "no_such_symbol": s.count("no_such_symbol"), "error": s.count("error"), "pending": s.count("pending"),
-                "credits": self.credits, "stopped": self.stopped}  # fmt: skip
+                "credits": self.credits, "stopped": self.stopped, "lost": self.lost}  # fmt: skip
 
 
 def probe(source: HistorySource, symbol: str, reach: date) -> tuple[str | None, str | None, int]:
@@ -110,13 +120,21 @@ def download(
     limits: Limits | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> Outcome:
-    """One run of the download: resume the saved state, ask what is left within the limits, save."""
+    """One run of the download: resume the saved state, ask what is left within the limits, save. An `ok` ticker with
+    months saved that the price file lacks (the state was kept but not the prices: lab-prices.yml uploads the prices
+    first, yet a lost or partial asset is possible) is pending again, so the Lab never runs without its rows."""
     limits = limits or Limits()
     t0 = clock()
     state = DownloadState.load(state_path) or DownloadState()
     for t in tickers:
         state.tickers.setdefault(t, TickerState())
     out = Outcome(state)
+    if state.count("ok"):
+        have = month_csv_tickers(prices_path)
+        for t, ts in state.tickers.items():
+            if ts.status == "ok" and ts.months and t not in have:
+                state.tickers[t] = TickerState()
+                out.lost += 1
     batch: dict[str, list[MonthBar]] = {}
 
     def save() -> None:
@@ -144,38 +162,43 @@ def download(
     queue = deque(sorted((t for t, s in state.tickers.items() if s.status not in FINAL),
                          key=lambda t: (state.tickers[t].attempts, t)))  # fmt: skip
     failures, since_save = 0, 0  # failures in a row
-    while queue:
-        if out.credits >= limits.max_credits:
-            out.stopped = "credits"
-        elif clock() - t0 >= limits.max_minutes * 60:
-            out.stopped = "minutes"
-        elif failures >= MAX_FAILURES_IN_A_ROW:
-            out.stopped = "failures"
-        if out.stopped:
-            break
-        ticker = queue.popleft()
-        ts = state.tickers[ticker]
-        try:
-            closes = fetch(ticker)
-        except TwelveDataDayCredits:
-            out.stopped = "day_credits"  # not this ticker's fault: no attempt is counted
-            break
-        except NoSuchSymbol as e:
-            ts.status, ts.error, failures = "no_such_symbol", str(e)[:200], 0
-        except PriceUnavailable as e:
-            ts.attempts, ts.error, failures = ts.attempts + 1, str(e)[:200], failures + 1
-            if ts.attempts >= limits.max_attempts:
-                ts.status = "error"
+    try:
+        while queue:
+            if out.credits >= limits.max_credits:
+                out.stopped = "credits"
+            elif clock() - t0 >= limits.max_minutes * 60:
+                out.stopped = "minutes"
+            elif failures >= MAX_FAILURES_IN_A_ROW:
+                out.stopped = "failures"
+            if out.stopped:
+                break
+            ticker = queue.popleft()
+            ts = state.tickers[ticker]
+            try:
+                closes = fetch(ticker)
+            except TwelveDataDayCredits:
+                out.stopped = "day_credits"  # not this ticker's fault: no attempt is counted
+                break
+            except NoSuchSymbol as e:
+                ts.status, ts.error, failures = "no_such_symbol", str(e)[:200], 0
+            except PriceUnavailable as e:
+                ts.attempts, ts.error, failures = ts.attempts + 1, str(e)[:200], failures + 1
+                if ts.attempts >= limits.max_attempts:
+                    ts.status = "error"
+                else:
+                    queue.append(ticker)  # asked again after every ticker not yet asked
             else:
-                queue.append(ticker)  # asked again after every ticker not yet asked
-        else:
-            batch[ticker] = complete_months(closes, today)
-            ts.status, ts.error, failures = "ok", None, 0
-        out.credits += 1
-        since_save += 1
-        if since_save >= limits.save_every:
-            save()
-            since_save = 0
+                bars = complete_months(closes, today)
+                batch[ticker] = bars
+                ts.status, ts.error, ts.months, failures = "ok", None, len(bars), 0
+            out.credits += 1
+            since_save += 1
+            if since_save >= limits.save_every:
+                save()
+                since_save = 0
+    except BaseException:
+        save()  # cancelled, the job's timeout (SIGINT) or an error: keep what was fetched (PR 3 review lab-F5)
+        raise
     if state.settled() == len(state.tickers):
         state.status = "complete"
     save()
@@ -188,6 +211,17 @@ def finish(conn: psycopg.Connection[Any], run_id: UUID, out: Outcome, prices_pat
     s = out.state
     reason = run.blocked_reason(prices_path, s, cfg) if s.status == "blocked" else None
     repo.finish_run(conn, run_id, RUN_STATUS.get(s.status, "partial"), out.stats(), reason)
+
+
+def pending_tickers(conn: psycopg.Connection[Any]) -> int:
+    """Tickers the download still has to ask, for the digest's minutes projection (pipeline/digest/minutes.py): the
+    latest lab_prices run's pending count, 0 once the download is complete or blocked (lab-prices.yml is then off),
+    and before any run every ticker the Lab reads plus the probe."""
+    stats = repo.latest_run_stats(conn, "lab_prices", "tickers")
+    if stats is None:
+        kept, _ = run.lab_companies(conn, "us")
+        return len({c.ticker for c in kept if c.ticker}) + 1
+    return 0 if stats.get("status") in ("complete", "blocked") else int(stats.get("pending") or 0)
 
 
 def github_output(**values: bool) -> None:

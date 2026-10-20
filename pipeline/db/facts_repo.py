@@ -111,9 +111,9 @@ def skip_stale_filings(conn: Conn, theses: Sequence[UUID], stage_since: datetime
            "and g.form_type in ('10-K', '10-Q') and g.filed_at > f.filed_at)))"),
         {"t": list(theses), "since": stage_since, "items": sorted(STAGE_ITEMS)},
     ).rowcount  # fmt: skip
-    reset = conn.execute(
-        _q("update filings set status = 'new' where status = 'skipped' and company_id = any(%s::uuid[]) "
-           "and filed_at >= %s"),
+    reset = conn.execute(  # queued again now: RETRY_DAYS (pipeline.facts.run) count from here (PR 3 review TXT-3)
+        _q("update filings set status = 'new', created_at = now() where status = 'skipped' "
+           "and company_id = any(%s::uuid[]) and filed_at >= %s"),
         (list(theses), thesis_since),
     ).rowcount  # fmt: skip
     return skipped, reset
@@ -170,16 +170,23 @@ def document_has_facts(conn: Conn, document_id: UUID) -> bool:
     return bool(row and row[0])
 
 
-def deferred_documents(conn: Conn, company_ids: Sequence[UUID] | None = None, limit: int = 1000
+def deferred_documents(conn: Conn, company_ids: Sequence[UUID] | None = None, limit: int = 1000,
+                       theses: Sequence[UUID] = (), stage_since: datetime | None = None
                        ) -> list[dict[str, Any]]:  # fmt: skip
-    """Documents deferred for want of a provider, of these companies (None: all)."""
+    """Documents deferred for want of a provider, of these companies (None: all). With `stage_since`, a company not in
+    `theses` (a stage name) keeps only those published since then whose filing isn't `skipped`: a stage name reads its
+    120 days alone (docs/SPEC_ISSUES.md 50, PR 3 review TXT-2)."""
     return _rows(
         conn,
         "select d.id, d.company_id, d.filing_id, d.kind, d.url, d.title, d.published_at from documents d "
+        "left join filings f on f.id = d.filing_id "
         "where d.status = 'deferred' and (%(ids)s::uuid[] is null or d.company_id = any(%(ids)s::uuid[])) "
+        "and (%(since)s::timestamptz is null or d.company_id = any(%(theses)s::uuid[]) "
+        "or (d.published_at >= %(since)s and f.status is distinct from 'skipped')) "
         "order by d.published_at limit %(limit)s",
-        {"ids": None if company_ids is None else list(company_ids), "limit": limit},
-    )
+        {"ids": None if company_ids is None else list(company_ids), "limit": limit, "theses": list(theses),
+         "since": stage_since},
+    )  # fmt: skip
 
 
 # ---------------------------------------------------------------- facts, diffs, links
@@ -455,9 +462,17 @@ def last_checked(conn: Conn) -> tuple[datetime, dict[str, int]] | None:
     return row[0], {str(k): int(v) for k, v in dict(row[1]).items()}
 
 
-def sec_days_since(conn: Conn, after: datetime) -> list[date]:
+def sec_days_since(conn: Conn, after: datetime) -> list[date] | None:
     """The EDGAR days whose daily index the SEC step (us_daily runs, pipeline.us.daily) read in runs started after
-    `after`, oldest first."""
+    `after`, oldest first; None when one of those runs didn't end `ok` or `partial` with its `days` (it failed or was
+    cut off): the days it committed before that moved its cursor on but are in no runs row (PR 3 review TXT-1)."""
+    untrusted = conn.execute(
+        _q("select exists (select 1 from runs where kind = 'us_daily' and started_at > %s and (finished_at is null "
+           "or status not in ('ok', 'partial') or jsonb_typeof(stats -> 'days') is distinct from 'array'))"),
+        (after,),
+    ).fetchone()  # fmt: skip
+    if untrusted is not None and untrusted[0]:
+        return None
     rows = _rows(
         conn,
         "select distinct (d ->> 'day') as day from runs r, jsonb_array_elements(coalesce(r.stats -> 'days', '[]')) d "

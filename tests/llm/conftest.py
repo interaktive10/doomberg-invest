@@ -57,7 +57,7 @@ def quotas(names: Iterable[str] = ("gemini", "groq", "openrouter"), rpd: int | N
     return Quotas.from_doc({
         "providers": {n: {"models": {"extract": f"{n}-small", "card": f"{n}-big"}, "requests_per_day": rpd,
                           "requests_per_minute": rpm, "tokens_per_day": tpd} for n in names},
-        "routing": {p: names for p in ("P-01", "P-02", "P-03", "P-05", "P-06", "P-07")},
+        "routing": {p: names for p in ("P-01", "P-02", "P-05", "P-06", "P-07")},
     })  # fmt: skip
 
 

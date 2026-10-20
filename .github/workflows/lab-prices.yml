@@ -56,9 +56,11 @@ jobs:
             gh release create lab-data-v1 --target "$GITHUB_SHA" --title "Signal Lab data" \
               --notes "Signal Lab prices from Twelve Data (lab-prices.yml) and the Lab's panel (lab.yml); private."
           fi
-          # A failed download fails this step (nothing after it runs), so a network error can never start the download
-          # over and upload an empty state over the real one.
-          if gh release view lab-data-v1 --json assets --jq '.assets[].name' | grep -qx 'us_prices_state.json'; then
+          # A failed listing or download fails this step (nothing after it runs), so a network error can never start the
+          # download over and upload an empty state over the real one: the listing is a statement of its own, since a
+          # command inside an `if` condition or a pipe never stops the step (PR 3 review lab-F1).
+          assets="$(gh release view lab-data-v1 --json assets --jq '.assets[].name')"
+          if grep -qx 'us_prices_state.json' <<< "$assets"; then
             gh release download lab-data-v1 --pattern 'us_prices_state.json' --pattern 'us_month_prices.csv.gz' \
               --dir .cache/lab --clobber
           else
@@ -72,10 +74,12 @@ jobs:
         id: download
         if: steps.resume.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.lab.price_history --dir .cache/lab
+      # The prices go first and the state last, so the state never says `ok` for rows the release doesn't hold; a
+      # failed upload stops the step before the state (PR 3 review lab-F2; price_history also re-asks such tickers).
       - name: Keep the progress (the lab-data-v1 release, also after a failure)
         if: always() && steps.resume.outputs.ok == 'true'
         run: |
-          for f in .cache/lab/us_prices_state.json .cache/lab/us_month_prices.csv.gz; do
+          for f in .cache/lab/us_month_prices.csv.gz .cache/lab/us_prices_state.json; do
             if [ -f "$f" ]; then gh release upload lab-data-v1 "$f" --clobber; fi
           done
       # --ref: the branch is named, as quarterly.yml's old dispatch did (first live run, 2026-09-29).
