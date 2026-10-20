@@ -74,6 +74,9 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
     expect(citeView("s:R3", co, facts).title).toBe("Auditor change, late filing or going-concern language");
     expect(citeView("c:C2", co, facts)).toMatchObject({ label: "C2", href: `/company/${co}#context` });
     expect(citeView("c:C2", null, facts).href).toBeNull();
+    expect(citeView("c:C1", co, facts)).toEqual({ label: "C1", title: "Valuation percentile vs its own history", href: `/company/${co}` });
+    expect(citeView("c:C3", co, facts).href).toBe(`/company/${co}`);
+    expect(citeView("c:C1", null, facts).href).toBeNull();
   });
 
   it("splits citations out of text for the chips, and leaves code alone", () => {

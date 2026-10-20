@@ -55,16 +55,17 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const inSector = all.filter((r) => !sector || r.sector === sector);
   const ids = inSector.map((r) => r.company_id);
   const [held, cards, history] = await Promise.all([
-    dismissals(ids),
+    week ? dismissals(ids, week) : Promise.resolve(new Map<string, never>()),
     latestThesisByCompany(ids),
     week ? scoreHistory(ids, windowStart(week), week) : Promise.resolve(new Map<string, never[]>()),
   ]);
-  // still dismissed: nothing new fired since the dismissal and Evidence moved less than 10
+  // still dismissed: no week since the dismissal (this one included) had a new signal or family or moved Evidence 10
   const dismissed = new Set(
     inSector
       .filter((r) => {
         const d = held.get(r.company_id);
-        return d !== undefined && dismissalHolds(d.baseline, { evidence: r.evidence, families: r.families, signals: r.fired_signals });
+        const now = { evidence: r.evidence, families: r.families, signals: r.fired_signals };
+        return d !== undefined && dismissalHolds(d.baseline, [...d.since, now]);
       })
       .map((r) => r.company_id),
   );
@@ -265,8 +266,8 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
 }
 
 /** A 0–100 score with a bar; the number is the value, the bar decoration, and the change since the previous scored
- * week under it when given. On a wide screen the column header names it (the label stays for screen readers). */
-function Score({ label, value, change }: { label: string; value: number | string | null | undefined; change?: number | null }) {
+ * score (and its week) under it when given. On a wide screen the column header names it (the label stays for screen readers). */
+function Score({ label, value, change }: { label: string; value: number | string | null | undefined; change?: { change: number; since: string } | null }) {
   const n = value === null || value === undefined || value === "" ? null : Number(value);
   const width = n === null || !Number.isFinite(n) ? 0 : Math.max(0, Math.min(100, n));
   return (
@@ -279,8 +280,8 @@ function Score({ label, value, change }: { label: string; value: number | string
         </span>
       </div>
       {change === undefined ? null : (
-        <div className={cn("num mt-0.5 text-xs", change === null || change === 0 ? "text-muted" : change > 0 ? "text-up" : "text-down")}>
-          {change === null ? "no earlier score" : `${signed(change)} vs last week`}
+        <div className={cn("num mt-0.5 text-xs", change === null || change.change === 0 ? "text-muted" : change.change > 0 ? "text-up" : "text-down")}>
+          {change === null ? "no earlier score" : `${signed(change.change)} since ${change.since}`}
         </div>
       )}
     </div>

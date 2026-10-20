@@ -194,31 +194,34 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                 <ReviewDiff id={r.period_end ?? r.created_at.slice(0, 10)} diff={r.pack_diff as Partial<PackDiff>} />
                 {r.note ? <p className="mt-3 text-[13px]">Note: {r.note}</p> : null}
                 {r.verdict === null && t.state === "review" ? (
-                  <form action={decideReview} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
-                    <Hidden id={t.id} />
-                    <input type="hidden" name="review_id" value={r.id} />
-                    <fieldset className="min-w-0">
-                      <legend className="mb-2 text-xs font-medium text-muted">Verdict</legend>
-                      <div className="flex flex-wrap gap-2">
-                        {(["intact", "weakened", "broken"] as const).map((v) => (
-                          <label key={v} className={choiceChip}>
-                            <input type="radio" name="verdict" value={v} required />
-                            {v}
-                          </label>
-                        ))}
+                  <details className="mt-4 border-t border-line pt-4">
+                    <summary className={cn(buttonVariants({ size: "sm" }), OPENER)}>Record a verdict</summary>
+                    <form action={decideReview} className="mt-3 flex flex-col gap-3">
+                      <Hidden id={t.id} />
+                      <input type="hidden" name="review_id" value={r.id} />
+                      <fieldset className="min-w-0">
+                        <legend className="mb-2 text-xs font-medium text-muted">Verdict</legend>
+                        <div className="flex flex-wrap gap-2">
+                          {(["intact", "weakened", "broken"] as const).map((v) => (
+                            <label key={v} className={choiceChip}>
+                              <input type="radio" name="verdict" value={v} required />
+                              {v}
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor={`note-${r.id}`}>Note</Label>
+                        <Textarea id={`note-${r.id}`} name="note" />
                       </div>
-                    </fieldset>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor={`note-${r.id}`}>Note</Label>
-                      <Textarea id={`note-${r.id}`} name="note" />
-                    </div>
-                    <label className="flex items-center gap-2 text-[13px]">
-                      <input type="checkbox" name="to_journal" /> Also add the note to the journal
-                    </label>
-                    <div>
-                      <SubmitButton>Record verdict</SubmitButton>
-                    </div>
-                  </form>
+                      <label className="flex items-center gap-2 text-[13px]">
+                        <input type="checkbox" name="to_journal" /> Also add the note to the journal
+                      </label>
+                      <div>
+                        <SubmitButton>Record verdict</SubmitButton>
+                      </div>
+                    </form>
+                  </details>
                 ) : null}
               </li>
             ))}

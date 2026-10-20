@@ -239,31 +239,47 @@ export async function scoreHistory(ids: readonly string[], from: string, before:
   return out;
 }
 
-/** Each company's latest dismissal (candidate_actions) with what it was dismissed on: that week's Evidence, families
- * and fired signals (lib/candidates.ts dismissalHolds). A dismissal without a scores row for its week has no baseline
- * (null). */
-export async function dismissals(ids: readonly string[]): Promise<Map<string, { week_end: string; reason: string | null; baseline: Baseline | null }>> {
+/** Each company's latest dismissal (candidate_actions) with what it was dismissed on (that week's Evidence, families
+ * and fired signals) and the same for every scored week after it through `week` (lib/candidates.ts dismissalHolds
+ * reads them all: once a week releases the hold it stays released). A dismissal without a scores row for its week has
+ * no baseline (null). The reads cover only the dismissed companies, from their own dismissal week on. */
+export async function dismissals(ids: readonly string[], week: string): Promise<Map<string, { week_end: string; reason: string | null; baseline: Baseline | null; since: Baseline[] }>> {
   const acts = await byIds<{ company_id: string; week_end: string; reason: string | null }>(ids, (chunk) => (a, b) =>
     db().from("candidate_actions").select("company_id, week_end, reason").in("company_id", chunk).eq("action", "dismiss")
       .order("created_at", { ascending: false }).order("id").range(a, b)); // prettier-ignore
   const latest = new Map<string, { week_end: string; reason: string | null }>();
   for (const x of acts) if (!latest.has(x.company_id)) latest.set(x.company_id, { week_end: x.week_end, reason: x.reason });
-  const who = [...latest.keys()];
-  const weeks = [...new Set([...latest.values()].map((x) => x.week_end))];
-  if (who.length === 0) return new Map();
-  const [scored, fired] = await Promise.all([
-    byIds<{ company_id: string; week_end: string; evidence: number | string; families: string[] }>(who, (chunk) => (a, b) =>
-      db().from("scores").select("company_id, week_end, evidence, families").in("company_id", chunk).in("week_end", weeks)
-        .order("company_id").order("week_end").range(a, b)), // prettier-ignore
-    byIds<{ company_id: string; week_end: string; signal_id: string }>(who, (chunk) => (a, b) =>
-      db().from("signal_values").select("company_id, week_end, signal_id").in("company_id", chunk).in("week_end", weeks)
-        .eq("fired", true).order("company_id").order("week_end").order("signal_id").range(a, b)), // prettier-ignore
-  ]);
-  const out = new Map<string, { week_end: string; reason: string | null; baseline: Baseline | null }>();
+  if (latest.size === 0) return new Map();
+  // one pair of reads per dismissal week, each for the companies dismissed that week, from that week through `week`
+  const groups = new Map<string, string[]>();
+  for (const [id, d] of latest) groups.set(d.week_end, [...(groups.get(d.week_end) ?? []), id]);
+  type Scored = { company_id: string; week_end: string; evidence: number | string; families: string[] };
+  type Fired = { company_id: string; week_end: string; signal_id: string };
+  const reads = await Promise.all(
+    [...groups].map(([from, who]) =>
+      Promise.all([
+        byIds<Scored>(who, (chunk) => (a, b) =>
+          db().from("scores").select("company_id, week_end, evidence, families").in("company_id", chunk)
+            .gte("week_end", from).lte("week_end", week).order("company_id").order("week_end").range(a, b)), // prettier-ignore
+        byIds<Fired>(who, (chunk) => (a, b) =>
+          db().from("signal_values").select("company_id, week_end, signal_id").in("company_id", chunk)
+            .gte("week_end", from).lte("week_end", week).eq("fired", true).order("company_id").order("week_end")
+            .order("signal_id").range(a, b)), // prettier-ignore
+      ]),
+    ),
+  );
+  const scored = reads.flatMap(([s]) => s);
+  const fired = reads.flatMap(([, f]) => f);
+  const at = (r: Scored): Baseline => ({
+    evidence: r.evidence,
+    families: r.families,
+    signals: fired.filter((f) => f.company_id === r.company_id && f.week_end === r.week_end).map((f) => f.signal_id),
+  });
+  const out = new Map<string, { week_end: string; reason: string | null; baseline: Baseline | null; since: Baseline[] }>();
   for (const [id, d] of latest) {
-    const s = scored.find((r) => r.company_id === id && r.week_end === d.week_end);
-    const signals = fired.filter((r) => r.company_id === id && r.week_end === d.week_end).map((r) => r.signal_id);
-    out.set(id, { ...d, baseline: s ? { evidence: s.evidence, families: s.families, signals } : null });
+    const mine = scored.filter((r) => r.company_id === id);
+    const s = mine.find((r) => r.week_end === d.week_end);
+    out.set(id, { ...d, baseline: s ? at(s) : null, since: mine.filter((r) => r.week_end > d.week_end).map(at) });
   }
   return out;
 }

@@ -33,7 +33,7 @@ async function flash(page: Page, text: string | RegExp): Promise<void> {
 
 /** Opens a form that sits behind its button (a <details> whose summary reads `name`), unless it is open already. */
 async function openForm(page: Page, name: string): Promise<void> {
-  const summary = page.getByRole("main").locator("summary", { hasText: name });
+  const summary = page.getByRole("main").locator("summary", { hasText: name }).first();
   if ((await summary.locator("xpath=..").getAttribute("open")) === null) await summary.click();
 }
 
@@ -114,6 +114,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await journalEntry(page, "start_position", "Backlog converts; the price implies 5% growth.", "Order book confirmed.");
   await flash(page, "Position recorded in the journal.");
 
+  await openForm(page, "Record a verdict");
   await page.getByLabel("intact", { exact: true }).check();
   await page.getByLabel("Note", { exact: true }).fill("Q2 in line with the card.");
   await page.getByLabel("Also add the note to the journal").check();
@@ -149,6 +150,7 @@ test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Review");
   await expect(page.getByText("A kill criterion triggered")).toBeVisible();
   await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("m:evidence");
+  await openForm(page, "Record a verdict");
   await page.getByLabel("intact", { exact: true }).check();
   await page.getByRole("button", { name: "Record verdict" }).click();
   await flash(page, "Marked intact.");

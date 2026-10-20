@@ -29,7 +29,7 @@ export interface Snapshot {
   figures: Record<string, number | null>; // that quarter's key figures
   signals: string[]; // fired signal ids
   red_flags: string[]; // fired red-flag ids
-  context: Record<string, number | null>; // C1..C4, evidence, gap
+  context: Record<string, number | null>; // C1..C3, evidence, gap
   kill: Record<string, number | null>; // kill metric id -> value
 }
 
@@ -73,7 +73,7 @@ export interface PackDiff {
 }
 
 export const FIGURES = ["revenue", "op_income", "net_income", "cfo", "rpo", "diluted_shares"] as const;
-const CONTEXT_ORDER = ["C1", "C2", "C3", "C4", "evidence", "gap"];
+const CONTEXT_ORDER = ["C1", "C2", "C3", "evidence", "gap"]; // an old pack's C4 sorts after them
 
 function num(x: unknown): number | null {
   const n = typeof x === "number" ? x : typeof x === "string" && x.trim() !== "" ? Number(x) : Number.NaN;
