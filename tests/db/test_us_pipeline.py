@@ -473,6 +473,47 @@ def test_weekly_run_cut_off_by_the_timeout_keeps_finished_companies(migrated_url
             c.commit()
 
 
+def test_a_resumed_catch_up_cut_off_part_way_keeps_the_days_it_read(
+    migrated_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Overhaul PR 1 review (pipeline-F1): without a state file the catch-up first reads the runs table on
+    tracked_run's connection. That read is closed before the first day, so each day still commits on its own: a job
+    killed on 2025-03-04 keeps 2025-03-03's purchases (seen from a second connection) and the cursor past them. The
+    `conn` fixture can't show this: its outer transaction makes every block a savepoint."""
+    from pipeline.us import daily
+
+    real = daily.run_daily
+
+    def run_daily(
+        conn: psycopg.Connection[Any], client: HttpClient, day: date, state: Path | None = None
+    ) -> daily.DailyStats:
+        if day == date(2025, 3, 4):
+            raise Killed  # the job timeout, while the day's downloads run
+        return real(conn, client, day, state)
+
+    monkeypatch.setattr(daily, "run_daily", run_daily)
+    day_state, pending = tmp_path / "day.json", tmp_path / "pending.json"
+    with psycopg.connect(migrated_url) as c, psycopg.connect(migrated_url, autocommit=True) as observer:
+        geron = add(c, "0000886744", "GERON CORP")
+        c.execute("insert into runs (kind, started_at, finished_at, status, stats) values "
+                  "(%s, '2025-03-01 01:30+00', '2025-03-01 01:31+00', 'ok', %s)",
+                  (daily.RUN_KIND, Jsonb({"date": None, "days": [{"day": "2025-02-28", "retry": 0}],
+                                          "errors": []})))  # fmt: skip
+        c.commit()
+        try:
+            with pytest.raises(Killed), repo.tracked_run(c, daily.RUN_KIND):
+                daily.run_catch_up(c, catch_up_client(tmp_path), date(2025, 3, 5), pending, day_state)
+            kept = observer.execute("select count(*) from insider_events where company_id = %s", (geron,)).fetchone()
+            assert kept == (3,) and daily.load_last_day(day_state) == date(2025, 3, 3)
+        finally:
+            c.rollback()
+            c.execute("delete from insider_events where company_id = %s", (geron,))
+            c.execute("delete from corp_events where company_id = %s", (geron,))
+            c.execute("delete from runs where kind = %s", (daily.RUN_KIND,))
+            c.execute("delete from companies where id = %s", (geron,))
+            c.commit()
+
+
 # ---------------------------------------------------------------- runs bookkeeping
 
 

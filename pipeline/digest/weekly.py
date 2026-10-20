@@ -3,9 +3,9 @@ markdown, from the `digests` table).
 
 Under the title, a banner lists every source that is stale or past its §2.7 SLA (config/staleness.yaml; M6 review
 R1-F12). Sections: new candidates (at most 10, one line each: families fired, Evidence, Gap, link; when the week has
-no scores, it says the candidates are missing); theses needing attention (kill criteria triggered this week, reviews
-due); the Capex brief; source health and staleness; LLM quota use; Lab notes when a run happened this week. No
-price-move content: no gainers, losers or returns.
+no scores, it says the candidates are missing and why, from weekly.yml's job results); theses needing attention
+(kill criteria triggered this week, reviews due); the Capex brief; source health and staleness; LLM quota use; Lab
+notes when a run happened this week. No price-move content: no gainers, losers or returns.
 
 `python -m pipeline.digest.weekly [--week D]` (weekly.yml `publish` job: every week, whatever the other jobs did).
 The issue is published with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true)
@@ -60,10 +60,30 @@ def _link(c: Company, app_url: str) -> str:
     return f" · [company page]({app_url.rstrip('/')}/company/{c.id})" if app_url else ""
 
 
-def candidates(conn: psycopg.Connection[Any], week: date, companies: Mapping[Any, Company], app_url: str) -> list[str]:
+UNSCORED = "the scoring run didn't finish"  # a digest run outside weekly.yml: the jobs' results aren't known
+ENDED = {"failure": "failed", "cancelled": "was cancelled or timed out"}  # needs.<job>.result, besides success/skipped
+
+
+def unscored_why(env: Mapping[str, str]) -> str:
+    """Why a week has no scores, from weekly.yml's job results (the digest step's US_RESULT and SCORES_RESULT are
+    needs.<job>.result, US_RAN the us job's secret check): scores run only after a us job that ran and succeeded."""
+    us, scores = env.get("US_RESULT", ""), env.get("SCORES_RESULT", "")
+    if us in ENDED:
+        return f"the US data run {ENDED[us]}, so nothing was scored"
+    if us == "success" and env.get("US_RAN") != "true":
+        return "the US data run skipped its steps (a secret is missing), so nothing was scored"
+    if scores in ENDED:
+        return f"the scoring run {ENDED[scores]}"
+    if scores == "success":
+        return "the scoring run finished without writing any"
+    return UNSCORED
+
+
+def candidates(conn: psycopg.Connection[Any], week: date, companies: Mapping[Any, Company], app_url: str,
+               why: str = UNSCORED) -> list[str]:  # fmt: skip
     if not thesis_repo.scored(conn, week):
-        return [f"**Candidates are missing this week:** no scores were written for {week:%Y-%m-%d} (the scoring run "
-                "didn't finish; see source health below)."]  # fmt: skip
+        return [f"**Candidates are missing this week:** no scores were written for {week:%Y-%m-%d} ({why}; see "
+                "source health below)."]  # fmt: skip
     out = []
     for r in thesis_repo.shortlist(conn, week)[:10]:
         c = companies.get(r["company_id"])
@@ -177,7 +197,8 @@ def lab(rows: Sequence[Mapping[str, Any]]) -> list[str]:
             "proposals arrive as pull requests (docs/LAB_REPORT.md)."]  # fmt: skip
 
 
-def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: datetime | None = None) -> tuple[str, str]:
+def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: datetime | None = None,
+          why_unscored: str = UNSCORED) -> tuple[str, str]:  # fmt: skip
     now = now or datetime.now(UTC)
     companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
     since = datetime.combine(week - timedelta(days=6), time(0), tzinfo=UTC)
@@ -185,7 +206,7 @@ def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: dat
     title = f"Doomberg weekly — {week_label(week)}"
     sources, sla, fb = repo.source_health(conn), sla_days(), fallbacks()
     parts: list[tuple[str, list[str]]] = [
-        ("New candidates", candidates(conn, week, companies, app_url)),
+        ("New candidates", candidates(conn, week, companies, app_url, why_unscored)),
         ("Theses needing attention", attention(conn, week)),
         ("Capex brief", capex(conn, week)),
         ("Source health", health(sources, now, sla, fb)),
@@ -220,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     api = issues_client(settings, HttpClient(settings))
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "digest") as tracked:
-        title, body = build(conn, a.week, os.environ.get("APP_URL", ""))
+        title, body = build(conn, a.week, os.environ.get("APP_URL", ""), why_unscored=unscored_why(os.environ))
         number = publish(api, title, body) if api is not None else None
         thesis_repo.upsert_digest(conn, a.week, title, body, number)
         tracked.update({"week": a.week.isoformat(), "issue": number})

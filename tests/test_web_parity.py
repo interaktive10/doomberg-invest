@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import yaml
@@ -41,3 +41,19 @@ def test_staleness_rows_are_the_digests_and_india_is_paused() -> None:
     assert {k: int(v) for k, v in re.findall(r"(\w+): (\d+),", sla.group(1))} == doc["sla_days"]
     assert dict(re.findall(r'(\w+): "(\w+)"', fallback.group(1))) == fallbacks
     assert not {"nse", "bse"} & (set(doc["sla_days"]) | set(fallbacks) | set(fallbacks.values()))
+
+
+def test_a_paused_indias_rows_read_alike_in_the_digest_and_raise_no_banner() -> None:
+    """Overhaul PR 1 review (pipeline-F2): production's bse row has never succeeded (BSE records a success only in a
+    week it stood in for NSE), so without its fallback row the digest's table reads "never succeeded", as
+    web/tests/staleness.test.ts does for Settings, and nse keeps its last success with no SLA; the stale banner names
+    neither (docs/SPEC_ISSUES.md 46)."""
+    from pipeline.db.models import SourceHealth
+    from pipeline.digest import weekly as digest
+
+    now = datetime(2026, 9, 19, 3, tzinfo=UTC)
+    rows = [SourceHealth(source="bse"), SourceHealth(source="nse", last_success=datetime(2026, 9, 12, 6, tzinfo=UTC))]
+    sla, fallbacks = digest.sla_days(), digest.fallbacks()
+    assert digest.banner(rows, now, sla, fallbacks) == []
+    assert digest.health(rows, now, sla, fallbacks)[2:] == ["| bse | never | never succeeded |",
+                                                            "| nse | 2026-09-12 06:00Z | ok |"]  # fmt: skip

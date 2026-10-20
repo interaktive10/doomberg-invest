@@ -178,6 +178,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           # the digest's company links; the deployed app unless the APP_URL repository variable says otherwise
           APP_URL: ${{ vars.APP_URL || 'https://doomberg-invest.vercel.app' }}
+          # why a week has no scores (pipeline.digest.weekly.unscored_why)
+          US_RESULT: ${{ needs.us.result }}
+          US_RAN: ${{ needs.us.outputs.ran }}
+          SCORES_RESULT: ${{ needs.scores.result }}
         run: uv run --frozen python -m pipeline.digest.weekly
       - name: Storage guard (prune, then fail above 400 MB)
         if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}

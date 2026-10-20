@@ -224,6 +224,25 @@ def test_the_digest_links_to_the_app_without_a_repository_variable() -> None:
     assert all("DATABASE_URL" in o["env"] for o in others if "python -m pipeline" in str(o.get("run", "")))
 
 
+def test_the_digest_is_told_why_a_week_has_no_scores() -> None:
+    """Overhaul PR 1 review (actions-GHA-1): scores run only after a us job that ran and succeeded; the digest step
+    gets both jobs' results (pipeline.digest.weekly.unscored_why) to say which one stopped the week's scores."""
+    import inspect
+
+    from pipeline.digest.weekly import unscored_why
+
+    doc = load("weekly.yml")
+    _, s = step("weekly.yml", "publish", "python -m pipeline.digest.weekly")
+    names = ("US_RESULT", "US_RAN", "SCORES_RESULT")
+    assert {k: v for k, v in s["env"].items() if k in names} == {
+        "US_RESULT": "${{ needs.us.result }}",
+        "US_RAN": "${{ needs.us.outputs.ran }}",
+        "SCORES_RESULT": "${{ needs.scores.result }}",
+    }
+    assert doc["jobs"]["publish"]["needs"] == ["us", "scores"] and "ran" in doc["jobs"]["us"]["outputs"]
+    assert all(f'"{k}"' in inspect.getsource(unscored_why) for k in names)  # the names the digest reads
+
+
 def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> None:
     ingest_doc = load("thesis-ingest.yml")
     assert ingest_doc[True]["push"]["paths"] == ["data/thesis_cards/**"]
@@ -347,8 +366,8 @@ def test_web_runs_on_pull_requests_and_gates_the_e2e_steps() -> None:
     gate = "steps.changes.outputs.e2e == 'true'"
     job = doc["jobs"]["web"]
     assert job["steps"][0]["with"]["fetch-depth"] == 2  # HEAD^1, the base tip, for the diff
-    changes, s = step("web.yml", "web", "git diff --name-only HEAD^1 HEAD")
-    assert s["id"] == "changes"
+    changes, s = step("web.yml", "web", "git diff --name-only --no-renames HEAD^1 HEAD")
+    assert s["id"] == "changes"  # --no-renames: a file moved out of web/ or db/migrations/ lists its old path too
     pattern = re.search(r"grep -qE '([^']+)'", s["run"])
     assert pattern is not None
     e2e = re.compile(pattern.group(1))

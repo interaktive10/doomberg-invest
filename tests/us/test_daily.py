@@ -26,11 +26,31 @@ PUBLISHED = [d for d in CALENDAR if d.weekday() < 5]  # 2026-09-01 .. 2026-11-02
 
 
 class Conn:
-    """run_catch_up commits each day in its own transaction; nothing else reaches the database here."""
+    """tracked_run's connection as run_catch_up gets it (not autocommit, idle after start_run's commit), with
+    psycopg's rule: a statement outside a transaction block opens a transaction, and a transaction() block inside one
+    is only a savepoint, so what it wrote waits for the outer commit. Nothing else reaches the database here."""
+
+    def __init__(self) -> None:
+        self.open = False  # a transaction is open (psycopg: info.transaction_status INTRANS)
+        self.written: list[str] = []  # not committed yet
+        self.committed: list[str] = []
+
+    def execute(self, statement: str) -> None:
+        self.open = True
+        if not statement.startswith("select"):
+            self.written.append(statement)
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
-        yield
+        if self.open:
+            yield  # a savepoint
+            return
+        self.open = True
+        try:
+            yield
+            self.committed += self.written
+        finally:
+            self.written, self.open = [], False  # committed, or rolled back by the exception
 
 
 def weekdays(first: date, last: date) -> list[date]:
@@ -66,15 +86,16 @@ def runs_row(monkeypatch: pytest.MonkeyPatch, days: Sequence[dict[str, Any]]) ->
 
     def latest_run_days(conn: Conn, kind: str) -> list[dict[str, Any]]:
         kinds.append(kind)
+        conn.execute("select stats->'days' from runs")
         return list(days)
 
     monkeypatch.setattr(repo, "latest_run_days", latest_run_days)
     return kinds
 
 
-def catch_up(tmp_path: Path) -> list[daily.DailyStats]:
-    conn: Any = Conn()
-    return daily.run_catch_up(conn, sec(tmp_path), TODAY, tmp_path / "pending.json", tmp_path / "day.json")
+def catch_up(tmp_path: Path, conn: Conn | None = None) -> list[daily.DailyStats]:
+    db: Any = conn or Conn()
+    return daily.run_catch_up(db, sec(tmp_path), TODAY, tmp_path / "pending.json", tmp_path / "day.json")
 
 
 def test_a_missing_cursor_resumes_from_the_newest_day_of_the_latest_runs_row(
@@ -125,6 +146,55 @@ def test_the_catch_up_goes_back_at_most_catch_up_days(
     assert read == weekdays(floor + timedelta(days=1), date(2026, 11, 2)) and read[0] == date(2026, 10, 5)
     assert stats[0].day == "cursor as of 2026-11-03" and "pipeline.us.backfill" in stats[0].errors[0]
     assert "2026-09-04" in stats[0].errors[0]
+
+
+class Killed(BaseException):
+    """The job timeout: not an Exception, so nothing in the run catches it."""
+
+
+def writes(monkeypatch: pytest.MonkeyPatch, killed_on: date | None = None) -> list[date]:
+    """Each day's reading writes a row (on `killed_on` the job is killed instead); returns the days read."""
+    out: list[date] = []
+
+    def run_daily(conn: Conn, client: HttpClient, day: date, state_path: Path | None = None) -> daily.DailyStats:
+        out.append(day)
+        if day == killed_on:
+            raise Killed
+        conn.execute(f"insert {day}")
+        return daily.DailyStats(day.isoformat())
+
+    monkeypatch.setattr(daily, "run_daily", run_daily)
+    return out
+
+
+def test_each_day_is_committed_by_the_catch_up_itself(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Overhaul PR 1 review (pipeline-F1): the runs-table read is closed before the first day, so each day's block
+    is a transaction of its own, not a savepoint left for tracked_run's commit after the cursor moved."""
+    runs_row(monkeypatch, [{"day": "2026-10-28", "retry": 0}])
+    read = writes(monkeypatch)
+    conn = Conn()
+    catch_up(tmp_path, conn)
+    assert read == [date(2026, 10, 29), date(2026, 10, 30), date(2026, 11, 2)]
+    assert conn.committed == [f"insert {d}" for d in read] and not conn.open
+    assert daily.load_last_day(tmp_path / "day.json") == date(2026, 11, 2)
+
+
+def test_a_catch_up_cut_off_part_way_keeps_its_days_and_resumes_after_them(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Overhaul PR 1 review (pipeline-F1, spec-F2): the job is killed on the third day. The two days before it stay
+    committed and the state file (saved by the daily.yml step that runs always()) has the cursor past them, so the
+    next run reads only the day it lost, instead of the whole catch-up again."""
+    kinds = runs_row(monkeypatch, [{"day": "2026-10-28", "retry": 0}])
+    writes(monkeypatch, killed_on=date(2026, 11, 2))
+    conn = Conn()
+    with pytest.raises(Killed):
+        catch_up(tmp_path, conn)
+    assert conn.committed == ["insert 2026-10-29", "insert 2026-10-30"]
+    assert daily.load_last_day(tmp_path / "day.json") == date(2026, 10, 30)
+    read = writes(monkeypatch)
+    catch_up(tmp_path)
+    assert read == [date(2026, 11, 2)] and kinds == ["us_daily"]  # the second run has its state file
 
 
 def test_resume_day_reads_only_days() -> None:

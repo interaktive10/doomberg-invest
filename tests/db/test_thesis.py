@@ -434,6 +434,24 @@ def test_the_digest_without_scores_says_the_candidates_are_missing(conn: psycopg
     assert "**Stale data:** sec (no success for 17 days; SLA 8)" in body and "## Source health" in body
 
 
+@pytest.mark.parametrize(("env", "why"), [
+    ({"US_RESULT": "failure", "US_RAN": "true", "SCORES_RESULT": "skipped"},
+     "the US data run failed, so nothing was scored"),
+    ({"US_RESULT": "success", "US_RAN": "", "SCORES_RESULT": "skipped"},
+     "the US data run skipped its steps (a secret is missing), so nothing was scored"),
+    ({"US_RESULT": "success", "US_RAN": "true", "SCORES_RESULT": "cancelled"},
+     "the scoring run was cancelled or timed out"),
+    ({}, "the scoring run didn't finish"),
+], ids=["us-failed", "us-skipped", "scores-timed-out", "by-hand"])  # fmt: skip
+def test_the_digest_without_scores_says_why(conn: psycopg.Connection[Any], env: dict[str, str], why: str) -> None:
+    """Overhaul PR 1 review (actions-GHA-1): scores run only after a us job that ran and succeeded, so a week without
+    scores is most often one whose US run failed; weekly.yml passes the jobs' results and the digest names the job
+    (tests/digest/test_unscored.py has every case)."""
+    _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC), why_unscored=digest.unscored_why(env))
+    assert (f"**Candidates are missing this week:** no scores were written for 2026-09-18 ({why}; see source health "
+            "below).") in body  # fmt: skip
+
+
 @pytest.mark.parametrize(("nse", "banner"), [("2026-09-18 06:00+00", None), (None, "nse (stale)")],
                          ids=["nse-fine", "nse-stale"])  # fmt: skip
 def test_fallback_banner_only_when_its_primary_is_down(conn: psycopg.Connection[Any], nse: str | None,

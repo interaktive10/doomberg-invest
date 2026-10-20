@@ -38,8 +38,9 @@ jobs:
       - name: does the PR change the app, the schema or the seed? (gates the Supabase, build and Playwright steps)
         id: changes
         working-directory: .
+        # --no-renames: a rename lists as delete + add, so a file moved out of a gated directory still gates
         run: |
-          if ! changed="$(git diff --name-only HEAD^1 HEAD)"; then
+          if ! changed="$(git diff --name-only --no-renames HEAD^1 HEAD)"; then
             echo "::warning::could not list the PR's changed files: running every step"
             echo "e2e=true" >> "$GITHUB_OUTPUT"
           elif grep -qE '^(web/|db/migrations/|supabase/|scripts/seed_e2e\.py$|scripts/e2e_report\.py$|\.github/workflows/web\.yml$)' <<< "$changed"; then

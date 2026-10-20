@@ -34,6 +34,16 @@ describe("staleness (BRIEF §2.7; config/staleness.yaml, as the digest reads it)
     expect(paused.map((s) => sourceStatus(s, paused, now))).toEqual(["ok", "ok"]);
   });
 
+  it("reads production's never-succeeded bse row as not on time, without a banner (PR 1 review pipeline-F2)", () => {
+    // BSE records a success only in a week it stood in for NSE, and production's row never has. Without its
+    // fallback_of entry it reads "never succeeded" (the digest's table says the same) until Settings lists US
+    // sources only (overhaul PR 4); docs/SPEC_ISSUES.md 46.
+    const prod = [at("bse", null), at("nse", "2026-09-12T06:00:00Z"), at("sec", "2026-09-18T06:00:00Z")];
+    expect(staleSources(prod, now)).toEqual([]);
+    expect(prod.map((s) => sourceStatus(s, prod, now))).toEqual(["never succeeded", "ok", "ok"]);
+    expect(onTimeCount(prod, now)).toBe(2);
+  });
+
   it("counts the sources on time like the banner (Settings 'Sources on time')", () => {
     const fine = [at("sec", "2026-09-18T06:00:00Z"), at("nse", "2026-08-01T06:00:00Z")];
     expect(onTimeCount(fine, now)).toBe(2);

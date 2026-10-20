@@ -329,9 +329,11 @@ def run_catch_up(
     """Every published EDGAR day after the last one processed (review F2: at 01:30 UTC yesterday's index often
     isn't published yet; it is picked up by the next run instead of being skipped as a 'holiday').
 
-    Each day is committed before the cursor moves past it. A day with failed downloads holds the cursor, so the next
-    run reads it again (inserts are idempotent). Retries are counted in runs, not calendar days: Friday's index is
-    first read on Tuesday (review R2-F5). After RETRY_RUNS reads the cursor moves on and the errors stay logged.
+    Each day is committed before the cursor moves past it, and the cursor is saved as it moves, so a run cut off
+    part-way (the job's timeout) keeps the days it read and the next run resumes after them. A day with failed
+    downloads holds the cursor, so the next run reads it again (inserts are idempotent). Retries are counted in runs,
+    not calendar days: Friday's index is first read on Tuesday (review R2-F5). After RETRY_RUNS reads the cursor moves
+    on and the errors stay logged.
 
     Without a state file the cursor comes from the latest us_daily runs row (resume_day), at most CATCH_UP_DAYS back;
     with no such row either, the run reads the latest few published days (a first run)."""
@@ -341,7 +343,11 @@ def run_catch_up(
     attempts = int(state.get("attempts", 0))
     notes: list[str] = []
     if last is None:
-        last = resume_day(repo.latest_run_days(conn, RUN_KIND))
+        # In a transaction of its own: a read left open would turn each day's transaction below into a savepoint,
+        # committed only when tracked_run ends, after the cursor moved (overhaul PR 1 review, pipeline-F1).
+        with conn.transaction():
+            run_days = repo.latest_run_days(conn, RUN_KIND)
+        last = resume_day(run_days)
         floor = today - timedelta(days=CATCH_UP_DAYS)
         if last is not None and last < floor:
             notes.append(f"no state file and the last run's cursor {last} is over {CATCH_UP_DAYS} days old: read from "
@@ -366,6 +372,7 @@ def run_catch_up(
                 continue
             stats.errors.append(f"{day}: downloads still failing after {tries} runs; moving on")
         last = day
+        save_last_day(day_path, last)  # committed above: a run cut off later still resumes after it (spec-F2)
     if listing_errors:
         out.insert(0, DailyStats(f"listings as of {today}", errors=listing_errors))
     if notes:
