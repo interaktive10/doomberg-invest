@@ -1,5 +1,5 @@
-# Signal Lab settings (BRIEF §4.10; lab.yml, manual; US first). Not a protected file: the weights the Lab proposes
-# are (config/weights.yaml, changed only through a PR with the human-approved label).
+# Signal Lab settings (BRIEF §4.10; lab.yml, dispatched once by lab-prices.yml, then manual; US first). Not a protected
+# file: the weights the Lab proposes are (config/weights.yaml, changed only through a PR with the human-approved label).
 start: 2010-01-31                 # first month-end of the panel (§4.10.1)
 horizons_months: [12, 24, 36]     # forward total price returns (no dividends in v1; §7 caveat 3)
 periods:                          # by event month (§4.10.3)
@@ -13,6 +13,16 @@ markets:
   us: true
   in: false                       # §4.10.7: enabled after 8 quarters of collected India data
 india_min_quarters: 8
-prices:                           # the Stooq bulk daily file, downloaded manually once (it has a CAPTCHA; §2.7)
-  release_tag: lab-data-v1        # a private GitHub release of this repository holds it
-  asset: d_us_txt.zip
+# S7-S12 read data the pipeline has collected only since 2026 (Form 4 purchases, 13F holder counts, text facts,
+# spin-offs, capex links, cycle text), so their out-of-sample years hold no real events: their verdict is "not
+# testable yet" and the Lab keeps their weights. S9's text facts have no history at all: it never earns weight.
+not_testable: [S7, S8, S9, S10, S11, S12]
+prices:                           # month-end prices from Twelve Data (lab-prices.yml; pipeline/lab/price_history.py)
+  release_tag: lab-data-v1        # a private GitHub release of this repository holds them (§2.7, §2.8)
+  asset: us_month_prices.csv.gz   # ticker,month_end,close,high,low (pipeline/lab/prices.py)
+  state: us_prices_state.json     # the download's progress: each run resumes from it
+  probe: AAPL                     # its series must reach `start`: daily, else monthly, else the download is blocked
+  max_minutes: 90                 # a run stops itself here (lab-prices.yml's limit is 120)
+  max_credits: 650                # requests a run may make, of the free plan's 800 credits a day
+  max_attempts: 3                 # a ticker that failed this often is 'error' and never asked again
+  save_every: 50                  # tickers between saves of the asset and the state

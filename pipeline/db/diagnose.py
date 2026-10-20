@@ -1,8 +1,9 @@
 """Why a scored week's companies landed in their buckets (BRIEF §4.8), read-only. For the candidate stage (Evidence
 >= 40) per market: how many were priced, which signal families contributed, how many had two families (Evidence
 above the single-family cap of 55 needs them), each of C1-C3, a Gap, a market cap above the §1.3 floor; why the
-priced ones that aren't candidates aren't; the top of the stage with its numbers; and the last scoring run's errors by
-source (a source that failed, such as the price source or a benchmark, shows here).
+priced ones that aren't candidates aren't; the top of the stage with its numbers; the last scoring run's errors by
+source (a source that failed, such as the price source or a benchmark, shows here); and the last text run's line: its
+scope, what it queued and read, and why it stopped (docs/SPEC_ISSUES.md 50).
 
 `python -m pipeline.db.diagnose [--week YYYY-MM-DD]` (default: the latest scored week); the manual workflow
 diagnose.yml runs it against the live database. Market data only: no journal, positions or post-mortems."""
@@ -14,7 +15,7 @@ import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -40,6 +41,10 @@ order by s.evidence desc, symbol
 LAST_RUN_SQL = """
 select started_at, status, stats -> 'errors' from runs
 where kind = 'scores_weekly' and finished_at is not null order by started_at desc limit 1
+"""
+TEXT_RUN_SQL = """
+select started_at, status, stats, error from runs
+where kind = 'text' and finished_at is not null order by started_at desc limit 1
 """
 
 
@@ -138,6 +143,32 @@ def last_run(conn: psycopg.Connection[Any]) -> list[str]:
     return [f"last scoring run {row[0]:%Y-%m-%d %H:%M}Z: {row[1]}, {len(errors)} errors", *run_errors(errors)]
 
 
+def text_run(started: datetime, status: str, stats: Mapping[str, Any], error: str | None = None) -> str:
+    """The daily text run's line (pipeline.facts.run.TextStats): its scope, what it queued and read, and why it
+    stopped ("queue empty" when nothing stopped it)."""
+    head = f"last text run {started:%Y-%m-%d %H:%M}Z: {status}"
+    if status == "failed":
+        return f"{head} ({(error or 'no error recorded')[:200]})"
+    if "skipped" in stats:
+        return f"{head}, skipped ({stats['skipped']})"
+
+    def n(key: str) -> int:
+        return int(stats.get(key) or 0)
+
+    return (f"{head}, scope {n('scope')} (theses {n('theses')}, stage names {n('stage')}), submissions read for "
+            f"{n('submissions')} ({n('indexed')} in the EDGAR index), {n('queued_filings')} filings queued, "
+            f"{n('skipped_filings')} skipped, {n('extracted')} documents extracted, {n('deferred')} deferred, "
+            f"{n('failed')} failed, {n('facts_verified')} verified facts; stopped: "
+            f"{stats.get('stopped') or 'queue empty'}")  # fmt: skip
+
+
+def last_text_run(conn: psycopg.Connection[Any]) -> list[str]:
+    row = conn.execute(TEXT_RUN_SQL).fetchone()
+    if row is None:
+        return ["last text run: none"]
+    return [text_run(row[0], row[1], row[2] or {}, row[3])]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--week", type=date.fromisoformat, default=None, help="Friday to inspect (default: the latest)")
@@ -148,13 +179,14 @@ def main(argv: list[str] | None = None) -> int:
     stage_min = Decimal(str(cfgs.signals["scores"]["us_price_candidate_min_evidence"]))
     with psycopg.connect(Settings.from_env().database_url) as conn:
         week = a.week or conn.execute("select max(week_end) from scores").fetchone()[0]  # type: ignore[index]
+        text = last_text_run(conn)
         if week is None:
-            print("diagnose: no scored week yet")
+            print("diagnose: no scored week yet", *text, sep="\n")
             return 0
         rows = stage_rows(conn, week, stage_min)
         runs = last_run(conn)
     print(f"diagnose {week}:")
-    for line in [*report(rows, cfgs.universe, cfgs.signals["scores"]["buckets"]), *runs]:
+    for line in [*report(rows, cfgs.universe, cfgs.signals["scores"]["buckets"]), *runs, *text]:
         print(line)
     return 0
 

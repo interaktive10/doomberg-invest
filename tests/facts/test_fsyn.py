@@ -54,7 +54,8 @@ def test_oracle_answers_are_all_found_and_nothing_else_is_stored(truth: dict[str
     rejected = sum((o.rejected for o in outcomes.values()), start=type(next(iter(outcomes.values())).rejected)())
     assert rejected["V1-TYPE"] >= 4 and rejected["V1-QUOTE"] >= 1 and rejected["V1-NUM"] >= 1
     assert rejected["V1-UNIT"] >= 1 and sum(o.duplicates for o in outcomes.values()) >= 1
-    # risk factors aren't sent to P-01 (the risk diff reads them), and the non-USD order waits for review
+    # risk factors aren't sent to P-01 (Appendix F.4; nothing reads them since P-03 went, docs/SPEC_ISSUES.md 50),
+    # and the non-USD order waits for review
     assert outcomes["kyst_10k_2025_risk.htm"].sent == 0
     arvl = [c for c, _ in outcomes["arvl_pr_order.htm"].facts if c.fact_type == "order_win"]
     assert [c.verification_status for c in arvl] == ["needs_review"] and "currency" in arvl[0].verification_notes

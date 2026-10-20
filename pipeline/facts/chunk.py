@@ -2,7 +2,8 @@
 
 - 10-K/10-Q: the MD&A and the notes named in F.3 (Commitments, Contingencies, Leases, Revenue, Debt, Subsequent
   Events); when no MD&A heading is found, the whole document. EX-99.x, press releases, transcripts and other
-  documents: the whole document. Presentations: page by page. Risk factors are the risk diff's (risk_diff.py).
+  documents: the whole document. Presentations: page by page. Risk factors aren't extracted (F.4 left them to the
+  risk diff, which no longer runs: docs/SPEC_ISSUES.md 50).
 - Chunks are at most MAX_TOKENS tokens (4 characters a token) with OVERLAP_TOKENS of overlap, cut at a paragraph,
   line or sentence end when one is near; each carries its absolute char_start in the canonical text.
 - Prefilter: the number of keyword hits from config/terms.yaml; only chunks scoring >= min_score (3) go to P-01.
@@ -79,7 +80,7 @@ def select(kind: str, text: str, section_map: Sequence[Mapping[str, Any]],
             for s in sorted(spans, key=lambda s: int(s["char_start"])):
                 out += split(text, int(s["char_start"]), int(s["char_end"]), str(s["name"]))
             return out
-        out, pos = [], 0  # no MD&A heading found: the whole document except its risk factors (the risk diff's)
+        out, pos = [], 0  # no MD&A heading found: the whole document except its risk factors (above)
         for s in sorted((s for s in section_map if s["name"] == "risk_factors"), key=lambda s: int(s["char_start"])):
             out += split(text, pos, int(s["char_start"]))
             pos = max(pos, int(s["char_end"]))

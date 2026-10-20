@@ -48,11 +48,12 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("thesis-fallback.yml", ("fallback",)),
         ("quarterly.yml", ("us",)),
         ("lab.yml", ("lab",)),
+        ("lab-prices.yml", ("prices",)),
         ("weights.yml", ("weights",)),
         ("backfill.yml", ("us",)),
     ):
-        for job in jobs:
-            runs = [r for r in steps(name, job) if "python -m pipeline" in r]
+        for job in jobs:  # the Actions minutes gate reads no table, so it may come first
+            runs = [r for r in steps(name, job) if "python -m pipeline" in r and "pipeline.digest.minutes" not in r]
             assert runs and "pipeline.db.migrate" in runs[0], (name, job)
 
 
@@ -100,28 +101,91 @@ def test_scores_run_only_after_a_us_run_that_succeeded_and_score_the_us_alone() 
     assert steps("weekly.yml", "scores")[-1].endswith("python -m pipeline.signals.weekly --markets us")
 
 
-def test_quarterly_dispatches_the_lab_after_the_universe_rebuild() -> None:
-    """M8 review R1-F5: §2.1 "quarterly: ... Signal Lab re-run" (§11.8): quarterly.yml dispatches lab.yml once the
-    13F step and the universe rebuild are done (not when `us` skipped them for want of a secret)."""
+def test_quarterly_has_no_lab_job() -> None:
+    """Overhaul PR 3 (docs/SPEC_ISSUES.md 51): the Lab's prices are a one-time Twelve Data download, so the quarterly
+    run no longer dispatches lab.yml (a re-run would cost 60-180 minutes for the same prices); its token can't
+    dispatch anything."""
     doc = load("quarterly.yml")
-    lab = doc["jobs"]["lab"]
-    assert lab["needs"] == "us" and lab["permissions"] == {"actions": "write"}
-    assert lab["if"] == "needs.us.outputs.ran == 'true'"
-    assert "actions" not in doc["permissions"]  # only the dispatching job's token can (least privilege)
-    assert any("gh workflow run lab.yml" in str(s.get("run", "")) for s in lab["steps"])
-    # the branch is named: gh can't look up the default branch with an actions-only token (first live run, 2026-09-29)
-    assert any("--ref" in str(s.get("run", "")) for s in lab["steps"] if "gh workflow run" in str(s.get("run", "")))
+    assert list(doc["jobs"]) == ["us"] and doc["permissions"] == {"contents": "read"}
+    assert "outputs" not in doc["jobs"]["us"]
+    assert "lab.yml" not in (WF / "quarterly.yml").read_text(encoding="utf-8").split("\non:", 1)[1]
     runs = steps("quarterly.yml", "us")
-    assert "pipeline.db.seed" in runs[-1]  # the rebuild is the us job's last step, so the Lab runs on the new universe
+    assert "pipeline.db.seed" in runs[-1]
+
+
+def gated(name: str, job: str, need: int) -> list[dict[str, Any]]:
+    """The minutes gate is the job's first step after the runner setup, it asks for the job's whole limit, and every
+    later step needs it to have allowed the run (directly, or through a step that did)."""
+    doc = load(name)
+    all_steps = doc["jobs"][job]["steps"]
+    i, gate = step(name, job, "python -m pipeline.digest.minutes gate")
+    assert gate["id"] == "gate" and gate["run"].endswith(f"gate --need {need}")
+    assert doc["jobs"][job]["timeout-minutes"] == need
+    assert gate["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
+    assert all("python -m pipeline" not in str(s.get("run", "")) for s in all_steps[:i])
+    perms = doc["permissions"]
+    assert perms.get("actions") in ("read", "write")  # the gate lists this repository's runs
+    rest = all_steps[i + 1 :]
+    first = rest[0]
+    assert first["if"] == "steps.gate.outputs.allowed == 'true'"
+    after = (f"steps.{first['id']}.outputs", "steps.download.outputs")
+    assert all(any(a in s.get("if", "") for a in after) for s in rest[1:]), name
+    return rest
+
+
+def test_lab_prices_runs_sunday_to_thursday_in_november_and_december_only() -> None:
+    """Overhaul PR 3: Saturday's weekly prices never compete with the download for Twelve Data's 800 credits a day,
+    and the job doesn't run the rest of the year."""
+    on = load("lab-prices.yml")[True]
+    assert on["schedule"] == [{"cron": "7 10 * 11,12 0-4"}] and "workflow_dispatch" in on
+    minute, hour, dom, months, dow = on["schedule"][0]["cron"].split()
+    assert (dom, months, dow) == ("*", "11,12", "0-4") and minute != "0"
+
+
+def test_lab_prices_gates_stops_itself_and_keeps_its_progress() -> None:
+    """Its own concurrency group, a 120-minute limit with the script's own stop at 90, the progress uploaded even
+    after a failure, and on completion the first Lab run dispatched and the workflow disabled."""
+    doc = load("lab-prices.yml")
+    assert doc["concurrency"] == {"group": "lab-prices", "cancel-in-progress": False}
+    job = doc["jobs"]["prices"]
+    assert list(doc["jobs"]) == ["prices"] and job["timeout-minutes"] == 120
+    assert doc["permissions"] == {"contents": "write", "actions": "write"}
+    assert job["env"]["TWELVEDATA_API_KEY"] == "${{ secrets.TWELVEDATA_API_KEY }}"
+    gated("lab-prices.yml", "prices", 120)
+    d, download = step("lab-prices.yml", "prices", "python -m pipeline.lab.price_history")
+    assert download["id"] == "download" and "timeout-minutes" not in download
+    u, upload = step("lab-prices.yml", "prices", "gh release upload lab-data-v1")
+    assert upload["if"].startswith("always() && ") and d < u
+    _, resume = step("lab-prices.yml", "prices", "gh release download lab-data-v1")
+    assert "--clobber ||" not in resume["run"]  # a failed resume fails the step: no fresh start over the progress
+    done, dispatch = step("lab-prices.yml", "prices", "gh workflow run lab.yml")
+    assert u < done and dispatch["if"] == "steps.download.outputs.complete == 'true'"
+    assert "--ref" in dispatch["run"] and "gh workflow disable lab-prices.yml" in dispatch["run"]
+    blocked = next(s for s in job["steps"] if s.get("if") == "steps.download.outputs.blocked == 'true'")
+    assert blocked["run"].startswith("gh workflow disable lab-prices.yml") and "workflow run" not in blocked["run"]
+    assert any("pipeline.db.migrate" in str(s.get("run", "")) for s in job["steps"][:d])
+
+
+def test_lab_gates_and_keeps_the_panel_as_soon_as_it_is_built() -> None:
+    """Overhaul PR 3: the minutes gate first, two workers (GitHub's 2-core runner), a 180-minute limit, and the panel
+    uploaded on always() once run.py has written it, before the PRs."""
+    gated("lab.yml", "lab", 180)
+    r, lab = step("lab.yml", "lab", "python -m pipeline.lab.run")
+    assert "--workers 2" in lab["run"] and "--propose" in lab["run"]
+    p, panel = step("lab.yml", "lab", "gh release upload lab-data-v1 .cache/lab/panel.parquet")
+    assert panel["if"].startswith("always() && ") and "hashFiles('.cache/lab/panel.parquet')" in panel["if"]
+    prs, _ = step("lab.yml", "lab", "gh pr create")
+    assert r < p < prs
+    assert load("lab.yml")["permissions"]["actions"] == "read"
 
 
 def test_text_facts_run_daily_after_the_sec_step_within_the_minutes_budget() -> None:
     """M5 (BRIEF §2.1 daily "capex-desk filings -> text facts", §2.5 budget): the text step follows the SEC events
-    step in the same job, has the free-tier keys, and stops starting documents at 4 minutes, so daily.yml stays
-    within §2.5's ~8 minutes (M5 review R1-F8; docs/SPEC_ISSUES.md 29)."""
+    step in the same job, has the free-tier keys, and stops starting documents at 6 minutes, so daily.yml takes about
+    9-10 minutes against §2.5's 8 (M5 review R1-F8; docs/SPEC_ISSUES.md 29, 50: the stage names' reading)."""
     sec, _ = step("daily.yml", "us", "python -m pipeline.us.daily")
     text, job = step("daily.yml", "us", "python -m pipeline.facts.run")
-    assert sec < text and "--minutes 4" in job["run"]
+    assert sec < text and "--minutes 6" in job["run"]
     assert set(job["env"]) == LLM_KEYS
     assert "ANTHROPIC_API_KEY" not in job["env"] and "OPENAI_API_KEY" not in job["env"]
 
@@ -161,7 +225,8 @@ def test_the_weekly_publish_job_evaluates_then_queues() -> None:
     """M6 (BRIEF §4.9 step 1): kill criteria see this week's rows, then the queue is written and committed to main
     for the Sunday routine; then the digest and the storage guard."""
     doc = load("weekly.yml")
-    assert doc["jobs"]["publish"]["permissions"] == {"contents": "write", "issues": "write"}
+    # actions: read for the digest's minutes line (overhaul PR 3, pipeline/digest/minutes.py)
+    assert doc["jobs"]["publish"]["permissions"] == {"contents": "write", "issues": "write", "actions": "read"}
     assert doc["permissions"] == {"contents": "read"}  # the other jobs' tokens can't write
     runs = [r for r in steps("weekly.yml", "publish") if r]
     keys = ("pipeline.thesis.kill_criteria", "pipeline.thesis.queue", "git push origin HEAD:refs/heads/main",

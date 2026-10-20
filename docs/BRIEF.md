@@ -85,7 +85,7 @@ GitHub Actions free minutes run the pipeline. The weekly thesis-writing routine 
 ### 1.1 Where a patient individual can still have an edge
 Screens everyone runs (low P/E, high ROE, momentum, RSI and chart patterns, analyst upgrades, "AI stocks" lists) are crowded; by the time they fire, the move is usually priced. Doomberg looks for five other kinds of edge instead:
 1. **Inflections, not levels.** Second derivatives: backlog accelerating faster than revenue, returns on *new* capital rising from a low base, margins turning, balance sheets finishing repair. Static screens only catch these after they're obvious.
-2. **Processing edge.** The facts are public but costly to read: footnotes, remaining performance obligations, capacity commitments, supplier and customer links, risk-factor changes, and Indian exchange filings that few people parse.
+2. **Processing edge.** The facts are public but costly to read: footnotes, remaining performance obligations, capacity commitments, supplier and customer links, and Indian exchange filings that few people parse.
 3. **Corroboration.** A candidate needs at least two *independent* evidence families to agree, for example fundamentals + insider buying, or backlog + text evidence. One signal alone is noise.
 4. **Neglect and structure.** Low and rising institutional ownership, low news attention, spin-offs, demergers, holding-company discounts: places where selling or neglect isn't about fundamentals.
 5. **Cross-border propagation.** US AI and grid capex shows up in US filings first. Indian suppliers (transformers, cables, switchgear, electronics manufacturing, data-center builders) often report it later. Linking the two is a genuine processing edge.
@@ -218,7 +218,7 @@ GitHub Actions (free minutes, cron) ──▶ pipeline/ (Python 3.12, uv, DuckDB
   weekly  : SEC bulk companyfacts → fundamentals · NSE bhavcopy + shareholding + PIT + results XBRL
             → signals → red flags → candidate prices (Stooq) → context (C1–C3) → scores/buckets
             → evidence packs → thesis queue file → digest issue
-  quarterly: 13F data sets · universe rebuild · Signal Lab re-run
+  quarterly: 13F data sets · universe rebuild
         │ writes compact tables                          ▲ raw bulk files stay on the runner / Actions cache
         ▼                                                │
 Supabase free (Postgres + Auth) ◀── web/ (Next.js on Vercel Hobby or Cloudflare Pages, single user)
@@ -303,14 +303,14 @@ doomberg-invest/
 ### 2.6 LLM on free tiers (`pipeline/llm/router.py`, `config/quotas.yaml`)
 | Task | Primary | Fallbacks |
 |---|---|---|
-| Fact extraction P-01, entities P-02, risk tags P-03, announcement triage P-07, cross-border map P-06 | Gemini Flash-Lite/Flash (free tier) | Groq free (Llama 3.3 70B class) → OpenRouter `:free` models |
+| Fact extraction P-01, entities P-02, announcement triage P-07, cross-border map P-06 | Gemini Flash-Lite/Flash (free tier) | Groq free (Llama 3.3 70B class) → OpenRouter `:free` models |
 | Thesis cards P-04 | **Claude Code routine** (weekly; existing plan) | Gemini Flash (free) in `thesis-fallback.yml` |
 | Claim support P-05 | Gemini Flash | Groq |
 
 **Router rules:**
 - **Quotas:** per-provider daily request and token budgets in `config/quotas.yaml`, with values set from each provider's console in M0 (limits are per project and change; never hard-code "known" numbers).
 - **On 429 or quota exhaustion:** fall back to the next provider. When all are exhausted, the item stays `deferred` and the next day's run picks it up.
-- **Work order:** text work is prioritized: capex-desk companies, then the candidate shortlist, then everything else.
+- **Work order:** text work is prioritized: theses, research entries and positions, then the stage names (§4.5).
 - **No paid endpoints:** `api.anthropic.com` and `api.openai.com` are banned in runtime code (guard). There is no credit card on any provider, so nothing can bill by accident.
 - **Privacy (`llm/privacy.py`):** the router accepts only `EvidencePack`/`DocumentChunk` types built from public data. Journal, positions and notes can't be passed (a typed API plus a unit test). Free tiers may use inputs to improve their services, and that's acceptable only for public filings.
 - **Grounding:** every text fact passes Appendix F grounding. Thesis cards pass `thesis/validate.py` (§4.9). Free-model errors are caught there, not trusted.
@@ -322,7 +322,7 @@ doomberg-invest/
 | US events | EDGAR daily index / submissions: Form 4, 8-K items (4.01 auditor, 1.01, 2.02, 2.03), NT 10-K/10-Q, Form 10-12B (spin-offs) | daily | SEC fair access: user agent, ≤ 8 req/s |
 | US ownership | SEC Form 13F data sets | quarterly | Holder counts per CUSIP → mapped to companies |
 | US prices | Stooq per-symbol weekly CSV, **candidate set + benchmarks only** (≤ 400 symbols/week) | weekly | Fragile; polite (1 req/2 s); cache; manual CSV import fallback |
-| US prices, Signal Lab | Stooq bulk daily US file downloaded **manually once** (it has a CAPTCHA) → private GitHub release asset | once, refreshed yearly | Survivorship bias warning (§7) |
+| US prices, Signal Lab | Twelve Data daily closes (monthly if the free plan's daily history doesn't reach 2010), downloaded by `lab-prices.yml` with **no human step**: resumable, ≤ 650 credits and 90 minutes a run, Sunday to Thursday → month-end bars in the private GitHub release `lab-data-v1` | once (November 2026) | Survivorship bias warning (§7) |
 | India prices | NSE CM-UDiFF Common Bhavcopy (daily file; use the Friday file) | weekly | BSE bhavcopy fallback |
 | India securities list, ASM/GSM lists | NSE reports | weekly | |
 | India fundamentals | NSE corporate filings: financial results (XBRL), shareholding patterns, insider trading (PIT), pledged data, announcements | weekly (announcements daily) | NSE site needs session cookies and polite rates (≤ 1 req/3 s); BSE fallback; **manual CSV import** from the pages' own "Download (.csv)" when blocked |
@@ -487,11 +487,11 @@ All thresholds live in `config/signals.yaml` (a protected path) with the default
 
 ### 4.5 Text facts
 Appendix F (carried over from the Capex Ledger brief): fetch → canonical text → P-01 extraction → exact-quote grounding → number, unit and period checks → verify-1 → diffs.
-- **Scope, in priority order:**
-  1. capex-desk companies (US + India)
-  2. the weekly candidate shortlist (top 100 by Evidence without text)
-  3. theses and positions
-- **Daily limits:** set by `config/quotas.yaml`.
+- **Scope, in priority order** (each newest first; SPEC_ISSUES 50):
+  1. theses, research entries and positions: their 10-K, 10-Q and 8-K filings of the last 400 days
+  2. the stage names (Evidence ≥ 40 in the latest scored week) with filings still queued or nothing read in 100 days: their latest 10-Q or 10-K and their 8-Ks with item 2.02, 7.01 or 8.01, of the last 120 days
+- **Queue:** queued filings that no company in scope reads are marked `skipped`; a new thesis's come back within its 400 days. SEC submissions are read only for names new to the scope and names in the daily EDGAR index the SEC step reads.
+- **Daily limits:** set by `config/quotas.yaml`; daily.yml starts no document after 6 minutes.
 
 ### 4.6 Signals (`pipeline/signals/*`; each returns fired, strength and inputs, stored in `signal_values`)
 **Shared definitions:**
@@ -585,7 +585,7 @@ Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:
 1. **Panel:**
    - month-end dates from 2010 onward
    - features computed **point-in-time** (filings accepted ≤ the date) with exactly the same code as the live signals (import, don't copy)
-   - prices from the Stooq bulk file in the private release asset → month-end closes
+   - prices from the Twelve Data download (`lab-prices.yml`, `pipeline/lab/price_history.py`) in the private release `lab-data-v1` → month-end closes (the current, incomplete month dropped)
    - forward total price returns (dividends not included in v1; noted) at 12, 24 and 36 months
    - excess return vs the equal-weighted universe average at the same date
 2. **Events:** the first fire of each signal per company within a rolling 12 months.
@@ -843,7 +843,7 @@ Return only JSON.
 | M8-02 | Leak test: moving `filed_at` later removes the planted effect |
 | M8-03 | Report prints the §7 caveats verbatim |
 | M8-04 | The proposal PR touches only `config/weights.yaml` and needs the label |
-| M8-05 | A real run is BLOCKED(human) until the Stooq bulk release asset exists |
+| M8-05 | The Lab's prices come from Twelve Data with no human step (`lab-prices.yml`, resumable); a real run is blocked, with the download's reason, until they are complete |
 
 ### M9 — Operations, hardening, live smoke
 **Done:**
@@ -910,14 +910,14 @@ Return only JSON.
 2. **After M0:** read `docs/DOOMBERG_AUDIT.md` (15 min) and confirm which old rules go into the Lab.
 3. **Free accounts and keys** (0.5) by M2/M5. Add the GitHub secrets, and copy the live quota values from each console into `config/quotas.yaml`.
 4. **M3:** if NSE blocks the fixture fetch, download the sample files by hand from the NSE pages.
-5. **M8:** download the Stooq US daily bulk file (CAPTCHA) and upload it as the private release asset `lab-data-v1`.
+5. **M8:** nothing to download: `lab-prices.yml` fetches the Lab's prices from Twelve Data into the private release `lab-data-v1` (November 2026) and starts the first Lab run itself.
 6. **After M6:** create the weekly routine (Appendix G).
 7. **Weekly** (about 30 min, weekend):
    - read the digest
    - open at most 3 cards
    - accept or dismiss them (with reasons)
    - do the reviews that are due
-8. **Quarterly:** check the universe rebuild; review the Lab re-run; approve or reject weight proposals.
+8. **Quarterly:** check the universe rebuild. After a Lab run (the first in November 2026, later ones by hand): approve or reject its weight proposals.
 9. **Default discipline** (configurable in Settings): a thesis must be ≥ 4 weeks old before a `start_position` journal entry (an override needs a written reason). This is long-term investing on purpose.
 
 ---
@@ -1182,7 +1182,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
    - 10-K/10-Q: MD&A plus the notes named above
    - EX-99.1, press releases and transcripts: the whole document
    - presentations: pages
-   - risk factors: handled by 4.5, not here
+   - risk factors: not extracted (F.6)
    - chunks ≤ 10k tokens with 400-token overlap; each carries its absolute `char_start`
 2. **Prefilter:** a keyword score from `config/terms.yaml` (data center, AI, capacity, backlog, capital expenditures, capex, lead time, MW, GW, megawatt, gigawatt, lease, purchase obligation, power purchase, interconnection, transformer, turbine, cooling, accelerator, GPU, networking, optical, large load, …). Only chunks with a score ≥ 3 go to P-01.
 3. **P-01** returns facts, each with a verbatim `quote`.
@@ -1211,7 +1211,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 
 `needs_review` facts appear in the web app's review queue (Company page and Capex Desk). Manzoor verifies or rejects them (a reason is required). Only verified facts feed diffs, signals, packs and briefs.
 
-### F.6 Diff (`diff/facts_diff.py`, `diff/risk_diff.py`)
+### F.6 Diff (`diff/facts_diff.py`)
 **Fact diffs:**
 - for each new verified fact, compare with the latest earlier verified fact of the same company and `subject_key`
 - single values: `raised`/`lowered` if the change is > 0.5%, else `reaffirmed`
@@ -1220,11 +1220,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 - `delta_abs`, `delta_pct` and `computed_note` (e.g. `"$38.0B → $45.0B (+18.4%)"`) are computed by code, never by an LLM
 - absence of a fact is **not** removal. "Removed" exists only for risk factors, or when a company explicitly withdraws guidance (P-01 `withdrawn` flag + quote)
 
-**Risk-factor diffs** (between consecutive 10-K and 10-Q Item 1A sections):
-- split into paragraphs
-- match with rapidfuzz `token_set_ratio`: ≥ 90 same; 60–89 `modified`; unmatched → `added` or `removed`
-- P-03 tags each changed paragraph; only these tags are kept: `ai_demand`, `data_center`, `power_supply`, `grid_interconnection`, `supply_chain`, `customer_concentration`, `export_controls`, `financing`, `construction`, `regulation`
-- a stored quote for a changed paragraph is ≤ 25 words, chosen by code as the sentence containing the largest change
+**Risk-factor diffs:** not made (SPEC_ISSUES 50). Nothing read their `risk_changes` rows, so P-03 is not called; the table stays.
 
 
 ### F.7 Prompts P-01, P-02, P-03, P-05

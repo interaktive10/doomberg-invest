@@ -5,7 +5,8 @@ Under the title, a banner lists every source that is stale or past its §2.7 SLA
 R1-F12). Sections: new candidates (at most 10, one line each: families fired, Evidence, Gap, link; when the week has
 no scores, it says the candidates are missing and why, from weekly.yml's job results); theses needing attention
 (kill criteria triggered this week, reviews due); the Capex brief; source health and staleness; LLM quota use; Lab
-notes when a run happened this week. No price-move content: no gainers, losers or returns.
+notes when a run happened this week. Source health ends with the Actions minutes line (pipeline/digest/minutes.py). No
+price-move content: no gainers, losers or returns.
 
 `python -m pipeline.digest.weekly [--week D]` (weekly.yml `publish` job: every week, whatever the other jobs did).
 The issue is published with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true)
@@ -28,6 +29,7 @@ import yaml
 
 from pipeline.db import repo, thesis_repo
 from pipeline.db.models import Company, SourceHealth
+from pipeline.digest import minutes
 from pipeline.digest.github_issue import GitHubIssues, Issues, MockIssues, publish
 from pipeline.net.http import HttpClient
 from pipeline.settings import REPO_ROOT, Settings
@@ -198,7 +200,8 @@ def lab(rows: Sequence[Mapping[str, Any]]) -> list[str]:
 
 
 def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: datetime | None = None,
-          why_unscored: str = UNSCORED) -> tuple[str, str]:  # fmt: skip
+          why_unscored: str = UNSCORED, actions: Sequence[str] = ()) -> tuple[str, str]:  # fmt: skip
+    """`actions`: the Actions minutes line (minutes.digest_lines), at the end of source health."""
     now = now or datetime.now(UTC)
     companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
     since = datetime.combine(week - timedelta(days=6), time(0), tzinfo=UTC)
@@ -209,7 +212,7 @@ def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: dat
         ("New candidates", candidates(conn, week, companies, app_url, why_unscored)),
         ("Theses needing attention", attention(conn, week)),
         ("Capex brief", capex(conn, week)),
-        ("Source health", health(sources, now, sla, fb)),
+        ("Source health", [*health(sources, now, sla, fb), *(["", *actions] if actions else [])]),
         ("LLM quota use", llm(thesis_repo.llm_use(conn, since, until))),
     ]
     notes = lab(thesis_repo.lab_runs(conn, since, until))
@@ -239,9 +242,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--week", type=date.fromisoformat, default=last_friday(datetime.now(UTC).date()))
     a = ap.parse_args(argv)
     settings = Settings.from_env()
-    api = issues_client(settings, HttpClient(settings))
+    http = HttpClient(settings)
+    api = issues_client(settings, http)
+    actions = minutes.digest_lines(settings, http)
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "digest") as tracked:
-        title, body = build(conn, a.week, os.environ.get("APP_URL", ""), why_unscored=unscored_why(os.environ))
+        title, body = build(conn, a.week, os.environ.get("APP_URL", ""), why_unscored=unscored_why(os.environ),
+                            actions=actions)  # fmt: skip
         number = publish(api, title, body) if api is not None else None
         thesis_repo.upsert_digest(conn, a.week, title, body, number)
         tracked.update({"week": a.week.isoformat(), "issue": number})

@@ -1,14 +1,16 @@
-"""Run the Signal Lab (BRIEF §4.10; lab.yml, manual). `python -m pipeline.lab.run --market us --prices FILE`.
+"""Run the Signal Lab (BRIEF §4.10; lab.yml). `python -m pipeline.lab.run --market us --prices FILE --state FILE`.
 
 Reads everything through pipeline.db.pit.as_of (every version of every quarter, with its filing time; the panel then
-applies each month-end's cutoff), prices from the Stooq bulk file, and writes:
+applies each month-end's cutoff), month-end prices from the Twelve Data download (pipeline/lab/price_history.py, the
+`lab-data-v1` release), and writes:
+- the panel as Parquet as soon as it is built (--panel-out; lab.yml keeps it as a release asset, §2.8);
 - lab_results rows (signals and legacy rules x horizon x period, Evidence and Gap deciles);
 - docs/LAB_REPORT.md (--report), with the §7 caveats at the top;
-- with --propose, config/weights.yaml with the §4.10.5 proposals (lab.yml opens the PR; it needs the
-  human-approved label);
-- the panel as Parquet (--panel-out; lab.yml keeps it as a release asset, §2.8).
-Without the bulk file the run is BLOCKED(human) (exit 3): Manzoor downloads it once (it has a CAPTCHA) and attaches
-it to the `lab-data-v1` release (M8-05). India runs only once config/lab.yaml enables it (§4.10.7).
+- with --propose, config/weights.yaml with the §4.10.5 proposals and the weights PR's body with each signal's verdict
+  (--pr-body; lab.yml opens the PR; it needs the human-approved label).
+Until the download is complete the run is blocked (exit 3) with the download's own reason (blocked_reason; M8-05):
+lab-prices.yml downloads the prices with no human step and starts the first run itself. India runs only once
+config/lab.yaml enables it (§4.10.7).
 """
 
 from __future__ import annotations
@@ -27,11 +29,11 @@ import psycopg
 import yaml
 
 from pipeline.db import repo
-from pipeline.db.models import LabResult, WeightsVersion
+from pipeline.db.models import Company, LabResult, WeightsVersion
 from pipeline.db.pit import as_of
 from pipeline.lab import evaluate, panel, proposals, report
 from pipeline.lab.events import events, signal_ids
-from pipeline.lab.prices import add_months, month_end, month_ends, read_bulk
+from pipeline.lab.prices import DownloadState, add_months, month_end, month_ends, read_prices
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals import weekly as live
 from pipeline.us.universe import UniverseRules, structural
@@ -44,12 +46,21 @@ def lab_config(root: Path = REPO_ROOT) -> dict[str, Any]:
     return cfg
 
 
-def blocked_reason(prices: Path, cfg: dict[str, Any]) -> str | None:
-    if prices.is_file():
-        return None
+def blocked_reason(prices: Path, state: DownloadState | None, cfg: dict[str, Any]) -> str | None:
+    """Why the Lab can't run yet, or None: the download's own state first (price_history records this text in its
+    lab_prices runs row when the probe blocks it), then the price file itself."""
     p = cfg["prices"]
-    return (f"BLOCKED(human: the Stooq bulk file {p['asset']} is not attached to the `{p['release_tag']}` release; "
-            f"download it once from stooq.com (it has a CAPTCHA) and attach it, BRIEF §2.7)")  # fmt: skip
+    if state is not None and state.status == "blocked":
+        return f"the Twelve Data download is blocked: {state.reason}"
+    if state is not None and state.status != "complete":
+        if not state.tickers:
+            return "the Twelve Data download hasn't started (lab-prices.yml, Sunday to Thursday in Nov and Dec)"
+        return (f"the Twelve Data download has {state.settled():,} of {len(state.tickers):,} tickers; lab-prices.yml "
+                "resumes it Sunday to Thursday and starts the Lab once every ticker is done")  # fmt: skip
+    if not prices.is_file():
+        return (f"no Lab prices yet: lab-prices.yml downloads them from Twelve Data into the `{p['release_tag']}` "
+                f"release ({p['asset']}) with no human step")  # fmt: skip
+    return None
 
 
 class _Row(Protocol):
@@ -87,15 +98,21 @@ def describe(market: str, pop: panel.Population | None, left_out: int) -> str:
             "survivorship bias; market cap is a candidate-stage rule)")  # fmt: skip
 
 
-def load(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, root: Path = REPO_ROOT
-         ) -> panel.LabData:  # fmt: skip
-    """Companies of the market with a price file, less the structural exclusions (they give no rows, events or
-    members of the excess average), and every row the panel reads (point in time later, per month)."""
+def lab_companies(conn: psycopg.Connection[Any], market: str, root: Path = REPO_ROOT) -> tuple[list[Company], int]:
+    """The companies of the market with a ticker, less the structural exclusions (they give no rows, events or
+    members of the excess average), and how many were left out. price_history downloads prices for exactly these."""
     companies = [c for c in repo.companies(conn, market=market) if c.id is not None and c.ticker]
     rules = UniverseRules.load(root) if market == "us" else None
     kept = [c for c in companies if rules is None or structural(c.sic, c.excluded_reason, rules) is None]
-    left_out = len(companies) - len(kept)
-    bars = read_bulk(prices, [c.ticker for c in kept if c.ticker])
+    return kept, len(companies) - len(kept)
+
+
+def load(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, root: Path = REPO_ROOT
+         ) -> panel.LabData:  # fmt: skip
+    """The Lab's companies (lab_companies) with prices, and every row the panel reads (point in time later, per
+    month)."""
+    kept, left_out = lab_companies(conn, market, root)
+    bars = read_prices(prices, [c.ticker for c in kept if c.ticker])
     companies = [c for c in kept if c.ticker in bars]
     ids = [c.id for c in companies if c.id is not None]
     snap = as_of(today)
@@ -165,8 +182,9 @@ Outcome = tuple[str, list[proposals.Proposal], list[panel.PanelRow], list[evalua
 
 
 def run(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, root: Path = REPO_ROOT,
-        workers: int = 1) -> Outcome:  # fmt: skip
-    """The report text, the proposals, the panel and the signal statistics (lab_results are written)."""
+        workers: int = 1, panel_out: Path | None = None) -> Outcome:  # fmt: skip
+    """The report text, the proposals, the panel and the signal statistics (lab_results are written). The panel is
+    written to `panel_out` as soon as it is built, before the statistics, so a run that fails later still keeps it."""
     cfg = lab_config(root)
     horizons = [int(h) for h in cfg["horizons_months"]]
     data = load(conn, market, prices, today, root)
@@ -175,6 +193,8 @@ def run(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, r
     pop = population(market, root)
     opts = panel.Options(c1_min_months=int(cfg["c1_min_months"]), population=pop)
     rows = panel.build(data, months, cfgs, horizons, opts, workers)
+    if panel_out is not None:
+        write_panel(rows, panel_out, horizons)
     evts = events(rows, int(cfg["event_window_months"]))
     periods = evaluate.period_bounds(cfg["periods"])
     k = int(cfg["deciles"])
@@ -182,9 +202,9 @@ def run(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, r
     evid, gp = (evaluate.decile_stats(rows, s, horizons, periods, k) for s in ("evidence", "gap"))
     repo.insert_lab_results(conn, results([*ev_stats, *evid, *gp], market))
     weights = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
-    props = proposals.propose(ev_stats, weights, int(cfg["proposal_horizon_months"]))
+    props = proposals.propose(ev_stats, weights, int(cfg["proposal_horizon_months"]), cfg.get("not_testable") or ())
     info = report.RunInfo(market, months[0], months[-1], len({r.company_id for r in rows}), len(rows), len(evts),
-                          periods, f"Stooq bulk daily file {prices.name}",
+                          periods, f"Twelve Data month-end closes ({prices.name}, the lab-data-v1 release)",
                           describe(market, pop, data.left_out))  # fmt: skip
     return report.render(info, ev_stats, evid, gp, props), props, rows, ev_stats
 
@@ -213,37 +233,42 @@ def record_proposal(
 
 
 def main(argv: list[str] | None = None) -> int:
+    cfg = lab_config()
+    lab = REPO_ROOT / ".cache" / "lab"
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--market", choices=("us", "in"), default="us")
-    ap.add_argument("--prices", type=Path, default=REPO_ROOT / ".cache" / "lab" / "d_us_txt.zip")
+    ap.add_argument("--prices", type=Path, default=lab / cfg["prices"]["asset"])
+    ap.add_argument("--state", type=Path, default=lab / cfg["prices"]["state"], help="the download's state")
     ap.add_argument("--report", type=Path, default=REPO_ROOT / "docs" / "LAB_REPORT.md")
     ap.add_argument("--propose", action="store_true", help="write the §4.10.5 proposals into config/weights.yaml")
     ap.add_argument("--panel-out", type=Path, default=REPO_ROOT / ".cache" / "lab" / "panel.parquet")
+    ap.add_argument("--pr-body", type=Path, help="with --propose: write the weights PR's body here")
     ap.add_argument("--workers", type=int, default=1)
     a = ap.parse_args(argv)
-    cfg = lab_config()
     if not cfg["markets"].get(a.market):
         print(f"lab: market {a.market} is not enabled in config/lab.yaml (India: after "
               f"{cfg['india_min_quarters']} quarters of collected data, BRIEF §4.10.7)")  # fmt: skip
         return 0
-    reason = blocked_reason(a.prices, cfg)
+    reason = blocked_reason(a.prices, DownloadState.load(a.state), cfg)
     if reason:
-        print(f"lab: {reason}")
+        print(f"lab: BLOCKED: {reason}")
         return BLOCKED_EXIT
     now = datetime.now(UTC)
     settings = Settings.from_env()
     path = REPO_ROOT / "config" / "weights.yaml"
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "lab") as tracked:
-        text, props, rows, stats = run(conn, a.market, a.prices, now.date(), workers=a.workers)
+        text, props, rows, stats = run(conn, a.market, a.prices, now.date(), workers=a.workers, panel_out=a.panel_out)
         changed = [p for p in props if p.new != p.old]
         after = proposals.render(path.read_text(encoding="utf-8"), props, version_for(now))
         if a.propose and changed and not record_proposal(conn, yaml.safe_load(after), changed):
             raise RuntimeError(f"weights version {version_for(now)} already exists; re-run the Lab")
         tracked.update({"company_months": len(rows), "stats": len(stats), "weight_changes": len(changed)})
     a.report.write_text(text, encoding="utf-8")
-    write_panel(rows, a.panel_out, [int(h) for h in cfg["horizons_months"]])
     if a.propose and changed:
         path.write_text(after, encoding="utf-8")
+        if a.pr_body is not None:
+            rules = yaml.safe_load(after)["lab_rules"]
+            a.pr_body.write_text(proposals.pr_body(props, rules, int(cfg["proposal_horizon_months"])), encoding="utf-8")
     print(
         f"lab {a.market}: {len(rows)} company-months, {len(stats)} statistics, {len(changed)} weight changes proposed"
     )

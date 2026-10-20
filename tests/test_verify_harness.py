@@ -37,6 +37,20 @@ def test_m6_checks() -> None:
     assert [c.id for c in verify.CHECKS if c.milestone == "m6"] == [f"M6-0{i}" for i in range(1, 7)]
 
 
+def test_m8_05_has_no_human_step() -> None:
+    """Overhaul PR 3 (docs/SPEC_ISSUES.md 51): the Lab's prices come from the Twelve Data download (lab-prices.yml),
+    not a Stooq file Manzoor fetches through a CAPTCHA, so M8-05 runs the download's and the blocked run's tests and
+    is never BLOCKED(human)."""
+    m8 = [c for c in verify.CHECKS if c.milestone == "m8"]
+    assert [c.id for c in m8] == [f"M8-0{i}" for i in range(1, 6)]
+    m8_05 = m8[-1]
+    assert m8_05.requires is None and m8_05.requires_after is None
+    assert m8_05.command[: len(verify.PYTEST)] == verify.PYTEST
+    assert {"tests/lab/test_price_history.py", "tests/lab/test_run.py"} <= set(m8_05.command)
+    assert "Stooq" not in m8_05.description and "human" not in m8_05.description.replace("no human step", "")
+    assert not hasattr(verify, "_needs_lab_prices") and not hasattr(verify, "LAB_PRICES")
+
+
 def test_a_failing_check_prints_its_whole_output(monkeypatch: pytest.MonkeyPatch,
                                                  capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
     """Overhaul PR 1 review (pipeline-F3): CI's only test run is M0-01 inside verify, so a failing check's whole

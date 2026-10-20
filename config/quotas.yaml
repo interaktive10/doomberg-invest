@@ -23,7 +23,6 @@ providers:
 routing:
   P-01: [gemini, groq, openrouter]
   P-02: [gemini, groq, openrouter]
-  P-03: [gemini, groq, openrouter]
   P-05: [gemini, groq]
   P-06: [gemini, groq, openrouter]
   P-07: [gemini, groq, openrouter]
@@ -31,3 +30,21 @@ routing:
 work_order: [capex_desk, candidate_shortlist, other]
 text_daily_limits:
   documents_per_day: null
+# GitHub Actions minutes (overhaul PR 3, pipeline/digest/minutes.py): the account's private repos share the free 2,000
+# a billing cycle, and going over stops every workflow until the reset. Read from github.com/settings/billing: Manzoor
+# updates cycle_day (the day the cycle resets) and other_repos (this cycle's minutes in his other private repos; 0 while
+# their workflows are off). The digest prints used and projected; lab-prices.yml and lab.yml run only while
+# used + their limit + reserve + the remaining scheduled runs stays at or below gate_max.
+actions:
+  included: 2000
+  cycle_day: 1       # Manzoor: copy from github.com/settings/billing
+  other_repos: 0     # Manzoor: copy from github.com/settings/billing
+  gate_max: 1900
+  reserve: 180       # minutes no schedule shows: CI, thesis-ingest, a re-run
+  warn_above: 1600   # the digest's warning
+  typical:           # billed minutes of one scheduled run (each job rounded up), for the projection
+    daily.yml: 10            # SEC then text, about 9-10 (docs/SPEC_ISSUES.md 50)
+    weekly.yml: 60           # us about 5, scores about 50 (400 prices 8 s apart), publish about 5
+    quarterly.yml: 60        # §2.5's target
+    thesis-fallback.yml: 2   # stops at once when the routine wrote the week's cards
+    lab-prices.yml: 0        # gated: each run asks for its own 120 minutes

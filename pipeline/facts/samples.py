@@ -1,9 +1,9 @@
 """The other prompts' samples for record-cassettes.yml (BRIEF §9 "P-01, P-02, P-03, P-05, P-06, P-07 ..."; M5 review
 R1-F7). Besides F-SYN's P-01 corpus (evaluate.run_corpus): one P-02 batch (F-SYN's counterparties against its
-companies), P-03 tags for KYST's risk-factor changes, one P-06 profile (ARVL's order announcement) and P-07 triage
-of F-SYN's India press releases. They run from files alone, with the inputs the pipeline builds (run.link_pending,
-run.risk_changes, capex.run.cross_border, run.triage_announcements), so `evaluate --record` writes cassettes under
-each prompt and `--replay` reads them back.
+companies), one P-06 profile (ARVL's order announcement) and P-07 triage of F-SYN's India press releases. They run
+from files alone, with the inputs the pipeline builds (run.link_pending, capex.run.cross_border,
+run.triage_announcements), so `evaluate --record` writes cassettes under each prompt and `--replay` reads them back.
+P-03 is no longer called (docs/SPEC_ISSUES.md 50); F-SYN keeps KYST's two risk-factor versions.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any
 import yaml
 
 from pipeline.capex.membership import MAX_TEXT_CHARS, CrossBorderInput
-from pipeline.facts import entities, risk_diff
+from pipeline.facts import entities
 from pipeline.facts.process import normalize
 from pipeline.india.triage import SUMMARY_CHARS, TriageInput
 from pipeline.llm.prompt import PromptInput
@@ -32,15 +32,6 @@ def inputs(root: Path, truth: Mapping[str, Any], config_root: Path = REPO_ROOT) 
     batch = names[:LINK_BATCH]
     cands = tuple(dict.fromkeys((c.id, c.name) for n in batch for c in entities.candidates_for(n, pool)))
     out: dict[str, list[PromptInput]] = {"P-02": [entities.EntityInput(tuple(batch), cands)]}
-
-    rc = truth["risk_changes"]
-    old, new = (normalize(rc[k], (root / rc[k]).read_bytes()) for k in ("from", "to"))
-    spans = [next(s for s in n.section_map if s["name"] == "risk_factors") for n in (old, new)]
-    old_p, new_p = (risk_diff.paragraphs(n.text, int(str(s["char_start"])), int(str(s["char_end"])))
-                    for n, s in zip((old, new), spans, strict=True))  # fmt: skip
-    changes = risk_diff.compare(old_p, new_p)
-    out["P-03"] = [risk_diff.RiskTagInput(tuple((f"p{k}", p.text[:2000]) for k, c in enumerate(changes)
-                                                if (p := c.new or c.old) is not None))]  # fmt: skip
 
     cats = tuple(yaml.safe_load((config_root / "config" / "categories.yaml").read_text(encoding="utf-8"))["categories"])
     india = [d for d in truth["documents"] if truth["companies"][d["ticker"]]["market"] == "in"]

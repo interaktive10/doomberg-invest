@@ -1,5 +1,6 @@
 """US weekly prices from Twelve Data's time_series (docs/SPEC_ISSUES.md 38): symbols, bars keyed by Friday, the key in
-a header and never in an error, and the answers Twelve Data gives instead of a series."""
+a header and never in an error, and the answers Twelve Data gives instead of a series. The Signal Lab's daily and
+monthly history (SPEC_ISSUES 51): end-of-day intervals only, a spent minute retried, a spent day told apart."""
 
 from __future__ import annotations
 
@@ -14,7 +15,13 @@ import pytest
 from pipeline.net.http import HttpClient
 from pipeline.net.stooq import parse_csv
 from pipeline.net.twelvedata import (
+    HISTORY_SIZE,
+    INTERVALS,
+    MINUTE_RETRIES,
+    MINUTE_WAIT,
     TwelveDataClient,
+    TwelveDataDayCredits,
+    TwelveDataMinuteCredits,
     TwelveDataNoSuchSymbol,
     TwelveDataUnavailable,
     parse_series,
@@ -139,3 +146,64 @@ def test_http_errors_are_classified_and_never_carry_the_key(tmp_path: Path, monk
 def test_the_source_follows_price_source(tmp_path: Path) -> None:
     assert price_source(mock_http(tmp_path)).name == "twelvedata"
     assert price_source(mock_http(tmp_path, source="yahoo")).name == "yahoo"
+
+
+def test_the_daily_url_and_parse(tmp_path: Path) -> None:
+    """Overhaul PR 3: the Lab's history asks one request of HISTORY_SIZE days per symbol and gets every day's close,
+    oldest first (Twelve Data lists the newest first)."""
+    http = mock_http(tmp_path)
+    url = series_url("AAPL", HISTORY_SIZE, "1day")
+    assert url == "https://api.twelvedata.com/time_series?symbol=AAPL&interval=1day&outputsize=5000"
+    http.register_mock(url, (TD / "daily_AAPL.json").read_bytes())
+    closes = TwelveDataClient(http).daily("AAPL")
+    assert http.calls == [url] and len(closes) == 11
+    assert closes[0] == (date(2010, 1, 4), D("7.6432")) and closes[-1] == (date(2026, 10, 16), D("252.1"))
+    assert [d for d, _ in closes] == sorted(d for d, _ in closes)
+
+
+def test_the_monthly_url(tmp_path: Path) -> None:
+    http = mock_http(tmp_path)
+    url = series_url("BRK.B", HISTORY_SIZE, "1month")
+    body = {"values": [{"datetime": "2026-10-01", "close": "480.5"}, {"datetime": "2009-12-01", "close": "99.0"}],
+            "status": "ok"}  # fmt: skip
+    http.register_mock(url, json.dumps(body).encode())
+    assert TwelveDataClient(http).monthly("BRK-B") == [(date(2009, 12, 1), D(99)), (date(2026, 10, 1), D("480.5"))]
+    assert http.calls == ["https://api.twelvedata.com/time_series?symbol=BRK.B&interval=1month&outputsize=5000"]
+
+
+@pytest.mark.parametrize("interval", ["1min", "5min", "15min", "30min", "45min", "1h", "2h", "4h", "8h", "1d", ""])
+def test_an_intraday_interval_raises(tmp_path: Path, interval: str) -> None:
+    """CLAUDE.md: a research tool, no intraday data. Only end-of-day intervals build a URL, so nothing is asked."""
+    assert INTERVALS == ("1day", "1week", "1month")
+    with pytest.raises(ValueError, match="no intraday data"):
+        series_url("AAPL", HISTORY_SIZE, interval)
+    http = mock_http(tmp_path)
+    with pytest.raises(ValueError):
+        TwelveDataClient(http)._history("AAPL", interval)
+    assert http.calls == []
+
+
+def test_a_spent_minute_is_asked_again_after_the_minute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    http = mock_http(tmp_path)
+    answers = [(TD / "minute_credits.json").read_bytes(), (TD / "daily_AAPL.json").read_bytes()]
+    monkeypatch.setattr(http, "get_bytes", lambda url, **kw: answers.pop(0))
+    waits: list[float] = []
+    assert len(TwelveDataClient(http, sleep=waits.append).daily("AAPL")) == 11
+    assert waits == [MINUTE_WAIT] and MINUTE_WAIT > 60
+    monkeypatch.setattr(http, "get_bytes", lambda url, **kw: (TD / "minute_credits.json").read_bytes())
+    waits.clear()
+    with pytest.raises(TwelveDataMinuteCredits):
+        TwelveDataClient(http, sleep=waits.append).daily("AAPL")
+    assert waits == [MINUTE_WAIT] * MINUTE_RETRIES
+
+
+def test_a_spent_day_is_its_own_failure_and_never_waited_for(tmp_path: Path) -> None:
+    http = mock_http(tmp_path)
+    http.register_mock(series_url("AAPL", HISTORY_SIZE, "1day"), (TD / "daily_day_credits.json").read_bytes())
+    waits: list[float] = []
+    with pytest.raises(TwelveDataDayCredits) as e:
+        TwelveDataClient(http, sleep=waits.append).daily("AAPL")
+    assert waits == [] and len(http.calls) == 1 and not isinstance(e.value, NoSuchSymbol)
+    assert isinstance(e.value, TwelveDataUnavailable)  # the weekly run counts it as a failure, as before
+    with pytest.raises(TwelveDataMinuteCredits):  # the weekly run doesn't wait for a spent minute
+        parse_series((TD / "minute_credits.json").read_bytes())

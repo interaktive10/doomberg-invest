@@ -30,7 +30,7 @@ class RunInfo:
     company_months: int
     events: int
     periods: Mapping[str, tuple[date, date]]
-    source: str  # where the prices came from ("Stooq bulk d_us_txt.zip", "F-LAB synthetic panel", ...)
+    source: str  # where the prices came from ("Twelve Data month-end closes (...)", "F-LAB synthetic panel", ...)
     population: str = ""  # which companies each month-end's cross-section holds (run.describe)
 
 

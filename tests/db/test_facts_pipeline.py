@@ -1,22 +1,25 @@
 """M5 against the database: F-SYN through the text-facts pipeline (M5-02: every stored verified quote is its document's
-canonical text at the stored offsets; the database refuses one that isn't), fact diffs, counterparty links, risk
-changes, deferral to the next day (M5-03 at the pipeline level), the daily run's queue from SEC submissions and
-filing indexes, and India announcement triage (P-07)."""
+canonical text at the stored offsets; the database refuses one that isn't), fact diffs, counterparty links, deferral
+to the next day (M5-03 at the pipeline level), the daily run's queue from SEC submissions and filing indexes, and
+India announcement triage (P-07). The scope on stage names (docs/SPEC_ISSUES.md 50): the queue window filtered in
+SQL, stale filings skipped and back for a new thesis, theses first, submissions read only for new or indexed names,
+and no P-03 call; tests/facts/test_scope.py has the rules without a database."""
 
 from __future__ import annotations
 
 import itertools
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import psycopg
 import pytest
+from psycopg.types.json import Jsonb
 
 from pipeline.db import facts_repo, repo
-from pipeline.db.models import Company, CorpEvent
+from pipeline.db.models import Company, CorpEvent, FilingRow
 from pipeline.facts import run
 from pipeline.facts.evaluate import SYN, load_truth
 from pipeline.facts.process import normalize
@@ -24,6 +27,7 @@ from pipeline.llm.router import Router
 from pipeline.net.http import HttpClient
 from pipeline.settings import Settings
 from pipeline.us.daily import submissions_url
+from pipeline.us.events import master_index_url
 from tests.facts.fakes import MultiOracle
 from tests.llm.conftest import FakeClock, quotas
 
@@ -61,7 +65,8 @@ def jobs(companies: dict[str, Company]) -> list[run.DocJob]:
 
 def test_f_syn_in_the_database_keeps_every_quote_grounded(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     cos = add_companies(conn)
-    r = router()
+    oracle = MultiOracle(TRUTH)
+    r = Router({"gemini": oracle}, quotas(["gemini"], rpd=10_000), FakeClock())
     stats = run.TextStats("2027-08-01")
     for job in jobs(cos):
         assert run.process(conn, job, fetch, r, tmp_path, stats) == "extracted", job.url
@@ -95,12 +100,9 @@ def test_f_syn_in_the_database_keeps_every_quote_grounded(conn: psycopg.Connecti
                                                  ("VOLT", "partner")]  # fmt: skip
     assert {cik for _, _, cik in links} == {CIKS["NMBS"]} and stats.links == 3
 
-    # risk changes (F.6): the 2026 10-K added a data-center demand paragraph; only tagged changes are stored
-    rc = conn.execute("select change_kind, topic_tags, text_after, char_start, char_end from risk_changes").fetchall()
-    added = [x for x in rc if x[0] == "added"]
-    assert len(added) == 1 and "data_center" in added[0][1] and all(x[1] for x in rc)
-    kyst = normalize("x.htm", (SYN / "kyst_10k_2026_risk.htm").read_bytes()).text
-    assert kyst[added[0][3] : added[0][4]] == added[0][2] and len(added[0][2].split()) <= 25
+    # no risk-factor diff: the 10-Qs and KYST's two 10-Ks make no P-03 call (docs/SPEC_ISSUES.md 50)
+    assert not [q for q in oracle.requests if q.prompt_id not in {"P-01", "P-02"}]
+    assert conn.execute("select count(*) from risk_changes").fetchone() == (0,)
 
 
 def test_a_deferred_document_is_read_the_next_day(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
@@ -154,41 +156,42 @@ def test_a_partial_price_quote_is_not_stored(conn: psycopg.Connection[Any], tmp_
     assert conn.execute("select count(*) from facts").fetchone() == (5,) and stats.rejected.get("V1-TYPE", 0) >= 1
 
 
-class NoRiskTags:
-    """F-SYN's oracle, but P-03 is rate-limited for the day."""
-
-    name = "gemini"
-
-    def __init__(self) -> None:
-        self.inner = MultiOracle(TRUTH)
-
-    def available(self) -> bool:
-        return True
-
-    def complete(self, req: Any) -> Any:
-        from pipeline.llm.providers.base import RateLimited
-
-        if req.prompt_id == "P-03":
-            raise RateLimited("gemini: 429")
-        return self.inner.complete(req)
-
-
-def test_a_deferred_risk_diff_is_done_the_next_day(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """M5 review R2-F3: KYST's 2026 10-K is read while P-03 is rate-limited: the document stays deferred (its facts
-    stored), and the next day's run stores the risk diff once without storing the facts again."""
+def test_a_10q_makes_no_p03_call(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """docs/SPEC_ISSUES.md 50: a 10-Q, and a 10-K whose risk factors changed from the year before, are read with
+    P-01 alone: no P-03 request, no risk_changes row."""
     cos = add_companies(conn)
-    old, new = (next(j for j in jobs(cos) if j.url.endswith(f)) for f in ("kyst_10k_2025_risk.htm",
-                                                                          "kyst_10k_2026_risk.htm"))  # fmt: skip
+    oracle = MultiOracle(TRUTH)
+    r = Router({"gemini": oracle}, quotas(["gemini"], rpd=10_000), FakeClock())
     stats = run.TextStats("2026-09-25")
-    assert run.process(conn, old, fetch, router(), tmp_path, stats) == "extracted"
-    limited = Router({"gemini": NoRiskTags()}, quotas(["gemini"], rpd=10_000), FakeClock())
-    assert run.process(conn, new, fetch, limited, tmp_path, stats) == "deferred"
-    facts = conn.execute("select count(*) from facts").fetchone()
-    assert [d["url"] for d in facts_repo.deferred_documents(conn)] == [new.url]
+    for f in ("nmbs_10q_q1.htm", "kyst_10k_2025_risk.htm", "kyst_10k_2026_risk.htm"):
+        assert run.process(conn, next(j for j in jobs(cos) if j.url.endswith(f)), fetch, r, tmp_path, stats) == (
+            "extracted"
+        )
+    assert {q.prompt_id for q in oracle.requests} == {"P-01"} and stats.deferred == 0
     assert conn.execute("select count(*) from risk_changes").fetchone() == (0,)
-    assert run.process(conn, new, fetch, router(), tmp_path, stats) == "extracted"
-    assert conn.execute("select count(*) from risk_changes where change_kind = 'added'").fetchone() == (1,)
-    assert conn.execute("select count(*) from facts").fetchone() == facts  # the facts once
+
+
+def test_a_document_deferred_for_its_risk_diff_is_closed_without_reading_it_again(
+    conn: psycopg.Connection[Any], tmp_path: Path
+) -> None:
+    """A 10-Q left `deferred` with its facts stored (P-03 was rate-limited before this change) is marked extracted
+    the next time it comes up, with no P-01 request and no fact stored twice; only the scope's deferred documents
+    come up."""
+    cos = add_companies(conn)
+    job = next(j for j in jobs(cos) if j.url.endswith("nmbs_10q_q1.htm"))
+    assert run.process(conn, job, fetch, router(), tmp_path, run.TextStats("2026-09-24")) == "extracted"
+    conn.execute("update documents set status = 'deferred' where url = %s", (job.url,))
+    facts = conn.execute("select count(*) from facts").fetchone()
+    assert facts is not None and facts[0] > 0
+    nmbs, kyst = cos["NMBS"].id, cos["KYST"].id
+    assert nmbs is not None and kyst is not None
+    assert [d["url"] for d in facts_repo.deferred_documents(conn, [nmbs])] == [job.url]
+    assert facts_repo.deferred_documents(conn, [kyst]) == []
+    oracle = MultiOracle(TRUTH)
+    again = Router({"gemini": oracle}, quotas(["gemini"], rpd=10_000), FakeClock())
+    assert run.process(conn, job, fetch, again, tmp_path, run.TextStats("2026-09-25")) == "extracted"
+    assert oracle.requests == [] and conn.execute("select count(*) from facts").fetchone() == facts
+    assert facts_repo.deferred_documents(conn) == []
 
 
 ARCH = "https://www.sec.gov/Archives/edgar/data/999001"
@@ -235,10 +238,48 @@ def submissions(cik: str) -> bytes:
                        "filings": {"recent": recent, "files": []}}).encode()  # fmt: skip
 
 
+WEEK = date(2026, 9, 18)  # the latest scored week
+DAY = date(2026, 9, 25)
+
+
+def us_company(conn: psycopg.Connection[Any], name: str, ticker: str, cik: str | None = None) -> UUID:
+    row = conn.execute("insert into companies (market, name, cik, ticker, fiscal_year_end) values ('us', %s, %s, %s, "
+                       "'0630') returning id", (name, cik, ticker)).fetchone()  # fmt: skip
+    assert row is not None
+    cid: UUID = row[0]
+    return cid
+
+
+def stage_name(conn: psycopg.Connection[Any], cid: UUID, evidence: int = 45) -> None:
+    """Evidence >= 40 in the latest scored week: the candidate stage."""
+    conn.execute("insert into scores (company_id, week_end, evidence, families, bucket, weights_version) values "
+                 "(%s, %s, %s, '{fundamentals}', 'none', 'w0-equal')", (cid, WEEK, evidence))  # fmt: skip
+
+
+def research_entry(conn: psycopg.Connection[Any], cid: UUID) -> None:
+    conn.execute("insert into theses (company_id, state, card_md, card_json, evidence_pack, author, validation, "
+                 "created_week) values (%s, 'research', '', '{}', '{}', 'manual', '{}', %s)", (cid, WEEK))  # fmt: skip
+
+
+def at(days_ago: int) -> datetime:
+    """Accepted at 21:00 UTC, `days_ago` days before DAY."""
+    return datetime(DAY.year, DAY.month, DAY.day, 21, tzinfo=UTC) - timedelta(days=days_ago)
+
+
+def filing(cid: UUID, accession: str, form: str, filed: datetime, items: tuple[str, ...] = (),
+           url: str = f"{BASE}/none.htm") -> FilingRow:  # fmt: skip
+    return FilingRow(company_id=cid, accession_no=accession, form_type=form, items=list(items), filed_at=filed,
+                     accepted_at=filed, primary_doc_url=url, index_url=f"{url}-index.htm")  # fmt: skip
+
+
+def mock_http(tmp_path: Path) -> HttpClient:
+    return HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+
+
 def nimbus(conn: psycopg.Connection[Any], tmp_path: Path) -> HttpClient:
-    """A capex-desk company with a 10-Q and an 8-K (EX-99.1 press release) filed in the last days."""
-    conn.execute("insert into companies (market, name, cik, ticker, fiscal_year_end, capex_desk) values "
-                 "('us', 'Nimbus Compute Corp.', %s, 'NMBS', '0630', true)", (CIKS["NMBS"],))  # fmt: skip
+    """A stage name (Evidence 45 in the latest scored week) with a 10-Q and an 8-K (EX-99.1 press release) filed in
+    the last days."""
+    stage_name(conn, us_company(conn, "Nimbus Compute Corp.", "NMBS", CIKS["NMBS"]))
     http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
     arch = "https://www.sec.gov/Archives/edgar/data/999001"
     http.register_mock(submissions_url(CIKS["NMBS"]), submissions(CIKS["NMBS"]))
@@ -265,7 +306,7 @@ def test_the_daily_run_queues_fetches_and_extracts(conn: psycopg.Connection[Any]
 
 
 def test_a_deferred_filing_is_read_once_the_next_day(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """M5 review R1-F2: on day 1 every provider is rate-limited, so the 10-Q defers and its filing stays new; on day 2
+    """M5 review R1-F2: on day 1 every provider is rate-limited, so a document defers and its filing stays new; on day 2
     each document is read once (not from the deferred list and again from its filing): one fact row per distinct
     fact, no "reaffirmed" diff between two facts of one document, and the P-01 requests of a clean single run."""
     http = nimbus(conn, tmp_path)
@@ -304,6 +345,166 @@ def test_the_time_budget_stops_between_documents(conn: psycopg.Connection[Any], 
     assert statuses == ["extracted", "new"]
     later = run.run(conn, date(2026, 9, 26), router(), http, None, tmp_path)
     assert later.extracted == 1 and later.stopped is None
+
+
+def test_out_of_scope_filings_never_starve_an_in_scope_filing(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """1,200 queued filings of a company out of scope (the old capex-desk queue): 200 older than a stage name's 120
+    days are skipped; the 1,000 recent ones, all newer than the stage name's, stay queued but never fill the
+    1,000-row window (the scope is filtered in SQL), and the stage name's 10-Q and 8-K are read."""
+    http = nimbus(conn, tmp_path)
+    other = us_company(conn, "Old Desk Co", "ODC")
+    rows = [filing(other, f"0000999099-26-{k:06d}", "8-K", at(500 - k) if k < 200 else at(9) + timedelta(minutes=k),
+                   ("2.02", "9.01")) for k in range(1200)]  # fmt: skip
+    repo.insert_filings(conn, rows)
+    nmbs = conn.execute("select id from companies where ticker = 'NMBS'").fetchone()
+    assert nmbs is not None
+    stats = run.run(conn, DAY, router(), http, None, tmp_path)
+    assert stats.skipped_filings == 200 and stats.extracted == 2 and stats.errors == [], stats
+    assert (stats.scope, stats.theses, stats.stage) == (1, 0, 1)
+    got = conn.execute("select company_id = %s, status, count(*) from filings group by 1, 2 order by 1, 2",
+                       (other,)).fetchall()  # fmt: skip
+    assert got == [(False, "extracted", 2), (True, "new", 1000), (True, "skipped", 200)]
+    assert len(facts_repo.filings_by_status(conn, ["new"], [other])) == 1000  # the window is the scope's alone
+    assert facts_repo.filings_by_status(conn, ["new"], [nmbs[0]]) == []
+
+
+def history(cik: str) -> bytes:
+    """SEC submissions with filings from 5 to 500 days before DAY (tests/facts/test_scope.py HISTORY)."""
+    rows = [(500, "10-K", ""), (300, "10-K", ""), (150, "10-Q", ""), (130, "8-K", "8.01"), (60, "8-K", "7.01"),
+            (20, "10-Q", ""), (15, "10-Q/A", ""), (10, "8-K", "1.01,9.01"), (5, "8-K", "2.02,9.01"),
+            (3, "8-K", "5.02")]  # fmt: skip
+    recent: dict[str, list[str]] = {k: [] for k in ("accessionNumber", "form", "filingDate", "reportDate",
+                                                    "acceptanceDateTime", "items", "primaryDocument")}  # fmt: skip
+    for k, (ago, form, items) in enumerate(rows):
+        filed = DAY - timedelta(days=ago)
+        recent["accessionNumber"].append(f"{cik}-26-{k:06d}")
+        recent["form"].append(form)
+        recent["filingDate"].append(filed.isoformat())
+        recent["reportDate"].append("")
+        recent["acceptanceDateTime"].append(f"{filed.isoformat()}T21:00:00.000Z")
+        recent["items"].append(items)
+        recent["primaryDocument"].append(f"doc{k}.htm")
+    return json.dumps({"cik": cik, "name": "X", "filings": {"recent": recent, "files": []}}).encode()  # fmt: skip
+
+
+def test_stage_names_queue_their_latest_report_and_releases_theses_400_days(conn: psycopg.Connection[Any],
+                                                                            tmp_path: Path) -> None:  # fmt: skip
+    """A stage name queues its latest 10-Q or 10-K and its 8-Ks with item 2.02, 7.01 or 8.01 of the last 120 days;
+    a thesis everything of the last 400 days (10-K, 10-Q, 8-K items 1.01, 2.02, 2.03, 7.01, 8.01)."""
+    s_cik, t_cik = "0000999011", "0000999012"
+    s, t = us_company(conn, "Stage Co", "STG", s_cik), us_company(conn, "Thesis Co", "THS", t_cik)
+    http = mock_http(tmp_path)
+    for cik in (s_cik, t_cik):
+        http.register_mock(submissions_url(cik), history(cik))
+    cos = {c.id: c for c in repo.companies(conn) if c.id in (s, t)}
+    stats = run.TextStats(DAY.isoformat())
+    run.queue_us(conn, http, cos, {s: run.RANK["stage"], t: run.RANK["thesis"]}, DAY, stats)
+    got = conn.execute("select company_id, form_type, items, filed_at from filings").fetchall()
+    queued = {cid: sorted(((DAY - f.astimezone(UTC).date()).days, form, tuple(items))
+                          for c, form, items, f in got if c == cid) for cid in (s, t)}  # fmt: skip
+    assert queued[s] == [(5, "8-K", ("2.02", "9.01")), (20, "10-Q", ()), (60, "8-K", ("7.01",))]
+    assert queued[t] == [(5, "8-K", ("2.02", "9.01")), (10, "8-K", ("1.01", "9.01")), (20, "10-Q", ()),
+                         (60, "8-K", ("7.01",)), (130, "8-K", ("8.01",)), (150, "10-Q", ()),
+                         (300, "10-K", ())]  # fmt: skip
+    assert stats.queued_filings == 10 and stats.submissions == 2
+    assert stats.checked == {s_cik: run.RANK["stage"], t_cik: run.RANK["thesis"]}
+
+
+def test_skipped_filings_come_back_when_the_name_becomes_a_thesis(conn: psycopg.Connection[Any],
+                                                                  tmp_path: Path) -> None:  # fmt: skip
+    """Out of scope, a company's queued 10-Q of 200 days ago and 10-K of 450 days ago are skipped, and so are a stage
+    name's agreement 8-K and its 10-K older than its latest 10-Q (its latest 10-Q and its results 8-K stay queued).
+    Once the first company is a research entry, its 10-Q (within 400 days) is queued again and read first, its 10-K
+    stays skipped, and a thesis's filings are never skipped."""
+    x = us_company(conn, "Next Thesis Co", "NXT")
+    y = us_company(conn, "Stage Co", "STG")
+    stage_name(conn, y)
+    x_10q = f"{ARCH}/000099902126000001/nxt-10q.htm"
+    repo.insert_filings(conn, [
+        filing(x, "0000999021-26-000001", "10-Q", at(200), url=x_10q),
+        filing(x, "0000999021-25-000002", "10-K", at(450)),
+        filing(y, "0000999022-26-000001", "10-K", at(100)),
+        filing(y, "0000999022-26-000002", "10-Q", at(20)),
+        filing(y, "0000999022-26-000003", "8-K", at(10), ("1.01",)),
+        filing(y, "0000999022-26-000004", "8-K", at(5), ("2.02", "9.01")),
+    ])  # fmt: skip
+
+    def status() -> dict[str, str]:
+        return dict(conn.execute("select accession_no, status from filings").fetchall())
+
+    stage_since, thesis_since = at(120).replace(hour=0), at(400).replace(hour=0)
+    assert facts_repo.skip_stale_filings(conn, [], stage_since, thesis_since) == (4, 0)
+    assert status() == {"0000999021-26-000001": "skipped", "0000999021-25-000002": "skipped",
+                        "0000999022-26-000001": "skipped", "0000999022-26-000002": "new",
+                        "0000999022-26-000003": "skipped", "0000999022-26-000004": "new"}  # fmt: skip
+    research_entry(conn, x)
+    http = mock_http(tmp_path)
+    http.register_mock(x_10q, (SYN / "nmbs_10q_q1.htm").read_bytes())
+    stats = run.run(conn, DAY, router(), http, None, tmp_path, documents_per_day=1)
+    assert (stats.reset_filings, stats.skipped_filings, stats.theses, stats.stage) == (1, 0, 1, 1)
+    assert stats.stopped == "daily document limit (1)" and stats.extracted == 1  # the thesis's, before the stage's
+    assert status()["0000999021-26-000001"] == "extracted" and status()["0000999021-25-000002"] == "skipped"
+    repo.insert_filings(conn, [filing(x, "0000999021-25-000003", "10-Q", at(300))])
+    assert facts_repo.skip_stale_filings(conn, [x], stage_since, thesis_since) == (0, 0)
+    assert status()["0000999021-25-000003"] == "new"
+
+
+def test_theses_are_read_before_stage_names_each_newest_first(conn: psycopg.Connection[Any],
+                                                              tmp_path: Path) -> None:  # fmt: skip
+    """With one document a day: the thesis's newer 10-Q, then its older one, then the stage name's, although the
+    stage name's was filed last."""
+    t, s = us_company(conn, "Nimbus Compute Corp.", "NMBS"), us_company(conn, "Voltara Grid Systems", "VOLT")
+    research_entry(conn, t)
+    stage_name(conn, s)
+    http = mock_http(tmp_path)
+    docs = {"t-old": (t, at(60), "nmbs_10q_q1.htm"), "t-new": (t, at(20), "nmbs_10q_q2.htm"),
+            "s": (s, at(1), "volt_10q.htm")}  # fmt: skip
+    for k, (cid, filed, f) in enumerate(docs.values()):
+        http.register_mock(f"{ARCH}/{k}/{f}", (SYN / f).read_bytes())
+        repo.insert_filings(conn, [filing(cid, f"0000999041-26-{k:06d}", "10-Q", filed, url=f"{ARCH}/{k}/{f}")])
+    read: list[str] = []
+    for _ in docs:
+        before = {r[0] for r in conn.execute("select url from documents").fetchall()}
+        stats = run.run(conn, DAY, router(), http, None, tmp_path, documents_per_day=1)
+        assert stats.extracted == 1, stats
+        read += [u.rsplit("/", 1)[1] for u in {r[0] for r in conn.execute("select url from documents")} - before]
+    assert read == ["nmbs_10q_q2.htm", "nmbs_10q_q1.htm", "volt_10q.htm"]
+
+
+def empty_submissions(cik: str) -> bytes:
+    return json.dumps({"cik": cik, "name": "X", "filings": {"recent": {"accessionNumber": []}, "files": []}}).encode()
+
+
+@pytest.mark.parametrize(("index_ok", "fetched"), [(True, "BC"), (False, "ABC")], ids=["indexed", "index-unreadable"])
+def test_submissions_are_read_only_for_new_or_indexed_names(conn: psycopg.Connection[Any], tmp_path: Path,
+                                                            index_ok: bool, fetched: str) -> None:  # fmt: skip
+    """Three stage names: A is in the last text run's record, B is new to the scope, and C is in the record and filed
+    an 8-K on a day whose EDGAR index the SEC step read since (A's Form 4 that day is no text filing): only B's and
+    C's submissions are read. When that index can't be read, every name's are."""
+    ciks = {"A": "0000999031", "B": "0000999032", "C": "0000999033"}
+    for k, cik in ciks.items():
+        stage_name(conn, us_company(conn, f"{k} Co", k, cik))
+    runs = "insert into runs (kind, started_at, finished_at, status, stats) values (%s, %s, %s, 'ok', %s)"
+    conn.execute(runs, ("text", "2026-09-24 01:20+00", "2026-09-24 01:30+00",
+                        Jsonb({"checked": {ciks["A"]: 1, ciks["C"]: 1}})))  # fmt: skip
+    conn.execute(runs, ("us_daily", "2026-09-25 01:14+00", "2026-09-25 01:16+00",
+                        Jsonb({"days": [{"day": "listings as of 2026-09-25", "index_rows": 0},
+                                        {"day": "2026-09-24", "index_rows": 2}]})))  # fmt: skip
+    index = ("CIK|Company Name|Form Type|Date Filed|File Name\n" + "-" * 80 + "\n"
+             "999033|C CO|8-K|20260924|edgar/data/999033/0000999033-26-000001.txt\n"
+             "999031|A CO|4|20260924|edgar/data/999031/0000999031-26-000002.txt\n")  # fmt: skip
+    http = mock_http(tmp_path)
+    if index_ok:
+        http.register_mock(master_index_url(date(2026, 9, 24)), index.encode())
+    else:
+        http.register_error(master_index_url(date(2026, 9, 24)), 403)
+    for k in fetched:
+        http.register_mock(submissions_url(ciks[k]), empty_submissions(ciks[k]))
+    stats = run.run(conn, DAY, router(), http, None, tmp_path)
+    assert [u for u in http.calls if "/submissions/" in u] == [submissions_url(ciks[k]) for k in fetched]
+    assert stats.submissions == len(fetched) and stats.indexed == (1 if index_ok else 0)
+    assert stats.checked == dict.fromkeys(ciks.values(), run.RANK["stage"])
+    assert bool(stats.errors) is not index_ok  # the unreadable index is logged
 
 
 def test_india_announcements_are_triaged_once(conn: psycopg.Connection[Any]) -> None:
@@ -435,11 +636,12 @@ def test_an_announcement_pdf_is_fetched_again_after_the_weekend(conn: psycopg.Co
                                                                  tmp_path: Path) -> None:  # fmt: skip
     """M5 review R3 (R2-F4, India): a Friday announcement triaged read_pdf on Saturday, whose PDF fetch fails, is
     read on Tuesday (daily.yml doesn't run on Sunday or Monday); a PDF triaged more than RETRY_DAYS ago isn't offered
-    again."""
+    again. Aravalli is a research entry, so it is in the text run's scope."""
     conn.execute("insert into companies (market, name, nse_symbol, isin, fiscal_year_end, capex_desk) values "
                  "('in', 'Aravalli Cables Limited', 'ARVL', 'INE000A01010', '0331', true)")  # fmt: skip
     arvl = next(c for c in repo.companies(conn) if c.nse_symbol == "ARVL")
     assert arvl.id is not None
+    research_entry(conn, arvl.id)
     pdf = "https://nsearchives.nseindia.com/corporate/ARVL_18092026.pdf"
     repo.insert_corp_events(conn, [CorpEvent(
         company_id=arvl.id, event_date=date(2026, 9, 18), filed_at=datetime(2026, 9, 18, 12, tzinfo=UTC),
@@ -456,28 +658,3 @@ def test_an_announcement_pdf_is_fetched_again_after_the_weekend(conn: psycopg.Co
     assert [j.url for j in run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 22), stats)] == [pdf]
     conn.execute("update announcement_triage set created_at = '2026-09-01 00:00+00'")  # triaged > RETRY_DAYS ago
     assert run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 22), run.TextStats("x")) == []
-
-
-def test_a_previous_filing_fetch_error_defers_the_risk_diff(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """M5 review R3-F2: a 503 on the previous 10-K leaves the new one `deferred` (facts stored); the next day's run
-    stores its risk diff once and no fact twice."""
-    import httpx
-
-    cos = add_companies(conn)
-    old, new = (next(j for j in jobs(cos) if j.url.endswith(f)) for f in ("kyst_10k_2025_risk.htm",
-                                                                          "kyst_10k_2026_risk.htm"))  # fmt: skip
-    stats = run.TextStats(date.today().isoformat())
-    assert run.process(conn, old, fetch, router(), tmp_path, stats) == "extracted"
-
-    def flaky(job: run.DocJob) -> bytes:
-        if job.url == old.url:
-            raise httpx.HTTPStatusError("503", request=httpx.Request("GET", job.url), response=httpx.Response(503))
-        return fetch(job)
-
-    assert run.process(conn, new, flaky, router(), tmp_path, stats) == "deferred"
-    facts = conn.execute("select count(*) from facts").fetchone()
-    assert [d["url"] for d in facts_repo.deferred_documents(conn)] == [new.url]
-    assert conn.execute("select count(*) from risk_changes").fetchone() == (0,)
-    assert run.process(conn, new, fetch, router(), tmp_path, stats) == "extracted"
-    assert conn.execute("select count(*) from risk_changes where change_kind = 'added'").fetchone() == (1,)
-    assert conn.execute("select count(*) from facts").fetchone() == facts

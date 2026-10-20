@@ -1,11 +1,12 @@
-"""Which documents to read, and fetching them (BRIEF §4.5 scope, Appendix F.3).
+"""Which documents to read, and fetching them (BRIEF §4.5 scope, Appendix F.3; docs/SPEC_ISSUES.md 50).
 
-Scope, in the config/quotas.yaml work order: capex-desk companies (US + India), the weekly candidate shortlist (top
-100 by Evidence with no text facts yet), then companies with a live thesis. For each US company in scope, the SEC
-submissions list gives its filings of the last FILING_DAYS: 10-K and 10-Q (the primary document) and 8-Ks with
-items 1.01, 2.02, 2.03, 7.01 or 8.01 (the EX-99.1/EX-99.2 press releases from the filing index, and the 8-K itself
-for 1.01/2.03 agreements). New ones go to `filings`; India's documents are the announcement PDFs P-07 flagged.
-Raw files stay on the runner (§2.8): raw/{cik}/{accession}/{filename}, deduplicated by sha256.
+Scope (pipeline.facts.run): companies with a live thesis or research entry, then the stage names. For a US company
+in scope, the SEC submissions list gives the filings it reads (scope_filings): a thesis's of the last FILING_DAYS,
+10-K and 10-Q (the primary document) and 8-Ks with items 1.01, 2.02, 2.03, 7.01 or 8.01 (the EX-99.1/EX-99.2 press
+releases from the filing index, and the 8-K itself for 1.01/2.03 agreements); a stage name's of the last
+STAGE_DAYS, only its latest 10-Q or 10-K and its 8-Ks with item 2.02, 7.01 or 8.01. New ones go to `filings`;
+India's documents are the announcement PDFs P-07 flagged. Raw files stay on the runner (§2.8):
+raw/{cik}/{accession}/{filename}, deduplicated by sha256.
 """
 
 from __future__ import annotations
@@ -19,9 +20,11 @@ from pathlib import Path
 
 from pipeline.us.submissions import Submissions, filing_doc_url, filing_index_url
 
-FILING_DAYS = 400  # a new company's history: about four quarters of reports (diffs and the demand index need them)
+FILING_DAYS = 400  # a thesis's history: about four quarters of reports (diffs and the demand index need them)
+STAGE_DAYS = 120  # a stage name's: its latest report and the releases since (S9 counts facts of 2 quarters)
 PERIODIC = frozenset({"10-K", "10-Q"})
 EIGHT_K_ITEMS = frozenset({"1.01", "2.02", "2.03", "7.01", "8.01"})
+STAGE_ITEMS = frozenset({"2.02", "7.01", "8.01"})  # results, Regulation FD and other news: the press releases
 AGREEMENT_ITEMS = frozenset({"1.01", "2.03"})
 EXHIBITS = ("EX-99.1", "EX-99.2")
 
@@ -48,6 +51,16 @@ def text_filings(subs: Submissions, since: date) -> list[FilingRef]:
                                  filing_doc_url(subs.cik, f.accession, f.primary_document),
                                  filing_index_url(subs.cik, f.accession)))  # fmt: skip
     return out
+
+
+def scope_filings(subs: Submissions, today: date, thesis: bool) -> list[FilingRef]:
+    """The filings a company in scope reads: a thesis's text_filings of the last FILING_DAYS; a stage name's latest
+    10-Q or 10-K and its 8-Ks with item 2.02, 7.01 or 8.01, of the last STAGE_DAYS."""
+    if thesis:
+        return text_filings(subs, since(today))
+    refs = text_filings(subs, since(today, STAGE_DAYS))
+    latest = max((r for r in refs if r.form in PERIODIC), key=lambda r: r.accepted_at, default=None)
+    return [r for r in refs if r is latest or (r.form == "8-K" and STAGE_ITEMS & set(r.items))]
 
 
 class _IndexParser(HTMLParser):

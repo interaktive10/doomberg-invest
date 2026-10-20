@@ -1,9 +1,9 @@
 """The Signal Lab runner against the database (BRIEF §4.10): companies and every fundamentals version read through
-as_of, prices from a Stooq-format bulk zip, lab_results written, the report and a proposal for every weight."""
+as_of, prices from the Lab's month-price asset (pipeline/lab/prices.py), lab_results written, the report and a
+proposal for every weight."""
 
 from __future__ import annotations
 
-import zipfile
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -18,6 +18,7 @@ from pipeline.db import repo
 from pipeline.db.models import Company
 from pipeline.db.weights import INITIAL_REASON, MERGED_BY, MERGED_REASON, WeightsMismatch, record_weights_in_use
 from pipeline.lab import run
+from pipeline.lab.prices import write_month_csv
 from pipeline.lab.proposals import Proposal
 from pipeline.lab.report import CAVEATS
 
@@ -26,13 +27,9 @@ from ..lab.conftest import load_generator
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def bulk_zip(path: Path, bars: dict[str, list[Any]]) -> Path:
-    with zipfile.ZipFile(path, "w") as z:
-        for ticker, rows in bars.items():
-            lines = ["<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>"]
-            lines += [f"{ticker}.US,D,{b.month_end:%Y%m%d},000000,{b.close},{b.close},{b.close},{b.close},1000,0"
-                      for b in rows]  # fmt: skip
-            z.writestr(f"data/daily/us/nasdaq stocks/1/{ticker.lower()}.us.txt", "\n".join(lines) + "\n")
+def price_asset(path: Path, bars: dict[str, list[Any]]) -> Path:
+    """The F-LAB month bars as the asset lab-prices.yml builds (ticker,month_end,close,high,low, gzip)."""
+    write_month_csv(path, bars)
     return path
 
 
@@ -44,9 +41,11 @@ def test_lab_run_on_f_lab_companies(conn: psycopg.Connection[Any], tmp_path: Pat
     ids = {c.ticker: c.id for c in repo.companies(conn, market="us")}
     rows = [v.model_copy(update={"company_id": ids[c.ticker]}) for c in data.companies for v in data.versions[c.id]]
     repo.insert_fundamentals(conn, rows)
-    prices = bulk_zip(tmp_path / "d_us_txt.zip", {c.ticker: data.bars[c.id] for c in data.companies if c.ticker})
-    text, props, panel_rows, stats = run.run(conn, "us", prices, date(2026, 9, 25))
-    assert len(panel_rows) == 20 * 60 and {s.horizon for s in stats} == {12, 24, 36}
+    prices = price_asset(tmp_path / "us_month_prices.csv.gz", {c.ticker: data.bars[c.id] for c in data.companies
+                                                                if c.ticker})  # fmt: skip
+    panel = tmp_path / "panel.parquet"  # written as soon as it is built (lab.yml uploads it on always())
+    text, props, panel_rows, stats = run.run(conn, "us", prices, date(2026, 9, 25), panel_out=panel)
+    assert len(panel_rows) == 20 * 60 and {s.horizon for s in stats} == {12, 24, 36} and panel.stat().st_size > 0
     stored = conn.execute("select count(*), count(distinct signal_id) from lab_results where market = 'us'").fetchone()
     assert stored is not None and stored[0] > 0 and stored[1] >= 12 + 6 + 2 * 10  # signals, L1-L6, two decile sets
     assert all(c in text for c in CAVEATS) and text.startswith("# Signal Lab report")
@@ -102,7 +101,8 @@ def test_the_lab_population_is_the_universe(conn: psycopg.Connection[Any], tmp_p
                 continue  # its last 10-Q: 2017-01-30
             rows.append(v.model_copy(update={"company_id": ids[c.ticker]}))
     repo.insert_fundamentals(conn, rows)
-    prices = bulk_zip(tmp_path / "d_us_txt.zip", {c.ticker: data.bars[c.id] for c in data.companies if c.ticker})
+    prices = price_asset(tmp_path / "us_month_prices.csv.gz", {c.ticker: data.bars[c.id] for c in data.companies
+                                                                if c.ticker})  # fmt: skip
     today = date(2026, 9, 25)
     loaded = run.load(conn, "us", prices, today)
     kept = {f"SYN{k:03d}" for k in range(4, 12)}

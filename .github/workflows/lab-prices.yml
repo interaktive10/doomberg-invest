@@ -1,0 +1,89 @@
+name: lab-prices
+# BRIEF §4.10.1 (docs/SPEC_ISSUES.md 51): the Signal Lab's month-end prices from Twelve Data's daily bars, a resumable
+# download (pipeline/lab/price_history.py) kept in the private `lab-data-v1` release, with no human step. It runs
+# Sunday to Thursday in November and December only, so Saturday's weekly prices (weekly.yml) never compete with it for
+# the free plan's 800 credits a day. The Actions minutes gate goes first. Each run resumes from the release, stops
+# itself at 90 minutes or 650 credits (or once Twelve Data says the day's credits are spent) and uploads its progress
+# even after a failure. Once every ticker is done it dispatches the first Lab run (lab.yml) and disables itself; a
+# blocked probe disables it too (the reason is in the lab_prices runs row). About 8 runs of about 90 minutes.
+on:
+  schedule:
+    - cron: "7 10 * 11,12 0-4"
+  workflow_dispatch:
+
+# Its own group, not `pipeline`: a group holds one waiting run and a newer one replaces it, so a 90-minute download in
+# `pipeline` could cancel a waiting daily or weekly run. It shares nothing with them that needs it: its Twelve Data
+# credits are Sunday to Thursday's (the weekly run's are Saturday's), and it only reads the companies table and writes
+# its own runs row.
+concurrency:
+  group: lab-prices
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # the lab-data-v1 release: created once if missing, then the progress uploaded
+  actions: write    # the minutes gate reads this repository's runs; dispatching lab.yml; disabling this workflow
+
+jobs:
+  prices:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Actions minutes gate (this run may take its whole limit; a refusal is a notice)
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --frozen python -m pipeline.digest.minutes gate --need 120
+      - name: Secrets (BRIEF §2.4) and the progress so far (the lab-data-v1 release)
+        id: resume
+        if: steps.gate.outputs.allowed == 'true'
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$TWELVEDATA_API_KEY" ]; then
+            echo "::notice::DATABASE_URL and TWELVEDATA_API_KEY secrets are not set (BRIEF §2.4): nothing to do"
+            exit 0
+          fi
+          mkdir -p .cache/lab
+          if ! gh release view lab-data-v1 > /dev/null 2>&1; then
+            gh release create lab-data-v1 --target "$GITHUB_SHA" --title "Signal Lab data" \
+              --notes "Signal Lab prices from Twelve Data (lab-prices.yml) and the Lab's panel (lab.yml); private."
+          fi
+          # A failed download fails this step (nothing after it runs), so a network error can never start the download
+          # over and upload an empty state over the real one.
+          if gh release view lab-data-v1 --json assets --jq '.assets[].name' | grep -qx 'us_prices_state.json'; then
+            gh release download lab-data-v1 --pattern 'us_prices_state.json' --pattern 'us_month_prices.csv.gz' \
+              --dir .cache/lab --clobber
+          else
+            echo "nothing to resume: the first run"
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - name: Migrations
+        if: steps.resume.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      - name: Download (stops itself at 90 minutes or 650 credits)
+        id: download
+        if: steps.resume.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.lab.price_history --dir .cache/lab
+      - name: Keep the progress (the lab-data-v1 release, also after a failure)
+        if: always() && steps.resume.outputs.ok == 'true'
+        run: |
+          for f in .cache/lab/us_prices_state.json .cache/lab/us_month_prices.csv.gz; do
+            if [ -f "$f" ]; then gh release upload lab-data-v1 "$f" --clobber; fi
+          done
+      # --ref: the branch is named, as quarterly.yml's old dispatch did (first live run, 2026-09-29).
+      - name: Done - the first Lab run, then this workflow off
+        if: steps.download.outputs.complete == 'true'
+        run: |
+          gh workflow run lab.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f market=us
+          gh workflow disable lab-prices.yml --repo "$GITHUB_REPOSITORY"
+      - name: Blocked - this workflow off (the reason is in the lab_prices runs row and the log above)
+        if: steps.download.outputs.blocked == 'true'
+        run: gh workflow disable lab-prices.yml --repo "$GITHUB_REPOSITORY"

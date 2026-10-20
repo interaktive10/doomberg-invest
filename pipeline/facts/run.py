@@ -1,17 +1,22 @@
-"""The daily text-facts run (BRIEF §4.5, §4.11 ledger, §2.6 router; daily.yml, the step after SEC events).
-`python -m pipeline.facts.run [--day D]`.
+"""The daily text-facts run (BRIEF §4.5, §4.11 ledger, §2.6 router; daily.yml, the step after SEC events;
+docs/SPEC_ISSUES.md 50). `python -m pipeline.facts.run [--day D]`.
 
-1. Scope, in config/quotas.yaml work order: capex-desk companies, the candidate shortlist (top 100 by Evidence in the
-   latest scored week, without text facts yet), companies with a live thesis.
-2. Queue: for each US company in scope, its 10-K, 10-Q and 8-K (items 1.01, 2.02, 2.03, 7.01, 8.01) filings of the
-   last FILING_DAYS -> `filings` (new accessions only).
+1. Scope, in work order: companies with a live thesis or research entry, then the stage names (Evidence >=
+   STAGE_MIN_EVIDENCE in the latest scored week) with filings still queued or nothing read in READ_AGAIN_DAYS.
+2. Queue: queued filings that no company in scope reads are marked `skipped` (a thesis's come back within
+   FILING_DAYS). SEC submissions are read only for the US companies new to the scope (or a stage name that became a
+   thesis) and those listed in the daily EDGAR indexes the SEC step read since the last run; each queues the filings
+   fetch.scope_filings picks (a thesis's of FILING_DAYS; a stage name's latest report and press releases of
+   STAGE_DAYS) -> `filings` (new accessions only).
 3. India: P-07 triage of the scope companies' announcements of the last TRIAGE_DAYS (point-in-time reader);
    `read_pdf` ones join the document queue.
-4. Documents, in work order (deferred ones first, then new filings, then India PDFs): fetch, normalize, P-01 per
-   chunk, Verify-1, store facts, diffs (code, F.6) and, for 10-K/10-Q, the risk-factor diff with P-03 tags.
+4. Documents, in work order (theses' before stage names', each newest first; a deferred document or an India PDF in
+   its company's place): fetch, normalize, P-01 per chunk, Verify-1, store facts and diffs (code, F.6). Risk
+   factors aren't read: P-03 isn't called (docs/SPEC_ISSUES.md 50).
 5. Links: verified facts with a counterparty -> P-02 -> entities and links.
-The run stops asking providers when every one is out for the day (the rest stays queued or `deferred`) or at the
-daily document limit (config/quotas.yaml text_daily_limits). Private data never enters this module (llm/privacy.py).
+The run stops asking providers when every one is out for the day (the rest stays queued or `deferred`), at the daily
+document limit (config/quotas.yaml text_daily_limits) or at the time budget. Private data never enters this module
+(llm/privacy.py).
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import json
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -34,10 +40,9 @@ import psycopg
 from pipeline.db import facts_repo, repo
 from pipeline.db.models import Company, FilingRow, LlmCall
 from pipeline.db.pit import as_of
-from pipeline.facts import entities, risk_diff
+from pipeline.facts import entities
 from pipeline.facts.diff import Value, compute
-from pipeline.facts.fetch import AGREEMENT_ITEMS, exhibit_urls, since, store_raw, text_filings
-from pipeline.facts.html_text import Normalized
+from pipeline.facts.fetch import AGREEMENT_ITEMS, PERIODIC, STAGE_DAYS, exhibit_urls, scope_filings, since, store_raw
 from pipeline.facts.process import DocMeta, extract_document, normalize
 from pipeline.facts.types import RELATION
 from pipeline.facts.verify1 import Candidate, XbrlLookup
@@ -47,17 +52,19 @@ from pipeline.llm.router import CallRecord, Deferred, Router
 from pipeline.net.http import HttpClient
 from pipeline.net.nse import NseBlocked, NseClient
 from pipeline.settings import Settings
-from pipeline.us.daily import submissions_url
+from pipeline.us.daily import CATCH_UP_DAYS, submissions_url
+from pipeline.us.events import master_index_url, parse_master_index
 from pipeline.us.submissions import parse_submissions
 
-SHORTLIST = 100
+STAGE_MIN_EVIDENCE = Decimal(40)  # config/signals.yaml scores.us_price_candidate_min_evidence: the candidate stage
+READ_AGAIN_DAYS = 100  # a stage name read this long ago is read again: its next quarter's report is out by then
 TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
 RETRY_DAYS = 14  # a filing whose documents can't be fetched is tried daily this long after it was queued, then
 # `failed` (M5 review R2-F4)
-TIME_BUDGET_MIN = 4.0  # document starts: daily.yml stays ~8 min with the SEC step before it (SPEC_ISSUES 29)
+TIME_BUDGET_MIN = 6.0  # document starts: daily.yml takes about 9-10 min with the SEC step (SPEC_ISSUES 29, 50)
 LINK_BATCH = 20
-RANK = {"capex_desk": 0, "candidate_shortlist": 1, "other": 2}
+RANK = {"thesis": 0, "stage": 1}  # work order: a lower rank is read first
 SKIP_TRIAGE = (
     "trading window",
     "newspaper publication",
@@ -75,6 +82,12 @@ SKIP_TRIAGE = (
 class TextStats:
     day: str
     scope: int = 0
+    theses: int = 0
+    stage: int = 0
+    skipped_filings: int = 0  # queued filings no company in scope reads
+    reset_filings: int = 0  # skipped filings back in a new thesis's window
+    submissions: int = 0  # companies whose SEC submissions were read
+    indexed: int = 0  # of the scope's companies, those listed in the daily EDGAR indexes
     queued_filings: int = 0
     documents: int = 0
     extracted: int = 0
@@ -84,44 +97,90 @@ class TextStats:
     facts_review: int = 0
     rejected: dict[str, int] = field(default_factory=dict)
     diffs: int = 0
-    risk_changes: int = 0
     links: int = 0
     triaged: int = 0
     triage_deferred: int = 0
     stopped: str | None = None
     errors: list[str] = field(default_factory=list)
+    checked: dict[str, int] = field(default_factory=dict)  # CIK -> rank of the US companies in scope whose filings
+    # are queued (their submissions read today or earlier): the next run's "new to the scope" is one not in here
 
 
 # ---------------------------------------------------------------- scope and queue
 
 
-def scope(conn: psycopg.Connection[Any], companies: Sequence[Company]) -> dict[UUID, int]:
-    """company -> work rank (0 capex desk, 1 shortlist, 2 thesis)."""
-    ranks: dict[UUID, int] = {}
-    for c in companies:
-        if c.capex_desk and c.id is not None:
-            ranks[c.id] = RANK["capex_desk"]
+def _start(d: date) -> datetime:
+    return datetime(d.year, d.month, d.day, tzinfo=UTC)
+
+
+def due(last_read: datetime | None, queued: bool, day: date) -> bool:
+    """A stage name is read while filings of its are queued, and again once nothing of it was read (a document
+    stored) in READ_AGAIN_DAYS."""
+    return queued or last_read is None or last_read < _start(day - timedelta(days=READ_AGAIN_DAYS))
+
+
+def scope(conn: psycopg.Connection[Any], day: date, theses: Iterable[UUID]) -> dict[UUID, int]:
+    """company -> work rank: theses and research entries, then the stage names due for reading."""
+    ranks = dict.fromkeys(theses, RANK["thesis"])
     week = facts_repo.latest_scored_week(conn)
     if week is not None:
-        for cid in facts_repo.text_shortlist(conn, week, SHORTLIST):
-            ranks.setdefault(cid, RANK["candidate_shortlist"])
-    for cid in repo.research_company_ids(conn):
-        ranks.setdefault(cid, RANK["other"])
+        for s in facts_repo.stage_names(conn, week, STAGE_MIN_EVIDENCE):
+            if due(s.last_read, s.queued, day):
+                ranks.setdefault(s.company_id, RANK["stage"])
     return ranks
 
 
-def queue_us(conn: psycopg.Connection[Any], http: HttpClient, companies: Iterable[Company], today: date,
-             stats: TextStats) -> None:  # fmt: skip
+def to_fetch(scope: Mapping[str, int], checked: Mapping[str, int] | None, indexed: AbstractSet[str]) -> dict[str, int]:
+    """CIK -> rank of the companies in scope whose SEC submissions are read today: every one without the last run's
+    record; else those new to the scope, a stage name that became a thesis (its longer window), and those the daily
+    EDGAR indexes list (a new filing)."""
+    if checked is None:
+        return dict(scope)
+    return {cik: r for cik, r in scope.items() if cik in indexed or cik not in checked or r < checked[cik]}
+
+
+def indexed_ciks(conn: psycopg.Connection[Any], http: HttpClient, after: datetime, stats: TextStats) -> set[str] | None:
+    """CIKs with a 10-K, 10-Q or 8-K in the daily EDGAR indexes the SEC step read in its runs since `after` (the last
+    text run); None when one of them couldn't be read (every company's submissions are read then)."""
+    out: set[str] = set()
+    for d in facts_repo.sec_days_since(conn, after):
+        try:
+            text = http.get_bytes(master_index_url(d)).decode("latin-1")
+        except httpx.HTTPError as e:
+            stats.errors.append(f"daily index {d}: {type(e).__name__}"[:200])
+            return None
+        out |= {r.cik for r in parse_master_index(text) if r.form.upper() in PERIODIC | {"8-K"}}
+    return out
+
+
+def queue_us(conn: psycopg.Connection[Any], http: HttpClient, companies: Mapping[UUID, Company],
+             ranks: Mapping[UUID, int], day: date, stats: TextStats) -> None:  # fmt: skip
+    """Queue the filings of the US companies in scope whose submissions to_fetch picks; stats.checked records the
+    scope's companies (less those whose submissions couldn't be read: they count as new tomorrow)."""
+    us = {c.cik: (c, ranks[cid]) for cid, c in companies.items() if c.market == "us" and c.cik}
+    checked: Mapping[str, int] | None = None
+    indexed: set[str] = set()
+    last = facts_repo.last_checked(conn)
+    if last is not None and last[0] >= _start(day - timedelta(days=CATCH_UP_DAYS)):  # older: the SEC step's
+        found = indexed_ciks(conn, http, last[0], stats)  # catch-up didn't read every day since (pipeline.us.daily)
+        if found is not None:
+            checked, indexed = last[1], found
+    wanted = to_fetch({cik: r for cik, (_, r) in us.items()}, checked, indexed)
+    stats.indexed = len(indexed & set(us))
     rows: list[FilingRow] = []
-    for c in companies:
-        if c.market != "us" or not c.cik or c.id is None:
+    for cik, (c, rank) in sorted(us.items(), key=lambda kv: (kv[1][1], kv[0])):
+        assert c.id is not None
+        if cik not in wanted:
+            stats.checked[cik] = min(rank, checked[cik]) if checked is not None and cik in checked else rank
             continue
         try:
-            subs = parse_submissions(json.loads(http.get_bytes(submissions_url(c.cik))))
+            subs = parse_submissions(json.loads(http.get_bytes(submissions_url(cik))))
         except (httpx.HTTPError, ValueError, KeyError) as e:
-            stats.errors.append(f"submissions {c.cik}: {type(e).__name__}"[:200])
+            stats.errors.append(f"submissions {cik}: {type(e).__name__}"[:200])
             continue
-        refs = text_filings(subs, since(today))
+        stats.submissions += 1
+        stats.checked[cik] = rank
+        refs = scope_filings(subs, day, thesis=rank == RANK["thesis"])
         known = facts_repo.queued_accessions(conn, [r.accession for r in refs])
         rows += [FilingRow(company_id=c.id, accession_no=r.accession, form_type=r.form, items=list(r.items),
                            filed_at=r.accepted_at, accepted_at=r.accepted_at, period_of_report=r.report_date,
@@ -183,66 +242,6 @@ def store_facts(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, facts:
     return ids
 
 
-def risk_changes(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, norm: Normalized,
-                 fetch: Callable[[DocJob], bytes], router: Router, stats: TextStats) -> bool:  # fmt: skip
-    """Item 1A against the same company's previous document of the same form (Appendix F.6). False when P-03 was
-    deferred, or the previous document couldn't be fetched within RETRY_DAYS of this one: the document is read again
-    the next day, for its risk diff only (M5 review R2-F3, R3-F2)."""
-    assert job.company.id is not None
-    new_rf = next((s for s in norm.section_map if s["name"] == "risk_factors"), None)
-    prev = facts_repo.previous_document(conn, job.company.id, job.kind, job.published_at)
-    if new_rf is None or prev is None:
-        return True
-    try:
-        old = normalize(prev["url"], fetch(DocJob(job.company, job.kind, prev["url"], "", prev["published_at"])))
-    except (httpx.HTTPError, NseBlocked) as e:  # a transient error: the diff waits for another day (M5 review R3-F2)
-        stats.errors.append(f"risk diff {prev['url']}: {type(e).__name__}"[:200])
-        first = facts_repo.document_created_at(conn, doc_id).date()
-        return (date.fromisoformat(stats.day) - first).days > RETRY_DAYS  # give up RETRY_DAYS after it was stored
-    except ValueError as e:  # the previous document is broken: there is no diff to make
-        stats.errors.append(f"risk diff {prev['url']}: {type(e).__name__}"[:200])
-        return True
-    old_rf = next((s for s in old.section_map if s["name"] == "risk_factors"), None)
-    if old_rf is None:
-        return True
-    new_p = risk_diff.paragraphs(norm.text, int(str(new_rf["char_start"])), int(str(new_rf["char_end"])))
-    old_p = risk_diff.paragraphs(old.text, int(str(old_rf["char_start"])), int(str(old_rf["char_end"])))
-    if min(len(new_p), len(old_p)) < risk_diff.MIN_PARAGRAPHS:
-        return True
-    changes = risk_diff.compare(old_p, new_p)
-    if not changes:
-        return True
-    items = tuple((f"p{k}", para.text[:2000]) for k, c in enumerate(changes) if (para := c.new or c.old) is not None)
-    answer = router.call(risk_diff.RiskTagInput(items))
-    if isinstance(answer, Deferred):
-        stats.errors.append(f"risk tags deferred for {job.url}")
-        return False
-    tags = risk_diff.parse_tags(answer.content, [i for i, _ in items])
-    rows = []
-    for k, c in enumerate(changes):
-        t = tags.get(f"p{k}", [])
-        if not t:
-            continue
-        text, start, end = risk_diff.quote(c)
-        rows.append(
-            {
-                "company_id": job.company.id,
-                "from_document_id": prev["id"],
-                "to_document_id": doc_id,
-                "change_kind": c.kind,
-                "text_before": text if c.kind == "removed" else None,
-                "text_after": None if c.kind == "removed" else text,
-                "similarity": None if c.similarity is None else Decimal(str(c.similarity)).quantize(Decimal("0.001")),
-                "topic_tags": t,
-                "char_start": start,
-                "char_end": end,
-            }
-        )
-    facts_repo.insert_risk_changes(conn, rows)
-    stats.risk_changes += len(rows)
-    return True
-
-
 def process(conn: psycopg.Connection[Any], job: DocJob, fetch: Callable[[DocJob], bytes], router: Router,
             raw_root: Path, stats: TextStats) -> str:  # fmt: skip
     """extracted | deferred | retry (the fetch failed: try again another day) | failed (the document is broken)"""
@@ -267,7 +266,9 @@ def process(conn: psycopg.Connection[Any], job: DocJob, fetch: Callable[[DocJob]
         section_map=norm.section_map, page_map=norm.page_map, status="normalized",
     )  # fmt: skip
     stats.documents += 1
-    if not facts_repo.document_has_facts(conn, doc_id):  # facts stored on an earlier day: only the risk diff is left
+    # Facts stored on an earlier day: a 10-K or 10-Q deferred for its risk diff before P-03 was dropped (SPEC_ISSUES
+    # 50) has nothing left to read.
+    if not facts_repo.document_has_facts(conn, doc_id):
         meta = DocMeta(c.name, c.ticker or c.nse_symbol or "", c.fiscal_year_end, job.kind, job.title,
                        job.published_at)  # fmt: skip
         out = extract_document(meta, norm, router, xbrl_lookup(conn, c.id, job.published_at))
@@ -278,10 +279,6 @@ def process(conn: psycopg.Connection[Any], job: DocJob, fetch: Callable[[DocJob]
             stats.deferred += 1
             return "deferred"
         store_facts(conn, job, doc_id, out.facts, stats)
-    if job.kind in {"10-K", "10-Q"} and not risk_changes(conn, job, doc_id, norm, fetch, router, stats):
-        facts_repo.set_document_status(conn, doc_id, "deferred")  # P-03 deferred: tomorrow, the risk diff only
-        stats.deferred += 1
-        return "deferred"
     facts_repo.set_document_status(conn, doc_id, "extracted")
     stats.extracted += 1
     return "extracted"
@@ -415,6 +412,14 @@ def _llm_log(conn: psycopg.Connection[Any]) -> Callable[[CallRecord], None]:
     return log
 
 
+Job = tuple[int, datetime, DocJob, UUID | None]  # (rank, filed or published, the document, its filing)
+
+
+def work_order(jobs: Iterable[Job]) -> list[Job]:
+    """Theses' documents before stage names', each rank newest first (docs/SPEC_ISSUES.md 50)."""
+    return sorted(jobs, key=lambda j: (j[0], -j[1].timestamp()))
+
+
 def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClient, nse: NseClient | None,
         raw_root: Path, documents_per_day: int | None = None, minutes: float | None = None,
         clock: Callable[[], float] = time.monotonic) -> TextStats:  # fmt: skip
@@ -423,11 +428,18 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
     stats = TextStats(day.isoformat())
     deadline = None if minutes is None else clock() + 60 * minutes
     all_companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
-    ranks = scope(conn, list(all_companies.values()))
-    stats.scope = len(ranks)
-    in_scope = {cid: all_companies[cid] for cid in ranks if cid in all_companies}
     with conn.transaction():
-        queue_us(conn, http, sorted(in_scope.values(), key=lambda c: (ranks[c.id or UUID(int=0)], c.name)), day, stats)
+        theses = repo.research_company_ids(conn)
+        stats.skipped_filings, stats.reset_filings = facts_repo.skip_stale_filings(
+            conn, sorted(theses), _start(since(day, STAGE_DAYS)), _start(since(day))
+        )
+        ranks = scope(conn, day, sorted(theses))
+    in_scope = {cid: all_companies[cid] for cid in ranks if cid in all_companies}
+    stats.scope = len(in_scope)
+    stats.theses = sum(1 for cid in in_scope if ranks[cid] == RANK["thesis"])
+    stats.stage = stats.scope - stats.theses
+    with conn.transaction():
+        queue_us(conn, http, in_scope, ranks, day, stats)
 
     def fetch(job: DocJob) -> bytes:
         if job.via_nse:
@@ -440,28 +452,19 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
     with conn.transaction():
         pdf_jobs = triage_announcements(conn, router, in_scope, day, stats)
 
-    jobs: list[tuple[int, datetime, DocJob, UUID | None]] = []
-    new_filings = [f for f in facts_repo.filings_by_status(conn, ["new"]) if f["company_id"] in in_scope]
+    jobs: list[Job] = []
+    # one query a rank: the stage names' filings never crowd the theses' out of the window
+    new_filings = [
+        f
+        for rank in sorted(set(RANK.values()))
+        for f in facts_repo.filings_by_status(conn, ["new"], [i for i in in_scope if ranks[i] == rank])
+    ]
     queued = {f["id"] for f in new_filings}
-    for d in facts_repo.deferred_documents(conn):
-        c = all_companies.get(d["company_id"])
-        if c is not None and d["filing_id"] not in queued:  # else its filing, still new, re-reads it (M5 R1-F2)
-            jobs.append(
-                (
-                    -1,
-                    d["published_at"],
-                    DocJob(
-                        c,
-                        d["kind"],
-                        d["url"],
-                        d["title"] or "",
-                        d["published_at"],
-                        d["filing_id"],
-                        d["url"].startswith("https://nsearchives"),
-                    ),
-                    None,
-                )
-            )
+    for d in facts_repo.deferred_documents(conn, list(in_scope)):
+        if d["filing_id"] not in queued:  # else its filing, still new, re-reads it (M5 R1-F2)
+            job = DocJob(in_scope[d["company_id"]], d["kind"], d["url"], d["title"] or "", d["published_at"],
+                         d["filing_id"], d["url"].startswith("https://nsearchives"))  # fmt: skip
+            jobs.append((ranks[d["company_id"]], d["published_at"], job, None))
     for f in new_filings:
         c = in_scope[f["company_id"]]
         jobs.append((ranks[f["company_id"]], f["filed_at"], DocJob(c, str(f["form_type"]), "", "", f["filed_at"],
@@ -469,11 +472,10 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
     seen_urls = set(facts_repo.document_status(conn, [j.url for j in pdf_jobs]))
     for j in pdf_jobs:
         if j.url not in seen_urls:
-            jobs.append((ranks.get(j.company.id or UUID(int=0), 2), j.published_at, j, None))
-    jobs.sort(key=lambda x: (x[0], x[1]))
+            jobs.append((ranks.get(j.company.id or UUID(int=0), len(RANK)), j.published_at, j, None))
 
     done = 0
-    for _, _, job, filing_id in jobs:
+    for _, _, job, filing_id in work_order(jobs):
         if done >= limit:
             stats.stopped = f"daily document limit ({limit})"
             break
@@ -485,10 +487,12 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
             break
         with conn.transaction():
             if filing_id is not None:
-                f = next(x for x in facts_repo.filings_by_status(conn, ["new"]) if x["id"] == filing_id)
-                expired = (day - f["created_at"].date()).days > RETRY_DAYS  # RETRY_DAYS after it was first queued
+                row = facts_repo.filing(conn, filing_id)
+                if row is None:
+                    continue
+                expired = (day - row["created_at"].date()).days > RETRY_DAYS  # RETRY_DAYS after it was first queued
                 try:
-                    parts = filing_jobs(f, job.company, http)
+                    parts = filing_jobs(row, job.company, http)
                 except IndexUnavailable as e:
                     stats.errors.append(str(e)[:200])
                     stats.failed += 1
@@ -530,7 +534,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         stats = run(conn, a.day, router, http, nse, settings.cache_dir / "raw", quotas.documents_per_day, a.minutes)
         tracked.update(asdict(stats))
-    print(f"text {a.day}: {stats.extracted} documents extracted, {stats.deferred} deferred, "
+    print(f"text {a.day}: scope {stats.scope} (theses {stats.theses}, stage names {stats.stage}), "
+          f"{stats.extracted} documents extracted, {stats.deferred} deferred, "
           f"{stats.facts_verified} verified facts, {stats.facts_review} for review, {stats.links} links; "
           f"stopped: {stats.stopped or 'queue empty'}")  # fmt: skip
     return 0
