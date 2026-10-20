@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
-import { NavLinks } from "@/components/nav-links";
+import { NavLinks, SearchBox } from "@/components/nav-links";
 import { Button } from "@/components/ui/button";
 
-/** The top bar: the name, the main navigation (one row under the name on a phone) and Sign out. */
+/** The top bar: the name, the main navigation (one row under the name on a phone), the company search and Sign out. */
 export function Nav({ email }: { email: string }) {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
@@ -13,11 +13,14 @@ export function Nav({ email }: { email: string }) {
           Doomberg Invest
         </Link>
         <NavLinks />
-        <form action="/auth/signout" method="post" className="order-2 ml-auto lg:order-3">
-          <Button type="submit" variant="ghost" size="sm" title={`Signed in as ${email}`}>
-            Sign out
-          </Button>
-        </form>
+        <div className="order-2 ml-auto flex items-center gap-1 sm:gap-2 lg:order-3">
+          <SearchBox />
+          <form action="/auth/signout" method="post">
+            <Button type="submit" variant="ghost" size="sm" title={`Signed in as ${email}`}>
+              Sign out
+            </Button>
+          </form>
+        </div>
       </div>
     </header>
   );

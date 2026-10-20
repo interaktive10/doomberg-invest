@@ -3,24 +3,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChartGrid, LineChartCard, type Row } from "@/components/charts";
 import { FactItem } from "@/components/fact";
-import { Empty, Page, Section } from "@/components/page";
-import { FamilyBadges } from "@/components/score";
+import { Empty, Flash, Page, Section } from "@/components/page";
+import { FamilyBadges, WhyThisScore } from "@/components/score";
+import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { company as getCompany, companySeries, contextHistory, events, facts, fundamentals, insiders, latestScore, thesesOf } from "@/lib/data";
-import { big, code, num, pct } from "@/lib/format";
-import { BUCKET_LABEL, dcfRows, detailText, humanize, label } from "@/lib/labels";
+import { company as getCompany, companySeries, events, facts, fundamentals, insiders, latestScore, thesesOf, whyScore } from "@/lib/data";
+import { big, code, num } from "@/lib/format";
+import { BUCKET_LABEL, detailText, humanize, label } from "@/lib/labels";
 import { chartRows } from "@/lib/metrics";
-import { UUID } from "@/lib/forms";
-import { STATE_LABEL } from "@/lib/theses";
-import { cn } from "@/lib/utils";
+import { one, UUID, type Query } from "@/lib/forms";
+import { LIVE_STATES, STATE_LABEL } from "@/lib/theses";
 import { requireUser } from "@/lib/auth";
+import { research } from "../../candidates/actions";
 
 // BRIEF §6 Company: the latest scored week's two scores, bucket and families under the name; fundamentals charts
 // (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA, RPO/backlog; the weekly run's company_series,
 // §4.6 definitions); verified facts with quotes and links; insiders; events; the reverse DCF (C2); thesis link.
 // Overhaul PR 4: no ribbon, no C1 chart, signal timeline or Ownership table (S8's inputs carry the holder counts),
-// and a table with no rows is left out.
+// and a table with no rows is left out. Overhaul PR 5: "Why this score" at the top (components/score.tsx; the reverse
+// DCF is folded into its C2 row) and an Open card or Research button in the header.
 
 function str(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -34,35 +37,49 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: c ? `${c.name} (${code(c)})` : "Company" };
 }
 
-export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CompanyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Query> }) {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const { id } = await params;
+  const q = await searchParams;
   if (!UUID.test(id)) notFound();
   const c = await getCompany(id);
   if (c === null) notFound();
-  const [rows, ins, evs, fs, ctx, ths, ser, score] = await Promise.all([
+  const [rows, ins, evs, fs, ths, ser, score] = await Promise.all([
     fundamentals(id),
     insiders(id),
     events(id),
     facts([id], 30),
-    contextHistory(id),
     thesesOf(id),
     companySeries(id),
     latestScore(id),
   ]);
+  const why = score ? await whyScore(id, score) : null;
   const data: Row[] = chartRows(ser?.points ?? []).map((p) => ({ ...p }));
-  const c2 = [...ctx].reverse().find((x) => x.metric_id === "C2");
   const currency = rows.find((r) => r.currency)?.currency ?? (c.market === "us" ? "USD" : "INR");
+  const live = ths.find((t) => (LIVE_STATES as readonly string[]).includes(t.state));
   const sections: [id: string, name: string, shown: boolean][] = [
+    ["why", "Why this score", true],
     ["thesis", "Thesis", true],
     ["fundamentals", "Fundamentals", true],
     ["facts", "Facts", fs.length > 0],
     ["insiders", "Insiders", ins.length > 0],
     ["events", "Events", evs.length > 0],
-    ["context", "Context", c2 !== undefined],
   ];
   return (
     <Page
+      actions={
+        live ? (
+          <Link href={`/theses/${live.id}`} className={buttonVariants({ size: "sm" })}>
+            Open card
+          </Link>
+        ) : (
+          <form action={research}>
+            <input type="hidden" name="company_id" value={c.id} />
+            <input type="hidden" name="back" value={`/company/${c.id}`} />
+            <SubmitButton size="sm">Research</SubmitButton>
+          </form>
+        )
+      }
       title={
         <>
           {c.name} <span className="font-mono font-normal text-muted">({code(c)})</span>
@@ -109,9 +126,11 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           </a>
         ))}
       </nav>
+      <Flash error={one(q, "error")} ok={one(q, "ok")} />
+      <WhyThisScore score={score} why={why} />
       <Section title="Thesis" id="thesis">
         {ths.length === 0 ? (
-          <Empty>No thesis or card for this company. Start one with Research on the Candidates screen.</Empty>
+          <Empty>No thesis or card for this company. Start one with Research above.</Empty>
         ) : (
           <ul className="flex flex-wrap gap-2 text-[13px]">
             {ths.map((t) => (
@@ -237,36 +256,6 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               ))}
             </TableBody>
           </Table>
-        </Section>
-      ) : null}
-      {c2 ? (
-        <Section
-          title="Context (uses price)"
-          id="context"
-          description="Where the price stands against the evidence. Context never feeds the Evidence score."
-        >
-          <div className="max-w-xl text-[13px]">
-            <h3 className="mb-2 text-xs font-medium text-muted">Reverse DCF (C2)</h3>
-            <p className="text-fg">
-              Week <span className="num">{c2.week_end}</span>: evidence growth minus implied growth ={" "}
-              <span
-                className={cn(
-                  "num font-semibold",
-                  c2.value !== null && c2.value > 0 ? "text-up" : c2.value !== null && c2.value < 0 ? "text-down" : undefined,
-                )}
-              >
-                {pct(c2.value)}
-              </span>
-            </p>
-            <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
-              {dcfRows(c2.inputs).map((r) => (
-                <div key={r.key} className="contents">
-                  <dt className="text-muted">{r.label}</dt>
-                  <dd className="num text-right break-words text-fg">{r.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
         </Section>
       ) : null}
     </Page>

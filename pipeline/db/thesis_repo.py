@@ -123,6 +123,15 @@ def generated_theses(conn: Conn, week: date) -> list[dict[str, Any]]:
                        "and author = any(%s) order by company_id", (week, list(GENERATED)))  # fmt: skip
 
 
+def research_entries(conn: Conn, week: date) -> list[UUID]:
+    """Companies with an open manual research entry (no card yet) made in `week` or before, oldest entry first (the
+    queue packs them after the shortlist)."""
+    rows = _rows(conn, "select company_id, min(created_week) as first_week, min(updated_at) as first_at from theses "
+                       "where author = 'manual' and state = 'research' and card_md = '' and created_week <= %s "
+                       "group by company_id order by first_week, first_at, company_id", (week,))  # fmt: skip
+    return [r["company_id"] for r in rows]
+
+
 def upsert_generated_thesis(
     conn: Conn,
     company_id: UUID,
@@ -135,26 +144,45 @@ def upsert_generated_thesis(
     criteria: Sequence[dict[str, Any]],
 ) -> tuple[UUID, bool]:
     """One generated card per company and week (migration 0010's unique index). A card still in `research` is
-    replaced whole, kill criteria included; one Manzoor already moved on is left alone. Returns (id, written)."""
-    row = conn.execute(
+    replaced whole, kill criteria included; one Manzoor already moved on is left alone. Returns (id, written).
+
+    A manual research entry of the company (the web app's Research button: author `manual`, no card yet, made in
+    this week or before) is filled in place when the week has no generated card of the company yet: the same row
+    takes the card, its author, validation and week, so its link stays the same and the next run of the same card
+    updates it through the unique index like any generated card (idempotent, M6-03; docs/SPEC_ISSUES.md 35)."""
+    params = {
+        "c": company_id,
+        "md": card_md,
+        "card": Jsonb(card_json),
+        "pack": Jsonb(pack),
+        "a": author,
+        "v": Jsonb(validation),
+        "w": week,
+    }
+    filled = conn.execute(
         _q(
-            "insert into theses (company_id, state, card_md, card_json, evidence_pack, author, validation, "
-            "created_week) values (%(c)s, 'research', %(md)s, %(card)s, %(pack)s, %(a)s, %(v)s, %(w)s) "
-            "on conflict (company_id, created_week) where author in ('routine', 'fallback') do update set "
-            "card_md = excluded.card_md, card_json = excluded.card_json, evidence_pack = excluded.evidence_pack, "
-            "author = excluded.author, validation = excluded.validation, updated_at = now() "
-            "where theses.state = 'research' returning id"
+            "update theses set author = %(a)s, card_md = %(md)s, card_json = %(card)s, evidence_pack = %(pack)s, "
+            "validation = %(v)s, created_week = %(w)s, updated_at = now() where id = (select e.id from theses e "
+            "where e.company_id = %(c)s and e.author = 'manual' and e.state = 'research' and e.card_md = '' "
+            "and e.created_week <= %(w)s order by e.created_week, e.updated_at, e.id limit 1) "
+            "and not exists (select 1 from theses g where g.company_id = %(c)s and g.created_week = %(w)s "
+            "and g.author in ('routine', 'fallback')) returning id"
         ),
-        {
-            "c": company_id,
-            "md": card_md,
-            "card": Jsonb(card_json),
-            "pack": Jsonb(pack),
-            "a": author,
-            "v": Jsonb(validation),
-            "w": week,
-        },  # fmt: skip
+        params,
     ).fetchone()
+    row = filled
+    if row is None:
+        row = conn.execute(
+            _q(
+                "insert into theses (company_id, state, card_md, card_json, evidence_pack, author, validation, "
+                "created_week) values (%(c)s, 'research', %(md)s, %(card)s, %(pack)s, %(a)s, %(v)s, %(w)s) "
+                "on conflict (company_id, created_week) where author in ('routine', 'fallback') do update set "
+                "card_md = excluded.card_md, card_json = excluded.card_json, evidence_pack = excluded.evidence_pack, "
+                "author = excluded.author, validation = excluded.validation, updated_at = now() "
+                "where theses.state = 'research' returning id"
+            ),
+            params,
+        ).fetchone()
     if row is None:
         existing = conn.execute(
             _q("select id from theses where company_id = %s and created_week = %s and author = any(%s)"),
@@ -209,47 +237,72 @@ def move_to_review(conn: Conn, thesis_id: UUID) -> None:
     )
 
 
-def triggered_in_week(conn: Conn, week: date) -> list[dict[str, Any]]:
-    return _rows(
-        conn,
-        "select t.id as thesis_id, c.id as company_id, c.name, c.market, c.ticker, c.nse_symbol, k.metric, "
-        "k.operator, k.threshold, k.last_value from kill_criteria k join theses t on t.id = k.thesis_id "
-        "join companies c on c.id = t.company_id where k.triggered_week = %s order by c.name, k.metric",
-        (week,),
-    )
-
-
-def reviews_due(conn: Conn, week: date) -> list[dict[str, Any]]:
-    return _rows(
-        conn,
-        "select t.id as thesis_id, c.id as company_id, c.name, c.market, c.ticker, c.nse_symbol, t.state, "
-        "t.next_review from theses t join companies c on c.id = t.company_id "
-        "where (t.state = 'review') or (t.state = any(%s) and t.next_review is not null and t.next_review <= %s) "
-        "order by c.name",
-        (list(MONITORED), week),
-    )
-
-
 # ---------------------------------------------------------------- the digest's other inputs
 
 
-def llm_use(conn: Conn, since: datetime, until: datetime) -> list[dict[str, Any]]:
+def previous_scored_week(conn: Conn, week: date) -> date | None:
+    row = conn.execute(_q("select max(week_end) from scores where week_end < %s"), (week,)).fetchone()
+    return None if row is None else row[0]
+
+
+def funnel(conn: Conn, week: date, min_evidence: Decimal, min_families: int) -> list[dict[str, Any]]:
+    """The digest's funnel per market (overhaul PR 5): companies scored, the stage (Evidence >= min_evidence), the
+    Candidate bucket, the week's shortlist (new candidates), and the stage names with fewer than min_families families
+    (Evidence capped)."""
     return _rows(
         conn,
-        "select provider, count(*) as calls, count(*) filter (where ok) as ok, "
-        "count(*) filter (where not ok and error like '%%: 429%%') as rate_limited, "  # RateLimited: '<provider>: 429'
-        "coalesce(sum(tokens_in), 0) as tokens_in, coalesce(sum(tokens_out), 0) as tokens_out "
-        "from llm_calls where created_at >= %s and created_at < %s group by provider order by provider",
-        (since, until),
+        "select c.market, count(*) as scored, count(*) filter (where s.evidence >= %(ev)s) as stage, "
+        "count(*) filter (where s.bucket = 'candidate') as candidates, "
+        "count(l.company_id) as shortlisted, "
+        "count(*) filter (where s.evidence >= %(ev)s and cardinality(s.families) < %(fam)s) as one_family "
+        "from scores s join companies c on c.id = s.company_id "
+        "left join shortlists l on l.week_end = s.week_end and l.company_id = s.company_id where s.week_end = %(w)s "
+        "group by c.market order by c.market = 'us' desc, c.market",
+        {"w": week, "ev": min_evidence, "fam": min_families},
     )
 
 
-def lab_runs(conn: Conn, since: datetime, until: datetime) -> list[dict[str, Any]]:
+def bucket_company_ids(conn: Conn, weeks: Sequence[date], buckets: Sequence[str]) -> set[UUID]:
+    rows = conn.execute(_q("select distinct company_id from scores where week_end = any(%s) and bucket = any(%s)"),
+                        (list(weeks), list(buckets))).fetchall()  # fmt: skip
+    return {r[0] for r in rows}
+
+
+def scores_of(conn: Conn, company_ids: Sequence[UUID], weeks: Sequence[date]) -> list[dict[str, Any]]:
+    return _rows(conn, "select company_id, week_end, evidence, gap, families, bucket from scores "
+                       "where company_id = any(%s::uuid[]) and week_end = any(%s)",
+                 (list(company_ids), list(weeks)))  # fmt: skip
+
+
+def fired_signals_of(conn: Conn, company_ids: Sequence[UUID], weeks: Sequence[date]) -> list[dict[str, Any]]:
+    return _rows(conn, "select company_id, week_end, signal_id from signal_values where fired "
+                       "and company_id = any(%s::uuid[]) and week_end = any(%s)",
+                 (list(company_ids), list(weeks)))  # fmt: skip
+
+
+def fired_flags_of(conn: Conn, company_ids: Sequence[UUID], weeks: Sequence[date]) -> list[dict[str, Any]]:
+    """Red flags that fired (a stored row may also be `unknown`: missing inputs never fire a flag, §4.6)."""
+    return _rows(conn, "select company_id, week_end, flag_id, hard from redflag_values "
+                       "where inputs ->> 'status' = 'fired' and company_id = any(%s::uuid[]) and week_end = any(%s)",
+                 (list(company_ids), list(weeks)))  # fmt: skip
+
+
+def cards_to_decide(conn: Conn) -> list[dict[str, Any]]:
+    """The digest's To do: generated cards still in research (to accept or dismiss). Company names only."""
+    return _rows(conn, "select distinct c.id as company_id, c.name, c.market, c.ticker, c.nse_symbol "
+                       "from theses t join companies c on c.id = t.company_id where t.state = 'research' "
+                       "and t.author = any(%s) and t.card_md <> '' order by c.name", (list(GENERATED),))  # fmt: skip
+
+
+def in_review(conn: Conn, week: date) -> list[dict[str, Any]]:
+    """The digest's To do: theses in review (a kill criterion moved them there) or whose review date has come.
+    Company names only."""
     return _rows(
         conn,
-        "select signal_id, market, horizon_m, period, n, excess_mean, t_nw, run_at from lab_results "
-        "where run_at >= %s and run_at < %s order by signal_id, horizon_m, period",
-        (since, until),
+        "select distinct c.id as company_id, c.name, c.market, c.ticker, c.nse_symbol from theses t "
+        "join companies c on c.id = t.company_id where t.state = 'review' "
+        "or (t.state = any(%s) and t.next_review is not null and t.next_review <= %s) order by c.name",
+        (list(MONITORED), week),
     )
 
 

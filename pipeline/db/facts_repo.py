@@ -51,7 +51,7 @@ def llm_usage(conn: Conn, day: date) -> dict[str, tuple[int, int]]:
 
 
 def logged_router(conn: Conn, providers: Mapping[str, Provider], quotas: Quotas, day: date) -> Router:
-    """A Router whose calls land in llm_calls (the digest's "LLM quota use") and whose day starts from what earlier
+    """A Router whose calls land in llm_calls (Settings' LLM calls, llm_use_7d) and whose day starts from what earlier
     runs spent (BRIEF §2.6 daily budgets; M6 review R1-F9)."""
 
     def log(r: CallRecord) -> None:
@@ -371,3 +371,20 @@ def sec_days_since(conn: Conn, after: datetime) -> list[date] | None:
         (after,),
     )
     return sorted(date.fromisoformat(r["day"]) for r in rows)
+
+
+# ---------------------------------------------------------------- What changed (the weekly digest)
+
+
+def week_facts(conn: Conn, company_ids: Sequence[UUID], since: datetime, until: datetime) -> list[dict[str, Any]]:
+    """The companies' verified facts whose document was published in [since, until) (the pit.AsOf.facts rule), with
+    their diff (Appendix F.6; the newest diff row of the fact, if any), newest first (pipeline/digest/changes.py)."""
+    return _rows(
+        conn,
+        "select f.company_id, f.id, f.fact_type, f.subject, d.published_at, x.change_kind, x.computed_note "
+        "from facts f join documents d on d.id = f.document_id left join lateral (select g.change_kind, "
+        "g.computed_note from diffs g where g.new_fact_id = f.id order by g.created_at desc limit 1) x on true "
+        "where f.company_id = any(%s::uuid[]) and f.verification_status = 'verified' and d.published_at >= %s "
+        "and d.published_at < %s order by d.published_at desc, f.id",
+        (list(company_ids), since, until),
+    )

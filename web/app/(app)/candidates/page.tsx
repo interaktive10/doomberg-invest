@@ -229,7 +229,6 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
                     ) : (
                       <form action={research}>
                         <input type="hidden" name="company_id" value={r.company_id} />
-                        <input type="hidden" name="week_end" value={r.week_end} />
                         <input type="hidden" name="back" value={back} />
                         <SubmitButton size="sm">Research</SubmitButton>
                       </form>

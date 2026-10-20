@@ -86,12 +86,8 @@ def test_one_open_review_without_a_quarter(conn: psycopg.Connection[Any]) -> Non
 
 
 def test_llm_use_is_counted_in_the_database(conn: psycopg.Connection[Any]) -> None:
-    """M7 review R1-F6: Home reads llm_use_7d, which counts every call (PostgREST would return at most max_rows
-    rows), the same way as the digest's thesis_repo.llm_use."""
-    from datetime import UTC, datetime, timedelta
-
-    from pipeline.db import thesis_repo
-
+    """M7 review R1-F6: Settings reads llm_use_7d, which counts every call in the database (PostgREST would return at
+    most max_rows rows). The digest no longer has an LLM table (overhaul PR 5)."""
     conn.execute(
         "insert into llm_calls (prompt_id, provider, model, ok, tokens_in, tokens_out, error, created_at) "
         "select 'P-01', 'gemini', 'm', i % 10 <> 0, 100, 20, case when i % 10 = 0 then 'gemini: 429' end, "
@@ -101,9 +97,6 @@ def test_llm_use_is_counted_in_the_database(conn: psycopg.Connection[Any]) -> No
                  "('P-01', 'groq', 'm', true, now() - interval '8 days')")  # fmt: skip
     rows = conn.execute("select provider, calls, ok, rate_limited, tokens_in, tokens_out from llm_use_7d").fetchall()
     assert rows == [("gemini", 1500, 1350, 150, 150000, 30000)]
-    now = datetime.now(UTC)
-    digest = thesis_repo.llm_use(conn, now - timedelta(days=7), now + timedelta(minutes=1))
-    assert [(r["provider"], r["calls"], r["ok"], r["rate_limited"]) for r in digest] == [("gemini", 1500, 1350, 150)]
 
 
 def test_company_series_keeps_the_newest_week(conn: psycopg.Connection[Any]) -> None:

@@ -6,6 +6,10 @@ import type { ThesisState } from "@/lib/data";
 export const STATES: readonly ThesisState[] = ["research", "thesis", "position", "review", "closed", "dismissed"];
 export const LIVE_STATES = ["research", "thesis", "position", "review"] as const;
 
+/** What a research entry says until the routine writes its card (overhaul PR 5): the weekly queue packs research
+ * entries after the shortlist, within its 10 packs, for Sunday's routine. */
+export const RESEARCH_QUEUED = "Card queued for Sunday's routine.";
+
 export const STATE_LABEL: Record<ThesisState, string> = {
   research: "Research",
   thesis: "Thesis",
@@ -71,13 +75,21 @@ export function markMoved<T extends { id: string; state: ThesisState }>(list: re
   return list.map((t) => (moved.has(t.id) ? { ...t, state: "review" as const } : t));
 }
 
+/** A manual research entry still waiting for the routine's card (overhaul PR 5): nothing to decide yet. */
+export function cardQueued(t: { state: ThesisState; author: string; card_md: string }): boolean {
+  return t.state === "research" && t.author === "manual" && t.card_md.trim() === "";
+}
+
 /** The Theses screen's groups (overhaul PR 4): Needs you (a card to accept or dismiss, a review to decide), Watching
- * (theses and positions) and Closed (closed and dismissed, folded). */
+ * (theses, positions, and research entries whose card is queued: overhaul PR 5, so Home's To do and the digest's
+ * agree) and Closed (closed and dismissed, folded). */
 export type Group = "needs" | "watching" | "closed";
 
 export const GROUP_LABEL: Record<Group, string> = { needs: "Needs you", watching: "Watching", closed: "Closed" };
 
-export function group(state: ThesisState): Group {
+export function group(t: { state: ThesisState; author: string; card_md: string }): Group {
+  if (cardQueued(t)) return "watching";
+  const state = t.state;
   return state === "research" || state === "review" ? "needs" : state === "thesis" || state === "position" ? "watching" : "closed";
 }
 

@@ -590,14 +590,14 @@ Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:
 Deleted in the overhaul with S11, P-06, `config/categories.yaml` and the Capex brief (§1.10, SPEC_ISSUES 52).
 
 ### 4.12 Weekly digest (`pipeline/digest/*`)
-- **Where:** a GitHub issue in the private repo, "Doomberg weekly — {week}", created by `weekly.yml` (GitHub notifies Manzoor by email for free). The same content appears on the web Home screen.
-- **Sections:**
-  - new candidates (≤ 10, one line each: families fired, Evidence, Gap, link)
-  - theses needing attention (kill criteria triggered, reviews due)
-  - source health and staleness
-  - LLM quota use
-  - Lab notes, if a new run happened
-- **No price-move content:** no "top gainers" or similar lists.
+- **Where:** a GitHub issue in the private repo, "Doomberg weekly — {week}", created by `weekly.yml` (GitHub notifies Manzoor by email for free). The web Home screen shows its This week and What changed from the same text (`digests.body_md`), with To do read live.
+- **Sections** (each under a level-2 heading, in this order; SPEC_ISSUES 53):
+  - **This week:** the funnel line per market from the week's stored rows, e.g. "US 4,659 → stage 456 → candidates 4 → new 0 · 440 of 456 fire one family, capped at 55" (scored, Evidence ≥ 40, the Candidate bucket, the shortlist of new candidates, and the stage names with fewer than 2 families). A week without scores still goes out and says why.
+  - **To do:** cards to accept or dismiss, and theses in review (a kill criterion triggered, or the review date has come): counts and company names only
+  - **What changed** (`changes.py`, no LLM): at most 20 lines, each linking to the company. First the week's shortlist; then one line per company in a bucket this week or the previous scored week, or with a live thesis or research entry, with its biggest change and the reason ("MTDR left Candidate: S4 stopped, Evidence 62 → 48", "now priced in (Gap 48)"; a bucket change, then an Evidence move of 10 or more, then a signal or red flag that started or stopped); then the week's new verified facts with their diffs (reaffirmed ones left out)
+  - **Health:** one line naming every source that is stale or past its SLA (§2.7), then the Actions minutes line
+- **No price-move content:** no "top gainers" or similar lists; Gap is named as a level, never a return.
+- **Private data never enters it** (it is a GitHub issue): no journal entry, position, start_position date, review note, dismissal or override reason, or post-mortem.
 
 ---
 
@@ -642,15 +642,15 @@ Return only JSON.
 ## 6. Web app (`web/`, single user)
 | Screen | Content |
 |---|---|
-| **Home** | The digest for this week; the stale-data banner (the only screen with it: sec, twelvedata, sec_13f) |
+| **Home** | The funnel line as one strip (the digest's This week section); To do, live: the Theses screen's Needs you group, or "Nothing needs you this week"; What changed (the digest's section, each line linked to its company); the stale-data banner (the only screen with it: sec, twelvedata, sec_13f). No KPI cards |
 | **Candidates** | Tabs: Candidate · Early · Priced-in. Filters: market, sector, family, show dismissed. One row per company: Evidence with its change since the previous scored week, Gap, why it's here (fired signals), red flags, NEW (first week in that bucket in 12 weeks). Actions: open card, research, dismiss (reason required; it holds until a new signal or family fires or Evidence moves 10 or more) |
-| **Company** | The latest scored week's Evidence, Gap, bucket and families under the name; fundamentals charts (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA, RPO/backlog); verified facts with quotes and links; insiders; events; reverse DCF (C2 inputs and implied growth); thesis link. Tables with no rows are left out |
+| **Company** | Reached from a list or the nav's search (ticker or name: letters, digits, spaces and . & -, at most 40 characters; an exact ticker opens the page, otherwise up to 20 rows with market, bucket and Evidence; "/" focuses it). The latest scored week's Evidence, Gap, bucket and families under the name, with an Open card or Research button (Research queues a card for Sunday's routine); Why this score at the top: Evidence by family with the one-family cap in words, each fired signal with its strength, inputs, firing since and Lab verdict, hard and soft red flags with their inputs, and Gap split into C1–C3 with missing parts marked and the reverse DCF folded into C2; fundamentals charts (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA, RPO/backlog); verified facts with quotes and links; insiders; events; thesis link. Tables with no rows are left out |
 | **Theses** | Needs you (cards to accept or dismiss, reviews to decide), Watching (theses and positions), Closed (closed and dismissed, folded); each row: Evidence at the card's week and now, kill criteria n of m triggered, next review. Thesis page: the card, kill criteria in words with their status, review history, journal entries; each form opens from its button and is left out when it can't be used |
 | **Journal** | Private entries and post-mortems (never sent to any LLM) |
 | **Signal Lab** | The price download's progress (the lab_prices runs row); each signal's verdict (works / unproven / hurts, §4.10.5; S7–S12 not testable yet) with the weight in use (weights_versions); results by signal, horizon and period; score deciles; open proposals |
 | **Settings** | Source health for the US sources; the discipline weeks (§11.9); LLM calls and rate-limited calls per provider over 7 days. Universes, quotas and weights live in config/ and change through PRs |
 
-- No screen but Home has a KPI ribbon or the stale banner; the footer carries the research-only line once.
+- Home alone has the funnel strip and the stale banner; no screen has a KPI ribbon. The footer carries the research-only line once.
 - **Deleted** (SPEC_ISSUES 52): the Screener screen (its filter builder, saved screens and CSV export; the screener API, M4-05, stays) and the Capex Desk screen. `/screener` redirects to Candidates and `/capex` to Home (307).
 - **Auth:** Supabase magic link for `APP_ALLOWED_EMAIL` only.
 - **Quality:** responsive at 390 px; axe 0 serious issues.

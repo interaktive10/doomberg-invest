@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -84,76 +83,5 @@ export function Flash({ error, ok }: { error?: string | undefined; ok?: string |
         </p>
       ) : null}
     </>
-  );
-}
-
-/** The strip of key figures at the top of a screen: Kpi cells on hairlines, two to a row on a phone. */
-export function KpiRibbon({ children }: { children: ReactNode }) {
-  return (
-    <div className="overflow-hidden rounded-md border border-line bg-panel">
-      <div className="-mt-px -ml-px flex flex-wrap">{children}</div>
-    </div>
-  );
-}
-
-const TONE = {
-  up: "text-up",
-  down: "text-down",
-  warn: "text-warn",
-  accent: "text-accent",
-} as const;
-
-/** One key figure: a caps label, the value in monospace (coloured only when it is good, bad or needs a look), an
- * optional 0–100 bar and a hint. With `href` the whole cell is a link. No role or label: it is plain text. */
-export function Kpi({
-  label,
-  value,
-  hint,
-  href,
-  tone,
-  bar,
-}: {
-  label: string;
-  value: ReactNode;
-  hint?: ReactNode;
-  href?: string;
-  tone?: keyof typeof TONE;
-  bar?: number | null;
-}) {
-  const width = typeof bar === "number" && Number.isFinite(bar) ? Math.max(0, Math.min(100, bar)) : null;
-  const body = (
-    <>
-      <div className="flex items-center justify-between gap-2">
-        <span className="caps">{label}</span>
-        {href ? (
-          <span aria-hidden="true" className="font-mono text-[11px] text-subtle group-hover:text-accent">
-            →
-          </span>
-        ) : null}
-      </div>
-      <div
-        className={cn(
-          "mt-1 font-mono text-xl leading-7 font-semibold tracking-tight break-words sm:text-2xl sm:leading-8",
-          tone ? TONE[tone] : "text-fg",
-        )}
-      >
-        {value}
-      </div>
-      {width !== null ? (
-        <span aria-hidden="true" className="mt-2 block h-1 bg-line-strong">
-          <span className="block h-full bg-accent" style={{ width: `${width}%` }} />
-        </span>
-      ) : null}
-      {hint ? <div className="mt-0.5 text-xs text-muted">{hint}</div> : null}
-    </>
-  );
-  const cell = "min-w-[9.5rem] flex-1 border-t border-l border-line px-4 py-3";
-  // KpiRibbon clips its overflow (outer hairlines, rounded hover), so a link cell draws its focus ring inside itself.
-  return href ? (
-    <Link href={href} className={cn(cell, "group block no-underline transition-colors hover:bg-raised focus-visible:outline-offset-[-2px]")}>
-      {body}
-    </Link>
-  ) : (
-    <div className={cell}>{body}</div>
   );
 }

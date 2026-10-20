@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { Input } from "@/components/ui/input";
+import { SEARCH_MAX, typingIn } from "@/lib/search";
 import { cn } from "@/lib/utils";
 
 const MAIN = [
@@ -56,5 +59,41 @@ export function NavLinks() {
         </div>
       </details>
     </nav>
+  );
+}
+
+/** The company search (overhaul PR 5): a plain GET form to /search, so it works without script; "/" jumps to it from
+ * anywhere but a text field. app/(app)/search/page.tsx checks the query again on the server. */
+export function SearchBox() {
+  const box = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      if (typingIn(e.target as HTMLElement | null) || typingIn(document.activeElement as HTMLElement | null)) return;
+      e.preventDefault();
+      box.current?.focus();
+      box.current?.select();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <form role="search" action="/search" method="get" className="flex items-center">
+      <label htmlFor="company-search" className="sr-only">
+        Search companies
+      </label>
+      <Input
+        ref={box}
+        id="company-search"
+        name="q"
+        type="search"
+        maxLength={SEARCH_MAX}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="Search /"
+        aria-keyshortcuts="/"
+        className="w-24 font-mono sm:w-44"
+      />
+    </form>
   );
 }

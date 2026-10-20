@@ -5,6 +5,8 @@ import { allPages } from "@/lib/paging";
 import type { Baseline, ScorePoint } from "@/lib/candidates";
 import type { LabPricesRun } from "@/lib/lab";
 import type { ScreenSpec } from "@/lib/screener";
+import type { SearchHit } from "@/lib/search";
+import type { ContextRow, SignalRow } from "@/lib/why";
 import type { QuarterRow, SeriesPoint } from "@/lib/metrics";
 import {
   dayAfter,
@@ -162,31 +164,6 @@ export async function sourceHealth(): Promise<SourceHealth[]> {
   return rows(await db().from("source_health").select("source, last_success, last_error, stale").order("source"));
 }
 
-/** Home's summary: the latest scored week with its count per bucket (the week the Candidates tabs show, screener_v),
- * and the theses in Review and Position. Counted in the database. */
-export async function overview(): Promise<{ week: string | null; buckets: Record<"candidate" | "early" | "priced_in", number>; review: number; position: number }> {
-  const count = async (q: PromiseLike<{ count: number | null; error: { message: string } | null }>): Promise<number> => {
-    const res = await q;
-    if (res.error) throw new Error(res.error.message);
-    return res.count ?? 0;
-  };
-  const latest = one<{ week_end: string }>(
-    await db().from("scores").select("week_end").order("week_end", { ascending: false }).limit(1).maybeSingle(),
-  );
-  const week = latest?.week_end ?? null;
-  const inWeek = (bucket: Bucket) =>
-    week === null ? Promise.resolve(0) : count(db().from("scores").select("company_id", { count: "exact", head: true }).eq("week_end", week).eq("bucket", bucket));
-  const inState = (state: ThesisState) => count(db().from("theses").select("id", { count: "exact", head: true }).eq("state", state));
-  const [candidate, early, priced_in, review, position] = await Promise.all([
-    inWeek("candidate"),
-    inWeek("early"),
-    inWeek("priced_in"),
-    inState("review"),
-    inState("position"),
-  ]);
-  return { week, buckets: { candidate, early, priced_in }, review, position };
-}
-
 export interface LlmUse {
   provider: string;
   calls: number;
@@ -196,9 +173,9 @@ export interface LlmUse {
   tokensOut: number;
 }
 
-/** LLM calls by provider over the last 7 days, counted in the database (the llm_use_7d view, like the digest's
- * thesis_repo.llm_use): PostgREST returns at most max_rows rows, so counting fetched rows undercounts a busy week (M7
- * review R1-F6). */
+/** Settings' LLM calls by provider over the last 7 days, counted in the database (the llm_use_7d view, migration
+ * 0011): PostgREST returns at most max_rows rows, so counting fetched rows undercounts a busy week (M7 review R1-F6).
+ * The digest no longer lists LLM use (overhaul PR 5). */
 export async function llmUse(): Promise<LlmUse[]> {
   const data = rows<{ provider: string; calls: number; ok: number; rate_limited: number; tokens_in: number; tokens_out: number }>(
     await db().from("llm_use_7d").select("provider, calls, ok, rate_limited, tokens_in, tokens_out").order("provider"),
@@ -304,10 +281,87 @@ export const company = cache(async (id: string): Promise<Company | null> => {
   ).eq("id", id).maybeSingle());
 });
 
-/** The company's latest scores row (BRIEF §4.8): Evidence, Gap, bucket, families. */
-export async function latestScore(id: string): Promise<{ week_end: string; evidence: number; gap: number | null; families: string[]; bucket: Bucket } | null> {
-  return one(await db().from("scores").select("week_end, evidence, gap, families, bucket").eq("company_id", id)
+/** The company's latest scores row (BRIEF §4.8): Evidence, Gap, bucket, families and the weights version used. */
+export async function latestScore(id: string): Promise<{ week_end: string; evidence: number; gap: number | null; families: string[]; bucket: Bucket; weights_version: string } | null> {
+  return one(await db().from("scores").select("week_end, evidence, gap, families, bucket, weights_version").eq("company_id", id)
     .order("week_end", { ascending: false }).limit(1).maybeSingle());
+}
+
+export interface WhyData {
+  signals: SignalRow[]; // the scored week's signal rows
+  scoredWeeks: string[]; // the weeks the company was scored or fired a signal, through it ("firing since" walks them)
+  fired: Map<string, Set<string>>; // signal -> the weeks it fired, through the scored week
+  flags: { flag_id: string; hard: boolean; inputs: Record<string, unknown> | null }[]; // fired in the scored week
+  context: ContextRow[];
+  weights: Record<string, unknown> | null; // the weights version the score used
+  lab: LabResult[]; // the latest Lab run, for each signal's verdict (lib/lab.ts)
+}
+
+/** What "Why this score" reads for the company's scored week (overhaul PR 5): that week's signal, red-flag and context
+ * rows, the weeks each signal fired (for "firing since"), the weights version and the latest Lab run. Point-in-time:
+ * nothing after the scored week. */
+export async function whyScore(id: string, score: { week_end: string; weights_version: string }): Promise<WhyData> {
+  const week = score.week_end;
+  const [signals, firedRows, weeks, flags, context, version, lab] = await Promise.all([
+    db().from("signal_values").select("signal_id, fired, strength, inputs").eq("company_id", id).eq("week_end", week)
+      .order("signal_id"),
+    allPages<{ week_end: string; signal_id: string }>((a, b) =>
+      db().from("signal_values").select("week_end, signal_id").eq("company_id", id).eq("fired", true).lte("week_end", week)
+        .order("week_end").order("signal_id").range(a, b), 1_000_000), // prettier-ignore
+    allPages<{ week_end: string }>((a, b) =>
+      db().from("scores").select("week_end").eq("company_id", id).lte("week_end", week).order("week_end").range(a, b), 1_000_000),
+    db().from("redflag_values").select("flag_id, hard, inputs").eq("company_id", id).eq("week_end", week)
+      .eq("inputs->>status", "fired").order("flag_id"),
+    db().from("context_values").select("metric_id, value, pct, inputs").eq("company_id", id).eq("week_end", week)
+      .order("metric_id"),
+    db().from("weights_versions").select("weights").eq("version", score.weights_version).maybeSingle(),
+    labResults(),
+  ]);
+  const fired = new Map<string, Set<string>>();
+  for (const r of firedRows) fired.set(r.signal_id, (fired.get(r.signal_id) ?? new Set()).add(r.week_end));
+  return {
+    signals: rows<SignalRow>(signals),
+    scoredWeeks: [...new Set([...weeks.map((w) => w.week_end), ...firedRows.map((r) => r.week_end)])].sort(),
+    fired,
+    flags: rows(flags),
+    context: rows<ContextRow>(context),
+    weights: one<{ weights: Record<string, unknown> }>(version)?.weights ?? null,
+    lab,
+  };
+}
+
+// ---------------------------------------------------------------- Search
+
+const HIT = "id, market, name, ticker, nse_symbol";
+
+/** The search box's reads (lib/search.ts parseSearch gives the escaped patterns): companies whose code is the query,
+ * and up to `limit` whose ticker or name contains it. Each is its own ilike filter: no .or() string is built from the
+ * query. */
+export async function searchCompanies(exact: string, contains: string, limit: number): Promise<{ exact: SearchHit[]; hits: SearchHit[] }> {
+  const [byTicker, bySymbol, inTicker, inName] = await Promise.all([
+    db().from("companies").select(HIT).ilike("ticker", exact).limit(2),
+    db().from("companies").select(HIT).ilike("nse_symbol", exact).limit(2),
+    db().from("companies").select(HIT).ilike("ticker", contains).order("ticker").limit(limit),
+    db().from("companies").select(HIT).ilike("name", contains).order("name").limit(limit),
+  ]);
+  return {
+    exact: [...rows<SearchHit>(byTicker), ...rows<SearchHit>(bySymbol)],
+    hits: [...rows<SearchHit>(byTicker), ...rows<SearchHit>(bySymbol), ...rows<SearchHit>(inTicker), ...rows<SearchHit>(inName)],
+  };
+}
+
+/** The latest scored week (null before the first) and each listed company's Evidence and bucket in it. */
+export async function scoresInLatestWeek(ids: readonly string[]): Promise<{ week: string | null; scores: Map<string, { evidence: number | string; bucket: Bucket }> }> {
+  const latest = one<{ week_end: string }>(
+    await db().from("scores").select("week_end").order("week_end", { ascending: false }).limit(1).maybeSingle(),
+  );
+  const out = new Map<string, { evidence: number | string; bucket: Bucket }>();
+  if (latest === null || ids.length === 0) return { week: latest?.week_end ?? null, scores: out };
+  const data = rows<{ company_id: string; evidence: number | string; bucket: Bucket }>(
+    await db().from("scores").select("company_id, evidence, bucket").in("company_id", [...ids]).eq("week_end", latest.week_end),
+  );
+  for (const r of data) out.set(r.company_id, { evidence: r.evidence, bucket: r.bucket });
+  return { week: latest.week_end, scores: out };
 }
 
 export async function fundamentals(id: string): Promise<(QuarterRow & { currency: string | null; filed_at: string })[]> {
@@ -355,11 +409,6 @@ export async function facts(companyIds: string[], limit = 30): Promise<(FactRow 
       "documents(url, kind, published_at, title), companies(name, market, ticker, nse_symbol)",
   ).in("company_id", companyIds).eq("verification_status", "verified").order("as_of", { ascending: false })
     .limit(limit));
-}
-
-export async function contextHistory(id: string): Promise<{ week_end: string; metric_id: string; value: number | null; pct: number | null; inputs: Record<string, unknown> }[]> {
-  return rows(await db().from("context_values").select("week_end, metric_id, value, pct, inputs").eq("company_id", id)
-    .order("week_end").limit(1000));
 }
 
 export async function thesesOf(companyId: string): Promise<Pick<Thesis, "id" | "state" | "created_week" | "author">[]> {

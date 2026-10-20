@@ -1,5 +1,9 @@
 """The weekly thesis queue (BRIEF §4.9 step 1): the week's shortlist (at most 10 new candidates) as evidence packs in
-data/thesis_queue/{YYYY}-W{WW}.json, which weekly.yml commits to main for the routine (Appendix G).
+data/thesis_queue/{YYYY}-W{WW}.json, which weekly.yml commits to main for the routine (Appendix G). After the
+shortlist, within the same MAX_PACKS, come the open manual research entries (the web app's Research button: a thesis
+in `research` by `manual` with no card yet), oldest first; ingest fills each entry in place with its card
+(pipeline/db/thesis_repo.upsert_generated_thesis; docs/SPEC_ISSUES.md 35). An entry that doesn't fit waits for the
+next week.
 
 `python -m pipeline.thesis.queue [--week D]`."""
 
@@ -8,9 +12,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import psycopg
 
@@ -22,12 +28,23 @@ from pipeline.thesis.evidence_pack import build, to_json, week_label
 MAX_PACKS = 10
 
 
+def order(shortlist: Sequence[UUID], research: Sequence[UUID], limit: int = MAX_PACKS) -> list[UUID]:
+    """The companies to pack: the shortlist in rank order, then the research entries (oldest first) that aren't on it,
+    at most `limit` in all."""
+    out: list[UUID] = []
+    for cid in [*shortlist, *research]:
+        if cid not in out:
+            out.append(cid)
+    return out[:limit]
+
+
 def build_queue(conn: psycopg.Connection[Any], week: date, limit: int = MAX_PACKS) -> dict[str, Any]:
-    """The queue document: the shortlist in rank order, one pack each (no timestamps, so a re-run of the same data
-    writes the same bytes)."""
+    """The queue document: the shortlist in rank order, then the research entries, one pack each (no timestamps, so a
+    re-run of the same data writes the same bytes)."""
     companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
-    rows = [r for r in thesis_repo.shortlist(conn, week) if r["company_id"] in companies][:limit]
-    packs = [to_json(build(conn, companies[r["company_id"]], week)) for r in rows]
+    shortlist = [r["company_id"] for r in thesis_repo.shortlist(conn, week) if r["company_id"] in companies]
+    research = [cid for cid in thesis_repo.research_entries(conn, week) if cid in companies]
+    packs = [to_json(build(conn, companies[cid], week)) for cid in order(shortlist, research, limit)]
     return {"week": week_label(week), "week_end": week.isoformat(), "packs": packs}
 
 

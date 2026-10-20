@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { nextFiling } from "../lib/filing";
-import { OMEGA_THESIS } from "./seed";
+import { ECHO, OMEGA_THESIS, SIGMA } from "./seed";
 
 // BRIEF §8 M7-01 (restated in overhaul PR 4): login → candidates → company → thesis → journal entry → review → close
 // with a post-mortem (the allowlist login is e2e/auth.setup.ts); the Screener's and the Capex Desk's old links
-// redirect. One seeded world, so the steps run in order.
+// redirect. Overhaul PR 5: Home's funnel, To do and What changed from the seeded digest; search → company → Research →
+// "Card queued". One seeded world, so the steps run in order.
 test.describe.configure({ mode: "serial" });
 
 // When a step fails, the job log shows where the page was, what it said and any browser errors (the trace is in the
@@ -60,9 +61,30 @@ test("the nav has three places and More; the Screener's and the Capex Desk's old
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
 });
 
+test("Home: the funnel strip, To do live from the theses and What changed from the seeded digest (overhaul PR 5)", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Funnel" })).toContainText("US 4 → stage 4 → candidates 1 → new 0 · 1 of 4 fire one family, capped at 55");
+  // To do is the Theses screen's Needs you group: the card to decide (ECHO) and the thesis in review (OMEGA)
+  const todo = page.getByRole("region", { name: /^To do/ });
+  await expect(todo.getByRole("link", { name: "Echo Grid Corp. (ECHO)" })).toBeVisible();
+  await expect(todo.getByRole("link", { name: "Omega Systems Inc. (OMGA)" })).toBeVisible();
+  // What changed links each line to the company on this site, whatever host the digest was written for
+  const changed = page.getByRole("region", { name: "What changed" });
+  await expect(changed).toContainText("entered Candidate: Evidence 72.5");
+  await expect(changed.getByRole("link", { name: "ECHO" })).toHaveAttribute("href", `/company/${ECHO}`);
+  // the digest's To do and Health sections (the minutes line among them) are not repeated here
+  await expect(page.getByText(/Cards to accept or dismiss: \d/)).toHaveCount(0);
+  await expect(page.getByText(/Actions: 812 of 2,000/)).toHaveCount(0);
+  // the stale banner: twelvedata is seeded stale
+  await expect(page.getByRole("complementary", { name: "Stale data" })).toContainText("Twelve Data");
+});
+
 test("candidates: dismiss one with a reason, start research on another", async ({ page }) => {
   await page.goto("/candidates");
   await expect(page.getByRole("heading", { level: 1, name: "Candidates" })).toBeVisible();
+  // the NEW badge (overhaul PR 4): ECHO is in Candidate for the first time in 12 weeks
+  await expect(card(page, "Echo Grid Corp.").getByText("NEW", { exact: true })).toBeVisible();
   const kappa = card(page, "Kappa Cables Ltd");
   await kappa.locator("summary").click();
   await kappa.getByLabel("Reason").fill("Promoter pledge is rising");
@@ -76,18 +98,65 @@ test("candidates: dismiss one with a reason, start research on another", async (
 
   await page.getByRole("link", { name: "Early" }).click();
   await card(page, "Delta Power Inc.").getByRole("button", { name: "Research" }).click();
-  await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}\?ok=/);
+  await flash(page, "Card queued for Sunday's routine.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Delta Power Inc.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Research");
   await expect(page.getByText("No card yet")).toBeVisible();
-  // a manual research entry has no validated card, so it can't become a thesis (M7 review R1-F2)
+  // a manual research entry has no validated card until the routine fills it, so it can't become a thesis yet (M7
+  // review R1-F2)
   await expect(page.getByRole("button", { name: "Accept as thesis" })).toHaveCount(0);
+});
+
+test("search → company → Research → 'Card queued' (overhaul PR 5)", async ({ page }) => {
+  await page.goto("/candidates");
+  await page.waitForLoadState("networkidle"); // the "/" shortcut listens once the page is hydrated
+  const box = page.getByRole("searchbox", { name: "Search companies" });
+  await page.keyboard.press("/");
+  await expect(box).toBeFocused();
+  // a name match lists the companies with market, bucket and Evidence
+  await box.fill("Grid Corp");
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=Grid\+Corp$/);
+  const results = page.getByRole("region", { name: "Search results" });
+  await expect(results.getByRole("row").filter({ hasText: "Echo Grid Corp." })).toContainText("Candidate");
+  // "/" types a slash inside a field instead of jumping
+  await box.fill("a");
+  await box.press("/");
+  await expect(box).toHaveValue("a/");
+  // anything but letters, digits, spaces and . & - is turned away with a plain message
+  await box.fill("50%_off");
+  await box.press("Enter");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("letters, digits, spaces and . & - only");
+  // an exact ticker opens the Company page; SIGMA's only thesis is closed, so it offers Research
+  await box.fill("sgma");
+  await box.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/company/${SIGMA}$`));
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Sigma Holdings Inc. (SGMA)");
+  await expect(page.getByRole("heading", { level: 2, name: "Why this score" })).toBeVisible();
+  await expect(page.getByText("hard: excludes the company")).toBeVisible(); // R3, an auditor change
+  await page.getByRole("main").getByRole("button", { name: "Research" }).click();
+  await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}\?ok=/);
+  await flash(page, "Card queued for Sunday's routine.");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Sigma Holdings Inc.");
+  // the entry is live now: the Company page opens it instead of starting another
+  await page.goto(`/company/${SIGMA}`);
+  await expect(page.getByRole("main").getByRole("link", { name: "Open card" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("button", { name: "Research" })).toHaveCount(0);
 });
 
 test("company → thesis → journal → review → close with a post-mortem", async ({ page }) => {
   await page.goto("/candidates");
   await page.getByRole("link", { name: "Echo Grid Corp." }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Echo Grid Corp. (ECHO)");
+  // Why this score (overhaul PR 5): the families, each fired signal's firing since and Lab verdict, the Gap's parts
+  const why = page.getByRole("region", { name: "Why this score" });
+  await expect(why).toContainText("2 families fired (Fundamentals, Text), so the one-family cap at 55 does not apply.");
+  await expect(why).toContainText("S1 Order-book acceleration");
+  await expect(why).toContainText("firing since 2026-09-11");
+  await expect(why).toContainText("unproven"); // S1's out-of-sample t is 1.1
+  await expect(why).toContainText("not testable yet"); // S9
+  await expect(why).toContainText("Implied growth (g*)"); // C2's reverse DCF, folded in
   await expect(page.getByText("Revenue (TTM)")).toBeVisible();
   await expect(page.getByText("Total backlog reached $13.2 billion at quarter end.")).toBeVisible();
 

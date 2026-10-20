@@ -26,6 +26,27 @@ export function stripSection(md: string, title: string): string {
   return out.join("\n");
 }
 
+/** stripSection's complement: only the body of the section titled `title` (under its heading, down to the next
+ * heading of the same or a higher level: for the digest's "## " sections, the next "## " heading), trimmed; "" when
+ * there is no such section. Home cuts the digest with it. */
+export function pickSection(md: string, title: string): string {
+  const out: string[] = [];
+  let keeping = 0; // the level of the heading being kept; 0 = not inside it yet
+  for (const line of md.split("\n")) {
+    const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    if (h) {
+      const level = h[1]!.length;
+      if (keeping && level <= keeping) break;
+      if (!keeping && h[2]!.trim().toLowerCase() === title.toLowerCase()) {
+        keeping = level;
+        continue;
+      }
+    }
+    if (keeping) out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
 /** The markdown without its leading "# title" line (the page's own header already says it). */
 export function stripTitle(md: string): string {
   const lines = md.split("\n");
