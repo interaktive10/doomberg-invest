@@ -24,3 +24,13 @@ def test_only_main_deploys() -> None:
     previews of pipeline PRs held the production deploy of the simplified app back. Only main deploys now."""
     doc = json.loads((ROOT / "web" / "vercel.json").read_text(encoding="utf-8"))
     assert doc["git"]["deploymentEnabled"] == {"*": False, "main": True}
+
+
+def test_a_daily_cron_keeps_the_database_awake() -> None:
+    """Supabase's free plan pauses after 7 days without activity; with Actions blocked (billing, 2026-10-20) nothing
+    else touched it. Vercel's free plan allows a daily cron: it reads one row through /api/keepalive, which the
+    middleware lets through without a session."""
+    doc = json.loads((ROOT / "web" / "vercel.json").read_text(encoding="utf-8"))
+    assert doc["crons"] == [{"path": "/api/keepalive", "schedule": "17 9 * * *"}]
+    assert (ROOT / "web" / "app" / "api" / "keepalive" / "route.ts").exists()
+    assert '"/api/keepalive"' in (ROOT / "web" / "middleware.ts").read_text(encoding="utf-8")
