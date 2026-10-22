@@ -149,9 +149,9 @@ def gated(name: str, job: str, need: int) -> list[dict[str, Any]]:
     return rest
 
 
-def test_lab_prices_runs_sunday_to_thursday_in_november_and_december_only() -> None:
-    """Overhaul PR 3: Saturday's weekly prices never compete with the download for Twelve Data's 800 credits a day,
-    and the job doesn't run the rest of the year."""
+def test_lab_prices_runs_sunday_to_thursday_in_any_month() -> None:
+    """Overhaul PR 3: Saturday's weekly prices never compete with the download for Twelve Data's 800 credits a day;
+    any month, since the minutes gate may spread the download over several cycles (it disables itself when done)."""
     on = load("lab-prices.yml")[True]
     assert on["schedule"] == [{"cron": "7 10 * * 0-4"}] and "workflow_dispatch" in on
     minute, hour, dom, months, dow = on["schedule"][0]["cron"].split()
@@ -182,7 +182,12 @@ def test_lab_prices_gates_stops_itself_and_keeps_its_progress() -> None:
     # PR 3 review lab-F2: the prices are uploaded before the state, so the state never runs ahead of them
     assert upload["run"].index("us_month_prices.csv.gz") < upload["run"].index("us_prices_state.json")
     done, dispatch = step("lab-prices.yml", "prices", "gh workflow run lab.yml")
-    assert u < done and dispatch["if"] == "steps.download.outputs.complete == 'true'"
+    g, labgate = step("lab-prices.yml", "prices", "minutes gate --need 180")
+    assert labgate["id"] == "labgate" and labgate["if"] == "steps.download.outputs.complete == 'true'"
+    # integration review runtime-X1: the download switches itself off only once the Lab's own gate admits the Lab run
+    assert u < g < done and dispatch["if"] == (
+        "steps.download.outputs.complete == 'true' && steps.labgate.outputs.allowed == 'true'"
+    )
     assert "--ref" in dispatch["run"] and "gh workflow disable lab-prices.yml" in dispatch["run"]
     blocked = next(s for s in job["steps"] if s.get("if") == "steps.download.outputs.blocked == 'true'")
     assert blocked["run"].startswith("gh workflow disable lab-prices.yml") and "workflow run" not in blocked["run"]

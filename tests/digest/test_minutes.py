@@ -295,3 +295,18 @@ def test_other_repos_are_budgeted_per_day_of_the_cycle(tmp_path: Path) -> None:
     ok, line = minutes.gate(meter, 120)
     assert "315 of them in other repos) + 620 other repos ahead" in line
     assert minutes.Budget.load().other_repos_per_day == 31
+
+
+def test_the_digest_projects_no_more_download_runs_than_the_gate_admits() -> None:
+    """Integration review runtime-X2: 5,200 pending tickers are 8 runs, but the projection counts only the runs the
+    gate (gate_max 1,900, reserve 180, need 120 a run) can still admit this cycle (the repo's own crons)."""
+    budget = replace(BUDGET, download_run=95)
+    now = datetime(2026, 11, 2, 9, tzinfo=UTC)
+    quiet = minutes.measure(MockRuns(), budget, now, download_pending=5200, tickers_per_run=650)
+    busy = minutes.measure(MockRuns(runs={1: [job(1300 * 60)]}), budget, now, download_pending=5200,
+                           tickers_per_run=650)  # fmt: skip
+    assert minutes.admitted_runs(budget, 0) == (1900 - 180 - 120) // 95 + 1
+    assert minutes.admitted_runs(budget, 1900 - 180 - 119) == 0 and minutes.admitted_runs(budget, 1900 - 180 - 120) == 1
+    assert quiet.download == 8 * 95  # room for every run: nothing capped
+    assert busy.download == minutes.admitted_runs(budget, 1300 + busy.scheduled) * 95 < 8 * 95
+    assert busy.projected() <= 1900 - 180 + 95  # at most one run's actual minutes past the gate's own line

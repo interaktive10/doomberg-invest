@@ -22,6 +22,7 @@ from pipeline.lab import price_history, run
 from pipeline.lab.prices import write_month_csv
 from pipeline.lab.proposals import Proposal
 from pipeline.lab.report import CAVEATS
+from pipeline.signals import registry
 
 from ..lab.conftest import load_generator
 
@@ -48,7 +49,8 @@ def test_lab_run_on_f_lab_companies(conn: psycopg.Connection[Any], tmp_path: Pat
     text, props, panel_rows, stats = run.run(conn, "us", prices, date(2026, 9, 25), panel_out=panel)
     assert len(panel_rows) == 20 * 60 and {s.horizon for s in stats} == {12, 24, 36} and panel.stat().st_size > 0
     stored = conn.execute("select count(*), count(distinct signal_id) from lab_results where market = 'us'").fetchone()
-    assert stored is not None and stored[0] > 0 and stored[1] >= 12 + 6 + 2 * 10  # signals, L1-L6, two decile sets
+    signals = len(registry.SIGNALS)  # S1-S10 and S12 since PR 4 deleted S11
+    assert stored is not None and stored[0] > 0 and stored[1] >= signals + 6 + 2 * 10  # signals, L1-L6, two decile sets
     assert all(c in text for c in CAVEATS) and text.startswith("# Signal Lab report")
     weights = yaml.safe_load((ROOT / "config" / "weights.yaml").read_text(encoding="utf-8"))
     assert sorted(p.signal_id for p in props) == sorted([*weights["signals"], *weights["legacy"]])

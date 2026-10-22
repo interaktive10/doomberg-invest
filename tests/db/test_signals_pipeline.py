@@ -22,7 +22,7 @@ from pipeline.net.twelvedata import series_url
 from pipeline.prices.bars import parse_csv
 from pipeline.screener import MetricFilter, ScreenSpec, run_screen
 from pipeline.settings import Settings
-from pipeline.signals import weekly
+from pipeline.signals import registry, weekly
 from pipeline.us.fundamentals import load_xbrl_map, quarterize_company, to_models
 from pipeline.us.submissions import parse_submissions
 
@@ -91,7 +91,7 @@ def test_signals_as_of_w_are_identical_whether_or_not_later_filings_exist(conn: 
             weekly.run(conn, week, http=None)
             runs[mode] = snapshot(conn, week)
     sig, flags, scores = runs["with later filings"]
-    assert len(sig) == 3 * 12 and len(scores) == 3
+    assert len(sig) == 3 * len(registry.SIGNALS) and len(scores) == 3  # one row per signal (S11 went in PR 4)
     assert runs["with later filings"] == runs["only what was known at W"]
 
 
@@ -169,7 +169,7 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     # the candidate stage: PWR and JBL by their theses, CAT by its Evidence (50: S1 fired)
     assert stats.companies == 4 and stats.stage == 3 and stats.prices_ok == 3
     n_signals = conn.execute("select count(*) from signal_values where week_end = %s", (week,)).fetchone()
-    assert n_signals == (4 * 12,)
+    assert n_signals == (4 * len(registry.SIGNALS),)  # S1-S10 and S12 since PR 4 deleted S11
     prices = conn.execute("select count(*), min(week_end), max(week_end) from prices_w where company_id = %s", (pwr,))
     count, first, last = prices.fetchone() or (0, None, None)
     assert count == 260 and last == week and first is not None
