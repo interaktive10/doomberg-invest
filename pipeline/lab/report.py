@@ -30,7 +30,7 @@ class RunInfo:
     company_months: int
     events: int
     periods: Mapping[str, tuple[date, date]]
-    source: str  # where the prices came from ("Stooq bulk d_us_txt.zip", "F-LAB synthetic panel", ...)
+    source: str  # where the prices came from ("Twelve Data month-end closes (...)", "F-LAB synthetic panel", ...)
     population: str = ""  # which companies each month-end's cross-section holds (run.describe)
 
 
@@ -78,9 +78,12 @@ def render(info: RunInfo, events: Sequence[Stat], evidence: Sequence[Stat], gap:
         *_table(gap),
         "",
         "## Weight proposals (BRIEF §4.10.5)",
-        "| Weight | Now | Proposed | Why |",
-        "|---|---|---|---|",
-        *(f"| {p.section}.{p.signal_id} | {p.old} | {p.new} | {p.reason} |" for p in proposals),
+        "Each signal's verdict (the weights PR's too): works, hurts, unproven (not shown, not wrong) or not testable "
+        "yet. The report is written on every run, also when no weight changes and no weights PR is opened.",
+        "",
+        "| Weight | Verdict | Now | Proposed | Why |",
+        "|---|---|---|---|---|",
+        *(f"| {p.section}.{p.signal_id} | {p.verdict or '–'} | {p.old} | {p.new} | {p.reason} |" for p in proposals),
         "",
         "Weights change only through a PR with the `human-approved` label (config/weights.yaml is protected).",
         "",

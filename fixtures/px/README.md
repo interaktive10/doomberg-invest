@@ -17,6 +17,10 @@ answers Stooq gave instead of a CSV.
   the weekly run asks since 2026-10 (docs/SPEC_ISSUES.md 38): newest first, each bar dated at its week's Monday,
   prices as decimal strings. `SPY.json` carries the ^spx series (the client asks SPY for the S&P 500);
   `not_found.json`, `minute_credits.json` and `bad_key.json` are three of its error answers.
+- `twelvedata/daily_*.json`: hand-made in the shape of Twelve Data's `interval=1day` answer, which the Signal Lab's
+  price history asks (docs/SPEC_ISSUES.md 51): `daily_AAPL.json` holds a few days of 2010 and of 2026-09/10 (newest
+  first, so the month-end close and the incomplete current month can be checked), and `daily_day_credits.json` is
+  the answer once the day's 800 credits are spent.
 
 Neither stooq.com, Yahoo nor Twelve Data answers the build container, so the series are synthetic. Where Yahoo answers, `uv run
 python scripts/fetch_fixtures.py f-px` writes the real charts over `yahoo/`.

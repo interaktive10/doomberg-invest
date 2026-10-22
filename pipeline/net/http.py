@@ -48,7 +48,7 @@ ALLOWED_HOSTS: dict[str, float] = {
     "stooq.com": 2.0,
     "query1.finance.yahoo.com": 1.0,  # US weekly prices (pipeline/net/yahoo.py); one site, one limit
     "query2.finance.yahoo.com": 1.0,
-    "api.twelvedata.com": 8.0,  # US weekly prices (pipeline/net/twelvedata.py): the free plan's 8 credits a minute
+    "api.twelvedata.com": 8.0,  # US weekly prices and the Lab's history (net/twelvedata.py): 8 credits a minute
     "api.stlouisfed.org": 0.5,
     "api.eia.gov": 0.5,
     "generativelanguage.googleapis.com": 0.0,

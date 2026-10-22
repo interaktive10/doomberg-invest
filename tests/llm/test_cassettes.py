@@ -40,8 +40,8 @@ def test_committed_cassettes_match_their_manifest() -> None:
 
 
 def test_the_recorder_covers_every_m5_prompt_and_replays(tmp_path: Path) -> None:
-    """M5 review R1-F7 (BRIEF §9): recording writes cassettes for P-01 (F-SYN) and for the P-02, P-03, P-06 and P-07
-    samples, and a Player replays the samples with the same answers."""
+    """M5 review R1-F7 (BRIEF §9): recording writes cassettes for P-01 (F-SYN) and for the P-02, P-06 and P-07 samples
+    (P-03 is no longer called: docs/SPEC_ISSUES.md 50), and a Player replays the samples with the same answers."""
     from pipeline.facts.evaluate import SYN, load_truth, run_corpus
     from pipeline.facts.samples import run_samples
     from pipeline.llm.router import Done, Router
@@ -53,7 +53,7 @@ def test_the_recorder_covers_every_m5_prompt_and_replays(tmp_path: Path) -> None
     run_corpus(rec, truth=truth)
     live = run_samples(rec, SYN, truth)
     write_manifest(tmp_path)
-    assert {p.parent.name for p in tmp_path.rglob("*.json")} == {"P-01", "P-02", "P-03", "P-06", "P-07"}
+    assert {p.parent.name for p in tmp_path.rglob("*.json")} == {"P-01", "P-02", "P-06", "P-07"}
     assert all(isinstance(r, Done) for rs in live.values() for r in rs) and all(live.values())
     play = Router({"gemini": Player("gemini", tmp_path)}, quotas(["gemini"], rpd=10_000), FakeClock())
     again = run_samples(play, SYN, truth)

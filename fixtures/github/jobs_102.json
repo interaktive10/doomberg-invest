@@ -1,0 +1,9 @@
+{
+  "total_count": 2,
+  "jobs": [
+    {"id": 9004, "run_id": 102, "run_attempt": 1, "name": "us", "status": "completed", "conclusion": "success",
+     "started_at": "2026-11-07T02:07:10Z", "completed_at": "2026-11-07T02:09:10Z"},
+    {"id": 9005, "run_id": 102, "run_attempt": 1, "name": "scores", "status": "completed", "conclusion": "skipped",
+     "started_at": "2026-11-07T02:09:12Z", "completed_at": "2026-11-07T02:09:12Z"}
+  ]
+}

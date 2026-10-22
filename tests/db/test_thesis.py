@@ -452,6 +452,20 @@ def test_the_digest_without_scores_says_why(conn: psycopg.Connection[Any], env: 
             "below).") in body  # fmt: skip
 
 
+def test_source_health_ends_with_the_actions_minutes_line(conn: psycopg.Connection[Any]) -> None:
+    """Overhaul PR 3: the meter's one line (pipeline/digest/minutes.py; tests/digest/test_minutes.py has the line and
+    its warning) closes the source health section, after the table; without it (a build outside main) the section is
+    the table alone, as in the snapshot."""
+    conn.execute("insert into source_health (source, last_success, last_error, stale) values "
+                 "('sec', '2026-09-18 06:00+00', null, false)")  # fmt: skip
+    line = "Actions: 812 of 2,000 this cycle, projected 1,340."
+    _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC), actions=[line])
+    section = body.split("## Source health\n\n", 1)[1].split("\n## ", 1)[0]
+    assert section == f"| Source | Last success | Status |\n|---|---|---|\n| sec | 2026-09-18 06:00Z | ok |\n\n{line}\n"
+    _, without = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
+    assert "Actions:" not in without
+
+
 @pytest.mark.parametrize(("nse", "banner"), [("2026-09-18 06:00+00", None), (None, "nse (stale)")],
                          ids=["nse-fine", "nse-stale"])  # fmt: skip
 def test_fallback_banner_only_when_its_primary_is_down(conn: psycopg.Connection[Any], nse: str | None,

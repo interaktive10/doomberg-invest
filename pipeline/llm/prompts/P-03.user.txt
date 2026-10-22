@@ -1,2 +1,0 @@
-ALLOWED: {{tags}}
-PARAGRAPHS: {{id_text_list}}

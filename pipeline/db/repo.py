@@ -586,6 +586,17 @@ def latest_run_days(conn: Conn, kind: str) -> list[dict[str, Any]]:
     return list(row[0]) if row is not None else []
 
 
+def latest_run_stats(conn: Conn, kind: str, key: str) -> dict[str, Any] | None:
+    """The stats of the latest finished `kind` run that recorded `key` (a run that failed before recording its
+    progress is passed over); None when there is none."""
+    row = conn.execute(
+        _q("select stats from runs where kind = %s and finished_at is not null and stats -> %s is not null "
+           "order by started_at desc limit 1"),
+        (kind, key),
+    ).fetchone()  # fmt: skip
+    return dict(row[0]) if row is not None else None
+
+
 @contextmanager
 def tracked_run(conn: Conn, kind: str, source: str | None = None) -> Iterator[dict[str, Any]]:
     """A pipeline job's `runs` row (committed at once, so a crash still leaves a record). Yields a JSON-able stats

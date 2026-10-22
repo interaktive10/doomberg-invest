@@ -1,10 +1,10 @@
 """pipeline/db/diagnose.py against the database: the candidate stage's rows with their families, context scores and
 market caps, and why the priced ones that aren't candidates aren't (the first live runs, 2026-10-07, scored 391
-priced companies into no bucket at all)."""
+priced companies into no bucket at all); and the last text run's line with its stop reason (docs/SPEC_ISSUES.md 50)."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -12,7 +12,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from pipeline.db import repo
-from pipeline.db.diagnose import last_run, report, stage_rows
+from pipeline.db.diagnose import last_run, last_text_run, report, stage_rows, text_run
 from pipeline.db.models import ContextValue, Score
 from pipeline.signals.weekly import Configs
 from tests.db.conftest import new_company
@@ -82,3 +82,34 @@ def test_the_last_scoring_runs_errors_by_source(conn: psycopg.Connection[Any]) -
         "  benchmark: 1",
         "    benchmark XLI: x: y",
     ]
+
+
+def test_the_text_runs_line_says_what_it_read_and_why_it_stopped() -> None:
+    started = datetime(2026, 11, 3, 1, 20, tzinfo=UTC)
+    stats = {"scope": 312, "theses": 6, "stage": 306, "submissions": 14, "indexed": 9, "queued_filings": 11,
+             "skipped_filings": 3, "extracted": 38, "deferred": 2, "failed": 0, "facts_verified": 25,
+             "stopped": "daily document limit (40)", "checked": {"0000999001": 1}}  # fmt: skip
+    assert text_run(started, "ok", stats) == (
+        "last text run 2026-11-03 01:20Z: ok, scope 312 (theses 6, stage names 306), submissions read for 14 (9 in "
+        "the EDGAR index), 11 filings queued, 3 skipped, 38 documents extracted, 2 deferred, 0 failed, 25 verified "
+        "facts; stopped: daily document limit (40)"
+    )
+    assert text_run(started, "ok", {"scope": 1}).endswith("stopped: queue empty")  # an older row: missing keys are 0
+    assert text_run(started, "ok", {"skipped": "quotas not set"}) == (
+        "last text run 2026-11-03 01:20Z: ok, skipped (quotas not set)"
+    )
+    assert text_run(started, "failed", {}, "OperationalError: x") == (
+        "last text run 2026-11-03 01:20Z: failed (OperationalError: x)"
+    )
+
+
+def test_the_last_finished_text_run(conn: psycopg.Connection[Any]) -> None:
+    assert last_text_run(conn) == ["last text run: none"]
+    finished = "('text', '2026-11-03 01:20+00', '2026-11-03 01:29+00', 'partial', %s)"
+    conn.execute(f"insert into runs (kind, started_at, finished_at, status, stats) values {finished}",
+                 (Jsonb({"scope": 2, "theses": 1, "stage": 1, "extracted": 3, "stopped": "time budget (6 min)",
+                         "errors": ["fetch x: HTTPStatusError"]}),))  # fmt: skip
+    conn.execute("insert into runs (kind, started_at, status) values ('text', '2026-11-04 01:20+00', 'running')")
+    (line,) = last_text_run(conn)
+    assert line.startswith("last text run 2026-11-03 01:20Z: partial, scope 2 (theses 1, stage names 1)")
+    assert "3 documents extracted" in line and line.endswith("stopped: time budget (6 min)")

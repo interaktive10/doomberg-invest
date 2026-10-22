@@ -3,7 +3,7 @@
 `python -m pipeline.us.quarterly --windows 1` downloads the latest published 13F data set and writes
 ownership_q.inst_holders for universe companies (thirteenf.py does the counting and CUSIP mapping). `--windows 3`
 backfills the two windows before it (S8 needs holder growth over 2 quarters); `--zip` reads a local file instead.
-The universe rebuild runs in every weekly run (weekly.py); the Signal Lab re-run is M8's.
+The universe rebuild runs in every weekly run (weekly.py); the Lab has no quarterly re-run (SPEC_ISSUES 51).
 """
 
 from __future__ import annotations

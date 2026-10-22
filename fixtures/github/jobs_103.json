@@ -1,0 +1,9 @@
+{
+  "total_count": 2,
+  "jobs": [
+    {"id": 9006, "run_id": 103, "run_attempt": 1, "name": "prices", "status": "completed", "conclusion": "failure",
+     "started_at": "2026-11-08T10:07:30Z", "completed_at": "2026-11-08T10:17:31Z"},
+    {"id": 9007, "run_id": 103, "run_attempt": 2, "name": "prices", "status": "in_progress", "conclusion": null,
+     "started_at": "2026-11-08T11:00:00Z", "completed_at": null}
+  ]
+}

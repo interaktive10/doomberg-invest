@@ -105,7 +105,8 @@ jobs:
     #   M6 review R1-F5).
     # - BRIEF §4.12: the digest issue, also when scores or the queue commit failed, since those are the weeks source
     #   health matters (M6 review R1-F6). It lists this week's triggered criteria, source health with the §2.7
-    #   staleness banner and LLM quota use, and says why the candidates are missing in a week without scores.
+    #   staleness banner, the Actions minutes line and LLM quota use, and says why the candidates are missing in a week
+    #   without scores.
     # - BRIEF §2.8: the storage guard, after every job that writes and also when one failed (review R2-F1 on M3):
     #   prune (signal_values past 3 years, NSE announcements past 120 days) and fail the run above 400 MB.
     # Each work step has its own limit: a hung step fails alone and the digest and the guard still run (a job timeout
@@ -117,6 +118,7 @@ jobs:
     permissions:
       contents: write   # the queue commit
       issues: write     # the digest issue
+      actions: read     # the digest's Actions minutes line reads this repository's runs (pipeline/digest/minutes.py)
     steps:
       - name: Secrets (BRIEF §2.4; without the database the steps below are skipped, with a notice)
         id: secrets

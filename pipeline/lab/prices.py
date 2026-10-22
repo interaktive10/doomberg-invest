@@ -1,26 +1,37 @@
-"""Month-end prices for the Signal Lab (BRIEF §4.10.1).
+"""Month-end prices for the Signal Lab (BRIEF §4.10.1, docs/SPEC_ISSUES.md 51).
 
-The Stooq bulk daily file (`d_us_txt.zip`: it has a CAPTCHA, so Manzoor downloads it once and keeps it as a private
-GitHub release asset, §2.7) holds one text file per symbol, e.g. `data/daily/us/nasdaq stocks/1/aapl.us.txt`:
+pipeline/lab/price_history.py downloads every company's daily closes from Twelve Data (monthly closes if the free plan's
+daily history doesn't reach config/lab.yaml `start`) and keeps them as month bars in a private GitHub release asset
+(`lab-data-v1`, §2.7), one row per ticker and month:
 
-    <TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>
-    AAPL.US,D,19840907,000000,0.100763,0.101999,0.0997,0.100763,97676604,0
+    ticker,month_end,close,high,low
+    AAPL,2024-01-31,184.40,195.18,181.18
 
-Read by column name. Each calendar month becomes one bar: the month's last close and its highest and lowest close
-(the 52-week high/low of the legacy rules use closes). Stooq's closes are split-adjusted, not dividend-adjusted, so
-Lab returns are price returns (§7 caveat 3).
+Each calendar month becomes one bar: the month's last close and its highest and lowest close (the 52-week high/low of
+the legacy rules use closes); the current month isn't complete and is left out. A monthly series has one close a
+month, so its high and low are that close. Twelve Data's closes are split-adjusted, not dividend-adjusted, so Lab
+returns are price returns (§7 caveat 3).
+
+The download's progress is a small JSON state next to the asset (DownloadState), so each run resumes where the last
+one stopped.
 """
 
 from __future__ import annotations
 
 import csv
+import gzip
 import io
-import zipfile
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+import json
+import os
+import shutil
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass, field
+from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
+
+COLUMNS = ("ticker", "month_end", "close", "high", "low")
+FINAL = ("ok", "no_such_symbol", "error")  # a ticker in one of these is never asked again
 
 
 @dataclass(frozen=True)
@@ -50,24 +61,6 @@ def month_ends(start: date, end: date) -> list[date]:
     return out
 
 
-def parse_daily(text: str) -> list[tuple[date, Decimal]]:
-    """(day, close) rows of one Stooq daily file, by column name; unparseable rows are skipped."""
-    reader = csv.DictReader(io.StringIO(text))
-    names = {(h or "").strip().strip("<>").upper(): h for h in (reader.fieldnames or [])}
-    if "DATE" not in names or "CLOSE" not in names:
-        raise ValueError(f"not a Stooq daily file (header {reader.fieldnames})")
-    out: list[tuple[date, Decimal]] = []
-    for r in reader:
-        try:
-            day = datetime.strptime((r[names["DATE"]] or "").strip(), "%Y%m%d").date()
-            close = Decimal((r[names["CLOSE"]] or "").strip())
-        except (ValueError, InvalidOperation):
-            continue
-        if close > 0:
-            out.append((day, close))
-    return out
-
-
 def month_bars(daily: Sequence[tuple[date, Decimal]]) -> list[MonthBar]:
     by: dict[date, list[tuple[date, Decimal]]] = {}
     for d, c in sorted(daily):
@@ -77,24 +70,107 @@ def month_bars(daily: Sequence[tuple[date, Decimal]]) -> list[MonthBar]:
     ]
 
 
-def read_bulk(path: Path, tickers: Iterable[str], suffix: str = ".us.txt") -> dict[str, list[MonthBar]]:
-    """Month bars for the wanted tickers (e.g. "AAPL", "BRK-B") from the bulk zip; tickers without a file are left
-    out."""
-    want = {t.lower() + suffix: t for t in tickers}
-    out: dict[str, list[MonthBar]] = {}
-    with zipfile.ZipFile(path) as z:
-        for name in z.namelist():
-            ticker = want.get(name.rsplit("/", 1)[-1].lower())
-            if ticker is not None:
-                out[ticker] = month_bars(parse_daily(z.read(name).decode("utf-8", errors="replace")))
-    return out
+def complete_months(closes: Sequence[tuple[date, Decimal]], today: date) -> list[MonthBar]:
+    """Month bars of daily (or monthly) closes, closed at each month's last close; the current month, still
+    incomplete on `today`, is dropped."""
+    return [b for b in month_bars(closes) if b.month_end < month_end(today)]
+
+
+def _rows(bars: Mapping[str, Sequence[MonthBar]]) -> str:
+    out = io.StringIO()
+    w = csv.writer(out, lineterminator="\n")
+    for ticker, rows in bars.items():
+        w.writerows((ticker, b.month_end.isoformat(), b.close, b.high, b.low) for b in rows)
+    return out.getvalue()
+
+
+def write_month_csv(path: Path, bars: Mapping[str, Sequence[MonthBar]], append: bool = False) -> None:
+    """ticker,month_end,close,high,low rows, gzip-compressed when the name ends in .gz. With `append` the rows are
+    added (a further gzip member) to a copy of the file that then replaces it, so a run stopped mid-write keeps the
+    file as it was."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fresh = not (append and path.exists())
+    data = ((",".join(COLUMNS) + "\n" if fresh else "") + _rows(bars)).encode("utf-8")
+    if path.suffix == ".gz":
+        data = gzip.compress(data)  # one member; gzip readers read a file of several members as one stream
+    if fresh:
+        tmp.write_bytes(data)
+    else:
+        shutil.copyfile(path, tmp)
+        with tmp.open("ab") as fh:
+            fh.write(data)
+    os.replace(tmp, path)
 
 
 def read_month_csv(text: str) -> dict[str, list[MonthBar]]:
-    """ticker,month_end,close[,high,low] rows (F-LAB and manual imports)."""
-    out: dict[str, list[MonthBar]] = {}
+    """ticker,month_end,close[,high,low] rows (F-LAB, manual imports and the Lab's price asset); a month a ticker has
+    twice keeps its last row (a download resumed after a stop may save a ticker again)."""
+    out: dict[str, dict[date, MonthBar]] = {}
     for r in csv.DictReader(io.StringIO(text)):
         close = Decimal(r["close"])
         high, low = Decimal(r.get("high") or close), Decimal(r.get("low") or close)
-        out.setdefault(r["ticker"], []).append(MonthBar(date.fromisoformat(r["month_end"]), close, high, low))
-    return {t: sorted(bars, key=lambda b: b.month_end) for t, bars in out.items()}
+        m = date.fromisoformat(r["month_end"])
+        out.setdefault(r["ticker"], {})[m] = MonthBar(m, close, high, low)
+    return {t: [bars[m] for m in sorted(bars)] for t, bars in out.items()}
+
+
+def month_csv_tickers(path: Path) -> set[str]:
+    """The tickers with at least one row in the price asset; none when the file is missing."""
+    if not path.exists():
+        return set()
+    with gzip.open(path, "rt", encoding="utf-8") if path.suffix == ".gz" else path.open(encoding="utf-8") as fh:
+        rows = csv.reader(fh)
+        next(rows, None)  # the header (the first gzip member's)
+        return {r[0] for r in rows if r}
+
+
+def read_prices(path: Path, tickers: Iterable[str] | None = None) -> dict[str, list[MonthBar]]:
+    """The Lab's month bars (the release asset write_month_csv builds), for the wanted tickers (e.g. "AAPL", "BRK-B")
+    or all; tickers without rows are left out."""
+    with gzip.open(path, "rt", encoding="utf-8") if path.suffix == ".gz" else path.open(encoding="utf-8") as fh:
+        bars = read_month_csv(fh.read())
+    if tickers is None:
+        return bars
+    return {t: bars[t] for t in dict.fromkeys(tickers) if t in bars}
+
+
+@dataclass
+class TickerState:
+    status: str = "pending"  # pending | ok | no_such_symbol | error (FINAL: never asked again)
+    attempts: int = 0  # failed requests so far (a spent day of credits isn't one)
+    error: str | None = None  # the last failure
+    months: int = 0  # month bars saved for an `ok` ticker (0: Twelve Data had no complete month of it yet)
+
+
+@dataclass
+class DownloadState:
+    """The progress of price_history's download, saved as JSON next to the price asset."""
+
+    interval: str | None = None  # "1day" or "1month", chosen once by the probe
+    status: str = "pending"  # pending | partial | complete | blocked
+    reason: str | None = None  # why the probe blocked the download
+    tickers: dict[str, TickerState] = field(default_factory=dict)
+
+    def count(self, *statuses: str) -> int:
+        return sum(t.status in statuses for t in self.tickers.values())
+
+    def settled(self) -> int:
+        """Tickers with a final status: asked until they answered, had no series, or failed MAX_ATTEMPTS times."""
+        return self.count(*FINAL)
+
+    @classmethod
+    def load(cls, path: Path) -> DownloadState | None:
+        if not path.exists():
+            return None
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        tickers = {str(k): TickerState(**v) for k, v in (doc.get("tickers") or {}).items()}
+        return cls(interval=doc.get("interval"), status=str(doc.get("status") or "pending"), reason=doc.get("reason"),
+                   tickers=tickers)  # fmt: skip
+
+    def save(self, path: Path) -> None:
+        """Written to a temporary file that then replaces the state, so a stopped run never leaves half a file."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(asdict(self), sort_keys=True), encoding="utf-8")
+        os.replace(tmp, path)

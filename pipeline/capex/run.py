@@ -263,8 +263,6 @@ def last_friday(d: date) -> date:
 
 def run_index(conn: psycopg.Connection[Any], week: date, http: HttpClient, nse: NseClient | None, router: Router,
               settings: Settings) -> CapexStats:  # fmt: skip
-    from pipeline.facts.run import scope as text_scope
-
     stats = CapexStats(week.isoformat())
     cfg = config()
     companies = [c for c in repo.companies(conn) if c.id is not None]
@@ -275,8 +273,9 @@ def run_index(conn: psycopg.Connection[Any], week: date, http: HttpClient, nse: 
     with conn.transaction():
         propose_us(conn, companies, cfg, facts_repo.ledger_companies(conn), stats)
     with conn.transaction():
-        cross_border(conn, router, nse, companies, set(text_scope(conn, companies)), week, cfg,
-                     settings.cache_dir / "raw", stats)  # fmt: skip
+        # P-06's scope: the desk's companies and the theses (the text run's scope before docs/SPEC_ISSUES.md 50)
+        scope = {c.id for c in companies if c.capex_desk and c.id is not None} | repo.research_company_ids(conn)
+        cross_border(conn, router, nse, companies, scope, week, cfg, settings.cache_dir / "raw", stats)
     stats.errors = stats.errors[:50]
     return stats
 

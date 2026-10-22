@@ -1,9 +1,9 @@
 """The Signal Lab runner against the database (BRIEF §4.10): companies and every fundamentals version read through
-as_of, prices from a Stooq-format bulk zip, lab_results written, the report and a proposal for every weight."""
+as_of, prices from the Lab's month-price asset (pipeline/lab/prices.py), lab_results written, the report and a
+proposal for every weight."""
 
 from __future__ import annotations
 
-import zipfile
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -13,11 +13,13 @@ from typing import Any
 import psycopg
 import pytest
 import yaml
+from psycopg.types.json import Jsonb
 
 from pipeline.db import repo
 from pipeline.db.models import Company
 from pipeline.db.weights import INITIAL_REASON, MERGED_BY, MERGED_REASON, WeightsMismatch, record_weights_in_use
-from pipeline.lab import run
+from pipeline.lab import price_history, run
+from pipeline.lab.prices import write_month_csv
 from pipeline.lab.proposals import Proposal
 from pipeline.lab.report import CAVEATS
 
@@ -26,13 +28,9 @@ from ..lab.conftest import load_generator
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def bulk_zip(path: Path, bars: dict[str, list[Any]]) -> Path:
-    with zipfile.ZipFile(path, "w") as z:
-        for ticker, rows in bars.items():
-            lines = ["<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>"]
-            lines += [f"{ticker}.US,D,{b.month_end:%Y%m%d},000000,{b.close},{b.close},{b.close},{b.close},1000,0"
-                      for b in rows]  # fmt: skip
-            z.writestr(f"data/daily/us/nasdaq stocks/1/{ticker.lower()}.us.txt", "\n".join(lines) + "\n")
+def price_asset(path: Path, bars: dict[str, list[Any]]) -> Path:
+    """The F-LAB month bars as the asset lab-prices.yml builds (ticker,month_end,close,high,low, gzip)."""
+    write_month_csv(path, bars)
     return path
 
 
@@ -44,9 +42,11 @@ def test_lab_run_on_f_lab_companies(conn: psycopg.Connection[Any], tmp_path: Pat
     ids = {c.ticker: c.id for c in repo.companies(conn, market="us")}
     rows = [v.model_copy(update={"company_id": ids[c.ticker]}) for c in data.companies for v in data.versions[c.id]]
     repo.insert_fundamentals(conn, rows)
-    prices = bulk_zip(tmp_path / "d_us_txt.zip", {c.ticker: data.bars[c.id] for c in data.companies if c.ticker})
-    text, props, panel_rows, stats = run.run(conn, "us", prices, date(2026, 9, 25))
-    assert len(panel_rows) == 20 * 60 and {s.horizon for s in stats} == {12, 24, 36}
+    prices = price_asset(tmp_path / "us_month_prices.csv.gz", {c.ticker: data.bars[c.id] for c in data.companies
+                                                                if c.ticker})  # fmt: skip
+    panel = tmp_path / "panel.parquet"  # written as soon as it is built (lab.yml uploads it on always())
+    text, props, panel_rows, stats = run.run(conn, "us", prices, date(2026, 9, 25), panel_out=panel)
+    assert len(panel_rows) == 20 * 60 and {s.horizon for s in stats} == {12, 24, 36} and panel.stat().st_size > 0
     stored = conn.execute("select count(*), count(distinct signal_id) from lab_results where market = 'us'").fetchone()
     assert stored is not None and stored[0] > 0 and stored[1] >= 12 + 6 + 2 * 10  # signals, L1-L6, two decile sets
     assert all(c in text for c in CAVEATS) and text.startswith("# Signal Lab report")
@@ -102,7 +102,8 @@ def test_the_lab_population_is_the_universe(conn: psycopg.Connection[Any], tmp_p
                 continue  # its last 10-Q: 2017-01-30
             rows.append(v.model_copy(update={"company_id": ids[c.ticker]}))
     repo.insert_fundamentals(conn, rows)
-    prices = bulk_zip(tmp_path / "d_us_txt.zip", {c.ticker: data.bars[c.id] for c in data.companies if c.ticker})
+    prices = price_asset(tmp_path / "us_month_prices.csv.gz", {c.ticker: data.bars[c.id] for c in data.companies
+                                                                if c.ticker})  # fmt: skip
     today = date(2026, 9, 25)
     loaded = run.load(conn, "us", prices, today)
     kept = {f"SYN{k:03d}" for k in range(4, 12)}
@@ -196,3 +197,23 @@ def test_a_run_off_main_never_approves_weights(conn: psycopg.Connection[Any], mo
     assert record_weights_in_use(conn, proposal) is False
     by, at = conn.execute(sql, (proposal["version"],)).fetchone() or (None, None)
     assert by == MERGED_BY and at is not None
+
+
+def test_the_digest_reads_the_downloads_pending_tickers(conn: psycopg.Connection[Any]) -> None:
+    """PR 3 review spec-F2: the digest's minutes projection reads the latest finished lab_prices run that recorded its
+    progress (a run that failed before recording any, or one still running, is passed over); before any run, every
+    ticker the Lab reads plus the probe; none once the download is complete."""
+    repo.upsert_us_companies(conn, [Company(market="us", name=f"{t} Co", cik=f"{990000 + i:010d}", ticker=t)
+                                    for i, t in enumerate(("AAA", "BBB", "CCC"))])  # fmt: skip
+    assert price_history.pending_tickers(conn) == 3 + 1
+    runs = "insert into runs (kind, started_at, finished_at, status, stats) values ('lab_prices', %s, %s, %s, %s)"
+    conn.execute(runs, ("2026-11-01 10:07+00", "2026-11-01 11:37+00", "partial",
+                        Jsonb({"status": "partial", "tickers": 5200, "pending": 4550})))  # fmt: skip
+    conn.execute(runs, ("2026-11-02 10:07+00", "2026-11-02 10:08+00", "failed", Jsonb({})))
+    conn.execute(runs, ("2026-11-03 10:07+00", None, "running", Jsonb({})))
+    assert repo.latest_run_stats(conn, "lab_prices", "tickers") == {"status": "partial", "tickers": 5200,
+                                                                     "pending": 4550}  # fmt: skip
+    assert price_history.pending_tickers(conn) == 4550
+    conn.execute(runs, ("2026-11-10 10:07+00", "2026-11-10 11:30+00", "ok",
+                        Jsonb({"status": "complete", "tickers": 5200, "pending": 0})))  # fmt: skip
+    assert price_history.pending_tickers(conn) == 0

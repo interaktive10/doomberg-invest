@@ -84,17 +84,6 @@ def _needs_db_and_f_in() -> str | None:
     return _needs_f_in() or _needs_database()
 
 
-LAB_PRICES = ROOT / ".cache" / "lab" / "d_us_txt.zip"
-
-
-def _needs_lab_prices() -> str | None:
-    """M8-05: the Stooq bulk daily file is downloaded by hand once (CAPTCHA) into the `lab-data-v1` release; lab.yml
-    fetches it to .cache/lab/."""
-    if not LAB_PRICES.exists():
-        return "human:Stooq bulk file d_us_txt.zip not attached to the lab-data-v1 release (BRIEF §2.7)"
-    return _needs_database()
-
-
 CASSETTES = ROOT / "pipeline" / "llm" / "cassettes"
 
 
@@ -519,9 +508,9 @@ CHECKS: list[Check] = [
     Check(
         "M8-05",
         "m8",
-        "a real run needs the Stooq bulk release asset (BLOCKED(human) until it exists)",
-        ["uv", "run", "--frozen", "python", "-m", "pipeline.lab.run", "--market", "us", "--prices", str(LAB_PRICES)],
-        requires=_needs_lab_prices,
+        "the Lab's prices come from Twelve Data with no human step (lab-prices.yml, resumable); a real run is blocked, "
+        "with the download's reason, until they are complete",
+        [*PYTEST, "tests/lab/test_price_history.py", "tests/lab/test_run.py", "tests/prices/test_twelvedata.py"],
     ),
 ]
 

@@ -1,10 +1,12 @@
 name: lab
-# BRIEF §4.10 Signal Lab (manual; US first; <= 90 min): the Stooq bulk daily file from the `lab-data-v1` release (Manzoor
-# downloads it once from stooq.com: it has a CAPTCHA) -> the point-in-time monthly panel -> events and statistics ->
-# lab_results, docs/LAB_REPORT.md and the §4.10.5 weight proposals. Two PRs: the report, and config/weights.yaml
-# alone (a protected path: it passes the `protected` check only with the human-approved label). The panel is kept as
-# a release asset (§2.8). PRs opened with the workflow token start no CI run: close and reopen them, or push to them,
-# to run the checks.
+# BRIEF §4.10 Signal Lab (US first): the month-end prices lab-prices.yml downloaded from Twelve Data (the `lab-data-v1`
+# release; docs/SPEC_ISSUES.md 51) -> the point-in-time monthly panel -> events and statistics -> lab_results,
+# docs/LAB_REPORT.md and the §4.10.5 weight proposals. lab-prices.yml dispatches the first run once its download is
+# complete; later runs are manual (there is no quarterly re-run). The Actions minutes gate goes first. The panel is kept
+# as a release asset (§2.8) as soon as it is built, also when a later step fails. Two PRs: the report, and
+# config/weights.yaml alone (a protected path: it passes the `protected` check only with the human-approved label),
+# whose body gives each signal's verdict. PRs opened with the workflow token start no CI run: close and reopen them to
+# run the checks.
 on:
   workflow_dispatch:
     inputs:
@@ -21,11 +23,12 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  actions: read   # the minutes gate reads this repository's runs (pipeline/digest/minutes.py)
 
 jobs:
   lab:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180   # 60-180 minutes on the 2-core runner (SPEC_ISSUES 51); the gate reserves all of it
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GH_TOKEN: ${{ github.token }}
@@ -37,25 +40,31 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
-      - name: Stooq bulk file (the lab-data-v1 release)
+      - name: Actions minutes gate (this run may take its whole limit; a refusal is a notice)
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --frozen python -m pipeline.digest.minutes gate --need 180
+      - name: The Lab's prices and the download's state (the lab-data-v1 release)
         id: prices
+        if: steps.gate.outputs.allowed == 'true'
         run: |
           mkdir -p .cache/lab
           if [ -z "$DATABASE_URL" ]; then
             echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
-          elif gh release download lab-data-v1 --pattern 'd_us_txt.zip' --dir .cache/lab --clobber; then
+          elif gh release download lab-data-v1 --pattern 'us_month_prices.csv.gz' --pattern 'us_prices_state.json' --dir .cache/lab --clobber; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::BLOCKED(human): attach the Stooq bulk file d_us_txt.zip to the lab-data-v1 release (BRIEF §2.7)"
+            echo "::notice::no Lab prices in the lab-data-v1 release yet: lab-prices.yml downloads them from Twelve Data"
           fi
       - name: Migrations
         if: steps.prices.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.db.migrate
-      - name: Lab run
+      - name: Lab run (blocked, exit 3, until the download is complete)
         if: steps.prices.outputs.ok == 'true'
-        run: uv run --frozen python -m pipeline.lab.run --market "$MARKET" --workers 4 --propose
-      - name: Keep the panel (release asset)
-        if: steps.prices.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.lab.run --market "$MARKET" --workers 2 --propose --pr-body "$RUNNER_TEMP/weights_pr.md"
+      - name: Keep the panel (release asset; written as soon as it is built)
+        if: always() && steps.prices.outputs.ok == 'true' && hashFiles('.cache/lab/panel.parquet') != ''
         run: gh release upload lab-data-v1 .cache/lab/panel.parquet --clobber
       - name: Open the report PR and the weights PR
         if: steps.prices.outputs.ok == 'true'
@@ -81,7 +90,5 @@ jobs:
             git add config/weights.yaml
             git commit -m "[Lab] Weight proposals $stamp ($MARKET)"
             git push -u origin HEAD
-            body="BRIEF §4.10.5 proposals from run ${GITHUB_RUN_ID}; the reasons per weight are in the report PR."
-            gh pr create --title "[Lab] Weight proposals $stamp ($MARKET)" \
-              --body "$body config/weights.yaml is protected: it needs the human-approved label. If you edit a weight, also change \`version:\` (the proposal's version is stored as proposed; weights.yml fails on edited weights under the same version)."
+            gh pr create --title "[Lab] Weight proposals $stamp ($MARKET)" --body-file "$RUNNER_TEMP/weights_pr.md"
           fi

@@ -1,5 +1,5 @@
 """A provider that answers every M5 prompt the way a well-behaved model would, from F-SYN's ground truth (P-01) and
-simple rules (P-02, P-03, P-06, P-07); `fail=True` makes it answer 429 to everything (the day's quota is out)."""
+simple rules (P-02, P-06, P-07); `fail=True` makes it answer 429 to everything (the day's quota is out)."""
 
 from __future__ import annotations
 
@@ -26,21 +26,6 @@ def _p02(req: Request) -> dict[str, Any]:
                     or normalize_name(c["name"]) in normalize_name(n)), None)  # fmt: skip
         out.append({"name": n, "candidate_id": hit["id"] if hit else None, "kind": "company", "confidence": 0.9})
     return {"matches": out}
-
-
-def _p03(req: Request) -> dict[str, Any]:
-    items = json.loads(req.user.split("PARAGRAPHS: ", 1)[1])
-    out = []
-    for it in items:
-        t, tags = it["text"].lower(), []
-        if "data center" in t:
-            tags.append("data_center")
-        if " ai " in f" {t} " or "ai computing" in t:
-            tags.append("ai_demand")
-        if "transformer" in t or "turbine" in t:
-            tags += ["supply_chain", "power_supply"]
-        out.append({"id": it["id"], "tags": tags})
-    return {"items": out}
 
 
 def _p06(req: Request) -> dict[str, Any]:
@@ -78,5 +63,5 @@ class MultiOracle:
             raise RateLimited("gemini: 429")
         if req.prompt_id == "P-01":
             return Oracle(self.truth, noise=False).complete(req)
-        answer = {"P-02": _p02, "P-03": _p03, "P-06": _p06, "P-07": _p07}[req.prompt_id](req)
+        answer = {"P-02": _p02, "P-06": _p06, "P-07": _p07}[req.prompt_id](req)
         return Completion(answer, 200, 50)

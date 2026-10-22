@@ -24,7 +24,6 @@ def blocks(title: str) -> list[str]:
         ("P-01.system.txt", "### P-01 EXTRACT_FACTS", 0),
         ("P-01.user.txt", "### P-01 EXTRACT_FACTS", 1),
         ("P-02.system.txt", "### P-02 ENTITY_NORMALIZE", 0),
-        ("P-03.system.txt", "### P-03 RISK_TAGS", 0),
         ("P-04.system.txt", "### P-04 THESIS_CARD", 0),
         ("P-05.system.txt", "### P-05 CLAIM_SUPPORT · free", 0),
         ("P-06.system.txt", "### P-06 CROSS_BORDER_MAP", 0),
@@ -38,7 +37,6 @@ def test_prompt_text_is_verbatim(file: str, title: str, k: int) -> None:
 @pytest.mark.parametrize(
     ("pid", "line"),
     [("P-02", "`NAMES: {{names}}` and `CANDIDATES: {{candidates}}`"),
-     ("P-03", "`ALLOWED: {{tags}}` and `PARAGRAPHS: {{id_text_list}}`"),
      ("P-05", "`SENTENCE: {{sentence}}`, then `QUOTES: {{quotes}}`, then `COMPUTED: {{computed}}`")],
 )  # fmt: skip
 def test_user_messages_carry_the_briefs_fields_in_order(pid: str, line: str) -> None:
