@@ -218,6 +218,26 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     assert (nxt.gdelt_queried, nxt.gdelt_reused) == (0, 3)
 
 
+def test_a_us_only_run_skips_india_entirely(conn: psycopg.Connection[Any]) -> None:
+    """Overhaul PR 1 (docs/SPEC_ISSUES.md 46): `--markets us` writes no India rows (signals, scores, the Company page's
+    series), and the runs row says which markets ran; without it both markets are scored, as before."""
+    week = date(2026, 9, 18)
+    us = add(conn, "0000018230")
+    repo.upsert_in_companies(conn, [Company(market="in", name="Pledged Ltd", isin="INE000X01011", nse_symbol="PLDG")])
+    ind = repo.company_ids_by(conn, "nse_symbol")["PLDG"]
+
+    def written() -> dict[str, set[uuid.UUID]]:
+        return {t: {r[0] for r in conn.execute(f"select company_id from {t} where week_end = %s", (week,))}
+                for t in ("signal_values", "scores", "company_series")}  # fmt: skip
+
+    stats = weekly.run(conn, week, http=None, markets=("us",))
+    assert (stats.markets, stats.companies) == (["us"], 1)
+    assert written() == {"signal_values": {us}, "scores": {us}, "company_series": {us}}
+    both = weekly.run(conn, week, http=None)
+    assert (both.markets, both.companies) == (["us", "in"], 2)
+    assert written() == {"signal_values": {us, ind}, "scores": {us, ind}, "company_series": {us, ind}}
+
+
 def test_manual_price_import_when_the_price_source_fails(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     week = date(2026, 9, 18)
     cid = add(conn, "0001050915")

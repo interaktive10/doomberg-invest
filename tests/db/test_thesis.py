@@ -321,7 +321,7 @@ def test_digest_issue_body_snapshot(conn: psycopg.Connection[Any]) -> None:
     conn.execute("insert into capex_briefs (week_end, body_md) values (%s, %s)", (W, brief))
     conn.execute(
         "insert into source_health (source, last_success, last_error, stale) values "
-        "('sec', '2026-09-18 06:00+00', null, false), ('nse', '2026-09-07 06:00+00', null, false), "
+        "('sec', '2026-09-18 06:00+00', null, false), ('twelvedata', '2026-09-07 06:00+00', null, false), "
         "('stooq', null, 'stale: 13 downloads failed: stooq PWR: Exceeded the daily hits limit', true)"
     )
     conn.execute(
@@ -434,12 +434,36 @@ def test_the_digest_without_scores_says_the_candidates_are_missing(conn: psycopg
     assert "**Stale data:** sec (no success for 17 days; SLA 8)" in body and "## Source health" in body
 
 
+@pytest.mark.parametrize(("env", "why"), [
+    ({"US_RESULT": "failure", "US_RAN": "true", "SCORES_RESULT": "skipped"},
+     "the US data run failed, so nothing was scored"),
+    ({"US_RESULT": "success", "US_RAN": "", "SCORES_RESULT": "skipped"},
+     "the US data run skipped its steps (a secret is missing), so nothing was scored"),
+    ({"US_RESULT": "success", "US_RAN": "true", "SCORES_RESULT": "cancelled"},
+     "the scoring run was cancelled or timed out"),
+    ({}, "the scoring run didn't finish"),
+], ids=["us-failed", "us-skipped", "scores-timed-out", "by-hand"])  # fmt: skip
+def test_the_digest_without_scores_says_why(conn: psycopg.Connection[Any], env: dict[str, str], why: str) -> None:
+    """Overhaul PR 1 review (actions-GHA-1): scores run only after a us job that ran and succeeded, so a week without
+    scores is most often one whose US run failed; weekly.yml passes the jobs' results and the digest names the job
+    (tests/digest/test_unscored.py has every case)."""
+    _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC), why_unscored=digest.unscored_why(env))
+    assert (f"**Candidates are missing this week:** no scores were written for 2026-09-18 ({why}; see source health "
+            "below).") in body  # fmt: skip
+
+
 @pytest.mark.parametrize(("nse", "banner"), [("2026-09-18 06:00+00", None), (None, "nse (stale)")],
                          ids=["nse-fine", "nse-stale"])  # fmt: skip
 def test_fallback_banner_only_when_its_primary_is_down(conn: psycopg.Connection[Any], nse: str | None,
-                                                       banner: str | None) -> None:  # fmt: skip
+                                                       banner: str | None,
+                                                       monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
     """M6 review R2-F5: BSE records a success only in weeks it stood in for NSE, so while NSE is within its SLA an
-    old BSE date isn't stale data (the table still lists it); when NSE is stale, the banner names NSE."""
+    old BSE date isn't stale data (the table still lists it); when NSE is stale, the banner names NSE. India's rows
+    are out of config/staleness.yaml while it is paused (docs/SPEC_ISSUES.md 46): this is the config once they're
+    back."""
+    sla = digest.sla_days()
+    monkeypatch.setattr(digest, "sla_days", lambda root=None: {**sla, "nse": 10, "bse": 10})
+    monkeypatch.setattr(digest, "fallbacks", lambda root=None: {"bse": "nse"})
     conn.execute("insert into source_health (source, last_success, last_error, stale) values "
                  "('bse', '2026-08-01 06:00+00', null, false), ('nse', %s, %s, %s)",
                  (nse, None if nse else "stale: 3 bhavcopy downloads failed", nse is None))  # fmt: skip

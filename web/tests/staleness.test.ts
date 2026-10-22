@@ -25,20 +25,31 @@ describe("staleness (BRIEF §2.7; config/staleness.yaml, as the digest reads it)
     expect(sourceStatus(rows[2] as SourceHealth, rows, now)).toBe("ok");
   });
 
-  it("doesn't flag BSE while NSE is fine, and does when NSE is down (M6 review R2-F5)", () => {
-    const fine = [at("bse", "2026-08-01T06:00:00Z"), at("nse", "2026-09-18T06:00:00Z")];
-    expect(staleSources(fine, now)).toEqual([]);
-    expect(sourceStatus(fine[0] as SourceHealth, fine, now)).toBe("fallback, not needed (nse ok)");
-    const down = [at("bse", "2026-08-01T06:00:00Z"), at("nse", null, true)];
-    expect(staleSources(down, now)).toEqual(["bse (no success for 48 days; SLA 10)", "nse (stale)"]);
+  it("raises no alarm for a paused India's sources (docs/SPEC_ISSUES.md 46)", () => {
+    expect(Object.keys(SLA_DAYS)).not.toContain("nse");
+    expect(Object.keys(SLA_DAYS)).not.toContain("bse");
+    expect(FALLBACK_OF).toEqual({}); // BSE stands in for NSE again when India restarts (M6 review R2-F5)
+    const paused = [at("bse", "2026-08-01T06:00:00Z"), at("nse", "2026-08-01T06:00:00Z")];
+    expect(staleSources(paused, now)).toEqual([]);
+    expect(paused.map((s) => sourceStatus(s, paused, now))).toEqual(["ok", "ok"]);
   });
 
-  it("counts a resting fallback as on time, like the banner (Settings 'Sources on time')", () => {
-    const fine = [at("nse", "2026-09-18T06:00:00Z"), at("bse", "2026-08-01T06:00:00Z")];
+  it("reads production's never-succeeded bse row as not on time, without a banner (PR 1 review pipeline-F2)", () => {
+    // BSE records a success only in a week it stood in for NSE, and production's row never has. Without its
+    // fallback_of entry it reads "never succeeded" (the digest's table says the same) until Settings lists US
+    // sources only (overhaul PR 4); docs/SPEC_ISSUES.md 46.
+    const prod = [at("bse", null), at("nse", "2026-09-12T06:00:00Z"), at("sec", "2026-09-18T06:00:00Z")];
+    expect(staleSources(prod, now)).toEqual([]);
+    expect(prod.map((s) => sourceStatus(s, prod, now))).toEqual(["never succeeded", "ok", "ok"]);
+    expect(onTimeCount(prod, now)).toBe(2);
+  });
+
+  it("counts the sources on time like the banner (Settings 'Sources on time')", () => {
+    const fine = [at("sec", "2026-09-18T06:00:00Z"), at("nse", "2026-08-01T06:00:00Z")];
     expect(onTimeCount(fine, now)).toBe(2);
     const oneStale = [at("sec", "2026-09-18T06:00:00Z"), at("twelvedata", "2026-09-18T06:00:00Z", true)];
     expect(onTimeCount(oneStale, now)).toBe(1);
-    const nseDown = [at("nse", null, true), at("bse", "2026-08-01T06:00:00Z")];
-    expect(onTimeCount(nseDown, now)).toBe(0);
+    const oneLate = [at("sec", "2026-09-01T06:00:00Z"), at("twelvedata", "2026-09-18T06:00:00Z")];
+    expect(onTimeCount(oneLate, now)).toBe(1);
   });
 });

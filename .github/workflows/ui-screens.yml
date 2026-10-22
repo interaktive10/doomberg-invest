@@ -1,11 +1,8 @@
 name: ui-screens
 # Screenshots of every web screen (desktop 1280 px, phone 390 px), first on an empty database and then on the e2e seed
-# data, published to the ui-screens branch for reviewing the UI (web/e2e/screens.shot.ts). Runs on pushes to web UI
-# branches and on demand.
+# data, published to the ui-screens branch for reviewing the UI (web/e2e/screens.shot.ts). On demand only (pick the
+# branch when dispatching): a push runs nothing, so a UI branch costs no minutes until its screens are wanted.
 on:
-  push:
-    branches: [web-polish]
-    paths: ["web/**", ".github/workflows/ui-screens.yml"]
   workflow_dispatch:
 
 concurrency:
@@ -17,7 +14,7 @@ permissions:
 
 jobs:
   screens:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
