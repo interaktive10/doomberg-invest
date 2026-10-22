@@ -292,3 +292,4 @@
 2026-10-20 PR 4 web: /screener and /capex redirect temporarily (307) in next.config.ts; vercel.json and outputFileTracingRoot are unchanged.
 2026-10-20 PR 4 Company: a card's s: citation links to the Company page top (the signal timeline is gone).
 2026-10-20 SPEC_ISSUES 52: the digest's stale banner names only sources with an SLA in config/staleness.yaml (digest.banner skips the rest), like the app's Home; a dead source's leftover health row (yahoo, stooq, fred, eia, gdelt) stays in the Source health table until PR 5 makes it one line.
+2026-10-22 Actions meter: other repos budgeted at actions.other_repos_per_day (31; measured Oct 1-22: account 2,047 = doomberg-invest 1,377 + splay 325 + monarch-pearl 194 + murmur 125 + 26) for every day of the cycle, since a hand-copied other_repos stays 0 in practice; lab-prices runs in any month (cron 7 10 * * 0-4) so the gate can spread the download over cycles.

@@ -227,14 +227,16 @@ def test_the_gate_writes_allowed_and_exits_0(monkeypatch: pytest.MonkeyPatch, tm
                                              capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
     code, output, printed = gate_run(monkeypatch, tmp_path, MockRuns(runs={1: [job(600)]}), capsys)
     assert code == 0 and output == "earlier=1\nallowed=true\n"
-    assert printed.count("\n") == 1 and printed.startswith("Actions minutes: 10 used") and "allowed" in printed
+    b = Budget.load()  # the real config: the other repos' daily rate counts too
+    assert printed.count("\n") == 1 and printed.startswith("Actions minutes: ") and "allowed" in printed
+    assert " used this cycle (since " in printed and "other repos ahead" in printed and b.other_repos_per_day > 0
 
 
 def test_a_refused_gate_is_a_notice_and_exits_0(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
                                                 capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
     code, output, printed = gate_run(monkeypatch, tmp_path, MockRuns(runs={1: [job(1700 * 60)]}), capsys)
     assert code == 0 and output == "earlier=1\nallowed=false\n"
-    assert printed.count("\n") == 1 and printed.startswith("::notice::Actions minutes: 1,700 used")
+    assert printed.count("\n") == 1 and printed.startswith("::notice::Actions minutes: ") and "refused" in printed
 
 
 def test_a_gate_that_cannot_read_the_runs_refuses(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
@@ -274,9 +276,22 @@ def test_the_digest_says_when_the_minutes_cannot_be_read(tmp_path: Path) -> None
     ]
     mock = Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path)
     [line] = minutes.digest_lines(mock, HttpClient(mock), datetime(2026, 11, 17, 12, tzinfo=UTC), env={})
-    assert line.startswith(f"Actions: {Budget.load().other_repos:,} of 2,000 this cycle, projected ")  # no runs here
+    b = Budget.load()  # no runs here: only the other repos, 16 days into the cycle at their daily rate
+    assert line.startswith(f"Actions: {b.other_repos + 16 * b.other_repos_per_day:,} of 2,000 this cycle, projected ")
 
 
 def test_the_fixtures_are_valid_json() -> None:
     for f in FIX.glob("*.json"):
         json.loads(f.read_text(encoding="utf-8"))
+
+
+def test_other_repos_are_budgeted_per_day_of_the_cycle(tmp_path: Path) -> None:
+    """The token reads only this repository: the others are budgeted at a daily rate, the days so far as used and the
+    rest of the cycle in the projection (Oct 2026: the others' 670 minutes put the account over 2,000)."""
+    budget = replace(BUDGET, other_repos=5, other_repos_per_day=31)
+    meter = minutes.measure(MockRuns(runs={1: [job(600)]}), budget, datetime(2026, 11, 11, 9, tzinfo=UTC), tmp_path)
+    assert (meter.others_so_far, meter.others_ahead) == (31 * 10, 31 * 20)
+    assert meter.used == 10 + 5 + 310 and meter.projected() == meter.used + 620
+    ok, line = minutes.gate(meter, 120)
+    assert "315 of them in other repos) + 620 other repos ahead" in line
+    assert minutes.Budget.load().other_repos_per_day == 31

@@ -37,7 +37,9 @@ text_daily_limits:
 actions:
   included: 2000
   cycle_day: 1       # Manzoor: copy from github.com/settings/billing
-  other_repos: 0     # Manzoor: copy from github.com/settings/billing
+  other_repos: 0     # extra minutes other repos are known to have used this cycle, on top of the daily rate below
+  other_repos_per_day: 31  # the other private repos' rate, budgeted for every day of the cycle (this token can't read
+                           # them): Oct 1-22, 2026 they used 670 (splay 325, monarch-pearl 194, murmur 125, others 26)
   gate_max: 1900
   reserve: 180       # minutes no schedule shows: CI, thesis-ingest, a re-run
   warn_above: 1600   # the digest's warning
