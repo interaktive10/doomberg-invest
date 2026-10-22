@@ -70,12 +70,12 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
     expect(citeView("f:ffff", co, facts).label).toBe("fact");
     expect(citeView("m:revenue:2026-03-31", co, facts)).toEqual({ label: "Revenue 2026-03-31", title: "Metric revenue:2026-03-31", href: `/company/${co}#fundamentals` });
     expect(citeView("m:revenue_ttm_yoy", co, facts).label).toBe("Revenue ttm yoy");
-    expect(citeView("s:S1", co, facts)).toEqual({ label: "S1", title: "Order-book acceleration", href: `/company/${co}` });
+    expect(citeView("s:S1", co, facts)).toEqual({ label: "S1", title: "Order-book acceleration", href: `/company/${co}#why` });
     expect(citeView("s:R3", co, facts).title).toBe("Auditor change, late filing or going-concern language");
-    expect(citeView("c:C2", co, facts)).toMatchObject({ label: "C2", href: `/company/${co}#context` });
+    expect(citeView("c:C2", co, facts)).toMatchObject({ label: "C2", href: `/company/${co}#why` });
     expect(citeView("c:C2", null, facts).href).toBeNull();
-    expect(citeView("c:C1", co, facts)).toEqual({ label: "C1", title: "Valuation percentile vs its own history", href: `/company/${co}` });
-    expect(citeView("c:C3", co, facts).href).toBe(`/company/${co}`);
+    expect(citeView("c:C1", co, facts)).toEqual({ label: "C1", title: "Valuation percentile vs its own history", href: `/company/${co}#why` });
+    expect(citeView("c:C3", co, facts).href).toBe(`/company/${co}#why`);
     expect(citeView("c:C1", null, facts).href).toBeNull();
   });
 
@@ -102,5 +102,16 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
     });
     expect(tree.children[1]).toEqual({ type: "element", tagName: "code", children: [{ type: "text", value: "[f:x]" }] });
     expect(tree.children[2]).toEqual({ type: "element", tagName: "p", children: [{ type: "text", value: "[not a cite] [x:y]" }] });
+  });
+});
+
+describe("citation anchors (integration review web-WEB-1)", () => {
+  it("point only at sections the Company page has", () => {
+    const page = repoFile("web/app/(app)/company/[id]/page.tsx") + repoFile("web/components/score.tsx");
+    const co = "00000000-0000-4000-8000-000000000001";
+    for (const id of ["s:S1", "s:R2", "c:C1", "c:C2", "c:C3", "m:revenue"]) {
+      const hash = (citeView(id, co, []).href ?? "").split("#")[1];
+      expect([id, page.includes(`id="${hash}"`) || page.includes(`["${hash}",`)]).toEqual([id, true]);
+    }
   });
 });

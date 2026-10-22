@@ -89,11 +89,11 @@ export function citeView(id: string, companyId: string | null, facts: readonly s
       return { label: dated ? `${name} ${dated[2]}` : name, title: `Metric ${body}`, href: at("fundamentals") };
     }
     case "s":
-      // the Company page has no signal timeline any more (overhaul PR 4): its score line is at the top
-      return { label: body, title: SIGNAL_NAME[body] ?? RED_FLAG_NAME[body] ?? `Signal ${body}`, href: page };
+      // the fired signals and the red flags are listed in the Company page's Why this score panel (overhaul PR 5)
+      return { label: body, title: SIGNAL_NAME[body] ?? RED_FLAG_NAME[body] ?? `Signal ${body}`, href: at("why") };
     case "c":
-      // the Company page's Context section shows only the reverse DCF (C2), and only when it has a row
-      return { label: body, title: CONTEXT_NAME[body] ?? `Context ${body}`, href: body === "C2" ? at("context") : page };
+      // so is Gap's split into C1-C3, the reverse DCF folded into C2 (overhaul PR 5; integration review web-WEB-1)
+      return { label: body, title: CONTEXT_NAME[body] ?? `Context ${body}`, href: at("why") };
     default:
       return { label: id, title: id, href: null };
   }

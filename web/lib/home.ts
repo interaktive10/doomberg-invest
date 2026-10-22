@@ -1,4 +1,4 @@
-import { pickSection } from "@/lib/cards";
+import { pickSection, stripSection, stripTitle } from "@/lib/cards";
 
 // Home (overhaul PR 5; BRIEF §6): the funnel and What changed come from the digest's body_md, the same text as the
 // GitHub issue. pipeline/digest/weekly.py writes "## This week" (one funnel paragraph per market), "## To do",
@@ -12,9 +12,12 @@ export function localLinks(md: string): string {
   return md.replace(/\]\((?:https?:\/\/[^\s/)]+)?(\/company\/[0-9a-f-]{36})\)/gi, "]($1)");
 }
 
-export function homeSections(md: string): { funnel: string; changed: string } {
-  return {
-    funnel: pickSection(md, "This week"), // in a week without scores, the sentence saying why
-    changed: localLinks(pickSection(md, "What changed")),
-  };
+/** `legacy`: a digest written before this format (no This week, no What changed: the latest row until the first
+ * weekly run after overhaul PR 5) is shown as it is, less its source and quota tables (integration review web-WEB-2). */
+export function homeSections(md: string): { funnel: string; changed: string; legacy: string } {
+  const funnel = pickSection(md, "This week"); // in a week without scores, the sentence saying why
+  const changed = localLinks(pickSection(md, "What changed"));
+  const old = md.trim() !== "" && !funnel && !changed;
+  const legacy = old ? localLinks(stripTitle(stripSection(stripSection(md, "Source health"), "LLM quota use")).trim()) : "";
+  return { funnel, changed, legacy };
 }

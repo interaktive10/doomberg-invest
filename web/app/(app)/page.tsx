@@ -20,7 +20,7 @@ export default async function Home() {
   const all = markMoved(first, await ensureReviews(first)); // as the Theses screen does, so both list the same
   const needs = all.filter((t) => group(t) === "needs");
   const figures = await thesisFigures(needs);
-  const { funnel, changed } = homeSections(digest?.body_md ?? "");
+  const { funnel, changed, legacy } = homeSections(digest?.body_md ?? "");
   const now = new Date();
   return (
     <Page title="This week" description={digest ? `${digest.title} · week ending ${digest.week_end}` : "No digest yet."}>
@@ -32,13 +32,21 @@ export default async function Home() {
           <div className="num text-[13px] text-fg [&_.prose-md]:max-w-none [&_.prose-md]:text-[13px] [&_.prose-md_p]:my-0">
             <Markdown text={funnel} />
           </div>
+        ) : legacy ? (
+          <p className="text-[13px] text-muted">This digest predates the funnel line; Saturday's weekly run writes it.</p>
         ) : (
           <p className="text-[13px] text-muted">No digest yet. The weekly run writes one each Saturday, after it scores the universe.</p>
         )}
       </section>
       <GroupSection group="needs" title="To do" id="todo" list={needs} figures={figures} />
       <Section title="What changed" id="changed" description="Each company's biggest change this week and why, then new verified facts and guidance or backlog changes.">
-        {changed ? <Markdown text={changed} /> : <Empty>Nothing to compare yet: What changed comes with the weekly digest.</Empty>}
+        {changed ? (
+          <Markdown text={changed} />
+        ) : legacy ? (
+          <Markdown text={legacy} />
+        ) : (
+          <Empty>Nothing to compare yet: What changed comes with the weekly digest.</Empty>
+        )}
       </Section>
       {lateSources(sources, now).length > 0 ? (
         <div className="overflow-hidden rounded-md">

@@ -62,9 +62,21 @@ describe("Home's cut of the digest", () => {
     expect(homeSections(unscored).funnel).toContain("no scores were written for 2026-09-18");
   });
 
-  it("is empty without a digest or without the sections", () => {
-    expect(homeSections("")).toEqual({ funnel: "", changed: "" });
-    expect(homeSections("## Source health\n\n| a |")).toEqual({ funnel: "", changed: "" });
+  it("is empty without a digest", () => {
+    expect(homeSections("")).toEqual({ funnel: "", changed: "", legacy: "" });
+  });
+
+  it("shows a digest written before this format as it is, less its source and quota tables (web-WEB-2)", () => {
+    const old = "# Doomberg weekly — 2026-W42\n\n## New candidates\n\n- [CELH](https://x.example/company/" +
+      "00000000-0000-4000-8000-000000000001) Evidence 62\n\n## Source health\n\n| a |\n\n## LLM quota use\n\n| b |\n";
+    const s = homeSections(old);
+    expect([s.funnel, s.changed]).toEqual(["", ""]);
+    expect(s.legacy).toContain("## New candidates");
+    expect(s.legacy).toContain("[CELH](/company/00000000-0000-4000-8000-000000000001)");
+    expect(s.legacy).not.toContain("Source health");
+    expect(s.legacy).not.toContain("LLM quota use");
+    expect(s.legacy.startsWith("# ")).toBe(false);
+    expect(homeSections("## Source health\n\n| a |")).toEqual({ funnel: "", changed: "", legacy: "" });
   });
 
   it("opens the digest's company links on this site, and leaves other links alone", () => {
