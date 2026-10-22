@@ -1,12 +1,17 @@
 """The weekly digest (BRIEF §4.12): a GitHub issue "Doomberg weekly — {week}" (the web Home screen shows the same
-markdown, from the `digests` table).
+markdown, from the `digests` table: the funnel and What changed from body_md, To do live from the database).
 
-Under the title, a banner lists every source that is stale or past its §2.7 SLA (config/staleness.yaml; M6 review
-R1-F12). Sections: new candidates (at most 10, one line each: families fired, Evidence, Gap, link; when the week has
-no scores, it says the candidates are missing and why, from weekly.yml's job results); theses needing attention
-(kill criteria triggered this week, reviews due); source health and staleness; LLM quota use; Lab notes when a run
-happened this week (the Capex brief went with the Capex Desk, docs/SPEC_ISSUES.md 52). Source health ends with the
-Actions minutes line (pipeline/digest/minutes.py). No price-move content: no gainers, losers or returns.
+Sections, in order, each under a level-2 heading (overhaul PR 5, docs/SPEC_ISSUES.md 53):
+- "## This week": the funnel line per market, from the week's stored scores and shortlist ('US 4,659 → stage 456 →
+  candidates 4 → new 0 · 440 of 456 fire one family, capped at 55': scored, Evidence >= the stage threshold, the
+  Candidate bucket, the shortlist, and the stage names with fewer than two families). A week without scores still
+  goes out and says why, from weekly.yml's job results.
+- "## To do": cards to accept or dismiss and theses in review, as counts and company names only.
+- "## What changed": at most 20 lines (pipeline/digest/changes.py).
+- "## Health": one line naming every source that is stale or past its §2.7 SLA (config/staleness.yaml), then the
+  Actions minutes line (pipeline/digest/minutes.py).
+No LLM, no price-move content (no gainers, losers or returns), and nothing a thesis's owner wrote: journal entries,
+positions, notes and reasons never reach the issue.
 
 `python -m pipeline.digest.weekly [--week D]` (weekly.yml `publish` job: every week, whatever the other jobs did).
 The issue is published with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true)
@@ -18,9 +23,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -28,8 +32,8 @@ import psycopg
 import yaml
 
 from pipeline.db import repo, thesis_repo
-from pipeline.db.models import Company, SourceHealth
-from pipeline.digest import minutes
+from pipeline.db.models import SourceHealth
+from pipeline.digest import changes, minutes
 from pipeline.digest.github_issue import GitHubIssues, Issues, MockIssues, publish
 from pipeline.lab import price_history
 from pipeline.lab.run import lab_config
@@ -51,17 +55,10 @@ def fallbacks(root: Any = REPO_ROOT) -> dict[str, str]:
     return {str(k): str(v) for k, v in (doc.get("fallback_of") or {}).items()}
 
 
-def _fmt(x: Decimal | float | None, digits: int = 1) -> str:
-    return "n/a" if x is None else f"{Decimal(str(x)):.{digits}f}"
-
-
-def _code(c: Company) -> str:
-    code = c.ticker if c.market == "us" else c.nse_symbol
-    return f"{code}, {c.market.upper()}" if code else c.market.upper()
-
-
-def _link(c: Company, app_url: str) -> str:
-    return f" · [company page]({app_url.rstrip('/')}/company/{c.id})" if app_url else ""
+def scores_config(root: Any = REPO_ROOT) -> dict[str, Any]:
+    """config/signals.yaml `scores` (the stage threshold, the two-family rule and its cap)."""
+    doc = yaml.safe_load((root / "config" / "signals.yaml").read_text(encoding="utf-8"))
+    return dict(doc["scores"])
 
 
 UNSCORED = "the scoring run didn't finish"  # a digest run outside weekly.yml: the jobs' results aren't known
@@ -83,36 +80,36 @@ def unscored_why(env: Mapping[str, str]) -> str:
     return UNSCORED
 
 
-def candidates(conn: psycopg.Connection[Any], week: date, companies: Mapping[Any, Company], app_url: str,
-               why: str = UNSCORED) -> list[str]:  # fmt: skip
-    if not thesis_repo.scored(conn, week):
+def funnel_line(row: Mapping[str, Any], cap: Any) -> str:
+    n = {k: int(row[k]) for k in ("scored", "stage", "candidates", "shortlisted", "one_family")}
+    return (f"{str(row['market']).upper()} {n['scored']:,} → stage {n['stage']:,} → candidates {n['candidates']:,} → "
+            f"new {n['shortlisted']:,} · {n['one_family']:,} of {n['stage']:,} fire one family, capped at "
+            f"{cap}")  # fmt: skip
+
+
+def this_week(funnel: Sequence[Mapping[str, Any]], week: date, cap: Any, why: str = UNSCORED) -> list[str]:
+    if not funnel:
         return [f"**Candidates are missing this week:** no scores were written for {week:%Y-%m-%d} ({why}; see "
-                "source health below)."]  # fmt: skip
-    out = []
-    for r in thesis_repo.shortlist(conn, week)[:10]:
-        c = companies.get(r["company_id"])
-        if c is None:
-            continue
-        score = thesis_repo.week_score(conn, r["company_id"], week)
-        families = ", ".join(sorted(score.families)) if score is not None and score.families else "none"
-        out.append(f"{r['rank']}. **{c.name}** ({_code(c)}): families {families} · Evidence {_fmt(r['evidence'])} "
-                   f"· Gap {_fmt(r['gap'])}{_link(c, app_url)}")  # fmt: skip
-    return out or ["No new candidates this week."]
+                "health below)."]  # fmt: skip
+    out: list[str] = []
+    for r in funnel:  # one paragraph per market (the US alone while India is paused)
+        out += [*([""] if out else []), funnel_line(r, cap)]
+    return out
 
 
-def attention(conn: psycopg.Connection[Any], week: date) -> list[str]:
+def _name(r: Mapping[str, Any]) -> str:
+    code = r["ticker"] if r["market"] == "us" else r["nse_symbol"]
+    return f"{r['name']} ({code})" if code else str(r["name"])
+
+
+def to_do(cards: Sequence[Mapping[str, Any]], reviewing: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Counts and company names only."""
     out = []
-    for t in thesis_repo.triggered_in_week(conn, week):
-        cond = t["operator"] if t["threshold"] is None else f"{t['operator']} {t['threshold']}"
-        out.append(f"- **{t['name']}**: kill criterion `{t['metric']}` {cond} met (now {_fmt(t['last_value'], 4)}); "
-                   "moved to review")  # fmt: skip
-    triggered = {t["thesis_id"] for t in thesis_repo.triggered_in_week(conn, week)}
-    for t in thesis_repo.reviews_due(conn, week):
-        if t["thesis_id"] in triggered:
-            continue
-        why = "in review" if t["state"] == "review" else f"review due {t['next_review']}"
-        out.append(f"- **{t['name']}**: {why}")
-    return out or ["Nothing needs attention."]
+    if cards:
+        out.append(f"- Cards to accept or dismiss: {len(cards)} ({', '.join(map(_name, cards))})")
+    if reviewing:
+        out.append(f"- Theses in review: {len(reviewing)} ({', '.join(map(_name, reviewing))})")
+    return out or ["Nothing needs you this week."]
 
 
 def late(h: SourceHealth, now: datetime, sla: Mapping[str, int]) -> bool:
@@ -130,10 +127,10 @@ def resting(h: SourceHealth, rows: Sequence[SourceHealth], now: datetime, sla: M
 
 def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int],
            fallback_of: Mapping[str, str] | None = None) -> list[str]:  # fmt: skip
-    """§2.7: every source with an SLA in config/staleness.yaml that is stale, or past its SLA, named under the title (a
-    fallback only when its primary isn't fine). A source without an SLA is one the pipeline no longer reads (yahoo,
-    stooq, fred, eia, gdelt; India's while it is paused): its leftover health row stays in the table but never in the
-    banner, as on the app's Home (overhaul PR 4, docs/SPEC_ISSUES.md 52)."""
+    """§2.7: every source with an SLA in config/staleness.yaml that is stale, or past its SLA, in one line (a fallback
+    only when its primary isn't fine). A source without an SLA is one the pipeline no longer reads (yahoo, stooq,
+    fred, eia, gdelt; India's while it is paused): its leftover health row never reaches the line, as on the app's
+    Home (overhaul PR 4, docs/SPEC_ISSUES.md 52)."""
     items = []
     for h in rows:
         if h.source not in sla or resting(h, rows, now, sla, fallback_of or {}):
@@ -142,12 +139,23 @@ def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int],
             items.append(f"{h.source} (stale)")
         elif late(h, now, sla) and h.last_success is not None:
             items.append(f"{h.source} (no success for {(now - h.last_success).days} days; SLA {sla[h.source]})")
-    return [f"**Stale data:** {', '.join(items)}. Signals and scores that read these sources may be out of date.",
-            ""] if items else []  # fmt: skip
+    return [f"**Stale data:** {', '.join(items)}. Signals and scores that read these sources may be out of date."
+            ] if items else []  # fmt: skip
+
+
+def health_line(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int],
+                fallback_of: Mapping[str, str] | None = None) -> str:  # fmt: skip
+    """The digest's one health line: the late sources (banner), else that none is late."""
+    if not rows:
+        return "No source has reported yet."
+    late_ones = banner(rows, now, sla, fallback_of)
+    return late_ones[0] if late_ones else "Sources: none late or stale."
 
 
 def health(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int] | None = None,
            fallback_of: Mapping[str, str] | None = None) -> list[str]:  # fmt: skip
+    """Each source's status as a table, the way the app's Settings reads it (web/lib/staleness.ts; tests/
+    test_web_parity.py keeps the two alike). The digest prints only health_line since overhaul PR 5."""
     if not rows:
         return ["No source has reported yet."]
     sla = sla if sla is not None else sla_days()
@@ -170,53 +178,31 @@ def health(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int] |
     return out
 
 
-def llm(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    if not rows:
-        return ["No LLM calls this week."]
-    out = ["| Provider | Calls | OK | Rate-limited | Tokens in | Tokens out |", "|---|---|---|---|---|---|"]
-    for r in rows:
-        out.append(f"| {r['provider']} | {r['calls']} | {r['ok']} | {r['rate_limited']} | {r['tokens_in']} | "
-                   f"{r['tokens_out']} |")  # fmt: skip
-    return out
-
-
-def lab(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    if not rows:
-        return []
-    runs = sorted({r["run_at"].date() for r in rows})
-    by_market = Counter(str(r["market"]) for r in rows)
-    markets = ", ".join(f"{m.upper()}: {n}" for m, n in sorted(by_market.items()))
-    results = f"{len(rows)} result{'' if len(rows) == 1 else 's'}"
-    return [f"The Signal Lab ran on {', '.join(map(str, runs))}: {results} ({markets}). The report and any weight "
-            "proposals arrive as pull requests (docs/LAB_REPORT.md)."]  # fmt: skip
+def render(week: date, sections: Sequence[tuple[str, Sequence[str]]]) -> str:
+    lines = [f"Week ending {week:%Y-%m-%d}. Research only: no orders, no price alerts.", ""]
+    for name, body in sections:
+        lines += [f"## {name}", "", *body, ""]
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: datetime | None = None,
           why_unscored: str = UNSCORED, actions: Sequence[str] = ()) -> tuple[str, str]:  # fmt: skip
-    """`actions`: the Actions minutes line (minutes.digest_lines), at the end of source health."""
+    """`actions`: the Actions minutes line (minutes.digest_lines), after the health line."""
     now = now or datetime.now(UTC)
     companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
-    since = datetime.combine(week - timedelta(days=6), time(0), tzinfo=UTC)
-    until = datetime.combine(week + timedelta(days=1), time(0), tzinfo=UTC)
-    title = f"Doomberg weekly — {week_label(week)}"
-    sources, sla, fb = repo.source_health(conn), sla_days(), fallbacks()
-    parts: list[tuple[str, list[str]]] = [
-        ("New candidates", candidates(conn, week, companies, app_url, why_unscored)),
-        ("Theses needing attention", attention(conn, week)),
-        ("Source health", [*health(sources, now, sla, fb), *(["", *actions] if actions else [])]),
-        ("LLM quota use", llm(thesis_repo.llm_use(conn, since, until))),
-    ]
-    notes = lab(thesis_repo.lab_runs(conn, since, until))
-    if notes:
-        parts.append(("Lab notes", notes))
-    lines = [
-        f"Week ending {week:%Y-%m-%d}. Research only: no orders, no price alerts.",
-        "",
-        *banner(sources, now, sla, fb),
-    ]
-    for name, body in parts:
-        lines += [f"## {name}", "", *body, ""]
-    return title, "\n".join(lines).rstrip() + "\n"
+    cfg = scores_config()
+    funnel = thesis_repo.funnel(conn, week, Decimal(str(cfg["us_price_candidate_min_evidence"])),
+                                int(cfg["min_families"]))  # fmt: skip
+    names, facts = changes.gather(conn, week, companies)
+    changed = changes.lines(names, facts, app_url) or [changes.NOTHING if funnel else changes.UNSCORED]
+    health_ = health_line(repo.source_health(conn), now, sla_days(), fallbacks())
+    body = render(week, [
+        ("This week", this_week(funnel, week, cfg["single_family_cap"], why_unscored)),
+        ("To do", to_do(thesis_repo.cards_to_decide(conn), thesis_repo.in_review(conn, week))),
+        ("What changed", changed),
+        ("Health", [health_, *(["", *actions] if actions else [])]),
+    ])  # fmt: skip
+    return f"Doomberg weekly — {week_label(week)}", body
 
 
 def issues_client(settings: Settings, http: HttpClient) -> Issues | None:

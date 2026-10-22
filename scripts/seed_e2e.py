@@ -290,10 +290,25 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     x("insert into capex_briefs (week_end, body_md) values (%s, %s)",
       (W, "### Demand index\n\n- grid: rising (+1.2σ)\n- power_equipment: flat (+0.3σ)\n"))  # fmt: skip
 
+    # the digest as pipeline/digest/weekly.py writes it (overhaul PR 5; tests/digest/test_weekly_body.py): Home shows
+    # This week and What changed, and turns the APP_URL in its company links into paths on its own host
+    app = "https://doomberg.example"
     digest = (
-        "Week ending 2026-09-18. Research only: no orders, no price alerts.\n\n## New candidates\n\n"
-        "1. **Echo Grid Corp.** (ECHO, US): families fundamentals, text · Evidence 72.5 · Gap 61.2\n\n"
-        "## Source health\n\n| Source | Last success | Status |\n|---|---|---|\n| sec | 2026-09-18 06:00Z | ok |\n"
+        "Week ending 2026-09-18. Research only: no orders, no price alerts.\n\n"
+        "## This week\n\n"
+        "US 4 → stage 4 → candidates 1 → new 0 · 1 of 4 fire one family, capped at 55\n\n"
+        "IN 1 → stage 1 → candidates 1 → new 0 · 0 of 1 fire one family, capped at 55\n\n"
+        "## To do\n\n"
+        "- Cards to accept or dismiss: 1 (Echo Grid Corp. (ECHO))\n"
+        "- Theses in review: 1 (Omega Systems Inc. (OMGA))\n\n"
+        "## What changed\n\n"
+        f"- [ECHO]({app}/company/{ECHO}) entered Candidate: Evidence 72.5\n"
+        f"- [KAPPA]({app}/company/{KAPPA}) entered Candidate: Evidence 64\n"
+        f"- [OMGA]({app}/company/{OMEGA}) entered Priced-in: Evidence 66\n"
+        f"- [DLTP]({app}/company/{DELTA}) entered Early: Evidence 58\n\n"
+        "## Health\n\n"
+        "**Stale data:** twelvedata (stale). Signals and scores that read these sources may be out of date.\n\n"
+        "Actions: 812 of 2,000 this cycle, projected 1,340.\n"
     )
     x("insert into digests (week_end, title, body_md) values (%s, 'Doomberg weekly — 2026-W38', %s)", (W, digest))
     x("insert into source_health (source, last_success, last_error, stale) values "

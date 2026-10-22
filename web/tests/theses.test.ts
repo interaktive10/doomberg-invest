@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { needsKillReview } from "@/lib/reviews";
-import { acceptable, afterVerdict, canMove, group, killTally, markMoved, positionOpen, STATES, verdicts } from "@/lib/theses";
+import { acceptable, afterVerdict, canMove, cardQueued, group, killTally, markMoved, positionOpen, STATES, verdicts } from "@/lib/theses";
 
 describe("thesis workflow (BRIEF §1.8)", () => {
   it("offers each move in its state only", () => {
@@ -85,7 +85,7 @@ describe("a broken verdict keeps the thesis in Review (§1.8; M7 review R2-F3)",
 
 describe("the Theses screen's three groups (overhaul PR 4)", () => {
   it("Needs you, Watching and Closed cover every state once", () => {
-    expect(STATES.map((s) => [s, group(s)])).toEqual([
+    expect(STATES.map((s) => [s, group({ state: s, author: "routine", card_md: "# Card" })])).toEqual([
       ["research", "needs"],
       ["thesis", "watching"],
       ["position", "watching"],
@@ -93,6 +93,18 @@ describe("the Theses screen's three groups (overhaul PR 4)", () => {
       ["closed", "closed"],
       ["dismissed", "closed"],
     ]);
+  });
+
+  it("a research entry whose card is queued is Watching, labelled 'card queued', until the routine fills it (PR 5)", () => {
+    const waiting = { state: "research" as const, author: "manual", card_md: "" };
+    expect(cardQueued(waiting)).toBe(true);
+    expect(group(waiting)).toBe("watching");
+    // filled in place by the routine: a card to accept or dismiss
+    expect(group({ ...waiting, author: "routine", card_md: "# Card" })).toBe("needs");
+    expect(cardQueued({ ...waiting, author: "fallback", card_md: "# Card" })).toBe(false);
+    // dismissed before the card came: Closed, not queued
+    expect(cardQueued({ ...waiting, state: "dismissed" })).toBe(false);
+    expect(group({ ...waiting, state: "dismissed" })).toBe("closed");
   });
 
   it("counts the kill criteria as 'n of m triggered'", () => {

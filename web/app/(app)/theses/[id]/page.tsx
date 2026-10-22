@@ -16,7 +16,7 @@ import { code, num } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
 import { ACTION_LABEL, killMetric, killSentence, label, metricValue } from "@/lib/labels";
 import type { PackDiff } from "@/lib/reviews";
-import { acceptable, canMove, markMoved, positionOpen, STATE_LABEL } from "@/lib/theses";
+import { acceptable, canMove, markMoved, positionOpen, RESEARCH_QUEUED, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
 import { requireUser } from "@/lib/auth";
@@ -115,8 +115,8 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
               </form>
             ) : (
               <p className="max-w-md basis-full text-[13px] text-muted">
-                Manual research: there is no validated card yet, so this can&apos;t become a thesis (a thesis needs the card&apos;s
-                kill criteria and review dates). The weekly routine writes cards for the week&apos;s shortlist.
+                There is no validated card yet, so this can&apos;t become a thesis (a thesis needs the card&apos;s kill criteria and
+                review dates). Sunday&apos;s routine writes the card for a research entry, after the week&apos;s shortlist.
               </p>
             )}
             <details>
@@ -138,7 +138,11 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
         {t.card_md.trim() ? (
           <Markdown text={card} cite={(cid) => citeView(cid, t.company_id, cited)} />
         ) : (
-          <Empty>No card yet: manual research. The weekly routine writes cards for the shortlist.</Empty>
+          <Empty>
+            {t.state === "research"
+              ? `No card yet. ${RESEARCH_QUEUED} It writes a grounded card for this research entry after the week's shortlist.`
+              : "No card: this research entry closed before the routine wrote one."}
+          </Empty>
         )}
       </Section>
 

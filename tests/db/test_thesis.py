@@ -16,7 +16,7 @@ import psycopg
 import pytest
 from psycopg.types.json import Jsonb
 
-from pipeline.db import repo
+from pipeline.db import repo, thesis_repo
 from pipeline.db.models import FundamentalsRow, Score, SignalValue
 from pipeline.digest import weekly as digest
 from pipeline.digest.github_issue import MockIssues, publish
@@ -76,7 +76,9 @@ def week_rows(conn: psycopg.Connection[Any], cid: uuid.UUID, evidence: str = "62
                  "(%s, %s, 'C2', 0.06, null, %s)", (cid, W, c2))  # fmt: skip
 
 
-def verified_fact(conn: psycopg.Connection[Any], cid: uuid.UUID, published: datetime, quote: str) -> uuid.UUID:
+def verified_fact(conn: psycopg.Connection[Any], cid: uuid.UUID, published: datetime, quote: str,
+                  stored: datetime | None = None) -> uuid.UUID:  # fmt: skip
+    """A verified order-win fact; `stored` is when the text run wrote it (facts.created_at; now by default)."""
     doc = conn.execute(
         "insert into documents (company_id, kind, url, published_at, sha256, raw_path) values "
         "(%s, 'EX-99.1', %s, %s, 'x', 'raw') returning id",
@@ -85,9 +87,10 @@ def verified_fact(conn: psycopg.Connection[Any], cid: uuid.UUID, published: date
     assert doc is not None
     row = conn.execute(
         "insert into facts (company_id, document_id, fact_type, subject, subject_key, value_num, unit, as_of, quote, "
-        "char_start, char_end, extraction_model, confidence, verification_status) values (%s, %s, 'order_win', "
-        "'order', 'order_win:hyperscaler', 600000000, 'usd', %s, %s, 0, %s, 'test', 0.9, 'verified') returning id",
-        (cid, doc[0], published.date(), quote, len(quote)),
+        "char_start, char_end, extraction_model, confidence, verification_status, created_at) values (%s, %s, "
+        "'order_win', 'order', 'order_win:hyperscaler', 600000000, 'usd', %s, %s, 0, %s, 'test', 0.9, 'verified', "
+        "coalesce(%s, now())) returning id",
+        (cid, doc[0], published.date(), quote, len(quote), stored),
     ).fetchone()
     assert row is not None
     return uuid.UUID(str(row[0]))
@@ -273,8 +276,8 @@ def test_a_new_fundamentals_row_triggers_a_kill_criterion(conn: psycopg.Connecti
                        "kill_criteria k on k.thesis_id = t.id where t.id = %s", (tid,)).fetchone()  # fmt: skip
     assert row == ("review", "triggered", nxt, True)
     _, body = digest.build(conn, nxt)
-    assert "**Delta Test**: kill criterion `m:revenue_ttm_yoy` < 0.05 met (now -0.0311)" in body
-    assert "moved to review" in body
+    assert "## To do\n\n- Theses in review: 1 (Delta Test (DLTT))\n" in body  # names only (overhaul PR 5)
+    assert "m:revenue_ttm_yoy" not in body
     third = kill_criteria.evaluate(conn, nxt + timedelta(days=7))
     assert third.theses == 0  # in review: no longer monitored, and not triggered twice
 
@@ -300,7 +303,7 @@ def test_a_retriggered_criterion_is_in_that_weeks_digest(conn: psycopg.Connectio
     row = conn.execute("select status, triggered_week from kill_criteria where thesis_id = %s", (tid,)).fetchone()
     assert row == ("triggered", w3)
     _, body = digest.build(conn, w3)
-    assert "**Retrigger Test**: kill criterion `m:revenue_ttm_yoy` < 0.05 met" in body
+    assert "- Theses in review: 1 (Retrigger Test (RTRG))" in body
 
 
 # ---------------------------------------------------------------- M6-06
@@ -342,6 +345,8 @@ def test_digest_issue_body_snapshot(conn: psycopg.Connection[Any]) -> None:
     assert body == SNAPSHOT.read_text(encoding="utf-8")
     for word in ("gainer", "loser", "top mover", "return"):
         assert word not in body.lower()  # no price-move content
+    for word in ("LLM", "gemini", "| Source |", "Capex", "Lab"):  # overhaul PR 5: no quota, source or Lab tables
+        assert word not in body, word
     api = MockIssues()
     assert publish(api, title, body) == 1
     assert api.requests[-1] == ("POST", "/issues", {"title": title, "body": body, "labels": ["digest"]})
@@ -429,7 +434,8 @@ def test_the_digest_without_scores_says_the_candidates_are_missing(conn: psycopg
                  "('sec', '2026-09-01 06:00+00', null, false)")  # fmt: skip
     _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
     assert "**Candidates are missing this week:** no scores were written for 2026-09-18" in body
-    assert "**Stale data:** sec (no success for 17 days; SLA 8)" in body and "## Source health" in body
+    assert "## Health\n\n**Stale data:** sec (no success for 17 days; SLA 8)" in body
+    assert "## To do" in body and "## What changed\n\nNo scores this week, so no score changes.\n" in body
 
 
 @pytest.mark.parametrize(("env", "why"), [
@@ -446,20 +452,20 @@ def test_the_digest_without_scores_says_why(conn: psycopg.Connection[Any], env: 
     scores is most often one whose US run failed; weekly.yml passes the jobs' results and the digest names the job
     (tests/digest/test_unscored.py has every case)."""
     _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC), why_unscored=digest.unscored_why(env))
-    assert (f"**Candidates are missing this week:** no scores were written for 2026-09-18 ({why}; see source health "
+    assert (f"**Candidates are missing this week:** no scores were written for 2026-09-18 ({why}; see health "
             "below).") in body  # fmt: skip
 
 
-def test_source_health_ends_with_the_actions_minutes_line(conn: psycopg.Connection[Any]) -> None:
+def test_health_ends_with_the_actions_minutes_line(conn: psycopg.Connection[Any]) -> None:
     """Overhaul PR 3: the meter's one line (pipeline/digest/minutes.py; tests/digest/test_minutes.py has the line and
-    its warning) closes the source health section, after the table; without it (a build outside main) the section is
-    the table alone, as in the snapshot."""
+    its warning) closes the health section, after the health line (overhaul PR 5: one line, no table); without it (a
+    build outside main) the section is the health line alone, as in the snapshot."""
     conn.execute("insert into source_health (source, last_success, last_error, stale) values "
                  "('sec', '2026-09-18 06:00+00', null, false)")  # fmt: skip
     line = "Actions: 812 of 2,000 this cycle, projected 1,340."
     _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC), actions=[line])
-    section = body.split("## Source health\n\n", 1)[1].split("\n## ", 1)[0]
-    assert section == f"| Source | Last success | Status |\n|---|---|---|\n| sec | 2026-09-18 06:00Z | ok |\n\n{line}\n"
+    section = body.split("## Health\n\n", 1)[1]
+    assert section == f"Sources: none late or stale.\n\n{line}\n"
     _, without = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
     assert "Actions:" not in without
 
@@ -480,12 +486,11 @@ def test_fallback_banner_only_when_its_primary_is_down(conn: psycopg.Connection[
                  "('bse', '2026-08-01 06:00+00', null, false), ('nse', %s, %s, %s)",
                  (nse, None if nse else "stale: 3 bhavcopy downloads failed", nse is None))  # fmt: skip
     _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
-    head = body.split("## ", 1)[0]
+    health = body.split("## Health\n\n", 1)[1]
     if banner is None:
-        assert "Stale data" not in head, head
-        assert "| bse | 2026-08-01 06:00Z | fallback, not needed (nse ok) |" in body
+        assert health == "Sources: none late or stale.\n", health
     else:
-        assert "**Stale data:**" in head and banner in head and "bse (no success for 48 days; SLA 10)" in head, head
+        assert "**Stale data:**" in health and banner in health and "bse (no success for 48 days; SLA 10)" in health
 
 
 def test_fallback_p04_and_p05_replay_from_cassettes(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
@@ -519,3 +524,212 @@ def test_fallback_p04_and_p05_replay_from_cassettes(conn: psycopg.Connection[Any
     out = fallback_writer.write_cards(conn, player, "2026-W38", tmp_path / "repo",
                                       now=lambda: datetime(2026, 9, 21, 6, tzinfo=UTC))  # fmt: skip
     assert out.written == ["us-nmbs"] and out.failed == {}
+
+
+# ---------------------------------------------------------------- overhaul PR 5: research entries and What changed
+
+
+def research_entry(conn: psycopg.Connection[Any], cid: uuid.UUID, week: date, state: str = "research") -> uuid.UUID:
+    """What the web app's Research button stores (web/app/(app)/candidates/actions.ts research): a thesis in research
+    by `manual` with no card, for the latest scored week."""
+    row = conn.execute("insert into theses (company_id, state, card_md, card_json, evidence_pack, author, validation, "
+                       "created_week) values (%s, %s, '', '{}', '{}', 'manual', '{}', %s) returning id",
+                       (cid, state, week)).fetchone()  # fmt: skip
+    assert row is not None
+    return uuid.UUID(str(row[0]))
+
+
+def test_queue_adds_research_entries_after_the_shortlist_oldest_first(conn: psycopg.Connection[Any]) -> None:
+    """docs/SPEC_ISSUES.md 35: the open manual research entries come after the shortlist, oldest first, within the
+    10 packs; one on the shortlist is packed once, one made after the week or dismissed is not packed."""
+    a, b, c, d, e = (company(conn, f"00000000-0000-4000-8000-0000000000f{i}", f"Research {i}", f"RSR{i}")
+                     for i in range(1, 6))  # fmt: skip
+    for cid in (a, b, c, d, e):
+        repo.insert_fundamentals(conn, quarters(cid, [100, 110, 120, 130, 140]))
+        week_rows(conn, cid)
+    repo.insert_shortlist(conn, W, [(a, Decimal(70), Decimal(60))])
+    research_entry(conn, b, W - timedelta(days=7))
+    research_entry(conn, c, W - timedelta(days=14))  # the oldest
+    research_entry(conn, a, W - timedelta(days=7))  # on the shortlist: packed once, in its rank
+    research_entry(conn, d, W + timedelta(days=7))  # made after the week
+    research_entry(conn, e, W - timedelta(days=21), state="dismissed")
+    doc = queue.build_queue(conn, W)
+    assert [p["company"]["key"] for p in doc["packs"]] == ["us-rsr1", "us-rsr3", "us-rsr2"]
+    assert [p["company"]["key"] for p in queue.build_queue(conn, W, limit=2)["packs"]] == ["us-rsr1", "us-rsr3"]
+
+
+def test_ingest_fills_a_research_entry_in_place_idempotently(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """docs/SPEC_ISSUES.md 35, M6-03: the card for a company with an open research entry fills that row (its link
+    stays) with the author and the validation result, and a re-run updates the same row. A card that fails validation
+    leaves the entry as it was, which the web app can't accept (web/lib/theses.ts acceptable: not by `manual`, a card,
+    validation.ok)."""
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    cards, _ = card_tree(tmp_path, cid)
+    entry = research_entry(conn, cid, W - timedelta(days=7))
+
+    def theses() -> list[Any]:
+        return conn.execute(
+            "select t.id, t.state, t.author, t.created_week, t.card_md <> '', t.validation -> 'ok', "
+            "(select count(*) from kill_criteria k where k.thesis_id = t.id) from theses t where t.company_id = %s",
+            (cid,)).fetchall()  # fmt: skip
+
+    good = (cards / "us-nmbs.json").read_text()
+    shutil.copy(FIX / "card" / "bad_number.json", cards / "us-nmbs.json")
+    bad = ingest.ingest(conn, ["2026-W38"], tmp_path)
+    assert bad.ingested == [] and list(bad.rejected) == ["2026-W38/us-nmbs.json"]
+    unfilled = theses()
+    assert unfilled == [(entry, "research", "manual", W - timedelta(days=7), False, None, 0)]
+    _, _, author, _, has_card, ok, _ = unfilled[0]
+    assert not (author != "manual" and has_card and ok is True)  # not acceptable
+
+    (cards / "us-nmbs.json").write_text(good)
+    assert ingest.ingest(conn, ["2026-W38"], tmp_path).ingested == ["2026-W38/us-nmbs.json"]
+    filled = theses()
+    assert filled == [(entry, "research", "routine", W, True, True, 2)]  # the same row, now with its card
+    assert ingest.ingest(conn, ["2026-W38"], tmp_path).ingested == ["2026-W38/us-nmbs.json"] and theses() == filled
+    conn.execute("update theses set state = 'thesis' where id = %s", (entry,))  # accepted
+    assert ingest.ingest(conn, ["2026-W38"], tmp_path).unchanged == ["2026-W38/us-nmbs.json"]
+
+
+def test_ingest_of_a_shortlisted_research_entry_never_breaks_the_weeks_unique_card(
+    conn: psycopg.Connection[Any], tmp_path: Path
+) -> None:
+    """Migration 0010's theses_generated_week allows one routine/fallback card per company and week. A research entry
+    whose company is also on the week's shortlist gets one pack and one card: ingest fills the entry, and a re-run
+    updates that row (one generated card for the week, no second insert). When the week already has a generated card
+    of the company (Manzoor dismissed it, then pressed Research again), the fill is skipped, so the update can't
+    collide with it: the card stays as it was and the entry waits for a later week's card."""
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    card_tree(tmp_path, cid)
+    repo.insert_shortlist(conn, W, [(cid, Decimal(70), Decimal(60))])
+    entry = research_entry(conn, cid, W - timedelta(days=7))
+
+    def rows() -> list[Any]:
+        return conn.execute("select id, state, author, created_week from theses where company_id = %s order by id",
+                            (cid,)).fetchall()  # fmt: skip
+
+    for _ in range(2):  # idempotent
+        assert ingest.ingest(conn, ["2026-W38"], tmp_path).ingested == ["2026-W38/us-nmbs.json"]
+        assert rows() == [(entry, "research", "routine", W)]
+
+    conn.execute("update theses set state = 'dismissed' where id = %s", (entry,))
+    again = research_entry(conn, cid, W)  # Research pressed again in the same scored week
+    for _ in range(2):
+        stats = ingest.ingest(conn, ["2026-W38"], tmp_path)
+        assert stats.unchanged == ["2026-W38/us-nmbs.json"] and stats.rejected == {}
+        assert sorted(rows(), key=lambda r: r[2]) == [(again, "research", "manual", W),
+                                                      (entry, "dismissed", "routine", W)]  # fmt: skip
+
+
+def scored_week(conn: psycopg.Connection[Any], cid: uuid.UUID, week: date, evidence: str, bucket: str, fired: str,
+                families: tuple[str, ...] = ("fundamentals", "text"),
+                flags: tuple[tuple[str, bool, str], ...] = ()) -> None:  # fmt: skip
+    repo.upsert_scores(conn, [Score(company_id=cid, week_end=week, evidence=Decimal(evidence), gap=Decimal(58),
+                                    families=list(families), bucket=bucket, weights_version="w0-equal")])  # fmt: skip
+    repo.upsert_signal_values(conn, [
+        SignalValue(company_id=cid, week_end=week, signal_id=s, fired=s in fired.split(),
+                    strength=Decimal("0.8") if s in fired.split() else Decimal(0), inputs={})
+        for s in ("S1", "S4", "S9")])  # fmt: skip
+    for flag_id, hard, status in flags:
+        conn.execute("insert into redflag_values (company_id, week_end, flag_id, hard, inputs) values (%s, %s, %s, %s, "
+                     "%s)", (cid, week, flag_id, hard, Jsonb({"status": status})))  # fmt: skip
+
+
+def diff(conn: psycopg.Connection[Any], cid: uuid.UUID, fact: uuid.UUID, kind: str, note: str) -> None:
+    conn.execute("insert into diffs (company_id, subject_key, new_fact_id, change_kind, computed_note) values "
+                 "(%s, 'order_win:hyperscaler', %s, %s, %s)", (cid, fact, kind, note))  # fmt: skip
+
+
+def test_what_changed_reads_this_and_last_week_and_the_weeks_facts(conn: psycopg.Connection[Any]) -> None:
+    """Overhaul PR 5: the previous scored week against this one (a fired red flag counts, an `unknown` one doesn't),
+    then the scope's verified facts stored in the week (point in time: published and stored before the week's cutoff),
+    with their diffs, reaffirmed ones left out; the funnel counts the week's stored rows."""
+    prev = W - timedelta(days=7)
+    mtdr = company(conn, "00000000-0000-4000-8000-0000000000a1", "Matador Test", "MTDR")
+    quiet = company(conn, "00000000-0000-4000-8000-0000000000a2", "Quiet Test", "QUIE")
+    flag = company(conn, "00000000-0000-4000-8000-0000000000a3", "Flag Test", "FLAG")
+    other = company(conn, "00000000-0000-4000-8000-0000000000a4", "Outside Test", "OUTS")
+    scored_week(conn, mtdr, prev, "62", "candidate", "S4 S9")
+    scored_week(conn, mtdr, W, "48", "none", "S9", families=("text",))
+    scored_week(conn, quiet, prev, "50", "early", "S1 S9")
+    scored_week(conn, quiet, W, "50", "early", "S1 S9", flags=(("R1", False, "unknown"),))
+    scored_week(conn, flag, prev, "52", "early", "S1 S9")
+    scored_week(conn, flag, W, "52", "early", "S1 S9", flags=(("R1", False, "fired"),))
+    scored_week(conn, other, W, "30", "none", "S1")
+
+    def fact(cid: uuid.UUID, published: datetime, quote: str) -> uuid.UUID:
+        return verified_fact(conn, cid, published, quote, stored=published + timedelta(hours=2))
+
+    raised = fact(mtdr, datetime(2026, 9, 15, 20, tzinfo=UTC), "a $600 million order from a customer")
+    diff(conn, mtdr, raised, "raised", "$400.0M → $600.0M (+50.0%)")
+    same = fact(mtdr, datetime(2026, 9, 16, 20, tzinfo=UTC), "the order book is unchanged at $600m")
+    diff(conn, mtdr, same, "reaffirmed", "$600.0M → $600.0M (+0.0%)")
+    fact(mtdr, datetime(2026, 9, 19, 1, tzinfo=UTC), "published after the week's cutoff")
+    fact(mtdr, datetime(2026, 9, 10, 20, tzinfo=UTC), "published and read before the week began")
+    fact(other, datetime(2026, 9, 15, 20, tzinfo=UTC), "a company outside the scope")
+    _, body = digest.build(conn, W, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
+    assert "## This week\n\nUS 4 → stage 3 → candidates 0 → new 0 · 1 of 3 fire one family, capped at 55\n" in body
+    section = body.split("## What changed\n\n", 1)[1].split("\n\n## ", 1)[0]
+    assert section.splitlines() == [
+        f"- [MTDR](/company/{mtdr}) left Candidate: S4 stopped, Evidence 62 → 48",
+        f"- [FLAG](/company/{flag}) R1 soft flag",
+        f"- [MTDR](/company/{mtdr}) order win raised: $400.0M → $600.0M (+50.0%)",
+    ]  # fmt: skip
+
+
+def test_a_fact_read_a_week_late_is_in_the_next_digest_once(conn: psycopg.Connection[Any]) -> None:
+    """PR 5 review: the daily reader defers documents, so a fact is often stored a week or more after its filing was
+    published. What changed selects facts by when they were stored (and published before the week's cutoff), so one
+    published in week 1 and read in week 2 is in week 2's digest, and in no other."""
+    w1, w2, w3 = W - timedelta(days=7), W, W + timedelta(days=7)
+    cid = company(conn, "00000000-0000-4000-8000-0000000000a5", "Late Read Test", "LATE")
+    for week in (w1, w2, w3):
+        scored_week(conn, cid, week, "62", "candidate", "S1 S9")  # nothing else changes
+    # published in week 1, read in week 2
+    verified_fact(conn, cid, datetime(2026, 9, 9, 20, tzinfo=UTC), "a $600 million order from a customer",
+                  stored=datetime(2026, 9, 15, 2, tzinfo=UTC))  # fmt: skip
+    line = f"- [LATE](/company/{cid}) new verified order win: order"
+    seen = {}
+    for week in (w1, w2, w3):
+        _, body = digest.build(conn, week, now=datetime.combine(week + timedelta(days=1), datetime.min.time(), UTC))
+        seen[week] = body.split("## What changed\n\n", 1)[1].split("\n\n## ", 1)[0].count("new verified order win")
+    assert seen == {w1: 0, w2: 1, w3: 0}
+    _, body = digest.build(conn, w2, now=datetime(2026, 9, 19, 3, tzinfo=UTC))
+    assert line in body
+
+
+def test_the_digest_never_carries_private_fields(conn: psycopg.Connection[Any]) -> None:
+    """Overhaul PR 5 (the digest is a GitHub issue): with a company in What changed and To do, its position state, the
+    start_position date, journal reasons, reviews.note, candidate_actions.reason, dismissed_reason, override_reason
+    and post-mortems are seeded with sentinels, and none reaches body_md."""
+    prev = W - timedelta(days=7)
+    cid = company(conn, "00000000-0000-4000-8000-0000000000b9", "Private Test", "PRIV")
+    gone = company(conn, "00000000-0000-4000-8000-0000000000ba", "Dismissed Test", "DISM")
+    scored_week(conn, cid, prev, "61", "candidate", "S1 S9")
+    scored_week(conn, cid, W, "73", "candidate", "S1 S4 S9")
+    scored_week(conn, gone, prev, "64", "candidate", "S1 S9")
+    scored_week(conn, gone, W, "63", "early", "S1 S9")
+    held = conn.execute("insert into theses (company_id, state, card_md, card_json, evidence_pack, author, validation, "
+                        "created_week, next_review) values (%s, 'position', '', '{}', '{}', 'routine', '{}', %s, %s) "
+                        "returning id", (cid, W - timedelta(days=70), W - timedelta(days=1))).fetchone()  # fmt: skip
+    closed = conn.execute("insert into theses (company_id, state, card_md, card_json, evidence_pack, author, "
+                          "validation, created_week, dismissed_reason) values (%s, 'dismissed', '', '{}', '{}', "
+                          "'routine', '{}', %s, %s) returning id", (gone, prev, SECRET)).fetchone()  # fmt: skip
+    assert held is not None and closed is not None
+    conn.execute("insert into journal (thesis_id, entry_date, action, portfolio_pct, reason, override_reason) values "
+                 "(%s, '2026-08-27', 'start_position', 7.25, %s, %s)", (held[0], SECRET, SECRET))  # fmt: skip
+    conn.execute("insert into reviews (thesis_id, period_end, note) values (%s, '2026-06-30', %s)", (held[0], SECRET))
+    conn.execute("insert into postmortems (thesis_id, what_happened, lessons) values (%s, %s, %s)",
+                 (closed[0], SECRET, SECRET))  # fmt: skip
+    conn.execute("insert into candidate_actions (company_id, week_end, action, reason) values (%s, %s, 'dismiss', %s)",
+                 (gone, prev, SECRET))  # fmt: skip
+    title, body = digest.build(conn, W, "https://doomberg.example", now=datetime(2026, 9, 19, 3, tzinfo=UTC))
+    thesis_repo.upsert_digest(conn, W, title, body, None)
+    stored = conn.execute("select body_md from digests where week_end = %s", (W,)).fetchone()
+    assert stored is not None and stored[0] == body
+    assert f"[PRIV](https://doomberg.example/company/{cid}) Evidence 61 → 73: S4 fired" in body  # in What changed
+    assert "- Theses in review: 1 (Private Test (PRIV))" in body  # in To do (its review date has come)
+    assert "[DISM]" in body  # left Candidate
+    for secret in (SECRET, "2026-08-27", "7.25", "start_position"):
+        assert secret not in stored[0], secret
+    assert "position" not in stored[0].lower() and "journal" not in stored[0].lower()

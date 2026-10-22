@@ -104,8 +104,8 @@ jobs:
     #   staging data/thesis_queue/ alone, on top of a freshly fetched origin/main (rebased and retried if main moved;
     #   M6 review R1-F5).
     # - BRIEF §4.12: the digest issue, also when scores or the queue commit failed, since those are the weeks source
-    #   health matters (M6 review R1-F6). It lists this week's triggered criteria, source health with the §2.7
-    #   staleness banner, the Actions minutes line and LLM quota use, and says why the candidates are missing in a week
+    #   health matters (M6 review R1-F6). It has the funnel, To do, What changed and a health line naming the late
+    #   sources with the Actions minutes line (overhaul PR 5), and says why the candidates are missing in a week
     #   without scores.
     # - BRIEF §2.8: the storage guard, after every job that writes and also when one failed (review R2-F1 on M3):
     #   prune (signal_values past 3 years, NSE announcements past 120 days) and fail the run above 400 MB.

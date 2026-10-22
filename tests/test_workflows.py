@@ -113,6 +113,22 @@ def test_quarterly_has_no_lab_job() -> None:
     assert "pipeline.db.seed" in runs[-1]
 
 
+def test_quarterly_backfills_the_stage_entrants() -> None:
+    """Overhaul PR 5: the quarterly run backfills the latest candidate stage's Form 4 purchases and 8-K/NT events
+    (pipeline/us/backfill.py, as backfill.yml does by hand). The rows are the daily run's own, so the step is
+    idempotent; it needs the secrets like the other steps, reads the stage only (no --all), and runs after 13F and
+    before the re-seed puts every listed filer back in the universe."""
+    runs = steps("quarterly.yml", "us")
+    i, backfill = step("quarterly.yml", "us", "python -m pipeline.us.backfill")
+    assert backfill["if"] == "steps.secrets.outputs.ok == 'true'"
+    assert backfill["run"].endswith("python -m pipeline.us.backfill") and "--all" not in backfill["run"]
+    thirteen_f = next(j for j, r in enumerate(runs) if "pipeline.us.quarterly" in r)
+    seed = next(j for j, r in enumerate(runs) if "pipeline.db.seed" in r)
+    assert thirteen_f < i < seed
+    assert (WF / "backfill.yml").exists() and (WF / "diagnose.yml").exists()  # both stay
+    assert all("pipeline.us.backfill" not in r for r in steps("weekly.yml", "us"))  # no weekly backfill step
+
+
 def gated(name: str, job: str, need: int) -> list[dict[str, Any]]:
     """The minutes gate is the job's first step after the runner setup, it asks for the job's whole limit, and every
     later step needs it to have allowed the run (directly, or through a step that did)."""

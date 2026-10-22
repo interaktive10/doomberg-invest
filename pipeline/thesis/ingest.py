@@ -1,7 +1,10 @@
 """Thesis-card ingest (BRIEF §4.9 step 3; thesis-ingest.yml, on a push touching data/thesis_cards/**): every card of
 the pushed weeks is validated again against its pack and upserted into `theses` (state `research`, author `routine`)
 with its kill criteria. One generated card per company and week: a re-run replaces a card still in `research` and
-leaves one Manzoor already moved on alone (idempotent; M6-03). A card that fails validation is not ingested.
+leaves one Manzoor already moved on alone (idempotent; M6-03). A card that fails validation is not ingested, so a
+research entry waiting for it keeps no card and can't be accepted. A card for a company with an open manual research
+entry (the queue packs those after the shortlist) fills that entry in place, with its author and validation result
+(thesis_repo.upsert_generated_thesis; docs/SPEC_ISSUES.md 35).
 
 The push supplies cards only (M6 review R1-F4): thesis-ingest.yml runs main's code against main's queue files, with
 only data/thesis_cards/** taken from the pushed commit, and a push that changed any other path (a queue file, code)

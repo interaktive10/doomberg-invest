@@ -26,6 +26,27 @@ export function stripSection(md: string, title: string): string {
   return out.join("\n");
 }
 
+/** stripSection's complement: only the body of the section titled `title` (under its heading, down to the next
+ * heading of the same or a higher level: for the digest's "## " sections, the next "## " heading), trimmed; "" when
+ * there is no such section. Home cuts the digest with it. */
+export function pickSection(md: string, title: string): string {
+  const out: string[] = [];
+  let keeping = 0; // the level of the heading being kept; 0 = not inside it yet
+  for (const line of md.split("\n")) {
+    const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    if (h) {
+      const level = h[1]!.length;
+      if (keeping && level <= keeping) break;
+      if (!keeping && h[2]!.trim().toLowerCase() === title.toLowerCase()) {
+        keeping = level;
+        continue;
+      }
+    }
+    if (keeping) out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
 /** The markdown without its leading "# title" line (the page's own header already says it). */
 export function stripTitle(md: string): string {
   const lines = md.split("\n");
@@ -68,11 +89,11 @@ export function citeView(id: string, companyId: string | null, facts: readonly s
       return { label: dated ? `${name} ${dated[2]}` : name, title: `Metric ${body}`, href: at("fundamentals") };
     }
     case "s":
-      // the Company page has no signal timeline any more (overhaul PR 4): its score line is at the top
-      return { label: body, title: SIGNAL_NAME[body] ?? RED_FLAG_NAME[body] ?? `Signal ${body}`, href: page };
+      // the fired signals and the red flags are listed in the Company page's Why this score panel (overhaul PR 5)
+      return { label: body, title: SIGNAL_NAME[body] ?? RED_FLAG_NAME[body] ?? `Signal ${body}`, href: at("why") };
     case "c":
-      // the Company page's Context section shows only the reverse DCF (C2), and only when it has a row
-      return { label: body, title: CONTEXT_NAME[body] ?? `Context ${body}`, href: body === "C2" ? at("context") : page };
+      // so is Gap's split into C1-C3, the reverse DCF folded into C2 (overhaul PR 5; integration review web-WEB-1)
+      return { label: body, title: CONTEXT_NAME[body] ?? `Context ${body}`, href: at("why") };
     default:
       return { label: id, title: id, href: null };
   }

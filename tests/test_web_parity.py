@@ -91,3 +91,29 @@ def test_the_lab_pages_verdict_reads_the_labs_rule() -> None:
     assert float(const("PROMOTE_MIN_T_NW")) == float(rules["promote_min_t_nw"])
     assert float(const("DEMOTE_MAX_T_NW")) == float(rules["demote_max_t_nw"])
     assert re.findall(r'"(S\d+)"', const("NOT_TESTABLE")) == [s for s in cfg["not_testable"] if s != "S11"]
+
+
+def test_why_this_score_reads_the_scoring_rules() -> None:
+    """Overhaul PR 5: web/lib/why.ts adds Evidence up by family as pipeline/signals/scores.py does, so its copies of
+    config/signals.yaml `scores` (families, at most 2 signals a family, the divisor, the one-family cap and minimum,
+    the soft-flag penalty, Gap's minimum) and Gap's metrics (config/context.yaml's C1-C3) are pinned here."""
+    why = (WEB / "lib" / "why.ts").read_text(encoding="utf-8")
+    cfg = yaml.safe_load((ROOT / "config" / "signals.yaml").read_text(encoding="utf-8"))["scores"]
+    context = yaml.safe_load((ROOT / "config" / "context.yaml").read_text(encoding="utf-8"))
+
+    def const(name: str) -> str:
+        m = re.search(rf"export const {name}(?:: [^=]+)? = ([^;]+);", why, re.S)
+        assert m is not None, name
+        return m.group(1)
+
+    families = dict(re.findall(r"(\w+): \[([^\]]*)\]", const("FAMILIES")))
+    assert {f: re.findall(r'"(S\d+)"', ids) for f, ids in families.items()} == cfg["families"]
+    assert list(families) == list(cfg["families"])
+    assert int(const("MAX_SIGNALS_PER_FAMILY")) == cfg["max_signals_per_family"]
+    assert float(const("EVIDENCE_DIVISOR")) == float(cfg["evidence_divisor"])
+    assert int(const("SINGLE_FAMILY_CAP")) == cfg["single_family_cap"]
+    assert int(const("MIN_FAMILIES")) == cfg["min_families"]
+    assert int(const("SOFT_FLAG_PENALTY")) == cfg["soft_flag_penalty"]
+    assert int(const("GAP_MIN_METRICS")) == cfg["gap_min_metrics"]
+    metrics = sorted({k.split("_")[0].upper() for k in context if re.fullmatch(r"c\d+(_\w+)?", k)})
+    assert re.findall(r'"(C\d+)"', const("GAP_METRICS")) == metrics == ["C1", "C2", "C3"]

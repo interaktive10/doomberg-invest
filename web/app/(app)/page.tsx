@@ -1,46 +1,58 @@
 import { Markdown } from "@/components/markdown";
-import { Empty, Kpi, KpiRibbon, Page, Section } from "@/components/page";
+import { Empty, Page, Section } from "@/components/page";
 import { StaleBanner } from "@/components/stale";
+import { GroupSection } from "@/components/thesis-list";
 import { requireUser } from "@/lib/auth";
-import { stripSection } from "@/lib/cards";
-import { latestDigest, overview, sourceHealth } from "@/lib/data";
+import { ensureReviews, latestDigest, sourceHealth, theses, thesisFigures } from "@/lib/data";
+import { homeSections } from "@/lib/home";
+import { lateSources } from "@/lib/staleness";
+import { group, markMoved } from "@/lib/theses";
 
 export const metadata = { title: "This week" };
 
-// BRIEF §6 Home, simplified (Manzoor, 2026-10-08): what needs a look this week and the weekly digest. Source health
-// and LLM quota use moved to Settings; the stale-data banner shows here only (overhaul PR 4) when a US source is late.
+// BRIEF §6 Home (overhaul PR 5, the only PR that changes it): the funnel line as one terminal strip, To do (the
+// Theses screen's Needs you group, read live), What changed, and the stale-data banner when a US source is late. The
+// funnel and What changed are the digest's own sections (lib/home.ts), so Home and the issue read the same; with no
+// KPI cards, a count here can't contradict the digest.
 export default async function Home() {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
-  const [digest, o, sources] = await Promise.all([latestDigest(), overview(), sourceHealth()]);
-  const body = digest ? stripSection(stripSection(digest.body_md, "Source health"), "LLM quota use") : "";
+  const [digest, sources, first] = await Promise.all([latestDigest(), sourceHealth(), theses()]);
+  const all = markMoved(first, await ensureReviews(first)); // as the Theses screen does, so both list the same
+  const needs = all.filter((t) => group(t) === "needs");
+  const figures = await thesisFigures(needs);
+  const { funnel, changed, legacy } = homeSections(digest?.body_md ?? "");
+  const now = new Date();
   return (
-    <>
-      <StaleBanner sources={sources} now={new Date()} />
-      <Page
-        title="This week"
-        description={o.week ? `Scores for the week ending ${o.week}.` : "No week has been scored yet."}
-      >
-        <KpiRibbon>
-          <Kpi
-            label="New candidates"
-            value={o.buckets.candidate}
-            hint="strong evidence, not priced in"
-            href="/candidates"
-            tone={o.buckets.candidate > 0 ? "up" : undefined}
-          />
-          <Kpi label="Early" value={o.buckets.early} hint="evidence building" href="/candidates?bucket=early" />
-          <Kpi label="Priced-in" value={o.buckets.priced_in} hint="evidence already in the price" href="/candidates?bucket=priced_in" />
-          <Kpi label="Theses to review" value={o.review} hint="need your verdict" href="/theses" tone={o.review > 0 ? "warn" : undefined} />
-          <Kpi label="Open positions" value={o.position} hint="theses you hold" href="/theses" />
-        </KpiRibbon>
-        <Section title={digest ? digest.title : "Weekly digest"} id="digest">
-          {digest ? (
-            <Markdown text={body} />
-          ) : (
-            <Empty>No digest yet. The weekly run writes one each Saturday, after it scores the universe.</Empty>
-          )}
-        </Section>
-      </Page>
-    </>
+    <Page title="This week" description={digest ? `${digest.title} · week ending ${digest.week_end}` : "No digest yet."}>
+      <section aria-labelledby="funnel" className="rounded-md border border-line bg-panel px-4 py-2.5">
+        <h2 id="funnel" className="sr-only">
+          Funnel
+        </h2>
+        {funnel ? (
+          <div className="num text-[13px] text-fg [&_.prose-md]:max-w-none [&_.prose-md]:text-[13px] [&_.prose-md_p]:my-0">
+            <Markdown text={funnel} />
+          </div>
+        ) : legacy ? (
+          <p className="text-[13px] text-muted">This digest predates the funnel line; Saturday's weekly run writes it.</p>
+        ) : (
+          <p className="text-[13px] text-muted">No digest yet. The weekly run writes one each Saturday, after it scores the universe.</p>
+        )}
+      </section>
+      <GroupSection group="needs" title="To do" id="todo" list={needs} figures={figures} />
+      <Section title="What changed" id="changed" description="Each company's biggest change this week and why, then new verified facts and guidance or backlog changes.">
+        {changed ? (
+          <Markdown text={changed} />
+        ) : legacy ? (
+          <Markdown text={legacy} />
+        ) : (
+          <Empty>Nothing to compare yet: What changed comes with the weekly digest.</Empty>
+        )}
+      </Section>
+      {lateSources(sources, now).length > 0 ? (
+        <div className="overflow-hidden rounded-md">
+          <StaleBanner sources={sources} now={now} />
+        </div>
+      ) : null}
+    </Page>
   );
 }
