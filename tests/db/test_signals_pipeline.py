@@ -1,5 +1,5 @@
 """M4 against the database: signals as of W ignore later filings (M4-02); the weekly scoring run on F-US with Twelve
-Data and GDELT served by mocks (prices, splits flagged, context, Gap, buckets, shortlist, metrics); history pruning
+Data served by mocks (prices, splits flagged, context, Gap, buckets, shortlist, metrics); history pruning
 (docs/SPEC_ISSUES.md 9); the screener API (screen() over screener_v)."""
 
 from __future__ import annotations
@@ -17,17 +17,12 @@ from psycopg.types.json import Jsonb
 from pipeline.db import repo
 from pipeline.db.models import Company, CorpEvent, InsiderEvent, OwnershipRow, PriceW, Score, SignalValue
 from pipeline.db.pit import cutoff_for
-from pipeline.net.gdelt import build_query, timeline_url
 from pipeline.net.http import HttpClient
 from pipeline.net.stooq import parse_csv
 from pipeline.net.twelvedata import series_url
 from pipeline.screener import MetricFilter, ScreenSpec, run_screen
 from pipeline.settings import Settings
 from pipeline.signals import weekly
-from pipeline.signals.context import Metric
-from pipeline.signals.reverse_dcf import C2
-from pipeline.signals.scores import Evidence
-from pipeline.signals.series import Series
 from pipeline.us.fundamentals import load_xbrl_map, quarterize_company, to_models
 from pipeline.us.submissions import parse_submissions
 
@@ -149,11 +144,6 @@ def mock_http(tmp_path: Path) -> HttpClient:
     http = HttpClient(keyed(tmp_path))
     for sym in ("PWR", "JBL", "CAT", "XLK", "SPY"):  # SPY: the S&P 500 benchmark (^spx in config/context.yaml)
         http.register_mock(series_url(sym), (FIX / "px" / "twelvedata" / f"{sym}.json").read_bytes())
-    http.register_mock(timeline_url(build_query("QUANTA SERVICES, INC.", "PWR", "us")),
-                       (FIX / "gdelt" / "timeline_pwr.json").read_bytes())  # fmt: skip
-    http.register_mock(timeline_url(build_query("JABIL INC", "JBL", "us")), (FIX / "gdelt" / "empty.json").read_bytes())
-    http.register_mock(timeline_url(build_query("CATERPILLAR INC", "CAT", "us")),
-                       (FIX / "gdelt" / "empty.json").read_bytes())  # fmt: skip
     return http
 
 
@@ -177,7 +167,7 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     stats = weekly.run(conn, week, http=mock_http(tmp_path), imports=tmp_path / "imports")
 
     # the candidate stage: PWR and JBL by their theses, CAT by its Evidence (50: S1 fired)
-    assert stats.companies == 4 and stats.stage == 3 and stats.prices_ok == 3 and stats.gdelt_queried == 3
+    assert stats.companies == 4 and stats.stage == 3 and stats.prices_ok == 3
     n_signals = conn.execute("select count(*) from signal_values where week_end = %s", (week,)).fetchone()
     assert n_signals == (4 * 12,)
     prices = conn.execute("select count(*), min(week_end), max(week_end) from prices_w where company_id = %s", (pwr,))
@@ -189,17 +179,21 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     assert any(j.startswith("JBL ") for j in stats.unconfirmed_jumps)
     unadjusted = conn.execute("select count(*) from prices_w where company_id = %s and adj_close <> close", (jbl,))
     assert unadjusted.fetchone() == (0,)
-    # context: C1-C4 rows for the staged companies; GDELT counts (180 for PWR, 0 for JBL and CAT) ranked within the
-    # set
+    # context: C1-C3 rows for the staged companies, no C4 (SPEC_ISSUES 48). C3 ranks within a group of 5 (PWR, JBL,
+    # CAT and the benchmarks ^spx and XLK), under its minimum of 30, so it is null
     ctx = dict(conn.execute("select metric_id, inputs from context_values where company_id = %s and week_end = %s",
                             (pwr, week)).fetchall())  # fmt: skip
-    assert set(ctx) == {"C1", "C2", "C3", "C4"}
-    assert ctx["C4"]["articles_90d"] == 180 and ctx["C4"]["population"] == 3
-    assert ctx["C4"]["score"] == round(100 - 100 * (2 + 0.5) / 3, 6)  # above two zeros -> pct 83.3, score 16.7
-    assert ctx["C3"]["population"] >= 3  # PWR, JBL and the benchmarks (^spx, XLK)
+    assert set(ctx) == {"C1", "C2", "C3"}
+    assert ctx["C3"]["score"] is None and ctx["C3"]["missing"] == ["population"] and ctx["C3"]["population"] == 5
+    # Gap needs 2 of C1-C3: PWR has C1 only (C2 is null, m(1 - t) x S2C = 0.0898 <= 0.09: SPEC_ISSUES 43); CAT and
+    # JBL have C1 and C2 (ROIC 21% and 36%, above the 9% discount rate: SPEC_ISSUES 48)
+    assert ctx["C1"]["score"] is not None and ctx["C2"]["missing"] == ["value_creating_growth"]
+    gaps = dict(conn.execute("select c.ticker, s.gap from scores s join companies c on c.id = s.company_id "
+                             "where s.week_end = %s", (week,)).fetchall())  # fmt: skip
+    assert gaps["PWR"] is None and gaps["JBL"] is not None and gaps["CAT"] is not None
     score = conn.execute("select gap, bucket, weights_version from scores where company_id = %s and week_end = %s",
                          (pwr, week)).fetchone()  # fmt: skip
-    assert score is not None and score[0] is not None and score[2] == "w0-equal"
+    assert score is not None and score[2] == "w0-equal"
     metrics = conn.execute("select metrics from company_metrics where company_id = %s", (pwr,)).fetchone()
     assert metrics is not None and metrics[0]["market_cap"] > 0 and "revenue_ttm" in metrics[0]
     assert {r["company_id"] for r in run_screen(conn, ScreenSpec(market="us"))} == set(ids.values())
@@ -212,10 +206,7 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     # a re-run of the same week replaces its rows
     weekly.run(conn, week, http=mock_http(tmp_path), imports=tmp_path / "imports")
     assert conn.execute("select count(*) from scores where week_end = %s", (week,)).fetchone() == (4,)
-    assert conn.execute("select count(*) from context_values where week_end = %s", (week,)).fetchone() == (12,)
-    # the next week reuses the GDELT counts (under 28 days old) instead of asking again
-    nxt = weekly.run(conn, week + timedelta(days=7), http=mock_http(tmp_path), imports=tmp_path / "imports")
-    assert (nxt.gdelt_queried, nxt.gdelt_reused) == (0, 3)
+    assert conn.execute("select count(*) from context_values where week_end = %s", (week,)).fetchone() == (9,)
 
 
 def test_a_us_only_run_skips_india_entirely(conn: psycopg.Connection[Any]) -> None:
@@ -248,7 +239,7 @@ def test_manual_price_import_when_the_price_source_fails(conn: psycopg.Connectio
     imports = tmp_path / "imports"
     imports.mkdir()
     (imports / "PWR.csv").write_bytes((FIX / "px" / "pwr.us_w.csv").read_bytes())
-    stats = weekly.run(conn, week, http=http, imports=imports, gdelt_limit=0)
+    stats = weekly.run(conn, week, http=http, imports=imports)
     assert (stats.prices_ok, stats.prices_imported) == (0, 1)
     assert conn.execute("select count(*), min(source), max(source) from prices_w where company_id = %s",
                         (cid,)).fetchone() == (260, "manual", "manual")  # fmt: skip
@@ -297,17 +288,17 @@ def test_prices_stale_when_every_download_fails_cleared_when_they_answer(
     thesis(conn, cid)
     down = HttpClient(keyed(tmp_path / "a"))
     down.register_mock(series_url("PWR"), b"<!doctype html><html>502 Bad Gateway")  # benchmarks: no answer at all
-    stats = weekly.run(conn, week, http=down, imports=tmp_path / "imports", gdelt_limit=0)
+    stats = weekly.run(conn, week, http=down, imports=tmp_path / "imports")
     assert (stats.prices_ok, stats.prices_failed, stats.bench_ok, stats.bench_failed) == (0, 1, 0, 12)
 
     def health() -> Any:
         return {h.source: h for h in repo.source_health(conn)}["twelvedata"]
 
     assert health().stale and (health().last_error or "").startswith("stale: 13 downloads failed")
-    up = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
+    up = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports")
     assert up.prices_ok == 1 and not health().stale and health().last_error is None and health().last_success
     http = mock_http(tmp_path / "c")
-    again = weekly.run(conn, week, http=http, imports=tmp_path / "imports", gdelt_limit=0)
+    again = weekly.run(conn, week, http=http, imports=tmp_path / "imports")
     assert (again.prices_ok, again.prices_skipped, again.bench_skipped) == (0, 1, 2)  # PWR, ^spx and XLK are priced
     assert series_url("PWR") not in http.calls and series_url("SPY") not in http.calls
     assert not health().stale  # the other ten benchmarks failed again, but this week's prices are in
@@ -326,19 +317,17 @@ def test_adjusted_source_split_moves_market_cap_to_the_new_basis(conn: psycopg.C
         return Decimal(str((row.fetchone() or [None])[0]))
 
     with conn.transaction(force_rollback=True):
-        weekly.run(conn, week, http=mock_http(tmp_path / "a"), imports=tmp_path / "imports", gdelt_limit=0)
+        weekly.run(conn, week, http=mock_http(tmp_path / "a"), imports=tmp_path / "imports")
         before = market_cap()
     old = [PriceW(company_id=cid, week_end=b.week_end, close=b.close * 10, adj_close=b.close * 10, source="twelvedata")
            for b in parse_csv((FIX / "px" / "pwr.us_w.csv").read_bytes()) if b.week_end < week]  # fmt: skip
     repo.upsert_prices(conn, old)
-    stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
+    stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports")
     assert stats.source_splits == [f"PWR {week} x10"]
     assert abs(market_cap() / before - 10) < Decimal("1e-9")
     stored = conn.execute("select split_ratio from prices_w where company_id = %s and week_end = %s", (cid, week))
     assert stored.fetchone() == (Decimal(10),)
-    nxt = weekly.run(
-        conn, week + timedelta(days=7), http=mock_http(tmp_path / "c"), imports=tmp_path / "i", gdelt_limit=0
-    )
+    nxt = weekly.run(conn, week + timedelta(days=7), http=mock_http(tmp_path / "c"), imports=tmp_path / "i")
     assert nxt.source_splits == []  # the history is on the new basis now; the ratio stays on its week
 
 
@@ -371,43 +360,15 @@ def test_adjusted_source_split_in_a_gap_already_reported_keeps_market_cap_and_c1
         return (cap.fetchone(), c1.fetchone())
 
     with conn.transaction(force_rollback=True):
-        weekly.run(conn, week, http=mock_http(tmp_path / "a"), imports=tmp_path / "imports", gdelt_limit=0)
+        weekly.run(conn, week, http=mock_http(tmp_path / "a"), imports=tmp_path / "imports")
         clean = seen()
     assert clean[0] is not None and clean[0][0] is not None and clean[1] is not None
     bars = [b for b in parse_csv((FIX / "px" / "pwr.us_w.csv").read_bytes()) if b.week_end <= date(2026, 1, 2)]
     repo.upsert_prices(conn, [PriceW(company_id=cid, week_end=b.week_end, close=b.close * 10, adj_close=b.close * 10,
                                      source="twelvedata") for b in bars])  # fmt: skip
-    stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports", gdelt_limit=0)
+    stats = weekly.run(conn, week, http=mock_http(tmp_path / "b"), imports=tmp_path / "imports")
     assert stats.source_splits == ["PWR 2026-01-09 x10"]
     assert seen() == clean
-
-
-def test_gdelt_budget_goes_to_the_highest_evidence_across_both_markets(
-    conn: psycopg.Connection[Any], tmp_path: Path
-) -> None:
-    """M4 review R1-F7: with one query left, the staged company with the highest Evidence gets it, whichever market
-    it is in (the US was served first, in name order)."""
-    week = date(2026, 9, 18)
-    us = add(conn, "0000018230")
-    repo.upsert_in_companies(conn, [Company(market="in", name="Pledged Ltd", isin="INE000X01011", nse_symbol="PLDG")])
-    companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
-    ind = repo.company_ids_by(conn, "nse_symbol")["PLDG"]
-    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
-    for c in companies.values():
-        http.register_mock(timeline_url(build_query(c.name, c.ticker if c.market == "us" else c.nse_symbol, c.market)),
-                           (FIX / "gdelt" / "timeline_pwr.json").read_bytes())  # fmt: skip
-
-    def scored(cid: uuid.UUID, ev: int) -> weekly.Scored:
-        c = companies[cid]
-        e = Evidence(Decimal(ev), Decimal(0), {}, (), 0, False)
-        return weekly.Scored(c, Series([], c.market), e, False, {}, None, {})
-
-    nothing = weekly.Priced(None, None, None, Metric(None, None, None, {}), C2(None, None, {}))
-    stats = weekly.ScoresStats(week.isoformat())
-    rows = weekly.context_rows(conn, week, weekly.Configs.load(), {us: scored(us, 30), ind: scored(ind, 70)},
-                               {us: nothing, ind: nothing}, http, 1, stats)  # fmt: skip
-    c4 = {r.company_id: r.inputs for r in rows if r.metric_id == "C4"}
-    assert stats.gdelt_queried == 1 and "articles_90d" in c4[ind] and c4[us].get("missing") == ["gdelt_count"]
 
 
 # ---------------------------------------------------------------- pruning (SPEC_ISSUES 9)

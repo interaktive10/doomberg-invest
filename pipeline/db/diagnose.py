@@ -1,8 +1,8 @@
 """Why a scored week's companies landed in their buckets (BRIEF §4.8), read-only. For the candidate stage (Evidence
 >= 40) per market: how many were priced, which signal families contributed, how many had two families (Evidence
-above the single-family cap of 55 needs them), each of C1-C4, a Gap, a market cap above the §1.3 floor; why the
+above the single-family cap of 55 needs them), each of C1-C3, a Gap, a market cap above the §1.3 floor; why the
 priced ones that aren't candidates aren't; the top of the stage with its numbers; and the last scoring run's errors by
-source (a source that failed, such as GDELT for C4, shows here).
+source (a source that failed, such as the price source or a benchmark, shows here).
 
 `python -m pipeline.db.diagnose [--week YYYY-MM-DD]` (default: the latest scored week); the manual workflow
 diagnose.yml runs it against the live database. Market data only: no journal, positions or post-mortems."""
@@ -23,7 +23,7 @@ import psycopg
 from pipeline.settings import Settings
 from pipeline.signals.buckets import market_cap_ok
 
-CONTEXT = ("C1", "C2", "C3", "C4")
+CONTEXT = ("C1", "C2", "C3")  # C4 went with GDELT (docs/SPEC_ISSUES.md 48)
 STAGE_SQL = """
 select c.market, coalesce(c.ticker, c.nse_symbol, c.name) as symbol, s.evidence, s.gap, s.bucket, s.families,
        m.metrics ->> 'market_cap' as market_cap,
@@ -72,7 +72,7 @@ def why_not(r: Row, universe: Mapping[str, Mapping[str, Any]], buckets: Mapping[
     """The first rule of buckets.bucket() a priced company in 'none' fails."""
     early = buckets["early"]
     if r.gap is None:
-        return "no Gap (fewer than 2 of C1-C4 known)"
+        return "no Gap (fewer than 2 of C1-C3 known)"
     if r.market_cap is None:
         return "market cap unknown (no share count)"
     if not market_cap_ok(r.market, r.market_cap, universe):
@@ -105,7 +105,7 @@ def report(rows: Sequence[Row], universe: Mapping[str, Mapping[str, Any]], bucke
         out.append(f"  priced: context known {known}, Gap {gap}, market cap {mcap}, above the floor {floor}")
         none = Counter(why_not(r, universe, buckets) for r in priced if r.bucket == "none")
         out.append(f"  priced but 'none': {dict(none.most_common())}")
-        out.append("  top of the stage (Evidence, families, Gap, C1-C4 scores, market cap in millions, bucket):")
+        out.append("  top of the stage (Evidence, families, Gap, C1-C3 scores, market cap in millions, bucket):")
         for r in stage[:15]:
             ctx = " ".join(f"{m}={'-' if r.context.get(m) is None else f'{r.context[m]:.0f}'}" for m in CONTEXT)
             cap = "-" if r.market_cap is None else f"{r.market_cap / 1_000_000:,.0f}"
@@ -118,7 +118,8 @@ def report(rows: Sequence[Row], universe: Mapping[str, Mapping[str, Any]], bucke
 
 
 def run_errors(errors: Sequence[str], examples: int = 3) -> list[str]:
-    """A scoring run's errors ("gdelt Quanta: GdeltError: ...") grouped by their source, with the first examples."""
+    """A scoring run's errors ("twelvedata PWR: TwelveDataUnavailable: ...") grouped by their source, with the first
+    examples."""
     by: dict[str, list[str]] = {}
     for e in errors:
         by.setdefault(e.split(" ", 1)[0], []).append(e)

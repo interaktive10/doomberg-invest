@@ -43,8 +43,10 @@ def test_s4_needs_cash_flow_to_rise_not_only_net_income_to_fall() -> None:
                net_income=[4465, 410, 2967, 2910, 3541, -1647, 2687, -248], total_assets=[200000] * 8)  # fmt: skip
     now = s04_earnings_quality.compute(Ctx("c", "us", date(2026, 10, 2), s, SIGNALS))
     assert not now.fired and now.inputs["ttm_cfo"] < now.inputs["ttm_cfo_year_ago"]
-    before = s04_earnings_quality.compute(Ctx("c", "us", date(2026, 10, 2), s,
-                                              without("s4_earnings_quality", "cfo_must_rise_yoy")))  # fmt: skip
+    cfg = without("s4_earnings_quality", "cfo_must_rise_yoy")
+    assert not s04_earnings_quality.compute(Ctx("c", "us", date(2026, 10, 2), s, cfg)).fired  # NI 0.40x (SPEC 47)
+    cfg["s4_earnings_quality"].pop("ni_min_ratio_yoy")
+    before = s04_earnings_quality.compute(Ctx("c", "us", date(2026, 10, 2), s, cfg))
     assert before.fired and before.strength == D(1)
 
 
@@ -84,8 +86,11 @@ def _quarters(rev: list[D], margin: str, equity: list[int]) -> Series:
 
 def test_c2_is_null_where_growth_lowers_the_dcf_value() -> None:
     """A 10% margin with capital growing far faster than revenue (S2C at its 0.5 floor): each $ of growth earns
-    0.10 x 0.79 x 0.5 = 4% on its capital, under the 9% discount rate, so g* would read backwards."""
-    s = _quarters([D(1000) * D("1.01") ** i for i in range(20)], "0.10", [3000 + 500 * i for i in range(20)])
+    0.10 x 0.79 x 0.5 = 4% on its capital, under the 9% discount rate, so g* would read backwards. Its ROIC (10.4%)
+    clears SPEC_ISSUES 48's hurdle, so this rule is the one that nulls it."""
+    s = _quarters([D(1000) * D("1.01") ** i for i in range(20)], "0.10", [1000 + 150 * i for i in range(20)])
+    roic = s.roic(0)
+    assert roic is not None and abs(roic - D("0.1038")) < D("0.0001")
     got = c2(s, D(1500), "us", C2_CFG)
     assert got.value is None and got.score is None and got.inputs["missing"] == ["value_creating_growth"]
     assert abs(got.inputs["growth_return"] - 0.10 * 0.79 * 0.5) < 1e-9

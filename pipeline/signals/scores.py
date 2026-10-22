@@ -83,7 +83,9 @@ def evidence(
 
 
 def gap(context_scores: Mapping[str, Decimal | None], weights: Weights, min_metrics: int) -> Decimal | None:
-    """The (weighted, equal by default) mean of the available C1-C4 scores; None with fewer than min_metrics."""
+    """The (weighted, equal by default) mean of the available C1-C3 scores; None with fewer than min_metrics. Only the
+    given metrics' weights are read, so a weight with no metric (C4's, left in config/weights.yaml: SPEC_ISSUES 48)
+    counts for nothing."""
     known = {k: v for k, v in context_scores.items() if v is not None}
     if len(known) < min_metrics:
         return None

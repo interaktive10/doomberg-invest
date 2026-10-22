@@ -39,33 +39,34 @@ def test_the_stage_and_why_priced_companies_are_not_candidates(conn: psycopg.Con
         score(unpriced, "50", None, ["fundamentals"], "none"),
         score(weak, "20", None, [], "none"),
     ])  # fmt: skip
-    repo.upsert_context_values(conn, context(one, {"C1": 70, "C2": None, "C3": 55, "C4": None})
-                               + context(two, {"C1": 61, "C2": None, "C3": 61, "C4": None})
-                               + context(small, {"C1": 61, "C2": None, "C3": 61, "C4": None}))  # fmt: skip
+    repo.upsert_context_values(conn, context(one, {"C1": 70, "C2": None, "C3": 55})
+                               + context(two, {"C1": 61, "C2": None, "C3": 61})
+                               + context(small, {"C1": 61, "C2": None, "C3": 61}))  # fmt: skip
     repo.upsert_company_metrics(conn, WEEK, {one: {"market_cap": 2.5e9}, two: {"market_cap": 9e9},
                                              small: {"market_cap": 1e8}})  # fmt: skip
     rows = stage_rows(conn, WEEK, Decimal(40))
     assert [r.evidence for r in rows] == [Decimal(70), Decimal(70), Decimal(55), Decimal(50)]  # weak is off-stage
     assert {r.symbol: len(r.families) for r in rows}["Two"] == 2
-    assert {r.symbol: dict(r.context) for r in rows}["One"] == {"C1": 70, "C2": None, "C3": 55, "C4": None}
+    assert {r.symbol: dict(r.context) for r in rows}["One"] == {"C1": 70, "C2": None, "C3": 55}
     cfgs = Configs.load()
     text = "\n".join(report(rows, cfgs.universe, cfgs.signals["scores"]["buckets"]))
     assert "us: stage 4, priced 3" in text
     assert "families contributing: {'fundamentals': 4, 'behavior': 2}" in text
-    assert "context known {'C1': 3, 'C2': 0, 'C3': 3, 'C4': 0}, Gap 3, market cap 3, above the floor 2" in text
+    assert "context known {'C1': 3, 'C2': 0, 'C3': 3}, Gap 3, market cap 3, above the floor 2" in text
     assert ("priced but 'none': {'market cap below the floor': 1, "
             "'one signal family (Evidence capped at 55; early needs 2)': 1}") in text  # fmt: skip
-    assert "Two          E=70.0 fam=fundamentals+behavior Gap=61.0 C1=61 C2=- C3=61 C4=- mcap=9,000 candidate" in text
+    assert "Two          E=70.0 fam=fundamentals+behavior Gap=61.0 C1=61 C2=- C3=61 mcap=9,000 candidate" in text
 
 
 def test_the_last_scoring_runs_errors_by_source(conn: psycopg.Connection[Any]) -> None:
-    """GDELT answered 3 of the first live run's queries (2026-10-07): its errors are where C4's gaps come from."""
+    """The last finished run's errors grouped by source: a source that failed shows where the stage's gaps come
+    from."""
     errors = [
-        "gdelt Quanta: GdeltError: Please limit requests to one every 5 seconds",
+        "twelvedata PWR: TwelveDataUnavailable: You have run out of API credits",
         "benchmark XLI: x: y",
-        "gdelt Jabil: GdeltError: timeout",
-        "gdelt Caterpillar: GdeltError: timeout",
-        "gdelt Acme: z",
+        "twelvedata JBL: TwelveDataUnavailable: timeout",
+        "twelvedata CAT: TwelveDataUnavailable: timeout",
+        "twelvedata ACME: z",
     ]
     finished = "('scores_weekly', '2026-10-07 16:01+00', '2026-10-07 16:57+00', 'partial', %s)"
     conn.execute(f"insert into runs (kind, started_at, finished_at, status, stats) values {finished}",
@@ -74,10 +75,10 @@ def test_the_last_scoring_runs_errors_by_source(conn: psycopg.Connection[Any]) -
     conn.execute(f"insert into runs (kind, started_at, status) values {running}")
     assert last_run(conn) == [
         "last scoring run 2026-10-07 16:01Z: partial, 5 errors",
-        "  gdelt: 4",
-        "    gdelt Quanta: GdeltError: Please limit requests to one every 5 seconds",
-        "    gdelt Jabil: GdeltError: timeout",
-        "    gdelt Caterpillar: GdeltError: timeout",
+        "  twelvedata: 4",
+        "    twelvedata PWR: TwelveDataUnavailable: You have run out of API credits",
+        "    twelvedata JBL: TwelveDataUnavailable: timeout",
+        "    twelvedata CAT: TwelveDataUnavailable: timeout",
         "  benchmark: 1",
         "    benchmark XLI: x: y",
     ]

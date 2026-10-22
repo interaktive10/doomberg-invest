@@ -8,7 +8,7 @@ exclusions):
   facts filed (published) before the month-end's cutoff, exactly the rows as_of(month-end) returns;
 - the legacy rules L1-L6 (legacy_doomberg.py);
 - Gap from the live context code (C1 over the month-end multiples of the last `c1.history_years`, C2 the reverse
-  DCF, C3 the `c3_runup.lookback_weeks` return within the month's population; C4 has no history, so it is missing);
+  DCF, C3 the `c3_runup.lookback_weeks` return within the month's population, null below `c3_runup.min_population`);
 - forward price returns at each horizon and the excess over the equal-weighted mean of the month's population priced
   at both dates (survivorship: only companies still in the database have prices; §7 caveat 2).
 
@@ -290,10 +290,11 @@ def _gap(
     ev, _, _ = context.multiples(feed.series, cap)
     c1 = context.c1(history, opts.c1_min_months) if cap is not None else context.Metric(None, None, None, {})
     c2 = reverse_dcf.c2(feed.series, ev, feed.market, cfgs.context["c2_reverse_dcf"], sc.g_ob)
-    ran = Decimal(str(cfgs.context["c3_runup"]["already_ran_pct"]))
-    c3 = context.c3(_ret(feed, m, shared.c3_months), mc.returns, ran)
+    c3_cfg = cfgs.context["c3_runup"]
+    c3 = context.c3(_ret(feed, m, shared.c3_months), mc.returns, Decimal(str(c3_cfg["already_ran_pct"])),
+                    int(c3_cfg["min_population"]))  # fmt: skip
     need = int(cfgs.signals["scores"]["gap_min_metrics"])
-    g = gap_score({"C1": c1.score, "C2": c2.score, "C3": c3.score, "C4": None}, cfgs.weights, need)
+    g = gap_score({"C1": c1.score, "C2": c2.score, "C3": c3.score}, cfgs.weights, need)
     return None if g is None else float(g)
 
 

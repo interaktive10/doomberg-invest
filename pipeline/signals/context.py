@@ -1,12 +1,11 @@
-"""Context metrics C1, C3, C4 (BRIEF §1.6, §4.7; C2 is reverse_dcf.py). Candidate stage only: they use price, and
+"""Context metrics C1 and C3 (BRIEF §1.6, §4.7; C2 is reverse_dcf.py). Candidate stage only: they use price, and
 they feed the Gap score, never Evidence.
 
 - EV = price x shares_outstanding + total_debt - cash (INR for India, USD for US).
 - C1: EV/Sales_TTM and EV/EBIT_TTM (EBIT > 0) percentile vs the company's own weekly history (up to 10 years,
   point-in-time fundamentals). Score = 100 - mean(percentiles).
 - C3: 52-week return percentile within the market's candidate set plus a benchmark sample. Score = 100 - pct;
-  `already_ran` if pct >= 90.
-- C4: GDELT article count over 90 days, percentile within the candidate set. Score = 100 - pct.
+  `already_ran` if pct >= 90; null when that comparison group has fewer than 30 members (docs/SPEC_ISSUES.md 48).
 
 Percentile rank: the share of the population below the value, ties counted as half (0-100).
 """
@@ -79,20 +78,17 @@ def c1(history: Sequence[tuple[date, Decimal | None, Decimal | None]], min_weeks
     return Metric(sales_now if sales_now is not None else ebit_now, mean, HUNDRED - mean, inputs)
 
 
-def c3(ret: Decimal | None, population: Sequence[Decimal], already_ran_pct: Decimal) -> Metric:
-    """population: 52-week returns of the market's candidate set plus the benchmark sample (including ret)."""
+def c3(ret: Decimal | None, population: Sequence[Decimal], already_ran_pct: Decimal, min_population: int) -> Metric:
+    """population: 52-week returns of the market's candidate set plus the benchmark sample (including ret). Below
+    min_population (config/context.yaml c3_runup.min_population) the percentile ranks too few to mean anything."""
     if ret is None or not population:
         return Metric(None, None, None, {"missing": ["return_52w"]})
+    if len(population) < min_population:
+        return Metric(None, None, None, {"missing": ["population"], "return_52w": _f(ret),
+                                         "population": len(population), "min_population": min_population})  # fmt: skip
     pct = percentile_rank(ret, population)
     return Metric(ret, pct, HUNDRED - pct, {"return_52w": _f(ret), "population": len(population),
                                           "already_ran": pct >= already_ran_pct})  # fmt: skip
-
-
-def c4(count: int | None, population: Sequence[int]) -> Metric:
-    if count is None or not population:
-        return Metric(None, None, None, {"missing": ["gdelt_count"]})
-    pct = percentile_rank(Decimal(count), [Decimal(c) for c in population])
-    return Metric(Decimal(count), pct, HUNDRED - pct, {"articles_90d": count, "population": len(population)})
 
 
 def return_52w(closes: Sequence[tuple[date, Decimal]], week: date, weeks: int = 52) -> Decimal | None:

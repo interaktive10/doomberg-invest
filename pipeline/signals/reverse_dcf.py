@@ -10,6 +10,8 @@ expectations; it doesn't value companies.
 - evidence growth g_e = 0.4 clip(g(ob), -0.2, 0.6) + 0.3 x 3-year revenue CAGR + 0.3 x latest revenue YoY, capped to
   [-0.10, 0.40]; the weights renormalize over the parts that exist
 - C2 = g_e - g*; score = clip(50 + 250 x C2, 0, 100)
+- C2 is null when ROIC (§4.6) is unknown or <= the discount rate (docs/SPEC_ISSUES.md 48), and when
+  m x (1 - t) x S2C <= the discount rate (43)
 """
 
 from __future__ import annotations
@@ -140,6 +142,11 @@ def c2(s: Series, ev: Decimal | None, market: str, cfg: Mapping[str, Any], g_ob:
         terminal_growth=float(cfg["terminal_growth"][market]), years=int(cfg["years"]),
     )  # fmt: skip
     lo, hi = (float(v) for v in cfg["brentq_bounds"])
+    roic = s.roic(0)
+    if roic is None or roic <= Decimal(str(cfg["discount_rate"][market])):
+        # a business that doesn't earn its cost of capital today, or whose ROIC is unknown: no expectations gap to
+        # read (docs/SPEC_ISSUES.md 48)
+        return C2(None, None, {"missing": ["roic_above_discount"], "roic": num(roic), "discount": x.discount})
     growth_return = x.margin * (1 - x.tax) * x.s2c  # what a $ of revenue growth earns on the capital it needs
     if cfg.get("growth_must_add_value", False) and growth_return <= x.discount:
         # PV falls as g rises here, so g* reads backwards and C2 with it (docs/SPEC_ISSUES.md 43)

@@ -1,5 +1,7 @@
 """S7 insider conviction (BRIEF §4.6).
 US: >= 2 distinct insiders with unplanned open-market (code P) buys of >= $25k each within 60 days, >= $250k in all.
+A filer whose only role is "10% owner" (a fund or holding vehicle, not a manager) isn't an insider here; a joint
+"director; 10% owner" filing and a filing without a role still count (docs/SPEC_ISSUES.md 49).
 India: promoter-group market purchases >= Rs 2 crore within 90 days, or the promoter pledged % down >= 5 pp QoQ.
 Strength min(1, 0.5 + 0.1 (n - 2) + 0.1 log2(total / threshold)); the India pledge path is 0.6.
 Amended filings count once: the latest filing per insider and trade date (insiders.latest_versions, M2 review F4)."""
@@ -7,7 +9,7 @@ Amended filings count once: the latest filing per insider and trade date (inside
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
@@ -34,6 +36,12 @@ def _window(ctx: Ctx, kind: str, days: int) -> list[Insider]:
     return [e for e in evs if not e.planned and start < e.event_date <= ctx.week]
 
 
+def only_ignored_roles(role: str | None, ignore: Collection[str]) -> bool:
+    """Every role the filing gives is an ignored one ("10% owner"); a filing that gives none isn't ignored."""
+    roles = {r.strip().lower() for r in (role or "").split(";") if r.strip()}
+    return bool(roles) and roles <= {str(r).strip().lower() for r in ignore}
+
+
 def compute(ctx: Ctx) -> SignalResult:
     c = ctx.section("s7_insider")
     return _us(ctx, c) if ctx.market == "us" else _india(ctx, c)
@@ -41,12 +49,19 @@ def compute(ctx: Ctx) -> SignalResult:
 
 def _us(ctx: Ctx, c: Mapping[str, Any]) -> SignalResult:
     by_person: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    ignore: Collection[str] = c.get("us_ignore_roles", ())
+    ignored: set[str] = set()
     for e in _window(ctx, "open_market_buy", int(c["us_window_days"])):
+        if only_ignored_roles(e.role, ignore):  # the latest version's role (amendments are collapsed first)
+            ignored.add(e.person)
+            continue
         by_person[e.person] += e.value or ZERO
     each, need = cfg_dec(c, "us_min_buy_usd"), cfg_dec(c, "us_min_total_usd")
     buyers = {p: v for p, v in by_person.items() if v >= each}
     total = sum(buyers.values(), ZERO)
-    inputs = {"insiders": len(buyers), "total_usd": num(total), "buyers": sorted(buyers)}
+    inputs: dict[str, object] = {"insiders": len(buyers), "total_usd": num(total), "buyers": sorted(buyers)}
+    if ignored:
+        inputs["ignored_by_role"] = sorted(ignored)
     if len(buyers) < int(c["us_min_insiders"]) or total < need:
         return quiet(**inputs)
     return fired(cluster_strength(len(buyers), total, need, c), **inputs)

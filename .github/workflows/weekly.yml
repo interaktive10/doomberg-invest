@@ -73,15 +73,14 @@ jobs:
           if-no-files-found: ignore
 
   scores:
-    # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Twelve Data) -> context C1-C4 -> Gap ->
+    # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Twelve Data) -> context C1-C3 -> Gap ->
     # buckets -> shortlist, for the US alone while India is paused. Only on this week's US data: when `us` failed or
     # skipped its steps there are no scores this week, and the digest says so.
     needs: us
     if: needs.us.result == 'success' && needs.us.outputs.ran == 'true'
     runs-on: ubuntu-24.04
     # One transaction: a run cut off by the limit keeps nothing. Prices are up to 400 downloads 8 s apart (Twelve
-    # Data's free 8 a minute: under an hour), GDELT 100 queries 5 s apart; the first live run (2026-09-29) spent 40
-    # minutes without finishing.
+    # Data's free 8 a minute: under an hour); the first live run (2026-09-29) spent 40 minutes without finishing.
     timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -3,7 +3,7 @@ only, every item under a stable id.
 
 - identifiers, the week's scores (Evidence, Gap, bucket, families);
 - the last 12 quarters of key metrics (`m:<metric>:<period_end>`), as the week's point-in-time reader sees them;
-- the week's fired signals and red flags with their inputs (`s:S1`, `s:R2`), the context metrics C1-C4 with their
+- the week's fired signals and red flags with their inputs (`s:S1`, `s:R2`), the context metrics C1-C3 with their
   inputs, reverse-DCF assumptions included (`c:C2`), Evidence and Gap (`c:evidence`, `c:gap`);
 - at most 20 verified text facts with quote, URL and fact id (`f:<uuid>`), the newest first;
 - ownership by quarter (`m:<field>:<quarter_end>`) and insider events of the last year (`m:insider:<uuid>`);
