@@ -564,7 +564,8 @@ def test_submissions_are_read_only_for_new_or_indexed_names(conn: psycopg.Connec
         http.register_mock(submissions_url(ciks[k]), empty_submissions(ciks[k]))
     stats = run.run(conn, DAY, router(), http, None, tmp_path)
     assert [u for u in http.calls if "/submissions/" in u] == [submissions_url(ciks[k]) for k in fetched]
-    assert stats.submissions == len(fetched) and stats.indexed == (1 if index_ok else 0)
+    # no daily index is read after a failed or cut-off SEC step, so none is counted (integration review db-DB-1)
+    assert stats.submissions == len(fetched) and stats.indexed == (1 if index_ok and sec_cut_off is None else 0)
     assert stats.checked == dict.fromkeys(ciks.values(), run.RANK["stage"])
     assert bool(stats.errors) is (fetched == "ABC")  # the unreadable index, or the SEC step's failure, is logged
     after = datetime(2026, 9, 24, 1, 20, tzinfo=UTC)
