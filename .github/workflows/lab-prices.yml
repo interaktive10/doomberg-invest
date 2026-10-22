@@ -1,14 +1,14 @@
 name: lab-prices
 # BRIEF §4.10.1 (docs/SPEC_ISSUES.md 51): the Signal Lab's month-end prices from Twelve Data's daily bars, a resumable
 # download (pipeline/lab/price_history.py) kept in the private `lab-data-v1` release, with no human step. It runs
-# Sunday to Thursday in November and December only, so Saturday's weekly prices (weekly.yml) never compete with it for
-# the free plan's 800 credits a day. The Actions minutes gate goes first. Each run resumes from the release, stops
+# Sunday to Thursday, so Saturday's weekly prices (weekly.yml) never compete with it for the free plan's 800 credits a
+# day; in any month, since the gate spreads it over as many cycles as the free minutes need. The Actions minutes gate goes first. Each run resumes from the release, stops
 # itself at 90 minutes or 650 credits (or once Twelve Data says the day's credits are spent) and uploads its progress
 # even after a failure. Once every ticker is done it dispatches the first Lab run (lab.yml) and disables itself; a
 # blocked probe disables it too (the reason is in the lab_prices runs row). About 8 runs of about 90 minutes.
 on:
   schedule:
-    - cron: "7 10 * 11,12 0-4"
+    - cron: "7 10 * * 0-4"
   workflow_dispatch:
 
 # Its own group, not `pipeline`: a group holds one waiting run and a newer one replaces it, so a 90-minute download in
