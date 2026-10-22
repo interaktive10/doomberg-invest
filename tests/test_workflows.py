@@ -153,9 +153,9 @@ def test_lab_prices_runs_sunday_to_thursday_in_november_and_december_only() -> N
     """Overhaul PR 3: Saturday's weekly prices never compete with the download for Twelve Data's 800 credits a day,
     and the job doesn't run the rest of the year."""
     on = load("lab-prices.yml")[True]
-    assert on["schedule"] == [{"cron": "7 10 * 11,12 0-4"}] and "workflow_dispatch" in on
+    assert on["schedule"] == [{"cron": "7 10 * * 0-4"}] and "workflow_dispatch" in on
     minute, hour, dom, months, dow = on["schedule"][0]["cron"].split()
-    assert (dom, months, dow) == ("*", "11,12", "0-4") and minute != "0"
+    assert (dom, months, dow) == ("*", "*", "0-4") and minute != "0"  # any month: it disables itself when done
 
 
 def test_lab_prices_gates_stops_itself_and_keeps_its_progress() -> None:

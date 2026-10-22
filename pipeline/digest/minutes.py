@@ -6,11 +6,14 @@ inside the free minutes.
 - Used: this repository's billed minutes since the cycle started (config/quotas.yaml `actions.cycle_day`), from the
   GitHub REST API with the workflow's GITHUB_TOKEN: each job of each run (every attempt) from its start to its end,
   rounded up to a whole minute as GitHub bills it. A job that never started (blocked, or still queued) or hasn't ended
-  counts 0. Other repositories' minutes are `actions.other_repos`, copied by hand from github.com/settings/billing.
-- Projected: used plus the cycle's remaining scheduled runs (the crons in .github/workflows/*.yml, UTC) at their
-  typical cost (`actions.typical`). The Lab download (lab-prices.yml) is gated, so its typical cost is 0; the digest
-  adds the runs it still needs instead (its pending tickers at `max_credits` a run, at most its cron's remaining runs)
-  at `actions.download_run` each (PR 3 review spec-F2). The gate leaves them out: each of those runs asks for itself.
+  counts 0. Other repositories' minutes can't be read with this repository's token, so they are budgeted at
+  `actions.other_repos_per_day` (measured: 670 minutes in Oct 1-22, 2026, about 31 a day) for each day of the cycle
+  so far, plus `actions.other_repos` for anything known on top (github.com/settings/billing).
+- Projected: used plus the other repositories' remaining days at the same rate, plus the cycle's remaining scheduled
+  runs (the crons in .github/workflows/*.yml, UTC) at their typical cost (`actions.typical`). The Lab download
+  (lab-prices.yml) is gated, so its typical cost is 0; the digest adds the runs it still needs instead (its pending
+  tickers at `max_credits` a run, at most its cron's remaining runs) at `actions.download_run` each (PR 3 review
+  spec-F2). The gate leaves them out: each of those runs asks for itself.
 - `python -m pipeline.digest.minutes gate --need N` (lab-prices.yml and lab.yml, first step; the job needs
   `permissions: actions: read`): the run is allowed when used + N + `actions.reserve` + the scheduled runs stays at or
   below `actions.gate_max`. It prints one line, writes allowed=true|false to $GITHUB_OUTPUT and exits 0 either way: a
@@ -53,12 +56,13 @@ class Budget:
 
     included: int  # the free minutes of a billing cycle
     cycle_day: int  # the day of the month the cycle resets (the month's last day when the month is shorter)
-    other_repos: int  # minutes the account's other private repositories used this cycle
+    other_repos: int  # minutes the account's other private repositories used this cycle, on top of the daily rate
     gate_max: int  # the gate allows a run while the projection with it stays at or below this
     reserve: int  # minutes no schedule shows (CI, thesis-ingest, a re-run), held back by the gate
     warn_above: int  # the digest warns above this projection
     typical: Mapping[str, int] = field(default_factory=dict)  # workflow file -> billed minutes of a scheduled run
     download_run: int = 0  # billed minutes of one Lab download run (lab-prices.yml), for the digest's projection
+    other_repos_per_day: int = 0  # the other private repositories' minutes a day, budgeted for every day of the cycle
 
     @classmethod
     def from_doc(cls, doc: Mapping[str, Any]) -> Budget:
@@ -72,6 +76,7 @@ class Budget:
             warn_above=int(a["warn_above"]),
             typical={str(k): int(v) for k, v in (a.get("typical") or {}).items()},
             download_run=int(a.get("download_run") or 0),
+            other_repos_per_day=int(a.get("other_repos_per_day") or 0),
         )
         if not 1 <= budget.cycle_day <= 31:
             raise ValueError(f"config/quotas.yaml actions.cycle_day must be 1-31, not {budget.cycle_day}")
@@ -257,13 +262,19 @@ class Meter:
     here: int  # this repository's billed minutes this cycle
     scheduled: int  # the cycle's remaining scheduled runs at their typical cost
     download: int = 0  # the Lab download's remaining runs (download_minutes); the digest's projection only
+    others_so_far: int = 0  # the other repositories' daily rate times the cycle's days before today
+    others_ahead: int = 0  # the same rate times the cycle's days from today on
+
+    @property
+    def others(self) -> int:
+        return self.budget.other_repos + self.others_so_far
 
     @property
     def used(self) -> int:
-        return self.here + self.budget.other_repos
+        return self.here + self.others
 
     def projected(self, need: int = 0, reserve: int = 0) -> int:
-        return self.used + need + reserve + self.scheduled + self.download
+        return self.used + self.others_ahead + need + reserve + self.scheduled + self.download
 
 
 def measure(runs: Runs, budget: Budget, now: datetime, root: Path = REPO_ROOT, download_pending: int = 0,
@@ -275,7 +286,17 @@ def measure(runs: Runs, budget: Budget, now: datetime, root: Path = REPO_ROOT, d
     until = datetime.combine(end, time(0), tzinfo=UTC)
     fires_left = scheduled_runs(now, until, root)
     download = download_minutes(fires_left.get(DOWNLOAD, 0), download_pending, tickers_per_run, budget.download_run)
-    return Meter(budget, start, end, here, scheduled_minutes(fires_left, budget.typical), download)
+    rate = budget.other_repos_per_day
+    return Meter(
+        budget,
+        start,
+        end,
+        here,
+        scheduled_minutes(fires_left, budget.typical),
+        download,
+        others_so_far=rate * (now.date() - start).days,
+        others_ahead=rate * (end - now.date()).days,
+    )
 
 
 def gate(meter: Meter, need: int) -> tuple[bool, str]:
@@ -285,9 +306,10 @@ def gate(meter: Meter, need: int) -> tuple[bool, str]:
     projected = meter.projected(need, b.reserve)
     ok = projected <= b.gate_max
     verdict = "<= {:,}: allowed" if ok else "> {:,}: refused, the run is skipped"
-    line = (f"Actions minutes: {meter.used:,} used this cycle (since {meter.start}; {b.other_repos:,} of them in other "
-            f"repos) + {need:,} this run + {b.reserve:,} reserve + {meter.scheduled:,} scheduled until {meter.end} = "
-            f"{projected:,} {verdict.format(b.gate_max)}")  # fmt: skip
+    line = (f"Actions minutes: {meter.used:,} used this cycle (since {meter.start}; {meter.others:,} of them in other "
+            f"repos) + {meter.others_ahead:,} other repos ahead + {need:,} this run + {b.reserve:,} reserve + "
+            f"{meter.scheduled:,} scheduled until {meter.end} = {projected:,} "
+            f"{verdict.format(b.gate_max)}")  # fmt: skip
     return ok, line if ok else f"::notice::{line}"
 
 
