@@ -91,9 +91,10 @@ test("Home: the funnel strip, To do live from the theses and What changed from t
   await expect(page.getByText(/Cards to accept or dismiss: \d/)).toHaveCount(0);
   await expect(page.getByText(/Actions: 812 of 2,000/)).toHaveCount(0);
   // Data health and the stale-data line: twelvedata is seeded stale, named as its row is ("Weekly prices") with its
-  // provider; whether SEC is late too depends on today's date, so the line is read in two parts (PR 6 review ci-CI-1)
+  // provider; whether SEC is late too depends on today's date ("SEC filings and weekly prices ..." once it is), so the
+  // line is read in two parts, the name in either case (PR 6 review ci-CI-1)
   const health = page.getByRole("region", { name: "Data health" });
-  await expect(health).toContainText("Weekly prices (Twelve Data)");
+  await expect(health).toContainText(/weekly prices \(Twelve Data\)/i);
   await expect(health).toContainText(/(is|are) out of date/);
 });
 
