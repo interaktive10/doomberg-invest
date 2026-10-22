@@ -2,7 +2,7 @@ import { pickSection, stripSection, stripTitle } from "@/lib/cards";
 import type { SourceHealth, Thesis } from "@/lib/data";
 import { shortDate } from "@/lib/dates";
 import { code } from "@/lib/format";
-import { RED_FLAG_NAME, SIGNAL_PLAIN, sourceLabel } from "@/lib/labels";
+import { RED_FLAG_NAME, SIGNAL_PLAIN, signalShort, sourceLabel } from "@/lib/labels";
 import { lateSources, sourceStatus, watched } from "@/lib/staleness";
 
 // Home (overhaul PR 5; BRIEF §6): the funnel and What changed come from the digest's body_md, the same text as the
@@ -133,6 +133,8 @@ export interface FunnelStep {
   key: FunnelKey;
   value: number;
   label: string;
+  /** the phone's one word (the phone mock: scored, signal, on board, new) */
+  short: string;
   width: number;
 }
 
@@ -141,13 +143,13 @@ const MARKET_WORD: Record<string, string> = { US: "US", IN: "Indian" };
 /** The four steps the strip draws. */
 export function funnelSteps(t: FunnelTotals): FunnelStep[] {
   const one = t.markets.length === 1 ? MARKET_WORD[t.markets[0]!] : undefined;
-  const steps: [FunnelKey, number, string][] = [
-    ["scored", t.scored, one ? `${one} companies scored` : "companies scored"],
-    ["stage", t.stage, "show real evidence"],
-    ["board", t.candidates, "on the board"],
-    ["new", t.fresh, "new this week"],
+  const steps: [FunnelKey, number, string, string][] = [
+    ["scored", t.scored, one ? `${one} companies scored` : "companies scored", "scored"],
+    ["stage", t.stage, "show real evidence", "signal"],
+    ["board", t.candidates, "on the board", "on board"],
+    ["new", t.fresh, "new this week", "new"],
   ];
-  return steps.map(([key, value, label]) => ({ key, value, label, width: funnelWidth(value, t.scored) }));
+  return steps.map(([key, value, label, short]) => ({ key, value, label, short, width: funnelWidth(value, t.scored) }));
 }
 
 /** The strip's heading: "From 4,659 companies to 3 ideas". */
@@ -435,10 +437,17 @@ export function comingUp(list: readonly Live[], today: string, kills: ReadonlyMa
 
 // ---------------------------------------------------------------- On the board and Data health
 
-/** An On the board card's one line: its first two fired signals in everyday words. */
+/** An On the board row's one line: its first two fired signals by their short names, as the Company page names them
+ * ("Insider buying · Earnings quality"); the row's title says every fired signal in everyday words (boardWhyAll). */
 export function boardWhy(signals: readonly string[]): string {
-  const words = signals.slice(0, 2).map(plain);
-  return words.length === 0 ? "No signal fired" : words.join(" · ").replace(/^./, (c) => c.toUpperCase());
+  const words = signals.slice(0, 2).map(signalShort);
+  return words.length === 0 ? "No signal fired" : words.join(" · ");
+}
+
+/** Every fired signal in everyday words, for the row's tooltip: "Insiders buying shares · cash flow rising ahead of
+ * profits · verified wins in its filings". */
+export function boardWhyAll(signals: readonly string[]): string {
+  return signals.length === 0 ? "No signal fired" : signals.map(plain).join(" · ").replace(/^./, (c) => c.toUpperCase());
 }
 
 export type HealthState = "ok" | "late" | "down" | "resting";
@@ -451,6 +460,8 @@ export interface HealthRow {
 }
 
 const HEALTH_NAME: Record<string, string> = { sec: "SEC filings", twelvedata: "Weekly prices", sec_13f: "Fund holdings (13F)" };
+/** The provider a Data health name doesn't already say: "Weekly prices" come from Twelve Data. */
+const HEALTH_PROVIDER: Record<string, string> = { twelvedata: "Twelve Data" };
 
 /** Data health: each source the pipeline reads (lib/staleness.ts watched), with a state for its dot and its last
  * success ("Sep 18"), or why not ("late · Sep 2", "stale", "never"). */
@@ -465,13 +476,18 @@ export function healthRows(sources: readonly SourceHealth[], now: Date): HealthR
   });
 }
 
-/** The stale-data line (BRIEF §2.7), or null when every source is on time: "Twelve Data is out of date, so scores that
- * read it may be behind." */
+/** The stale-data line (BRIEF §2.7), or null when every source is on time. It names the late sources as the Data health
+ * rows above it do, with the provider where the row's name doesn't say it: "Weekly prices (Twelve Data) are out of
+ * date, so scores that read them may be behind." */
 export function lateLine(sources: readonly SourceHealth[], now: Date): string | null {
   const late = lateSources(sources, now);
   if (late.length === 0) return null;
-  const names = late.map((s) => sourceLabel(s.source));
+  const names = late.map((s, i) => {
+    const name = HEALTH_NAME[s.source] ?? sourceLabel(s.source);
+    const said = i > 0 && /^[A-Z][a-z]/.test(name) ? name[0]!.toLowerCase() + name.slice(1) : name; // "and weekly prices"
+    return HEALTH_PROVIDER[s.source] ? `${said} (${HEALTH_PROVIDER[s.source]})` : said;
+  });
   const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  const one = names.length === 1;
+  const one = names.length === 1 && !(late[0]!.source in HEALTH_NAME); // "SEC filings are", "NSE is"
   return `${list} ${one ? "is" : "are"} out of date, so scores that read ${one ? "it" : "them"} may be behind.`;
 }

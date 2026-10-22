@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Chip, type ChipVariant } from "@/components/chip";
 import { Badge } from "@/components/ui/badge";
+import { shortDate } from "@/lib/dates";
 import { GAP_SHORT, killRule, KILL_WORD, pc, signalShort } from "@/lib/explain";
 import { big, measure, num } from "@/lib/format";
 import { RED_FLAG_NAME } from "@/lib/labels";
@@ -21,6 +22,15 @@ const FIGURE_LABEL: Record<string, string> = {
 };
 
 const CONTEXT_LABEL: Record<string, string> = { ...GAP_SHORT, evidence: "Evidence", gap: "Gap" };
+
+/** A date as the screens say it ("Jun 30, 2026"), the ISO date kept for machines; a value that isn't a date as it is. */
+function Day({ iso }: { iso: string }) {
+  return (
+    <time dateTime={iso.slice(0, 10)} className="num">
+      {shortDate(iso, true)}
+    </time>
+  );
+}
 
 function arrow(before: number | null, now: number | null, fmt: (v: number | null) => string): string {
   return `${fmt(before)} → ${fmt(now)}`;
@@ -100,10 +110,9 @@ function Names({ ids, name }: { ids: readonly string[]; name: (id: string) => st
 }
 
 function Changes({ id, state }: { id: string; state: StateDiff }) {
-  const since = state.since ? `since ${state.since}` : "since the card";
   return (
     <div className="flex flex-col gap-2.5 text-[14px] text-fg">
-      <h3 className="eyebrow">What changed {since}</h3>
+      <h3 className="eyebrow">What changed {state.since ? <>since {shortDate(state.since, true)}</> : "since the card"}</h3>
       <p>
         <span className="font-semibold">Signals:</span> started <Names ids={state.signals.fired} name={signalShort} />; stopped{" "}
         <Names ids={state.signals.dropped} name={signalShort} />.
@@ -124,8 +133,13 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
           {state.facts.map((f) => (
             <li key={f.id} className="rounded-tile bg-panel p-3">
               <p className="text-[13px] text-muted">
-                New fact (as of {f.as_of}
-                {f.published_at ? `, published ${f.published_at.slice(0, 10)}` : ""}): {f.subject}{" "}
+                New fact (as of <Day iso={f.as_of} />
+                {f.published_at ? (
+                  <>
+                    , published <Day iso={f.published_at} />
+                  </>
+                ) : null}
+                ): {f.subject}{" "}
                 {f.value === null ? "" : f.unit === "usd" ? big(f.value) : `${num(f.value)} ${f.unit}`}
               </p>
               <blockquote className="mt-1 text-fg">
@@ -148,14 +162,14 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
       {state.ownership.length > 0 ? (
         <p>
           <span className="font-semibold">New ownership filings:</span>{" "}
-          {state.ownership.map((o) => `${String(o.quarter_end ?? "")} (filed ${String(o.filed_at ?? "").slice(0, 10)})`).join("; ")}
+          {state.ownership.map((o) => `${shortDate(String(o.quarter_end ?? ""), true)} (filed ${shortDate(String(o.filed_at ?? ""), true)})`).join("; ")}
         </p>
       ) : null}
       {state.insiders.length > 0 ? (
         <ul className="flex flex-col gap-1">
           {state.insiders.map((e, i) => (
             <li key={i}>
-              <span className="font-semibold">Insider</span> ({String(e.event_date ?? "")}): {String(e.person ?? "")}, {String(e.kind ?? "").replace(/_/g, " ")}
+              <span className="font-semibold">Insider</span> ({shortDate(String(e.event_date ?? ""), true)}): {String(e.person ?? "")}, {String(e.kind ?? "").replace(/_/g, " ")}
               {e.shares === null || e.shares === undefined ? "" : `, ${big(Number(e.shares))} shares`}
               {e.value === null || e.value === undefined ? "" : `, ${big(Number(e.value))} ${String(e.currency ?? "")}`}
             </li>
@@ -174,10 +188,10 @@ export function ReviewDiff({ id, diff }: { id: string; diff: Partial<PackDiff> }
     <div className="flex flex-col gap-4">
       {quarter ? (
         <p className="text-[13px] text-muted">
-          Quarter <span className="num">{quarter.period_end}</span>, filed <span className="num">{quarter.filed_at.slice(0, 10)}</span>
+          Quarter to <Day iso={quarter.period_end} />, filed <Day iso={quarter.filed_at} />
           {diff.since ? (
             <>
-              ; the thesis had seen <span className="num">{diff.since}</span>
+              ; the thesis had seen the quarter to <Day iso={diff.since} />
             </>
           ) : null}
           .

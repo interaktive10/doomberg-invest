@@ -33,12 +33,25 @@ import {
   type Bucket,
 } from "@/lib/data";
 import { shortDate } from "@/lib/dates";
-import { BOARD_LABEL, bucketLine, caseLine, insiderSummary, money, trendNote, whenLine, type InsiderEvent, type InsiderGroup } from "@/lib/explain";
+import {
+  BOARD_LABEL,
+  bucketLine,
+  caseLine,
+  INSIDER_ROWS,
+  insidersCapped,
+  insiderSummary,
+  insiderTotal,
+  money,
+  trendNote,
+  whenLine,
+  type InsiderEvent,
+  type InsiderGroup,
+} from "@/lib/explain";
 import { big, code } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
 import { detailText, humanize } from "@/lib/labels";
 import { chartRows } from "@/lib/metrics";
-import { familyTone, type Tone } from "@/lib/palette";
+import { familyTone, type ChartTone, type Tone } from "@/lib/palette";
 import { LIVE_STATES, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { research } from "../../candidates/actions";
@@ -69,23 +82,28 @@ const BUCKET_BADGE: Record<Bucket, "default" | "secondary" | "destructive" | "ou
 };
 
 /** The quarterly charts, in the order a reader asks: is it growing, is it profitable, is the cash real, is it diluting,
- * is it levered, is there an order book. One shows only when its series has a value. */
-const CHARTS: { title: string; format: Format; series: Series[] }[] = [
-  { title: "Revenue (TTM)", format: "big", series: [{ key: "revenue", label: "Revenue" }] },
-  { title: "Operating margin (TTM)", format: "pct", series: [{ key: "opm", label: "Operating margin" }] },
+ * is it levered, is there an order book. One shows only when its series has a value. Each has its own colour, as the
+ * Company mock: sales in the accent, profitability in the business green, cash in the insiders blue. */
+const CHARTS: { title: string; format: Format; tone: ChartTone; series: Series[] }[] = [
+  { title: "Revenue (TTM)", format: "money", tone: "accent", series: [{ key: "revenue", label: "Revenue" }] },
+  { title: "Operating margin (TTM)", format: "pct", tone: "business", series: [{ key: "opm", label: "Operating margin" }] },
   {
     title: "Return on capital",
     format: "pct",
+    tone: "business",
     series: [
       { key: "roic", label: "ROIC" },
       { key: "incremental_roic", label: "On new capital" },
     ],
   },
-  { title: "Cash conversion", format: "x", series: [{ key: "ccr", label: "Cash from operations / net income" }] },
-  { title: "Diluted shares", format: "big", series: [{ key: "shares", label: "Shares" }] },
-  { title: "Net debt / EBITDA", format: "x", series: [{ key: "nd_ebitda", label: "Net debt / EBITDA" }] },
-  { title: "Order book", format: "big", series: [{ key: "order_book", label: "Order book" }] },
+  { title: "Cash conversion", format: "x", tone: "insiders", series: [{ key: "ccr", label: "Cash from operations / net income" }] },
+  { title: "Diluted shares", format: "big", tone: "ownership", series: [{ key: "shares", label: "Shares" }] },
+  { title: "Net debt / EBITDA", format: "x", tone: "text", series: [{ key: "nd_ebitda", label: "Net debt / EBITDA" }] },
+  { title: "Order book", format: "money", tone: "accent", series: [{ key: "order_book", label: "Order book" }] },
 ];
+
+/** A link that stands alone in small text: 44 px tall on a phone (a thumb's target), its own height from md up. */
+const SMALL_LINK = "inline-flex min-h-11 items-center md:min-h-0";
 
 const KIND_WORD: Record<string, string> = {
   open_market_buy: "bought",
@@ -113,8 +131,9 @@ function Ring({ kind, value }: { kind: ScoreKind; value: number | null }) {
   );
 }
 
-/** One side's trades as a bar per person (most money first, five at most), then when and how. */
-function InsiderBars({ g, tone, how }: { g: InsiderGroup; tone: Tone; how: string }) {
+/** One side's trades as a bar per person (most money first, five at most), then when and how; `capped` when the read
+ * stopped at its latest filings, so older trades of the year may be missing. */
+function InsiderBars({ g, tone, how, capped }: { g: InsiderGroup; tone: Tone; how: string; capped: boolean }) {
   const max = Math.max(...g.people.map((p) => p.value), 1);
   return (
     <div className="flex flex-col gap-3">
@@ -136,6 +155,7 @@ function InsiderBars({ g, tone, how }: { g: InsiderGroup; tone: Tone; how: strin
       <p className="text-[13px] text-subtle">
         {whenLine(g)}, {how}
         {g.planned > 0 ? `; ${g.planned} planned in advance` : ""}
+        {capped ? `; from the latest ${INSIDER_ROWS} filings only` : ""}
       </p>
     </div>
   );
@@ -151,7 +171,7 @@ function EventRow({ e }: { e: Record<string, unknown> }) {
       </div>
       {detailText(e.detail) ? <p className="text-[13px] break-words text-muted">{detailText(e.detail)}</p> : null}
       {e.source_url ? (
-        <a href={str(e.source_url)} rel="noreferrer" target="_blank" className="self-start text-[13px]">
+        <a href={str(e.source_url)} rel="noreferrer" target="_blank" className={cn(SMALL_LINK, "self-start text-[13px]")}>
           source<span className="sr-only"> (opens in a new tab)</span>
         </a>
       ) : null}
@@ -201,6 +221,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
     amends: e.amends ? str(e.amends) : null,
   }));
   const { bought, sold } = insiderSummary(trades, currency);
+  const capped = insidersCapped(ins.length);
   const firstCheck = kills.map((k) => k.check_after).sort()[0];
   const noteHref = live ? `/theses/${live.id}#journal` : "/journal#add-note";
 
@@ -224,17 +245,17 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
         title={bought ? "Insiders bought" : sold ? "Insiders sold" : "Insiders"}
         id="insiders"
         actions={
-          bought || sold ? <span className="num text-[15px] font-bold text-fg">{money((bought ?? sold)!.total, (bought ?? sold)!.currency)}</span> : undefined
+          bought || sold ? <span className="num text-[15px] font-bold text-fg">{insiderTotal((bought ?? sold)!, capped)}</span> : undefined
         }
       >
         <div className="flex flex-col gap-4">
-          {bought ? <InsiderBars g={bought} tone="insiders" how="on the open market" /> : null}
+          {bought ? <InsiderBars g={bought} tone="insiders" how="on the open market" capped={capped} /> : null}
           {bought && sold ? (
             <h3 className="eyebrow">
-              Sold <span className="num">{money(sold.total, sold.currency)}</span>
+              Sold <span className="num">{insiderTotal(sold, capped)}</span>
             </h3>
           ) : null}
-          {sold ? <InsiderBars g={sold} tone="down" how="on the open market" /> : null}
+          {sold ? <InsiderBars g={sold} tone="down" how="on the open market" capped={capped} /> : null}
           {!bought && !sold ? <p className="text-[14px] text-muted">No open-market trades; the filings are below.</p> : null}
           <Disclosure summary="The filings">
             <ul className="flex flex-col">
@@ -251,7 +272,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
                     {e.source_url ? (
                       <>
                         {" · "}
-                        <a href={str(e.source_url)} rel="noreferrer" target="_blank">
+                        <a href={str(e.source_url)} rel="noreferrer" target="_blank" className={SMALL_LINK}>
                           filing<span className="sr-only"> (opens in a new tab)</span>
                         </a>
                       </>
@@ -378,6 +399,8 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
                 data={data}
                 series={ch.series}
                 format={ch.format}
+                currency={currency}
+                tone={ch.tone}
                 surface="sheet"
                 note={trendNote(
                   data.map((r) => {

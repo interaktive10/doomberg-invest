@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DARK, familyTone, INK, LIGHT, SERIES, signalTone, type Token } from "@/lib/palette";
+import { CHART_TONE, DARK, familyTone, INK, LIGHT, SERIES, signalTone, type Token } from "@/lib/palette";
 
 // The look (overhaul PR 6, app/globals.css): every colour is a CSS variable defined for light on :root and for dark
 // twice (the Auto media query and data-theme="dark"); Tailwind reads them through @theme inline, which resets Tailwind's
@@ -132,17 +132,41 @@ describe("palette guard (the Curator look, light and dark)", () => {
     };
     for (const [name, t] of [["light", LIGHT], ["dark", DARK]] as const) {
       for (const text of TEXTS) for (const s of SURFACES) need(name, `${text} on ${s}`, t[text], t[s]);
-      // segmented pills (the header's nav, components/segmented.tsx): labels and counts on the track and the thumb
-      for (const text of ["fg", "muted", "accent"] as const) for (const s of ["track", "thumb"] as const) need(name, `${text} on ${s}`, t[text], t[s]);
+      // segmented pills (the header's nav, components/segmented.tsx): labels on the track, the current one in fg on the
+      // thumb (its count is a CountPill, on-accent on accent, checked below)
+      for (const text of ["fg", "muted", "accent"] as const) need(name, `${text} on track`, t[text], t.track);
+      need(name, "fg on thumb", t.fg, t.thumb);
       // pills and count badges
       need(name, "on-accent on accent", t["on-accent"], t.accent);
       need(name, "on-ink on ink", t["on-ink"], t.ink);
-      // a soft chip: a colour's own text on its tint (Badge uses 10%; 12% here leaves a margin)
-      for (const c of TINTED) for (const s of ["canvas", "panel", "raised"] as const) need(name, `${c} on its tint over ${s}`, t[c], mix(t[c], t[s], 0.12));
+      // a soft chip: a colour's own text on its tint (Badge uses 10%; 12% here leaves a margin), also on a row that
+      // hovers to the hover grey (the Theses rows' kill-criteria chip; PR 6 review a11y-A11Y-7)
+      for (const c of TINTED) for (const s of ["canvas", "panel", "raised", "hover"] as const) need(name, `${c} on its tint over ${s}`, t[c], mix(t[c], t[s], 0.12));
       // ticker tiles
       for (const tint of ["tint-sky", "tint-sage", "tint-sand", "tint-clay"] as const) need(name, `fg on ${tint}`, t.fg, t[tint]);
     }
     expect(low).toEqual([]);
+  });
+
+  it("draws control edges at 3:1 or more on every ground a field sits on, in both themes (PR 6 review a11y-A11Y-1)", () => {
+    const low: string[] = [];
+    for (const [name, t] of [["light", LIGHT], ["dark", DARK]] as const) {
+      for (const s of ["canvas", "panel", "raised", "field"] as const) {
+        const r = contrast(t.edge, t[s]);
+        if (r < 3) low.push(`${name}: edge on ${s} ${r.toFixed(2)}`);
+      }
+    }
+    expect(low).toEqual([]);
+    // fields, choice pills, the outline button and the header's search box draw their edge in it
+    const ui = (f: string) => readFileSync(join(WEB, f), "utf8");
+    expect(ui("components/ui/input.tsx")).not.toMatch(/border-line-strong/);
+    expect(ui("components/ui/input.tsx").match(/\bborder-edge\b/g)?.length).toBe(2); // field and choiceChip
+    expect(ui("components/ui/button.tsx")).toMatch(/outline: "[^"]*\bring-edge\b/);
+    expect(ui("components/nav-links.tsx")).toMatch(/lift [^"]*\boutline-edge\b/);
+  });
+
+  it("lifts the current segment off the track in dark, where the thumb's shadow barely shows (PR 6 review a11y-A11Y-2)", () => {
+    expect(contrast(DARK.thumb, DARK.track)).toBeGreaterThanOrEqual(1.5);
   });
 
   it("reads only variables the stylesheet defines, by their own names (Tailwind's --color-* need not exist at run time)", () => {
@@ -153,7 +177,7 @@ describe("palette guard (the Curator look, light and dark)", () => {
   });
 
   it("hands the charts' SVG theme variables that exist", () => {
-    const refs = [...Object.values(INK), ...SERIES];
+    const refs = [...Object.values(INK), ...SERIES, ...Object.values(CHART_TONE)];
     const names = refs.map((v) => /^var\(--([a-z0-9-]+)\)$/.exec(v)?.[1]);
     expect(names.filter((n) => n === undefined || !(n in LIGHT))).toEqual([]);
   });

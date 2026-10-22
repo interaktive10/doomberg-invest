@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { shortDate } from "../lib/dates";
 import { nextFiling } from "../lib/filing";
 import { ECHO, OMEGA_THESIS, SIGMA } from "./seed";
 
@@ -89,8 +90,35 @@ test("Home: the funnel strip, To do live from the theses and What changed from t
   // the digest's To do and Health sections (the minutes line among them) are not repeated here
   await expect(page.getByText(/Cards to accept or dismiss: \d/)).toHaveCount(0);
   await expect(page.getByText(/Actions: 812 of 2,000/)).toHaveCount(0);
-  // Data health and the stale-data line: twelvedata is seeded stale
-  await expect(page.getByRole("region", { name: "Data health" })).toContainText("Twelve Data is out of date");
+  // Data health and the stale-data line: twelvedata is seeded stale, named as its row is ("Weekly prices") with its
+  // provider; whether SEC is late too depends on today's date, so the line is read in two parts (PR 6 review ci-CI-1)
+  const health = page.getByRole("region", { name: "Data health" });
+  await expect(health).toContainText("Weekly prices (Twelve Data)");
+  await expect(health).toContainText(/(is|are) out of date/);
+});
+
+test("the theme button cycles Auto, Light, Dark and back, and the server writes the choice before the first paint (PR 6 review design-F8)", async ({ page }) => {
+  await page.goto("/");
+  const html = page.locator("html");
+  const button = page.getByRole("button", { name: /^Theme:/ });
+  /** The theme the server wrote on <html> for this browser's cookie, read from the HTML it sends (no script). */
+  const served = async () => /<html[^>]*\sdata-theme="(light|dark)"/.exec(await (await page.request.get("/")).text())?.[1] ?? "auto";
+  await expect(html).not.toHaveAttribute("data-theme");
+  await expect(button).toHaveAccessibleName("Theme: Auto (follows your device)");
+  await button.click();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  expect(await served()).toBe("light");
+  await page.reload();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  await expect(button).toHaveAccessibleName("Theme: Light");
+  await button.click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  expect(await served()).toBe("dark");
+  await button.click();
+  await expect(html).not.toHaveAttribute("data-theme");
+  expect(await served()).toBe("auto");
+  await page.reload();
+  await expect(html).not.toHaveAttribute("data-theme");
 });
 
 test("candidates: dismiss one with a reason, start research on another", async ({ page }) => {
@@ -111,6 +139,12 @@ test("candidates: dismiss one with a reason, start research on another", async (
   // the dismissal holds while the evidence stays as it was (overhaul PR 4)
   await expect(card(page, "Kappa Cables Ltd")).toHaveCount(0);
   await expect(card(page, "Echo Grid Corp.")).toHaveCount(1);
+  // Home's On the board leaves it out too, and counts what Candidates shows (PR 6 review ci-BEH-1)
+  await page.goto("/");
+  const board = page.getByRole("region", { name: "On the board" });
+  await expect(board.getByRole("link", { name: /Echo Grid Corp\./ })).toHaveCount(1);
+  await expect(board.getByRole("link", { name: /Kappa Cables Ltd/ })).toHaveCount(0);
+  await expect(board.getByRole("link", { name: "All 1 on the board" })).toBeVisible();
   await page.goto("/candidates?dismissed=1");
   await expect(card(page, "Kappa Cables Ltd").getByText("dismissed", { exact: true })).toBeVisible();
 
@@ -194,8 +228,9 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByRole("heading", { name: "Why it may be mispriced" })).toBeVisible();
   await page.getByRole("button", { name: "Accept as thesis" }).click();
   await flash(page, "Accepted");
-  // accept keeps the card's filing window: the one after the pack's quarter, 2026-03-31 (M7 review R2-F4)
-  await expect(page.getByText("next review 2026-08-14")).toBeVisible();
+  // accept keeps the card's filing window: the one after the pack's quarter, 2026-03-31 (M7 review R2-F4); dates read
+  // as the screens say them (PR 6 review design-F6)
+  await expect(page.getByText("next review Aug 14, 2026")).toBeVisible();
   // the quarter ended 2026-06-30 was filed after the card's pack: the page creates its review (§4.9)
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Review");
   await expect(page.getByText("waiting for a verdict")).toBeVisible();
@@ -205,7 +240,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
   // red flags from the scored week: R1 fired the two weeks before and is clear now (M7 review R2-F1)
   await expect(page.getByText(/Red flags: started none; stopped none/)).toBeVisible();
   // a fact about the June quarter published after the card's week (M7 review R2-F2)
-  await expect(page.getByText(/New fact \(as of 2026-06-30, published 2026-09-21\): backlog 14\.00B/)).toBeVisible();
+  await expect(page.getByText(/New fact \(as of Jun 30, 2026, published Sep 21, 2026\): backlog 14\.00B/)).toBeVisible();
 
   await journalEntry(page, "start_position", "Backlog converts; the price implies 5% growth.");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("week(s) old; the rule is 4");
@@ -222,7 +257,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
   // the next review is the filing window after the reviewed quarter (M7 review R1-F3), not the card's (R2-F4)
   const next = nextFiling("us", "1231", "2026-06-30", new Date().toISOString().slice(0, 10));
   expect(next?.closes).not.toBe("2026-08-14");
-  await expect(page.getByText(`next review ${next?.closes}`)).toBeVisible();
+  await expect(page.getByText(`next review ${shortDate(next?.closes ?? "", true)}`)).toBeVisible();
 
   await journalEntry(page, "exit", "The thesis played out.");
   await flash(page, "Journal entry added.");

@@ -53,7 +53,7 @@ export const DARK: Record<Token, string> = {
   hover: "#2a2b30",
   field: "#141518",
   track: "#2e2f35",
-  thumb: "#34353b",
+  thumb: "#4a4b52",
   line: "#28292e",
   "line-strong": "#3a3b41",
   edge: "#6e6e76",
@@ -65,8 +65,8 @@ export const DARK: Record<Token, string> = {
   "on-accent": "#0b0c0e",
   ink: "#f2f2f4",
   "on-ink": "#0b0c0e",
-  up: "#7aab8a",
-  down: "#d98080",
+  up: "#80b190",
+  down: "#e08a8a",
   warn: "#d4a574",
   violet: "#b4a8e6",
   gap: "#7aab8a",
@@ -95,6 +95,18 @@ export const INK = {
 
 /** Chart series colours, in order: accent, violet, ownership amber, fg. The second and later series are also dashed. */
 export const SERIES = ["var(--accent)", "var(--violet)", "var(--fam-ownership)", "var(--fg)"] as const;
+
+/** A sparkline card's own colour for its first series (the Company mock: revenue in the accent, operating income in the
+ * business green, cash from operations in the insiders blue). */
+export const CHART_TONE = {
+  accent: "var(--accent)",
+  business: "var(--fam-business)",
+  insiders: "var(--fam-insiders)",
+  ownership: "var(--fam-ownership)",
+  text: "var(--fam-text)",
+} as const;
+
+export type ChartTone = keyof typeof CHART_TONE;
 
 /** What a dot or a bar is coloured by: an evidence family, a score, or a meaning (components/chip.tsx and meter.tsx
  * map each to its theme class). */

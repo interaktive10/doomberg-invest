@@ -1,3 +1,5 @@
+import { money } from "@/lib/format";
+
 export type ChartRow = Record<string, string | number | null>;
 
 /** A round step near `raw` (1, 2 or 5 times a power of ten). */
@@ -20,4 +22,29 @@ export function yScale(data: readonly ChartRow[], keys: readonly string[], count
   const ticks: number[] = [];
   for (let i = 0; min + i * step <= max + step / 2; i++) ticks.push(Number((min + i * step).toPrecision(12)));
   return { domain: [ticks[0]!, ticks[ticks.length - 1]!], ticks };
+}
+
+/** How a chart's figures read: money in the page's currency, a plain amount (a share count), a percentage, a multiple
+ * or a count. */
+export type ChartFormat = "money" | "big" | "pct" | "x" | "num";
+
+/** A chart's figure (its headline value and each quarter in the tooltip): "$818M", "1.2B", "5.3%", "3.9×", "40". The
+ * percentages keep one decimal, as the note under the chart talks in tenths of a point. */
+export function chartValue(v: number, format: ChartFormat, currency?: string | null): string {
+  if (!Number.isFinite(v)) return "";
+  switch (format) {
+    case "money":
+      return money(v, currency, 3);
+    case "pct":
+      return `${(v * 100).toFixed(1)}%`;
+    case "x":
+      return `${v.toFixed(1)}×`;
+    case "num":
+      return v.toFixed(0);
+    case "big": {
+      const a = Math.abs(v);
+      const [d, s] = a >= 1e12 ? [1e12, "T"] : a >= 1e9 ? [1e9, "B"] : a >= 1e6 ? [1e6, "M"] : a >= 1e3 ? [1e3, "K"] : [1, ""];
+      return `${(v / d).toFixed(1)}${s}`;
+    }
+  }
 }

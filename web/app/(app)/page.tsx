@@ -9,11 +9,13 @@ import { ScoreRing } from "@/components/score-ring";
 import { TickerTile } from "@/components/ticker-tile";
 import { buttonVariants } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
-import { ensureReviews, latestDigest, screen, sourceHealth, theses, thesisFigures, type ScreenerRow, type Thesis } from "@/lib/data";
+import { stillDismissed } from "@/lib/candidates";
+import { dismissals, ensureReviews, latestDigest, screen, sourceHealth, theses, thesisFigures, type ScreenerRow, type Thesis } from "@/lib/data";
 import { dayDate, weekEyebrow } from "@/lib/dates";
 import { code } from "@/lib/format";
 import {
   boardWhy,
+  boardWhyAll,
   changeItems,
   comingUp,
   funnelInsight,
@@ -45,17 +47,22 @@ export const metadata = { title: "This week" };
 // numbers with bars and its one insight (the digest's This week, the line itself under Details); To do (the Theses
 // screen's Needs you group, read live) as rows with the decision each needs; What changed (the digest's section) as a
 // feed with a direction and the Evidence move per line, then Coming up (the live cards' next filings); On the board
-// (the Candidate bucket of the latest scored week) with Evidence rings; Data health with a dot per source the pipeline
-// reads, and the stale-data line when one is late (Home alone has it). The digest's own words, codes and all, stay in
-// each row's tooltip and the funnel's Details, so Home and the issue still read the same.
+// (the Candidate bucket of the latest scored week, less the names a dismissal still hides, as Candidates counts them)
+// with Evidence rings; Data health with a dot per source the pipeline reads, and the stale-data line when one is late
+// (Home alone has it). The digest's own words, codes and all, stay in each row's tooltip and the funnel's Details, so
+// Home and the issue still read the same.
 export default async function Home() {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
-  const [digest, sources, first, board] = await Promise.all([
+  const [digest, sources, first, ranked] = await Promise.all([
     latestDigest(),
     sourceHealth(),
     theses(),
     screen({ buckets: ["candidate"], limit: 500 }),
   ]);
+  const week = ranked[0]?.week_end;
+  const held = week ? await dismissals(ranked.map((r) => r.company_id), week) : new Map<string, never>();
+  const hidden = stillDismissed(ranked, held);
+  const board = ranked.filter((r) => !hidden.has(r.company_id));
   const all = markMoved(first, await ensureReviews(first)); // as the Theses screen does, so both list the same
   const needs = all.filter((t) => group(t) === "needs");
   const figures = await thesisFigures(needs);
@@ -111,7 +118,7 @@ export default async function Home() {
             ) : legacy ? (
               <Markdown text={legacy} />
             ) : (
-              <Empty>Nothing to compare yet: What changed comes with the weekly digest.</Empty>
+              <Empty>{WAITING}</Empty>
             )}
             <ComingUp list={upcoming} />
           </Section>
@@ -122,7 +129,7 @@ export default async function Home() {
             title="On the board"
             actions={
               board.length > 0 ? (
-                <Link href="/candidates" className="text-[14px] font-medium no-underline">
+                <Link href="/candidates" className="inline-flex min-h-11 items-center text-[14px] font-medium no-underline md:min-h-0">
                   All {board.length}
                   <span className="sr-only"> on the board</span>
                 </Link>
@@ -140,12 +147,15 @@ export default async function Home() {
   );
 }
 
+/** The empty line of a section the weekly digest fills, before its first run: the headline already says why. */
+const WAITING = "Waiting for Saturday's run.";
+
 /** "Data as of Fri, Sep 18": amber, and a link down to Data health, while a source is late. */
 function AsOf({ week, late }: { week: string; late: number }) {
   const text = `Data as of ${dayDate(week)}`;
   if (late === 0) return <Chip dot="up">{text}</Chip>;
   return (
-    <Link href="#health" className="inline-flex rounded-full no-underline">
+    <Link href="#health" className="inline-flex min-h-11 items-center rounded-full no-underline md:min-h-0">
       <Chip variant="warn" dot="warn">
         {text} · {late} {late === 1 ? "source" : "sources"} late
       </Chip>
@@ -171,13 +181,7 @@ function Funnel({ totals, lines, funnel, legacy }: { totals: FunnelTotals | null
         </Callout>
       );
     }
-    return (
-      <Empty>
-        {legacy
-          ? "This digest predates the funnel line; Saturday's weekly run writes it."
-          : "No digest yet. The weekly run writes one each Saturday, after it scores the universe."}
-      </Empty>
-    );
+    return <Empty>{legacy ? "This digest predates the funnel line; Saturday's weekly run writes it." : WAITING}</Empty>;
   }
   const insight = funnelInsight(totals);
   return (
@@ -194,17 +198,27 @@ function Funnel({ totals, lines, funnel, legacy }: { totals: FunnelTotals | null
                 style={{ width: `${s.width}%`, animationDelay: `${i * 60}ms` }}
               />
             </span>
-            <span className="text-[12px] leading-snug text-muted md:text-[13px]">{s.label}</span>
+            {/* a phone shows one word per step (the phone mock), the full words from sm up */}
+            <span className="text-[12px] leading-snug text-muted md:text-[13px]">
+              <span className="sm:hidden">{s.short}</span>
+              <span className="hidden sm:inline">{s.label}</span>
+            </span>
           </li>
         ))}
       </ol>
       {insight ? (
-        <Callout>
+        <Callout className="hidden sm:flex">
           <strong className="font-semibold text-fg">{insight.lead}</strong>
           {insight.rest}
         </Callout>
       ) : null}
       <Disclosure summary="Details">
+        {insight ? (
+          <p className="mb-2 text-fg sm:hidden">
+            <strong className="font-semibold">{insight.lead}</strong>
+            {insight.rest}
+          </p>
+        ) : null}
         <p>The weekly issue&apos;s line{lines.length === 1 ? "" : "s, one per market"}:</p>
         {lines.map((l) => (
           <p key={l} className="num mt-1 text-fg">
@@ -329,7 +343,8 @@ function ComingUp({ list }: { list: Upcoming[] }) {
 
 const BOARD_SHOWN = 5;
 
-/** The latest scored week's Candidate bucket: an Evidence ring, the name, a dot per kind of evidence and why. */
+/** The latest scored week's Candidate bucket: an Evidence ring, the name, a dot per kind of evidence and why. Both lines
+ * wrap (two lines at most) rather than cut off; the row's title has the name and every fired signal in full. */
 function Board({ rows }: { rows: ScreenerRow[] }) {
   if (rows.length === 0) {
     return (
@@ -350,16 +365,17 @@ function Board({ rows }: { rows: ScreenerRow[] }) {
         <li key={r.company_id}>
           <Link
             href={`/company/${r.company_id}`}
+            title={`${code(r)} ${r.name}: ${boardWhyAll(r.fired_signals)}`}
             className="tile flex items-center gap-3 p-2.5 text-fg no-underline transition-colors duration-150 hover:bg-hover hover:text-fg"
           >
             <ScoreRing value={Number(r.evidence)} kind="evidence" />
             <span className="flex min-w-0 flex-col gap-1">
-              <span className="truncate text-[15px] font-bold">
+              <span className="line-clamp-2 text-[15px] leading-snug font-bold">
                 {code(r)} <span className="font-medium text-muted">{r.name}</span>
               </span>
-              <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted">
-                <DotRow tones={r.families.map(familyTone)} />
-                <span className="truncate">{boardWhy(r.fired_signals)}</span>
+              <span className="flex min-w-0 items-start gap-2 text-[13px] leading-snug text-muted">
+                <DotRow tones={r.families.map(familyTone)} className="mt-[3px] shrink-0" />
+                <span className="line-clamp-2">{boardWhy(r.fired_signals)}</span>
               </span>
             </span>
           </Link>

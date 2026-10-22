@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayDate, isoWeek, shortDate, utcDay, weekEyebrow, weekSpan } from "@/lib/dates";
+import { dayDate, isoWeek, quarterLabel, shortDate, utcDay, weekEyebrow, weekSpan } from "@/lib/dates";
 
 // Overhaul PR 6: the dates Home and Candidates show. The week number is the ISO week, as the digest's title
 // ("Doomberg weekly — 2026-W38", pipeline/thesis/evidence_pack.py week_label) counts it.
@@ -25,6 +25,14 @@ describe("dates as the screens say them", () => {
     expect(weekSpan("2026-09-04")).toBe("Aug 31 – Sep 4");
     expect(weekEyebrow("2026-10-16")).toBe("Week 42 · Oct 12–16");
     expect(weekEyebrow("2026-10-16", false)).toBe("Week 42");
+  });
+
+  it("labels a chart's quarters as the Company mock does (PR 6 review design-F4)", () => {
+    expect(quarterLabel("2023-09-30")).toBe("Q3 ’23");
+    expect(quarterLabel("2026-06-30")).toBe("Q2 ’26");
+    expect(quarterLabel("2026-01-31")).toBe("Q1 ’26"); // a fiscal quarter that ends in January
+    expect(quarterLabel("2009-12-31")).toBe("Q4 ’09");
+    expect(quarterLabel("n/a")).toBe("n/a");
   });
 
   it("leaves what isn't a date as it is", () => {

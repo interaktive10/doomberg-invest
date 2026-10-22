@@ -10,6 +10,7 @@ import {
   isNew,
   releases,
   signed,
+  stillDismissed,
   windowStart,
   type ScorePoint,
 } from "@/lib/candidates";
@@ -50,6 +51,20 @@ describe("a dismissal holds until the evidence changes (overhaul PR 4)", () => {
 
   it("a dismissal without its week's scores row doesn't hide the name", () => {
     expect(dismissalHolds(null, [then])).toBe(false);
+  });
+
+  it("names the rows a dismissal still hides, for Candidates and Home's On the board alike (PR 6 review ci-BEH-1)", () => {
+    const r = (company_id: string, evidence: number, fired_signals = ["S1"]) => ({ company_id, evidence, families: ["fundamentals"], fired_signals });
+    const held = new Map([
+      ["kappa", { baseline: then, since: [] }], // dismissed this week, nothing changed
+      ["echo", { baseline: then, since: [{ ...then, evidence: 75 }] }], // Evidence moved 13 since
+      ["omega", { baseline: null, since: [] }], // no scores row on its week
+    ]);
+    const rows = [r("kappa", 63), r("echo", 75), r("omega", 63), r("delta", 63), r("sigma", 63, ["S1", "S4"])];
+    expect([...stillDismissed(rows, held)]).toEqual(["kappa"]);
+    // the shown week counts: a new signal this week releases it
+    expect([...stillDismissed([r("kappa", 63, ["S1", "S4"])], held)]).toEqual([]);
+    expect(stillDismissed(rows, new Map()).size).toBe(0);
   });
 });
 

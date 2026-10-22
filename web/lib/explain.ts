@@ -1,7 +1,14 @@
 import { CITE, stripTitle } from "@/lib/cards";
+import type { ChartFormat } from "@/lib/chart";
 import { shortDate } from "@/lib/dates";
-import { FAMILY_LABEL, humanize, killMetric, label, metricValue, SIGNAL_NAME, SIGNAL_PLAIN } from "@/lib/labels";
+import { money } from "@/lib/format";
+import { FAMILY_LABEL, humanize, killMetric, killName, label, metricValue, SIGNAL_NAME, SIGNAL_PLAIN } from "@/lib/labels";
 import { MIN_FAMILIES, SINGLE_FAMILY_CAP, SOFT_FLAG_PENALTY, type Breakdown, type GapPart } from "@/lib/why";
+
+// The short names (lib/labels.ts, so lib/cards.ts can name a citation without importing this file) and money
+// (lib/format.ts, so the client charts can format with it) stay importable from here.
+export { GAP_SHORT, KILL_SHORT, killName, SIGNAL_SHORT, signalShort } from "@/lib/labels";
+export { money } from "@/lib/format";
 
 // Plain words for the Company, Theses and Thesis screens (overhaul PR 6): a short name per signal and Gap part, one
 // line each from the stored inputs, the kill criteria as a checklist, the insiders' buying as bars, a year's change
@@ -21,16 +28,6 @@ export function pc(x: number): string {
 /** 3.94 -> "3.9×". */
 function times(x: number): string {
   return `${x.toFixed(1)}×`;
-}
-
-/** An amount as people say it: $1.83M, $447K, ₹2.5B; another currency's code goes first ("EUR 1.2M"). */
-export function money(v: number | null, currency?: string | null): string {
-  if (v === null || !Number.isFinite(v)) return "n/a";
-  const a = Math.abs(v);
-  const [d, s, dp] = a >= 1e12 ? [1e12, "T", 2] : a >= 1e9 ? [1e9, "B", 2] : a >= 1e6 ? [1e6, "M", 2] : a >= 1e3 ? [1e3, "K", 0] : [1, "", 0];
-  const cur = (currency ?? "").toUpperCase();
-  const sym = cur === "USD" ? "$" : cur === "INR" ? "₹" : cur ? `${cur} ` : "";
-  return `${v < 0 ? "−" : ""}${sym}${Number((a / d).toFixed(dp))}${s}`;
 }
 
 // ------------------------------------------------------------------------------------------------ scores and buckets
@@ -114,25 +111,6 @@ export function capShort(b: Breakdown): string {
   return b.softFlags === 0 ? base : `${base}; red flags take ${SOFT_FLAG_PENALTY * b.softFlags} off`;
 }
 
-/** Each signal's short name (the row title on the Company page; the code stays in its details). */
-export const SIGNAL_SHORT: Record<string, string> = {
-  S1: "Order book",
-  S2: "Returns on new capital",
-  S3: "Operating leverage",
-  S4: "Earnings quality",
-  S5: "Capital discipline",
-  S6: "Debt paid down",
-  S7: "Insider buying",
-  S8: "Funds discovering it",
-  S9: "Verified wins in filings",
-  S10: "Special situation",
-  S12: "Cycle turning",
-};
-
-export function signalShort(id: string): string {
-  return SIGNAL_SHORT[id] ?? SIGNAL_NAME[id] ?? id;
-}
-
 /** One line from a fired signal's stored inputs ("Cash from operations is 3.9× net income, up from 1.8× a year ago."),
  * or its everyday description when the inputs don't say enough. */
 export function signalLine(id: string, inputs: Record<string, unknown> | null | undefined): string {
@@ -206,9 +184,6 @@ export function signalLine(id: string, inputs: Record<string, unknown> | null | 
   return said ?? SIGNAL_PLAIN[id] ?? SIGNAL_NAME[id] ?? id;
 }
 
-/** The Gap's parts by their short names (the codes stay in titles and details). */
-export const GAP_SHORT: Record<string, string> = { C1: "Cheap vs its past", C2: "Growth test", C3: "Price move" };
-
 const MISSING_WORDS: Record<string, string> = {
   history: "not enough price history yet",
   multiples: "no valuation multiple",
@@ -262,35 +237,7 @@ export function gapLine(p: Pick<GapPart, "id" | "score" | "row">): string {
 
 // ------------------------------------------------------------------------------------------------ kill criteria
 
-/** A short name per kill metric (lib/labels.ts METRIC_LABEL keys, which tests/test_web_parity.py pins to the pipeline). */
-export const KILL_SHORT: Record<string, string> = {
-  revenue_ttm: "TTM revenue",
-  revenue_ttm_yoy: "TTM revenue growth",
-  revenue_q_yoy: "Quarterly revenue growth (YoY)",
-  op_margin_ttm: "Operating margin (TTM)",
-  roic: "Return on capital",
-  fcf_ttm: "Free cash flow (TTM)",
-  net_debt: "Net debt",
-  rpo: "Contracted revenue (RPO)",
-  rpo_yoy: "RPO growth (YoY)",
-  shares_yoy: "Share count change (YoY)",
-  inst_holders: "Fund holders (13F)",
-  fii_dii_pct: "FII + DII holding",
-  promoter_pct: "Promoter holding",
-  promoter_pledged_pct: "Pledged promoter shares",
-  evidence: "Evidence score",
-};
-
 const OP_SHORT: Record<string, string> = { "<": "under", "<=": "at or under", ">": "over", ">=": "at or over", "==": "equal to" };
-
-/** A kill-criteria metric's short name ("m:revenue_ttm_yoy" -> "TTM revenue growth"). */
-export function killName(metric: string): string {
-  const key = metric.replace(/^m:/, "");
-  const known = KILL_SHORT[key];
-  if (known) return known;
-  const sig = /^signal:(S\d{1,2})$/.exec(key);
-  return sig?.[1] ? `${signalShort(sig[1])} signal strength` : humanize(key);
-}
 
 export interface KillLike {
   metric: string;
@@ -439,14 +386,24 @@ export function whenLine(g: Pick<InsiderGroup, "from" | "to">): string {
   return `${shortDate(g.from, g.from.slice(0, 4) !== g.to.slice(0, 4))} – ${shortDate(g.to, true)}`;
 }
 
-// ------------------------------------------------------------------------------------------------ charts and cards
+/** lib/data.ts insiders() reads a company's latest 25 insider filings of every kind (tests/explain.test.ts pins it). */
+export const INSIDER_ROWS = 25;
 
-/** components/charts.tsx Format. */
-type Format = "big" | "pct" | "x" | "num";
+/** Whether that read hit its cap, so older trades of the year may be missing from the sums. */
+export function insidersCapped(rows: number): boolean {
+  return rows >= INSIDER_ROWS;
+}
+
+/** A side's total as the headline says it: "$510K", or "at least $1.2M" when the read was capped. */
+export function insiderTotal(g: Pick<InsiderGroup, "total" | "currency">, capped: boolean): string {
+  return `${capped ? "at least " : ""}${money(g.total, g.currency)}`;
+}
+
+// ------------------------------------------------------------------------------------------------ charts and cards
 
 /** A chart's last value against a year (four quarters) before: "+12% over a year", "Up 3.1 points over a year",
  * "1.8× a year ago"; null without both values. */
-export function trendNote(values: readonly (number | null | undefined)[], format: Format): string | null {
+export function trendNote(values: readonly (number | null | undefined)[], format: ChartFormat): string | null {
   let last = -1;
   values.forEach((v, i) => {
     if (typeof v === "number" && Number.isFinite(v)) last = i;
@@ -455,6 +412,7 @@ export function trendNote(values: readonly (number | null | undefined)[], format
   const then = last >= 4 ? values[last - 4] : undefined;
   if (typeof now !== "number" || typeof then !== "number" || !Number.isFinite(then)) return null;
   switch (format) {
+    case "money":
     case "big": {
       if (then <= 0) return null;
       const ch = now / then - 1;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { yScale } from "@/lib/chart";
+import { chartValue, yScale } from "@/lib/chart";
 
 describe("chart y-axis (lib/chart.ts)", () => {
   it("uses round ticks from zero to just above the top, so a flat line isn't on the chart's edge", () => {
@@ -13,5 +13,20 @@ describe("chart y-axis (lib/chart.ts)", () => {
     expect(yScale([{ roic: 0.3, incremental_roic: -0.1 }], ["roic", "incremental_roic"]).ticks).toEqual([-0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4]);
     expect(yScale([{ a: null }], ["a"])).toEqual({ domain: [0, 1], ticks: [0, 0.25, 0.5, 0.75, 1] });
     expect(yScale([{ a: 0 }], ["a"])).toEqual({ domain: [0, 0.2], ticks: [0, 0.2] });
+  });
+});
+
+describe("chart figures (lib/chart.ts chartValue; PR 6 review design-F4)", () => {
+  it("writes money with the page's currency, multiples with ×, percentages in tenths", () => {
+    expect(chartValue(818_040_000, "money", "USD")).toBe("$818M");
+    expect(chartValue(1_234_000_000, "money", "USD")).toBe("$1.23B");
+    expect(chartValue(75_300_000, "money", "INR")).toBe("₹75.3M");
+    expect(chartValue(-80_000_000, "money", "USD")).toBe("−$80M");
+    expect(chartValue(1_210_000_000, "big")).toBe("1.2B"); // a share count: no currency
+    expect(chartValue(3.94, "x")).toBe("3.9×");
+    expect(chartValue(0.0531, "pct")).toBe("5.3%");
+    expect(chartValue(0.05, "pct")).toBe("5.0%");
+    expect(chartValue(40.4, "num")).toBe("40");
+    expect(chartValue(Number.NaN, "pct")).toBe("");
   });
 });

@@ -3,6 +3,7 @@ import { pickSection } from "@/lib/cards";
 import type { SourceHealth, Thesis } from "@/lib/data";
 import {
   boardWhy,
+  boardWhyAll,
   changeItems,
   comingUp,
   countWord,
@@ -130,6 +131,8 @@ describe("the funnel strip (overhaul PR 6)", () => {
       ["on the board", 3, 16],
       ["new this week", 0, 0],
     ]);
+    // a phone shows the mock's one word per step (PR 6 review design-F10)
+    expect(funnelSteps(t).map((s) => s.short)).toEqual(["scored", "signal", "on board", "new"]);
     const two = funnelTotals(parseFunnel(homeSections(BODY).funnel))!;
     expect([two.scored, two.candidates, funnelSteps(two)[0]!.label]).toEqual([2, 2, "companies scored"]);
     expect(funnelTotals([])).toBeNull();
@@ -261,9 +264,12 @@ describe("To do, Coming up, On the board and Data health (overhaul PR 6)", () =>
     expect(comingUp(list, "2026-10-22", new Map(), 1)).toHaveLength(1);
   });
 
-  it("says why a name is on the board in two signals", () => {
-    expect(boardWhy(["S7", "S4", "S9"])).toBe("Insiders buying shares · cash flow rising ahead of profits");
+  it("says why a name is on the board in two signals, by the Company page's short names (PR 6 review design-F3)", () => {
+    expect(boardWhy(["S7", "S4", "S9"])).toBe("Insider buying · Earnings quality");
     expect(boardWhy([])).toBe("No signal fired");
+    // the row's tooltip has every fired signal in everyday words
+    expect(boardWhyAll(["S7", "S4", "S9"])).toBe("Insiders buying shares · cash flow rising ahead of profits · verified wins in its filings");
+    expect(boardWhyAll([])).toBe("No signal fired");
   });
 
   it("gives each watched source a state and a date, and the stale line", () => {
@@ -276,8 +282,13 @@ describe("To do, Coming up, On the board and Data health (overhaul PR 6)", () =>
       { source: "sec_13f", name: "Fund holdings (13F)", state: "late", when: "late · Mar 1" },
     ]);
     expect(healthRows([s("sec", null)], now)[0]).toMatchObject({ state: "down", when: "never" });
-    expect(lateLine(rows, now)).toBe("Twelve Data and SEC 13F are out of date, so scores that read them may be behind.");
-    expect(lateLine([rows[1]!], now)).toBe("Twelve Data is out of date, so scores that read it may be behind.");
+    // the late line names each source as its row does, with the provider the row's name leaves out (PR 6 review
+    // design-F7)
+    expect(lateLine(rows, now)).toBe("Weekly prices (Twelve Data) and fund holdings (13F) are out of date, so scores that read them may be behind.");
+    expect(lateLine([rows[1]!], now)).toBe("Weekly prices (Twelve Data) are out of date, so scores that read them may be behind.");
     expect(lateLine([rows[0]!], now)).toBeNull();
+    // the seeded e2e world after Sep 26: SEC is late too (PR 6 review ci-CI-1)
+    const later = new Date("2026-10-22T00:00:00Z");
+    expect(lateLine([rows[0]!, rows[1]!], later)).toBe("SEC filings and weekly prices (Twelve Data) are out of date, so scores that read them may be behind.");
   });
 });

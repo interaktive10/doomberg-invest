@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { useCloseOnOutside } from "@/components/details-menu";
 import { Icon } from "@/components/icons";
+import { LinkPending } from "@/components/link-pending";
 import { SEG_OFF as PILL_OFF, SEG_ON as PILL_ON, SEG_PILL as PILL, SEG_TRACK } from "@/components/segmented";
 import { inMore, isCurrent, MAIN, MORE } from "@/lib/nav";
 import { SEARCH_MAX, typingIn } from "@/lib/search";
@@ -20,34 +22,19 @@ const ITEM_ON = "bg-hover text-fg hover:text-fg";
 const ITEM_OFF = "text-muted hover:bg-hover hover:text-fg";
 
 /** More: Journal, Signal Lab, Settings and Sign out, in a native disclosure (works without script). With script it
- * also closes on a click outside, on Escape and when the page changes. In the dock it opens upwards. */
+ * also closes on a click outside, on Escape and when the page changes. In the dock it opens upwards. On Journal, Signal
+ * Lab and Settings it is the current tab, for screen readers too (aria-current on its summary). */
 function MoreMenu({ path, email, dock = false }: { path: string; email: string; dock?: boolean }) {
   const ref = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.open = false;
   }, [path]);
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const d = ref.current;
-      if (d?.open && !d.contains(e.target as Node)) d.open = false;
-    };
-    const onKey = (e: KeyboardEvent) => {
-      const d = ref.current;
-      if (e.key !== "Escape" || !d?.open) return;
-      d.open = false;
-      d.querySelector("summary")?.focus();
-    };
-    document.addEventListener("click", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("click", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, []);
+  useCloseOnOutside(ref);
   const on = inMore(path);
   return (
     <details ref={ref} className={cn("group relative", dock && "w-full")}>
       <summary
+        aria-current={on ? "page" : undefined}
         className={cn(
           dock ? TAB : PILL,
           dock ? (on ? TAB_ON : TAB_OFF) : on ? PILL_ON : PILL_OFF,
@@ -66,6 +53,7 @@ function MoreMenu({ path, email, dock = false }: { path: string; email: string; 
             <Link key={p.href} href={p.href} aria-current={cur ? "page" : undefined} className={cn(ITEM, cur ? ITEM_ON : ITEM_OFF)}>
               <Icon name={p.icon} className="size-[18px]" />
               {p.label}
+              <LinkPending />
             </Link>
           );
         })}
@@ -92,6 +80,7 @@ export function NavLinks({ email }: { email: string }) {
         return (
           <Link key={p.href} href={p.href} aria-current={cur ? "page" : undefined} className={cn(PILL, cur ? PILL_ON : PILL_OFF)}>
             {p.label}
+            <LinkPending />
           </Link>
         );
       })}
@@ -113,6 +102,7 @@ export function Dock({ email }: { email: string }) {
             <Link key={p.href} href={p.href} aria-current={cur ? "page" : undefined} className={cn(TAB, cur ? TAB_ON : TAB_OFF)}>
               <Icon name={p.icon} className="size-5" />
               {p.label}
+              <LinkPending />
             </Link>
           );
         })}
@@ -123,7 +113,8 @@ export function Dock({ email }: { email: string }) {
 }
 
 /** The company search (overhaul PR 5): a plain GET form to /search, so it works without script; "/" jumps to it from
- * anywhere but a text field. app/(app)/search/page.tsx checks the query again on the server. */
+ * anywhere but a text field. app/(app)/search/page.tsx checks the query again on the server. Its edge is the control
+ * edge colour (>= 3:1 on the canvas and on its own panel colour), like every field's. */
 export function SearchBox({ className }: { className?: string }) {
   const box = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -142,7 +133,7 @@ export function SearchBox({ className }: { className?: string }) {
       <label htmlFor="company-search" className="sr-only">
         Search companies
       </label>
-      <div className="lift flex h-11 items-center gap-2 rounded-full pr-2 pl-3.5 focus-within:outline-2 focus-within:outline-accent md:h-10">
+      <div className="lift outline-edge flex h-11 items-center gap-2 rounded-full pr-2 pl-3.5 focus-within:outline-2 focus-within:outline-accent md:h-10">
         <Icon name="search" className="text-subtle" />
         <input
           ref={box}

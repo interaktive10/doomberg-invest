@@ -56,7 +56,9 @@ export function ScoreRing({
   );
 }
 
-/** A score ring in a tile with its name and what it means ("Evidence / how sure"), as on a Candidates card. */
+/** A score ring in a tile with its name and what it means ("Evidence / how sure"), as on a Candidates card. The ring
+ * already says its name ("Evidence 73 of 100"), so the caption's name is hidden from screen readers and only what it
+ * means is read after it. */
 export function ScoreTile({
   value,
   kind,
@@ -74,7 +76,9 @@ export function ScoreTile({
     <div className={cn("tile flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5", className)}>
       <ScoreRing value={value} kind={kind} size={size} />
       <div className="flex min-w-0 flex-col">
-        <span className="text-[13px] font-semibold text-fg">{NAME[kind]}</span>
+        <span aria-hidden="true" className="text-[13px] font-semibold text-fg">
+          {NAME[kind]}
+        </span>
         <span className="text-[12px] text-subtle">{hint}</span>
       </div>
     </div>

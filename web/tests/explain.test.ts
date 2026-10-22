@@ -7,7 +7,10 @@ import {
   caseLine,
   familyWord,
   gapLine,
+  INSIDER_ROWS,
+  insidersCapped,
   insiderSummary,
+  insiderTotal,
   KILL_SHORT,
   killName,
   killNow,
@@ -27,6 +30,7 @@ import {
 } from "@/lib/explain";
 import { METRIC_LABEL, SIGNAL_NAME, SIGNAL_PLAIN } from "@/lib/labels";
 import { breakdown, gapParts } from "@/lib/why";
+import { repoFile } from "./repo";
 
 describe("numbers in plain words (lib/explain.ts)", () => {
   it("writes money and percentages the way people say them", () => {
@@ -205,6 +209,15 @@ describe("insiders as bars", () => {
     const in2 = ev({ kind: "promoter_buy", filed_at: "2026-09-18T10:00:00Z", value: 120, currency: "INR", source_url: "https://bse/2" });
     expect(latestInsiderEvents([in1, in2])).toEqual([in2]);
     expect(insiderSummary([original, fix1, fix2]).bought?.total).toBe(1_100_000);
+  });
+
+  it("says 'at least' when the insiders read hit its cap (PR 6 review ci-BEH-2)", () => {
+    // the cap is lib/data.ts insiders()'s limit
+    const read = /export async function insiders\([^)]*\)[\s\S]*?\.limit\((\d+)\)/.exec(repoFile("web/lib/data.ts"));
+    expect(Number(read?.[1])).toBe(INSIDER_ROWS);
+    expect([insidersCapped(24), insidersCapped(25)]).toEqual([false, true]);
+    expect(insiderTotal({ total: 510_000, currency: "USD" }, false)).toBe("$510K");
+    expect(insiderTotal({ total: 1_830_000, currency: "USD" }, true)).toBe("at least $1.83M");
   });
 });
 

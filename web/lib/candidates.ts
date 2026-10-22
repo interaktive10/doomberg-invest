@@ -62,6 +62,23 @@ export function dismissalHolds(then: Baseline | null, since: readonly Baseline[]
   return then !== null && !since.some((w) => releases(then, w));
 }
 
+/** The companies among `rows` (the shown week's scores) that a dismissal still hides: lib/data.ts dismissals() for
+ * those rows, the shown week included in the weeks since. Candidates hides them (unless asked to show them) and Home's
+ * On the board leaves them out, so the two screens count the same names. */
+export function stillDismissed(
+  rows: readonly { company_id: string; evidence: number | string; families: string[]; fired_signals: string[] }[],
+  held: ReadonlyMap<string, { baseline: Baseline | null; since: readonly Baseline[] }>,
+): Set<string> {
+  return new Set(
+    rows
+      .filter((r) => {
+        const d = held.get(r.company_id);
+        return d !== undefined && dismissalHolds(d.baseline, [...d.since, { evidence: r.evidence, families: r.families, signals: r.fired_signals }]);
+      })
+      .map((r) => r.company_id),
+  );
+}
+
 /** "+3.5", "−2.0", "0.0" (a true minus sign, like the rest of the app's figures). */
 export function signed(d: number): string {
   return d > 0 ? `+${d.toFixed(1)}` : d < 0 ? `−${Math.abs(d).toFixed(1)}` : "0.0";

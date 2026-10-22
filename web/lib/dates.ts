@@ -24,6 +24,13 @@ export function shortDate(iso: string, year = false): string {
   return year ? `${s}, ${t.getUTCFullYear()}` : s;
 }
 
+/** The calendar quarter a period ends in, as the charts label it: "2023-09-30" -> "Q3 ’23". */
+export function quarterLabel(iso: string): string {
+  const t = utcDay(iso);
+  if (t === null) return iso;
+  return `Q${Math.floor(t.getUTCMonth() / 3) + 1} ’${String(t.getUTCFullYear() % 100).padStart(2, "0")}`;
+}
+
 /** "Fri, Sep 18". */
 export function dayDate(iso: string): string {
   const t = utcDay(iso);

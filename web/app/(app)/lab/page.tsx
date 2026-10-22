@@ -28,7 +28,7 @@ import {
   type DownloadState,
   type Verdict,
 } from "@/lib/lab";
-import { SIGNAL_NAME } from "@/lib/labels";
+import { SIGNAL_NAME, SIGNAL_SHORT } from "@/lib/labels";
 import { signalTone } from "@/lib/palette";
 import { requireUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -41,10 +41,11 @@ export const metadata = { title: "Signal Lab" };
 // the score deciles as two small column charts (their rows behind Details); the price download's progress as a meter;
 // the open proposals. Plain names on the page; the signal codes sit in each row's tooltip and in the tables.
 
-/** A signal's plain name: S1 "Order-book acceleration", a legacy rule L3 "Legacy rule 3". */
+/** A signal's name as every screen gives it (lib/labels.ts SIGNAL_SHORT: S4 "Earnings quality", as the Company page's
+ * Why rows), a legacy rule L3 "Legacy rule 3"; the BRIEF's name and the code are the row's title (codeTitle). */
 function signalName(id: string): string {
   const legacy = /^L(\d+)$/.exec(id);
-  return SIGNAL_NAME[id] ?? (legacy ? `Legacy rule ${legacy[1]}` : id);
+  return SIGNAL_SHORT[id] ?? SIGNAL_NAME[id] ?? (legacy ? `Legacy rule ${legacy[1]}` : id);
 }
 
 function codeTitle(id: string): string {

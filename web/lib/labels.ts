@@ -56,6 +56,26 @@ export const SIGNAL_PLAIN: Record<string, string> = {
   S12: "Industry cycle turning up",
 };
 
+/** Each signal's short name, the one every screen shows (the Company page's Why rows, the Lab, Home's board, a card's
+ * citation chips); the code stays in its title or details. */
+export const SIGNAL_SHORT: Record<string, string> = {
+  S1: "Order book",
+  S2: "Returns on new capital",
+  S3: "Operating leverage",
+  S4: "Earnings quality",
+  S5: "Capital discipline",
+  S6: "Debt paid down",
+  S7: "Insider buying",
+  S8: "Funds discovering it",
+  S9: "Verified wins in filings",
+  S10: "Special situation",
+  S12: "Cycle turning",
+};
+
+export function signalShort(id: string): string {
+  return SIGNAL_SHORT[id] ?? SIGNAL_NAME[id] ?? id;
+}
+
 /** BRIEF §1.5. */
 export const RED_FLAG_NAME: Record<string, string> = {
   R1: "Accruals high or cash conversion weak",
@@ -72,6 +92,9 @@ export const CONTEXT_NAME: Record<string, string> = {
   C2: "Expectations gap (evidence growth minus reverse-DCF implied growth)",
   C3: "Run-up: 12-month return percentile",
 };
+
+/** The Gap's parts by their short names (the codes stay in titles and details). */
+export const GAP_SHORT: Record<string, string> = { C1: "Cheap vs its past", C2: "Growth test", C3: "Price move" };
 
 export const ACTION_LABEL: Record<string, string> = {
   note: "Note",
@@ -103,6 +126,34 @@ export const METRIC_LABEL: Record<string, { label: string; unit: MetricUnit }> =
   promoter_pledged_pct: { label: "the pledged share of the promoter holding", unit: "percent" },
   evidence: { label: "the Evidence score", unit: "score" },
 };
+
+/** A short name per kill metric (METRIC_LABEL's keys, which tests/test_web_parity.py pins to the pipeline). */
+export const KILL_SHORT: Record<string, string> = {
+  revenue_ttm: "TTM revenue",
+  revenue_ttm_yoy: "TTM revenue growth",
+  revenue_q_yoy: "Quarterly revenue growth (YoY)",
+  op_margin_ttm: "Operating margin (TTM)",
+  roic: "Return on capital",
+  fcf_ttm: "Free cash flow (TTM)",
+  net_debt: "Net debt",
+  rpo: "Contracted revenue (RPO)",
+  rpo_yoy: "RPO growth (YoY)",
+  shares_yoy: "Share count change (YoY)",
+  inst_holders: "Fund holders (13F)",
+  fii_dii_pct: "FII + DII holding",
+  promoter_pct: "Promoter holding",
+  promoter_pledged_pct: "Pledged promoter shares",
+  evidence: "Evidence score",
+};
+
+/** A kill-criteria (or a card's) metric's short name ("m:revenue_ttm_yoy" -> "TTM revenue growth"). */
+export function killName(metric: string): string {
+  const key = metric.replace(/^m:/, "");
+  const known = KILL_SHORT[key];
+  if (known) return known;
+  const sig = /^signal:(S\d{1,2})$/.exec(key);
+  return sig?.[1] ? `${signalShort(sig[1])} signal strength` : humanize(key);
+}
 
 const OP_WORDS: Record<string, string> = {
   "<": "falls below",

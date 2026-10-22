@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Chip, DotRow, Legend } from "@/components/chip";
+import { DetailsMenu } from "@/components/details-menu";
 import { Icon } from "@/components/icons";
 import { Empty, Flash, Page } from "@/components/page";
 import { ScoreTile } from "@/components/score-ring";
@@ -15,12 +16,12 @@ import {
   BUCKET_LINE,
   BUCKET_RANGE,
   BUCKET_TABS,
-  dismissalHolds,
   evidenceChange,
   evidenceMove,
   EVIDENCE_MOVE,
   flagLine,
   isNew,
+  stillDismissed,
   windowStart,
   type ShownBucket,
 } from "@/lib/candidates";
@@ -88,15 +89,8 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
     latestDigest(),
   ]);
   // still dismissed: no week since the dismissal (this one included) had a new signal or family or moved Evidence 10
-  const dismissed = new Set(
-    inSector
-      .filter((r) => {
-        const d = held.get(r.company_id);
-        const now = { evidence: r.evidence, families: r.families, signals: r.fired_signals };
-        return d !== undefined && dismissalHolds(d.baseline, [...d.since, now]);
-      })
-      .map((r) => r.company_id),
-  );
+  // (Home's On the board leaves out the same names)
+  const dismissed = stillDismissed(inSector, held);
   const shown = inSector.filter((r) => showDismissed || !dismissed.has(r.company_id));
   const filters = { bucket, market, family, sector, dismissed: showDismissed ? "1" : undefined };
   const back = href(filters);
@@ -131,7 +125,9 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
               <>
                 {" "}
                 · {hidden} dismissed until the evidence changes ·{" "}
-                <Link href={href({ ...filters, dismissed: "1" })}>show</Link>
+                <Link href={href({ ...filters, dismissed: "1" })} className="inline-flex min-h-11 items-center md:min-h-0">
+                  show
+                </Link>
               </>
             ) : null}
             {showDismissed ? " · dismissed ones shown" : ""}
@@ -294,10 +290,11 @@ function CandidateCard({
   );
 }
 
-/** Dismiss, with its reason, from a small form that opens above the button (a native disclosure: no script). */
+/** Dismiss, with its reason, from a small form that opens above the button (a native disclosure: no script; with
+ * script it also closes on a click outside or on Escape, like the More menu). */
 function Dismiss({ r, back }: { r: ScreenerRow; back: string }) {
   return (
-    <details className="group/dismiss relative">
+    <DetailsMenu className="group/dismiss relative">
       <summary
         title="Dismiss: hide it until the evidence changes"
         className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "list-none text-muted [&::-webkit-details-marker]:hidden")}
@@ -314,11 +311,12 @@ function Dismiss({ r, back }: { r: ScreenerRow; back: string }) {
         <p className="text-[13px] text-subtle">Hidden until a new signal fires or Evidence moves {EVIDENCE_MOVE}.</p>
         <SubmitButton size="sm">Confirm dismissal</SubmitButton>
       </form>
-    </details>
+    </DetailsMenu>
   );
 }
 
-/** Market, sector, family and show dismissed, folded behind one pill; the form opens under it. */
+/** Market, sector, family and show dismissed, folded behind one pill; the form opens under it (and closes on a click
+ * outside or on Escape). */
 function Filters({
   bucket,
   market,
@@ -337,7 +335,7 @@ function Filters({
   filtered: boolean;
 }) {
   return (
-    <details className="group/filters relative ml-auto">
+    <DetailsMenu className="group/filters relative ml-auto">
       <summary className={cn(buttonVariants({ variant: "outline", size: "sm" }), "list-none [&::-webkit-details-marker]:hidden")}>
         Filters{filtered ? " · on" : ""}
         <Icon name="chevron-down" className="transition-transform duration-200 group-open/filters:rotate-180" />
@@ -385,13 +383,13 @@ function Filters({
             Filter
           </Button>
           {filtered ? (
-            <Link href={href({ bucket, dismissed: showDismissed ? "1" : undefined })} className="text-[13px]">
+            <Link href={href({ bucket, dismissed: showDismissed ? "1" : undefined })} className="inline-flex min-h-11 items-center text-[13px] md:min-h-0">
               Clear filters
             </Link>
           ) : null}
         </div>
       </form>
-    </details>
+    </DetailsMenu>
   );
 }
 

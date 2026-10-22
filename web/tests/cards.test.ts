@@ -59,7 +59,7 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
     expect(factOrder("no citations")).toEqual([]);
   });
 
-  it("shows each citation as a short label that links to its evidence on the company page", () => {
+  it("shows each citation as a short label in plain words that links to its evidence on the company page", () => {
     const facts = factOrder(CARD);
     const co = "00000000-0000-4000-8000-0000000000e1";
     expect(citeView("f:00000000-0000-4000-8000-0000000000f2", co, facts)).toEqual({
@@ -68,15 +68,24 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
       href: `/company/${co}#fact-00000000-0000-4000-8000-0000000000f2`,
     });
     expect(citeView("f:ffff", co, facts).label).toBe("fact");
-    expect(citeView("m:revenue:2026-03-31", co, facts)).toEqual({ label: "Revenue 2026-03-31", title: "Metric revenue:2026-03-31", href: `/company/${co}#fundamentals` });
-    expect(citeView("m:revenue_ttm_yoy", co, facts).label).toBe("Revenue ttm yoy");
-    expect(citeView("s:S1", co, facts)).toEqual({ label: "S1", title: "Order-book acceleration", href: `/company/${co}#why` });
-    expect(citeView("s:R3", co, facts).title).toBe("Auditor change, late filing or going-concern language");
-    expect(citeView("c:C2", co, facts)).toMatchObject({ label: "C2", href: `/company/${co}#why` });
+    // a metric by the name the kill criteria use, its period end as the screens say dates (PR 6 review design-F1)
+    expect(citeView("m:revenue:2026-03-31", co, facts)).toEqual({ label: "Revenue, Mar 31", title: "Metric revenue:2026-03-31", href: `/company/${co}#fundamentals` });
+    expect(citeView("m:revenue_ttm_yoy", co, facts).label).toBe("TTM revenue growth");
+    expect(citeView("m:signal:S7", co, facts).label).toBe("Insider buying signal strength");
+    // signals, red flags and the Gap's parts by the names the Why panel gives their rows; the code in the title
+    expect(citeView("s:S1", co, facts)).toEqual({ label: "Order book", title: "S1 Order-book acceleration", href: `/company/${co}#why` });
+    expect(citeView("s:S4", co, facts).label).toBe("Earnings quality");
+    expect(citeView("s:R3", co, facts)).toMatchObject({ label: "Auditor change, late filing or going-concern language", title: "R3 Auditor change, late filing or going-concern language" });
+    expect(citeView("s:S99", co, facts)).toMatchObject({ label: "S99", title: "Signal S99" });
+    expect(citeView("c:C2", co, facts)).toMatchObject({ label: "Growth test", href: `/company/${co}#why` });
     expect(citeView("c:C2", null, facts).href).toBeNull();
-    expect(citeView("c:C1", co, facts)).toEqual({ label: "C1", title: "Valuation percentile vs its own history", href: `/company/${co}#why` });
-    expect(citeView("c:C3", co, facts).href).toBe(`/company/${co}#why`);
+    expect(citeView("c:C1", co, facts)).toEqual({ label: "Cheap vs its past", title: "C1 Valuation percentile vs its own history", href: `/company/${co}#why` });
+    expect(citeView("c:C3", co, facts)).toMatchObject({ label: "Price move", href: `/company/${co}#why` });
     expect(citeView("c:C1", null, facts).href).toBeNull();
+    // no code is a chip's label
+    for (const id of ["s:S1", "s:S12", "s:R1", "c:C1", "c:C2", "c:C3", "m:revenue_ttm_yoy", "m:signal:S4"]) {
+      expect([id, /\b[SRC]\d{1,2}\b/.test(citeView(id, co, facts).label)]).toEqual([id, false]);
+    }
   });
 
   it("splits citations out of text for the chips, and leaves code alone", () => {

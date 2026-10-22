@@ -18,6 +18,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { choiceChip, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { citeView, factOrder, stripSection, stripTitle } from "@/lib/cards";
 import { ensureReviews, journal, killCriteria, postmortem, reviews, setting, thesis as getThesis, thesisTitle } from "@/lib/data";
+import { shortDate } from "@/lib/dates";
 import { localToday, thesisWeeks } from "@/lib/discipline";
 import { cardSections, caseLine, plainText } from "@/lib/explain";
 import { code, num } from "@/lib/format";
@@ -50,6 +51,15 @@ const SECTION_TONE: Record<string, Tone> = {
 
 function Hidden({ id }: { id: string }) {
   return <input type="hidden" name="thesis_id" value={id} />;
+}
+
+/** A date as the screens say it ("Nov 14, 2026"), the ISO date kept for machines. */
+function Day({ iso, className }: { iso: string; className?: string }) {
+  return (
+    <time dateTime={iso.slice(0, 10)} className={cn("num", className)}>
+      {shortDate(iso, true)}
+    </time>
+  );
 }
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
@@ -135,7 +145,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
           {t.accepted_at ? (
             <li>
               <Chip>
-                Accepted <span className="num">{t.accepted_at.slice(0, 10)}</span>
+                Accepted <Day iso={t.accepted_at} />
                 {weeks <= 0 ? ", this week" : `, ${weeks} ${weeks === 1 ? "week" : "weeks"} ago`}
               </Chip>
             </li>
@@ -144,7 +154,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
             <li>
               <Chip>
                 <Icon name="calendar" className="size-3.5" />
-                Next review <span className="num">{t.next_review}</span>
+                Next review <Day iso={t.next_review} />
               </Chip>
             </li>
           ) : null}
@@ -181,8 +191,11 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
               </form>
             ) : (
               <Callout className="basis-full">
-                There is no validated card yet, so this can&apos;t become a thesis: a thesis needs the card&apos;s kill criteria and review
-                dates. Sunday&apos;s routine writes the card after the week&apos;s shortlist.
+                No validated card yet: Sunday&apos;s routine writes it.
+                <Disclosure summary="Why">
+                  A thesis needs the card&apos;s kill criteria and review dates, so it can&apos;t be accepted before the card. The routine
+                  writes it after the week&apos;s shortlist.
+                </Disclosure>
               </Callout>
             )}
             <details>
@@ -255,8 +268,18 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                 {revs.map((r) => (
                   <li key={r.id} className="tile flex flex-col gap-2 p-4">
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                      <span className="text-[15px] font-semibold text-fg">{r.period_end ? `Quarter ${r.period_end}` : "A kill criterion triggered"}</span>
-                      <span className="num text-[13px] text-subtle">created {r.created_at.slice(0, 10)}</span>
+                      <span className="text-[15px] font-semibold text-fg">
+                        {r.period_end ? (
+                          <>
+                            Quarter to <Day iso={r.period_end} />
+                          </>
+                        ) : (
+                          "A kill criterion triggered"
+                        )}
+                      </span>
+                      <span className="text-[13px] text-subtle">
+                        created <Day iso={r.created_at} />
+                      </span>
                       {r.verdict ? (
                         <Badge variant={r.verdict === "broken" ? "destructive" : r.verdict === "weakened" ? "warning" : "success"}>{r.verdict}</Badge>
                       ) : (
@@ -322,7 +345,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                   <li key={e.id} className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
                       <span className="font-semibold text-fg">{label(ACTION_LABEL, e.action)}</span>
-                      <span className="num text-subtle">{e.entry_date}</span>
+                      <Day iso={e.entry_date} className="text-subtle" />
                       {e.portfolio_pct === null ? null : (
                         <Chip size="sm">
                           <span className="num">{num(e.portfolio_pct)}%</span> of portfolio

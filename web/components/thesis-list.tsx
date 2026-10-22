@@ -6,6 +6,7 @@ import { ScoreRing } from "@/components/score-ring";
 import { TickerTile } from "@/components/ticker-tile";
 import { Badge } from "@/components/ui/badge";
 import type { thesisFigures, Thesis } from "@/lib/data";
+import { shortDate } from "@/lib/dates";
 import { thesisAsk } from "@/lib/explain";
 import { code } from "@/lib/format";
 import { GROUP_LABEL, STATE_LABEL, type Group } from "@/lib/theses";
@@ -71,7 +72,10 @@ export function ThesisRows({ list, figures }: { list: readonly Thesis[]; figures
                 {t.next_review ? (
                   <>
                     {" "}
-                    · next review <span className="num">{t.next_review}</span>
+                    · next review{" "}
+                    <time dateTime={t.next_review} className="num">
+                      {shortDate(t.next_review, true)}
+                    </time>
                   </>
                 ) : null}
                 {kills.length > 0 ? (
