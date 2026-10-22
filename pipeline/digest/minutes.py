@@ -178,6 +178,7 @@ def scheduled_minutes(runs: Mapping[str, int], typical: Mapping[str, int]) -> in
 
 
 DOWNLOAD = "lab-prices.yml"
+DOWNLOAD_NEED = 120  # lab-prices.yml's gate: `minutes gate --need 120`, its timeout-minutes
 
 
 def download_minutes(runs_left: int, pending: int, per_run: int, run_minutes: int) -> int:
@@ -287,16 +288,21 @@ def measure(runs: Runs, budget: Budget, now: datetime, root: Path = REPO_ROOT, d
     fires_left = scheduled_runs(now, until, root)
     download = download_minutes(fires_left.get(DOWNLOAD, 0), download_pending, tickers_per_run, budget.download_run)
     rate = budget.other_repos_per_day
-    return Meter(
-        budget,
-        start,
-        end,
-        here,
-        scheduled_minutes(fires_left, budget.typical),
-        download,
-        others_so_far=rate * (now.date() - start).days,
-        others_ahead=rate * (end - now.date()).days,
-    )
+    scheduled = scheduled_minutes(fires_left, budget.typical)
+    so_far, ahead = rate * (now.date() - start).days, rate * (end - now.date()).days
+    base = here + budget.other_repos + so_far + ahead + scheduled
+    download = min(download, admitted_runs(budget, base) * budget.download_run)
+    return Meter(budget, start, end, here, scheduled, download, others_so_far=so_far, others_ahead=ahead)
+
+
+def admitted_runs(budget: Budget, base: int, need: int = DOWNLOAD_NEED) -> int:
+    """How many Lab download runs the gate can still admit this cycle: run k goes ahead while base + (k - 1) runs +
+    its `need` + the reserve stays at or below gate_max. The digest projects no more than that (integration review
+    runtime-X2: projecting every pending run warned of going over 2,000 when the gate already caps it)."""
+    room = budget.gate_max - budget.reserve - base
+    if room < need or budget.download_run <= 0:
+        return 0
+    return (room - need) // budget.download_run + 1
 
 
 def gate(meter: Meter, need: int) -> tuple[bool, str]:

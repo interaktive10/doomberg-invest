@@ -82,9 +82,18 @@ jobs:
           for f in .cache/lab/us_month_prices.csv.gz .cache/lab/us_prices_state.json; do
             if [ -f "$f" ]; then gh release upload lab-data-v1 "$f" --clobber; fi
           done
+      # The Lab run asks its own gate for 180 minutes: if that would be refused now, this workflow stays on and a later
+      # scheduled run (which finds the download complete in seconds) tries again, so the Lab is never left undone
+      # (integration review runtime-X1).
+      - name: Lab gate (the first Lab run needs 180 minutes)
+        id: labgate
+        if: steps.download.outputs.complete == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --frozen python -m pipeline.digest.minutes gate --need 180
       # --ref: the branch is named, as quarterly.yml's old dispatch did (first live run, 2026-09-29).
       - name: Done - the first Lab run, then this workflow off
-        if: steps.download.outputs.complete == 'true'
+        if: steps.download.outputs.complete == 'true' && steps.labgate.outputs.allowed == 'true'
         run: |
           gh workflow run lab.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f market=us
           gh workflow disable lab-prices.yml --repo "$GITHUB_REPOSITORY"
