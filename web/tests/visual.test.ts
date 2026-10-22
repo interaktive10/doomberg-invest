@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clamp, kindsLabel, meterPct, ringGeometry, sparkGeometry, splitWidths, tileText, tintFor } from "@/lib/visual";
+import { clamp, kindsLabel, meterPct, ringGeometry, splitWidths, tileText, tintFor } from "@/lib/visual";
 
 describe("score rings (lib/visual.ts ringGeometry)", () => {
   it("draws the arc for the score out of the ring's circumference, and shows it rounded", () => {
@@ -35,37 +35,6 @@ describe("bars (meterPct, splitWidths)", () => {
     expect(splitWidths([80, 40])).toEqual([66.7, 33.3]);
     expect(splitWidths([30, -5, Number.NaN, 10], 80)).toEqual([37.5, 0, 0, 12.5]);
     expect(splitWidths([], 100)).toEqual([]);
-  });
-});
-
-describe("sparklines (sparkGeometry)", () => {
-  it("spreads the points over the width with zero always in range", () => {
-    const g = sparkGeometry([1, 2, 4], 300, 80, 6);
-    expect(g.zero).toBe(74); // the bottom: every value is above zero
-    expect(g.runs).toEqual([{ line: "0,57 150,40 300,6", area: "0,74 0,57 150,40 300,6 300,74", dot: false }]);
-  });
-
-  it("lifts the zero line when a value falls below it, so the dip shows", () => {
-    const g = sparkGeometry([98, -80, 139], 300, 80, 6);
-    expect(g.zero).toBe(49.2); // 6 + 68 x 139/219
-    expect(g.runs[0]!.line).toBe("0,18.7 150,74 300,6");
-    // all below zero: zero is the top
-    expect(sparkGeometry([-1, -2], 300, 80, 6).zero).toBe(6);
-  });
-
-  it("breaks the line at a missing value and draws a lone value as a dot", () => {
-    const g = sparkGeometry([1, null, 1, 1, undefined], 400, 80, 0);
-    expect(g.runs).toEqual([
-      { line: "0,0 0,0", area: "0,80 0,0 0,80", dot: true },
-      { line: "200,0 300,0", area: "200,80 200,0 300,0 300,80", dot: false },
-    ]);
-    expect(sparkGeometry([5], 300, 80, 6).runs[0]!.line).toBe("150,6 150,6");
-  });
-
-  it("has a baseline and no runs when there is nothing to draw", () => {
-    expect(sparkGeometry([], 300, 80, 6)).toEqual({ zero: 74, runs: [] });
-    expect(sparkGeometry([null, null], 300, 80, 6).runs).toEqual([]);
-    expect(sparkGeometry([0, 0], 300, 80, 6).runs[0]!.line).toBe("0,74 300,74"); // flat at zero
   });
 });
 

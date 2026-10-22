@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DARK, familyTone, INK, LIGHT, SERIES, signalTone, TONE_VAR, type Token } from "@/lib/palette";
+import { DARK, familyTone, INK, LIGHT, SERIES, signalTone, type Token } from "@/lib/palette";
 
 // The look (overhaul PR 6, app/globals.css): every colour is a CSS variable defined for light on :root and for dark
 // twice (the Auto media query and data-theme="dark"); Tailwind reads them through @theme inline, which resets Tailwind's
@@ -152,8 +152,8 @@ describe("palette guard (the Curator look, light and dark)", () => {
     expect(hits(/var\(--color-/g, SCREENS)).toEqual([]);
   });
 
-  it("hands SVG and inline styles theme variables that exist (charts, sparklines, dots)", () => {
-    const refs = [...Object.values(INK), ...SERIES, ...Object.values(TONE_VAR)];
+  it("hands the charts' SVG theme variables that exist", () => {
+    const refs = [...Object.values(INK), ...SERIES];
     const names = refs.map((v) => /^var\(--([a-z0-9-]+)\)$/.exec(v)?.[1]);
     expect(names.filter((n) => n === undefined || !(n in LIGHT))).toEqual([]);
   });

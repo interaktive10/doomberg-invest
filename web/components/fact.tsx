@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Dot } from "@/components/chip";
 import type { FactRow } from "@/lib/data";
+import { shortDate } from "@/lib/dates";
 import { big, num } from "@/lib/format";
 import { humanize, unitLabel } from "@/lib/labels";
 
@@ -12,36 +14,35 @@ export function factValue(f: Pick<FactRow, "value_num" | "value_low" | "value_hi
   return pct || base === "" ? base : `${base} ${unitLabel(f.unit)}`;
 }
 
-/** A verified text fact: what it says, the exact quote it was checked against, and the document (BRIEF §2.5). The
- * anchor #fact-<id> is where a card's [f:<id>] citation points. */
+/** A verified text fact as a compact quote (BRIEF §2.5): the exact words it was checked against, then what it says, when,
+ * and the document. The anchor #fact-<id> is where a card's [f:<id>] citation points (components/open-target.tsx opens
+ * the folded list around it); the stored subject key is the kind's title. */
 export function FactItem({ f, company }: { f: FactRow & { company_id: string }; company?: boolean }) {
   const value = factValue(f);
   return (
-    <li
-      id={`fact-${f.id}`}
-      className="scroll-mt-24 rounded-sm border border-line bg-canvas p-3 target:border-accent target:ring-1 target:ring-accent/40 sm:p-4"
-    >
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
+    <li id={`fact-${f.id}`} className="tile scroll-mt-24 p-3.5 target:ring-2 target:ring-accent/40 md:p-4">
+      <blockquote className="text-[14px] leading-relaxed text-fg">“{f.quote}”</blockquote>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-subtle">
         {company && f.companies ? (
-          <Link href={`/company/${f.company_id}`} className="link-quiet">
+          <Link href={`/company/${f.company_id}`} className="link-quiet text-[12px]">
             {f.companies.name}
           </Link>
         ) : null}
-        <span className="font-semibold text-fg">{humanize(f.fact_type)}</span>
-        {value ? <span className="num font-medium text-fg">{value}</span> : null}
-        <span className="text-muted">
-          {f.period_label ? `${f.period_label} · ` : ""}as of {f.as_of}
+        <span className="inline-flex items-center gap-1.5 font-semibold text-muted" title={f.subject_key}>
+          <Dot tone="text" />
+          {humanize(f.fact_type)}
+          {value ? <span className="num">{value}</span> : null}
         </span>
-        <code className="ml-auto text-xs break-all text-muted">{f.subject_key}</code>
+        <span className="num">
+          {f.period_label ? `${f.period_label} · ` : ""}as of {shortDate(f.as_of, true)}
+        </span>
+        {f.documents ? (
+          <a href={f.documents.url} rel="noreferrer" target="_blank" title={f.documents.title ?? undefined} className="text-[12px]">
+            {f.documents.kind}, {shortDate(f.documents.published_at, true)}
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        ) : null}
       </div>
-      <blockquote className="mt-2 border-l-2 border-line-strong pl-3 text-sm text-fg">“{f.quote}”</blockquote>
-      {f.documents ? (
-        <a href={f.documents.url} rel="noreferrer" target="_blank" className="mt-2 inline-block text-xs">
-          {f.documents.kind} {f.documents.published_at.slice(0, 10)}
-          {f.documents.title ? `: ${f.documents.title}` : ""}
-          <span className="sr-only"> (opens in a new tab)</span> ↗
-        </a>
-      ) : null}
     </li>
   );
 }

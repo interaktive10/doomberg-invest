@@ -1,12 +1,15 @@
+import type { ReactNode } from "react";
+import { Chip, type ChipVariant } from "@/components/chip";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { GAP_SHORT, killRule, KILL_WORD, pc, signalShort } from "@/lib/explain";
 import { big, measure, num } from "@/lib/format";
-import { humanize } from "@/lib/labels";
+import { RED_FLAG_NAME } from "@/lib/labels";
 import type { KillSnapshot, PackDiff, StateDiff } from "@/lib/reviews";
 
-// A review's pack diff (BRIEF §4.9 "the pack diff since the last review"; M7 review R1-F4): the quarter's key figures
-// against the quarter before, the kill criteria as they stood, and what changed since the last review (or the card):
-// signals and red flags, context, new facts, ownership rows and insider events.
+// A review's pack diff (BRIEF §4.9 "the pack diff since the last review"; M7 review R1-F4), as clean rows (overhaul
+// PR 6): the quarter's key figures against the quarter before with the change, the kill criteria as they stood, and
+// what changed since the last review (or the card): signals and red flags by name (the codes in their titles), the
+// context, new verified facts as quotes, ownership filings and insider events.
 
 const FIGURE_LABEL: Record<string, string> = {
   revenue: "Revenue",
@@ -17,109 +20,142 @@ const FIGURE_LABEL: Record<string, string> = {
   diluted_shares: "Diluted shares",
 };
 
+const CONTEXT_LABEL: Record<string, string> = { ...GAP_SHORT, evidence: "Evidence", gap: "Gap" };
+
 function arrow(before: number | null, now: number | null, fmt: (v: number | null) => string): string {
   return `${fmt(before)} → ${fmt(now)}`;
 }
 
-function ratio(v: number | null): string {
-  return measure(v);
+/** The change as a chip: up is good and down is bad, except for the share count, where it is the other way round. None
+ * from a zero or negative base (a loss turning into a profit has no percentage). */
+function Change({ name, before, now }: { name: string; before: number | null; now: number | null }) {
+  if (before === null || now === null || !(before > 0)) return null;
+  const ch = now / before - 1;
+  if (!Number.isFinite(ch)) return null;
+  const good = name === "diluted_shares" ? ch <= 0 : ch >= 0;
+  const variant: ChipVariant = Math.abs(ch) < 0.005 ? "plain" : good ? "good" : "bad";
+  return (
+    <Chip variant={variant} size="sm">
+      <span className="num">
+        {ch >= 0 ? "+" : "−"}
+        {pc(Math.abs(ch))}
+      </span>
+    </Chip>
+  );
 }
 
-function list(ids: readonly string[]): string {
-  return ids.length === 0 ? "none" : ids.join(", ");
+/** A labelled list of rows: a region a test (and a screen reader) can name. */
+function Rows({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="region" aria-label={label} className="min-w-0">
+      <ul className="flex flex-col">{children}</ul>
+    </div>
+  );
 }
 
-function KillTable({ label, kills, state }: { label: string; kills: readonly KillSnapshot[]; state: StateDiff | null }) {
+function Row({ name, title, value, end }: { name: ReactNode; title?: string; value: ReactNode; end?: ReactNode }) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line py-2 first:border-t-0 first:pt-0">
+      <span className="min-w-0 text-[14px] text-fg" title={title}>
+        {name}
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="num text-[14px] whitespace-nowrap text-fg">{value}</span>
+        {end}
+      </span>
+    </li>
+  );
+}
+
+function KillRows({ label, kills, state }: { label: string; kills: readonly KillSnapshot[]; state: StateDiff | null }) {
   const before = new Map((state?.kill ?? []).map((k) => [k.metric, k.before]));
   return (
-    <Table label={label}>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Kill criterion</TableHead>
-          <TableHead>Condition</TableHead>
-          <TableHead>Value (before → now)</TableHead>
-          <TableHead>Status</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {kills.map((k) => (
-          <TableRow key={k.metric}>
-            <TableCell>
-              <code>{k.metric}</code>
-            </TableCell>
-            <TableCell>
-              {k.operator} {k.threshold ?? ""}
-            </TableCell>
-            <TableCell className="num whitespace-nowrap">{arrow(before.get(k.metric) ?? null, k.last_value, ratio)}</TableCell>
-            <TableCell>
-              <Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{k.status}</Badge>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <Rows label={label}>
+      {kills.map((k) => (
+        <Row
+          key={k.metric}
+          name={killRule(k)}
+          title={k.metric}
+          value={arrow(before.get(k.metric) ?? null, k.last_value, measure)}
+          end={<Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{KILL_WORD[k.status] ?? k.status}</Badge>}
+        />
+      ))}
+    </Rows>
+  );
+}
+
+/** Ids as their names, each with its code as the title: "Order book, Insider buying"; "none" for an empty list. */
+function Names({ ids, name }: { ids: readonly string[]; name: (id: string) => string }) {
+  if (ids.length === 0) return <>none</>;
+  return (
+    <>
+      {ids.map((id, i) => (
+        <span key={id} title={id}>
+          {i > 0 ? ", " : ""}
+          {name(id)}
+        </span>
+      ))}
+    </>
   );
 }
 
 function Changes({ id, state }: { id: string; state: StateDiff }) {
   const since = state.since ? `since ${state.since}` : "since the card";
   return (
-    <div className="mt-3 flex flex-col gap-2 text-sm">
-      <h3 className="font-semibold">What changed {since}</h3>
+    <div className="flex flex-col gap-2.5 text-[14px] text-fg">
+      <h3 className="eyebrow">What changed {since}</h3>
       <p>
-        Signals: started {list(state.signals.fired)}; stopped {list(state.signals.dropped)}.
+        <span className="font-semibold">Signals:</span> started <Names ids={state.signals.fired} name={signalShort} />; stopped{" "}
+        <Names ids={state.signals.dropped} name={signalShort} />.
       </p>
       <p>
-        Red flags: started {list(state.red_flags.fired)}; stopped {list(state.red_flags.dropped)}.
+        <span className="font-semibold">Red flags:</span> started <Names ids={state.red_flags.fired} name={(f) => RED_FLAG_NAME[f] ?? f} />; stopped{" "}
+        <Names ids={state.red_flags.dropped} name={(f) => RED_FLAG_NAME[f] ?? f} />.
       </p>
       {state.context.length > 0 ? (
-        <Table label={`Context for review ${id}`}>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Context</TableHead>
-              <TableHead>Before → now</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {state.context.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell>{humanize(c.id)}</TableCell>
-                <TableCell className="num whitespace-nowrap">{arrow(c.before, c.now, ratio)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <Rows label={`Context for review ${id}`}>
+          {state.context.map((c) => (
+            <Row key={c.id} name={CONTEXT_LABEL[c.id] ?? c.id} title={c.id} value={arrow(c.before, c.now, measure)} />
+          ))}
+        </Rows>
       ) : null}
       {state.facts.length > 0 ? (
-        <ul className="list-disc pl-5">
+        <ul className="flex flex-col gap-2">
           {state.facts.map((f) => (
-            <li key={f.id}>
-              New fact (as of {f.as_of}{f.published_at ? `, published ${f.published_at.slice(0, 10)}` : ""}): {f.subject} {f.value === null ? "" : f.unit === "usd" ? big(f.value) : `${num(f.value)} ${f.unit}`} — “{f.quote}”
-              {f.url ? (
-                <>
-                  {" "}
-                  <a href={f.url} rel="noreferrer" target="_blank">
-                    source<span className="sr-only"> (opens in a new tab)</span>
-                  </a>
-                </>
-              ) : null}
+            <li key={f.id} className="rounded-tile bg-panel p-3">
+              <p className="text-[13px] text-muted">
+                New fact (as of {f.as_of}
+                {f.published_at ? `, published ${f.published_at.slice(0, 10)}` : ""}): {f.subject}{" "}
+                {f.value === null ? "" : f.unit === "usd" ? big(f.value) : `${num(f.value)} ${f.unit}`}
+              </p>
+              <blockquote className="mt-1 text-fg">
+                “{f.quote}”
+                {f.url ? (
+                  <>
+                    {" "}
+                    <a href={f.url} rel="noreferrer" target="_blank" className="text-[13px]">
+                      source<span className="sr-only"> (opens in a new tab)</span>
+                    </a>
+                  </>
+                ) : null}
+              </blockquote>
             </li>
           ))}
         </ul>
       ) : (
-        <p>No new verified facts.</p>
+        <p className="text-muted">No new verified facts.</p>
       )}
       {state.ownership.length > 0 ? (
         <p>
-          New ownership filings:{" "}
+          <span className="font-semibold">New ownership filings:</span>{" "}
           {state.ownership.map((o) => `${String(o.quarter_end ?? "")} (filed ${String(o.filed_at ?? "").slice(0, 10)})`).join("; ")}
         </p>
       ) : null}
       {state.insiders.length > 0 ? (
-        <ul className="list-disc pl-5">
+        <ul className="flex flex-col gap-1">
           {state.insiders.map((e, i) => (
             <li key={i}>
-              Insider ({String(e.event_date ?? "")}): {String(e.person ?? "")}, {String(e.kind ?? "")}
+              <span className="font-semibold">Insider</span> ({String(e.event_date ?? "")}): {String(e.person ?? "")}, {String(e.kind ?? "").replace(/_/g, " ")}
               {e.shares === null || e.shares === undefined ? "" : `, ${big(Number(e.shares))} shares`}
               {e.value === null || e.value === undefined ? "" : `, ${big(Number(e.value))} ${String(e.currency ?? "")}`}
             </li>
@@ -135,32 +171,34 @@ export function ReviewDiff({ id, diff }: { id: string; diff: Partial<PackDiff> }
   const kills = Array.isArray(diff.kill_criteria) ? diff.kill_criteria : [];
   const quarter = Array.isArray(diff.quarters) ? diff.quarters[0] : undefined;
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       {quarter ? (
-        <p className="text-sm">
-          Quarter {quarter.period_end}, filed {quarter.filed_at.slice(0, 10)}
-          {diff.since ? `; the thesis had seen ${diff.since}` : ""}.
+        <p className="text-[13px] text-muted">
+          Quarter <span className="num">{quarter.period_end}</span>, filed <span className="num">{quarter.filed_at.slice(0, 10)}</span>
+          {diff.since ? (
+            <>
+              ; the thesis had seen <span className="num">{diff.since}</span>
+            </>
+          ) : null}
+          .
         </p>
       ) : null}
       {figures.length > 0 ? (
-        <Table label={`Figures for review ${id}`}>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Figure</TableHead>
-              <TableHead>Quarter before → this quarter</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <div className="flex flex-col gap-1.5">
+          <h3 className="eyebrow">The quarter against the one before</h3>
+          <Rows label={`Figures for review ${id}`}>
             {figures.map((f) => (
-              <TableRow key={f.name}>
-                <TableCell>{FIGURE_LABEL[f.name] ?? f.name}</TableCell>
-                <TableCell className="num whitespace-nowrap">{arrow(f.before, f.now, big)}</TableCell>
-              </TableRow>
+              <Row key={f.name} name={FIGURE_LABEL[f.name] ?? f.name} value={arrow(f.before, f.now, big)} end={<Change name={f.name} before={f.before} now={f.now} />} />
             ))}
-          </TableBody>
-        </Table>
+          </Rows>
+        </div>
       ) : null}
-      {kills.length > 0 ? <KillTable label={`Kill criteria for review ${id}`} kills={kills} state={diff.state ?? null} /> : null}
+      {kills.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <h3 className="eyebrow">Kill criteria then</h3>
+          <KillRows label={`Kill criteria for review ${id}`} kills={kills} state={diff.state ?? null} />
+        </div>
+      ) : null}
       {diff.state ? <Changes id={id} state={diff.state} /> : null}
     </div>
   );

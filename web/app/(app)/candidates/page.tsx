@@ -1,35 +1,57 @@
 import Link from "next/link";
+import { Chip, DotRow, Legend } from "@/components/chip";
+import { Icon } from "@/components/icons";
 import { Empty, Flash, Page } from "@/components/page";
+import { ScoreTile } from "@/components/score-ring";
+import { Segmented } from "@/components/segmented";
 import { SubmitButton } from "@/components/submit-button";
+import { TickerTile } from "@/components/ticker-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
-import { dismissalHolds, evidenceChange, EVIDENCE_MOVE, isNew, signed, windowStart } from "@/lib/candidates";
-import { dismissals, latestThesisByCompany, scoreHistory, screen, type Bucket } from "@/lib/data";
-import { code, num } from "@/lib/format";
+import { requireUser } from "@/lib/auth";
+import {
+  BUCKET_EMPTY,
+  BUCKET_LINE,
+  BUCKET_RANGE,
+  BUCKET_TABS,
+  dismissalHolds,
+  evidenceChange,
+  evidenceMove,
+  EVIDENCE_MOVE,
+  flagLine,
+  isNew,
+  windowStart,
+  type ShownBucket,
+} from "@/lib/candidates";
+import { dismissals, latestDigest, latestThesisByCompany, scoreHistory, screen, type ScreenerRow, type Thesis } from "@/lib/data";
+import { weekEyebrow } from "@/lib/dates";
+import { code } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
-import { FAMILY_LABEL, RED_FLAG_NAME, SIGNAL_PLAIN } from "@/lib/labels";
+import { changeItems, homeSections, leftBucket, type ChangeItem } from "@/lib/home";
+import { FAMILY_LABEL, SIGNAL_NAME, SIGNAL_PLAIN } from "@/lib/labels";
+import { familyTone, signalTone } from "@/lib/palette";
 import type { ScreenSpec } from "@/lib/screener";
 import { cn } from "@/lib/utils";
 import { dismiss, research } from "./actions";
-import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Candidates" };
 
-// BRIEF §6 Candidates, simplified (Manzoor, 2026-10-08; overhaul PR 4): tabs Candidate · Early · Priced-in; one row
-// per company in plain words (why it's here, the two scores with the Evidence change, red flags, NEW when it is in the
-// bucket for the first time in 12 weeks) with open card, research and dismiss; filters folded away. A dismissal holds
-// until the evidence changes (lib/candidates.ts). The C1–C3 detail is on the Company page. On a wide screen the rows
-// line up under a column header (the header is decoration: each row also names its columns for screen readers).
-const TABS: readonly [Bucket, string][] = [
-  ["candidate", "Candidate"],
-  ["early", "Early"],
-  ["priced_in", "Priced-in"],
-];
+// BRIEF §6 Candidates (overhaul PR 4: one entry per company in plain words, filters folded away), drawn as the overhaul
+// PR 6 mock: a segmented switch for the three buckets (Candidate is "On the board"), then one card per company with its
+// ticker tile, the Evidence and Gap rings, the Evidence change since its previous scores row, why it's here as chips
+// with a dot per family (the codes in their tooltips), the red-flag line, NEW when it is in the bucket for the first
+// time in 12 weeks, and Open / Open card or Research / Dismiss. A dismissal holds until the evidence changes
+// (lib/candidates.ts). Under the cards, the names that left this bucket this week (the digest's What changed lines,
+// when the digest is of the week shown) and a legend.
 
 const FAMILIES = Object.keys(FAMILY_LABEL);
 
-const COLUMNS = "lg:grid-cols-[minmax(0,1.6fr)_7rem_7rem_minmax(0,2.4fr)_15rem]";
+const LEFT_TITLE: Record<ShownBucket, string> = {
+  candidate: "Left the board this week",
+  early: "Left Early this week",
+  priced_in: "No longer priced in this week",
+};
 
 function href(q: Record<string, string | undefined>): string {
   const p = new URLSearchParams();
@@ -38,10 +60,15 @@ function href(q: Record<string, string | undefined>): string {
   return s ? `/candidates?${s}` : "/candidates";
 }
 
+function score(v: number | string | null | undefined): number | null {
+  const n = v === null || v === undefined || v === "" ? Number.NaN : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default async function Candidates({ searchParams }: { searchParams: Promise<Query> }) {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
-  const bucket = (TABS.find(([b]) => b === one(q, "bucket"))?.[0] ?? "candidate") as Bucket;
+  const bucket: ShownBucket = BUCKET_TABS.find(([b]) => b === one(q, "bucket"))?.[0] ?? "candidate";
   const market = one(q, "market") === "us" || one(q, "market") === "in" ? (one(q, "market") as "us" | "in") : undefined;
   const family = FAMILIES.find((f) => f === one(q, "family"));
   const sector = one(q, "sector") || undefined;
@@ -54,10 +81,11 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const week = all[0]?.week_end;
   const inSector = all.filter((r) => !sector || r.sector === sector);
   const ids = inSector.map((r) => r.company_id);
-  const [held, cards, history] = await Promise.all([
+  const [held, cards, history, digest] = await Promise.all([
     week ? dismissals(ids, week) : Promise.resolve(new Map<string, never>()),
     latestThesisByCompany(ids),
     week ? scoreHistory(ids, windowStart(week), week) : Promise.resolve(new Map<string, never[]>()),
+    latestDigest(),
   ]);
   // still dismissed: no week since the dismissal (this one included) had a new signal or family or moved Evidence 10
   const dismissed = new Set(
@@ -74,215 +102,331 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const back = href(filters);
   const filtered = market !== undefined || family !== undefined || sector !== undefined;
   const hidden = showDismissed ? 0 : inSector.length - shown.length;
+  // the digest's lines about names that left this bucket, only when it is the digest of the week shown
+  const left = digest && week && digest.week_end === week ? leftBucket(changeItems(homeSections(digest.body_md).changed), bucket) : [];
+  const range = BUCKET_RANGE[bucket];
   return (
     <Page
+      eyebrow={week ? weekEyebrow(week, false) : undefined}
       title="Candidates"
-      description={
-        week
-          ? `The weekly scores for the week ending ${week}: ${shown.length} shown${hidden > 0 ? `, ${hidden} dismissed until the evidence changes` : ""}.`
-          : "The weekly scores, by bucket."
+      description={BUCKET_LINE[bucket]}
+      actions={
+        <Segmented
+          label="Buckets"
+          items={BUCKET_TABS.map(([b, text]) => ({
+            href: href({ ...filters, bucket: b }),
+            label: text,
+            count: b === bucket ? shown.length : undefined,
+            current: b === bucket,
+          }))}
+        />
       }
     >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <nav aria-label="Buckets" className="grid w-full grid-cols-3 self-start rounded-md border border-line bg-panel p-0.5 sm:inline-flex sm:w-auto">
-        {TABS.map(([b, text]) => (
-          <Link
-            key={b}
-            href={href({ ...filters, bucket: b })}
-            aria-current={b === bucket ? "page" : undefined}
-            className={cn(
-              "inline-flex h-7 items-center justify-center rounded-sm px-2 text-[13px] font-medium no-underline transition-colors sm:px-3",
-              b === bucket ? "bg-raised text-fg shadow-[inset_0_-2px_0_var(--accent)] hover:text-fg" : "text-muted hover:text-fg",
-            )}
-          >
-            {text}
-          </Link>
-        ))}
-      </nav>
-      <details className="rounded-md border border-line bg-panel" open={filtered}>
-        <summary className="list-none px-4 py-2.5 text-[13px] font-medium text-muted [&::-webkit-details-marker]:hidden">
-          Filters{filtered ? " (on)" : ""}
-        </summary>
-        <form method="get" action="/candidates" className="grid grid-cols-2 items-end gap-3 border-t border-line p-4 sm:flex sm:flex-wrap">
-          <input type="hidden" name="bucket" value={bucket} />
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <Label htmlFor="f-market">Market</Label>
-            <Select id="f-market" name="market" defaultValue={market ?? ""} className="w-full sm:w-auto">
-              <option value="">All</option>
-              <option value="us">US</option>
-              <option value="in">India</option>
-            </Select>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <Label htmlFor="f-sector">Sector</Label>
-            <Select id="f-sector" name="sector" defaultValue={sector ?? ""} className="w-full sm:w-auto sm:max-w-56">
-              <option value="">All</option>
-              {sectors.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <Label htmlFor="f-family">Family</Label>
-            <Select id="f-family" name="family" defaultValue={family ?? ""} className="w-full sm:w-auto">
-              <option value="">All</option>
-              {FAMILIES.map((f) => (
-                <option key={f} value={f}>
-                  {FAMILY_LABEL[f]}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="col-span-2 flex h-8 items-center gap-2 sm:col-span-1">
-            <input id="f-dismissed" type="checkbox" name="dismissed" value="1" defaultChecked={showDismissed} />
-            <Label htmlFor="f-dismissed" className="font-normal">
-              Show dismissed
-            </Label>
-          </div>
-          <div className="col-span-2 flex items-center gap-3 sm:col-span-1">
-            <Button type="submit" variant="outline">
-              Filter
-            </Button>
-            {filtered ? (
-              <Link href={href({ bucket, dismissed: filters.dismissed })} className="text-[13px]">
+      <div className="flex flex-wrap items-center gap-3">
+        {shown.length > 0 || hidden > 0 ? (
+          <p className="text-[14px] text-muted">
+            {shown.length} {shown.length === 1 ? "name" : "names"}
+            {hidden > 0 ? (
+              <>
+                {" "}
+                · {hidden} dismissed until the evidence changes ·{" "}
+                <Link href={href({ ...filters, dismissed: "1" })}>show</Link>
+              </>
+            ) : null}
+            {showDismissed ? " · dismissed ones shown" : ""}
+          </p>
+        ) : null}
+        <Filters bucket={bucket} market={market} family={family} sector={sector} sectors={sectors} showDismissed={showDismissed} filtered={filtered} />
+      </div>
+      {shown.length === 0 ? (
+        <Empty
+          action={
+            filtered ? (
+              <Link href={href({ bucket, dismissed: filters.dismissed })} className={buttonVariants({ variant: "secondary", size: "sm" })}>
                 Clear filters
               </Link>
-            ) : null}
-          </div>
-        </form>
-      </details>
-      {shown.length === 0 ? (
-        <Empty>
-          {all.length === 0 && !filtered
-            ? week === undefined
-              ? "No scored week yet. The weekly run scores the universe each Saturday."
-              : "Nothing in this bucket this week."
-            : "Nothing in this bucket with these filters."}
+            ) : bucket === "candidate" ? (
+              <Link href={href({ ...filters, bucket: "early" })} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                See Early
+              </Link>
+            ) : undefined
+          }
+        >
+          {filtered
+            ? "Nothing here with these filters."
+            : inSector.length > 0
+              ? "Every name here is dismissed until the evidence changes."
+              : BUCKET_EMPTY[bucket]}
         </Empty>
       ) : (
-        <div className="rounded-md border border-line bg-panel">
-          <div aria-hidden="true" className={cn("caps hidden rounded-t-md border-b border-line-strong bg-raised px-4 py-2 lg:grid lg:items-end lg:gap-x-4", COLUMNS)}>
-            <span>Company</span>
-            <span>Strength of evidence</span>
-            <span>Not priced in yet</span>
-            <span>Why it&apos;s here</span>
-            <span />
-          </div>
-          <ul aria-label="Candidates">
-            {shown.map((r) => {
-              const card = cards.get(r.company_id);
-              const gone = dismissed.has(r.company_id);
-              const reasons = r.fired_signals.map((s) => SIGNAL_PLAIN[s] ?? s);
-              const past = history.get(r.company_id) ?? [];
-              const change = evidenceChange(r.evidence, r.week_end, past);
-              return (
-                <li
-                  key={r.company_id}
-                  className={cn(
-                    "flex flex-col gap-3 border-t border-line p-4 first:border-t-0 lg:grid lg:items-start lg:gap-x-4 lg:gap-y-0 lg:py-3",
-                    COLUMNS,
-                  )}
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Link href={`/company/${r.company_id}`} className="link-quiet text-sm font-semibold">
-                        {r.name}
-                      </Link>
-                      {isNew(r.bucket, r.week_end, past) ? <Badge title="In this bucket for the first time in 12 weeks">NEW</Badge> : null}
-                      {gone ? <Badge variant="secondary">dismissed</Badge> : null}
-                    </div>
-                    <div className="mt-0.5 font-mono text-xs text-muted">
-                      {code(r)} · {r.market === "us" ? "US" : "India"}
-                      {r.sector ? ` · ${r.sector}` : ""}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 lg:contents">
-                    <Score label="Strength of evidence" value={r.evidence} change={change} />
-                    <Score label="Not priced in yet" value={r.gap} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="caps lg:sr-only">Why it&apos;s here</div>
-                    {reasons.length === 0 ? (
-                      <p className="mt-1 text-[13px] text-muted lg:mt-0">No signal fired.</p>
-                    ) : (
-                      <ul className="mt-1.5 flex flex-wrap gap-1.5 lg:mt-0">
-                        {reasons.map((t) => (
-                          <li key={t} className="rounded-sm bg-raised px-2 py-0.5 text-xs text-muted ring-1 ring-line-strong ring-inset">
-                            {t}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {r.red_flags.length > 0 ? (
-                      <p className={cn("mt-2 text-xs font-medium", r.hard_flag ? "text-down" : "text-warn")}>
-                        Watch out: {r.red_flags.map((f) => RED_FLAG_NAME[f] ?? f).join("; ")}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-start gap-2 border-t border-line pt-3 lg:justify-end lg:border-0 lg:pt-0">
-                    {card ? (
-                      <Link href={`/theses/${card.id}`} className={buttonVariants({ size: "sm" })}>
-                        Open card
-                      </Link>
-                    ) : (
-                      <form action={research}>
-                        <input type="hidden" name="company_id" value={r.company_id} />
-                        <input type="hidden" name="back" value={back} />
-                        <SubmitButton size="sm">Research</SubmitButton>
-                      </form>
-                    )}
-                    {gone ? null : (
-                      <details className="group/dismiss">
-                        <summary className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "list-none [&::-webkit-details-marker]:hidden")}>
-                          Dismiss
-                        </summary>
-                        <form action={dismiss} className="mt-2 flex w-56 flex-col gap-1.5 rounded-sm border border-line-strong bg-raised p-3">
-                          <input type="hidden" name="company_id" value={r.company_id} />
-                          <input type="hidden" name="week_end" value={r.week_end} />
-                          <input type="hidden" name="back" value={back} />
-                          <Label htmlFor={`reason-${r.company_id}`} className="text-xs">
-                            Reason
-                          </Label>
-                          <Input id={`reason-${r.company_id}`} name="reason" required className="w-full" />
-                          <p className="text-xs text-muted">Hidden until a new signal fires or Evidence moves {EVIDENCE_MOVE}.</p>
-                          <SubmitButton size="xs" variant="outline">
-                            Confirm dismissal
-                          </SubmitButton>
-                        </form>
-                      </details>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <ul aria-label="Candidates" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-5">
+          {shown.map((r, i) => (
+            <CandidateCard
+              key={r.company_id}
+              r={r}
+              i={i}
+              card={cards.get(r.company_id)}
+              gone={dismissed.has(r.company_id)}
+              fresh={isNew(r.bucket, r.week_end, history.get(r.company_id) ?? [])}
+              change={evidenceChange(r.evidence, r.week_end, history.get(r.company_id) ?? [])}
+              back={back}
+            />
+          ))}
+        </ul>
       )}
+      {left.length > 0 ? <Left title={LEFT_TITLE[bucket]} items={left} /> : null}
+      <Legend
+        className="rounded-[20px] border border-dashed border-line-strong px-5 py-4"
+        items={[
+          { tone: "evidence", label: <><strong className="font-semibold text-fg">Evidence</strong> how many independent kinds of signal agree ({range.evidence})</> },
+          { tone: "gap", label: <><strong className="font-semibold text-fg">Gap</strong> how far the price lags them ({range.gap})</> },
+          { tone: "business", label: "business" },
+          { tone: "insiders", label: "insiders" },
+          { tone: "ownership", label: "ownership" },
+          { tone: "text", label: "text facts" },
+        ]}
+      />
     </Page>
   );
 }
 
-/** A 0–100 score with a bar; the number is the value, the bar decoration, and the change since the previous scored
- * score (and its week) under it when given. On a wide screen the column header names it (the label stays for screen readers). */
-function Score({ label, value, change }: { label: string; value: number | string | null | undefined; change?: { change: number; since: string } | null }) {
-  const n = value === null || value === undefined || value === "" ? null : Number(value);
-  const width = n === null || !Number.isFinite(n) ? 0 : Math.max(0, Math.min(100, n));
+const MOVE: Record<"up" | "down" | "flat", { icon: "arrow-up" | "arrow-down" | "minus"; text: string }> = {
+  up: { icon: "arrow-up", text: "text-up" },
+  down: { icon: "arrow-down", text: "text-down" },
+  flat: { icon: "minus", text: "text-muted" },
+};
+
+const FLAG: Record<"good" | "warn" | "bad", string> = { good: "text-muted", warn: "text-warn", bad: "text-down" };
+
+/** One company: who it is, the two rings, the Evidence change, why it's here, its red flags, and what to do. */
+function CandidateCard({
+  r,
+  i,
+  card,
+  gone,
+  fresh,
+  change,
+  back,
+}: {
+  r: ScreenerRow;
+  i: number;
+  card: Pick<Thesis, "id"> | undefined;
+  gone: boolean;
+  fresh: boolean;
+  change: { change: number; since: string } | null;
+  back: string;
+}) {
+  const ticker = code(r);
+  const nameId = `name-${r.company_id}`;
+  const move = evidenceMove(change);
+  const flags = flagLine(r.red_flags, r.hard_flag);
   return (
-    <div className="min-w-0">
-      <div className="caps lg:sr-only">{label}</div>
-      <div className="mt-1 flex items-center gap-2 lg:mt-0">
-        <span className="num text-lg font-semibold text-fg">{num(value, 0)}</span>
-        <span aria-hidden="true" className="h-1 flex-1 overflow-hidden bg-line-strong">
-          <span className="block h-full bg-accent" style={{ width: `${width}%` }} />
-        </span>
-      </div>
-      {change === undefined ? null : (
-        <div className={cn("num mt-0.5 text-xs", change === null || change.change === 0 ? "text-muted" : change.change > 0 ? "text-up" : "text-down")}>
-          {change === null ? "no earlier score" : `${signed(change.change)} since ${change.since}`}
+    <li className="sheet rise flex min-w-0 flex-col gap-4 p-5" style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
+      <div className="flex items-center gap-3">
+        <TickerTile ticker={ticker} />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h2 id={nameId} className="text-[18px] leading-tight font-bold tracking-[-0.01em] text-fg">
+              {r.name}
+            </h2>
+            {fresh ? <Badge title="In this bucket for the first time in 12 weeks">NEW</Badge> : null}
+            {gone ? <Badge variant="secondary">dismissed</Badge> : null}
+          </div>
+          <p className="truncate text-[13px] text-subtle">{[ticker, r.market === "in" ? "India" : null, r.sector].filter(Boolean).join(" · ")}</p>
         </div>
-      )}
-    </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-3">
+          <ScoreTile value={score(r.evidence)} kind="evidence" />
+          <ScoreTile value={score(r.gap)} kind="gap" />
+        </div>
+        <p className={cn("flex items-center gap-1.5 text-[13px]", MOVE[move.tone].text)}>
+          <Icon name={MOVE[move.tone].icon} className="size-3.5" strokeWidth={2.4} />
+          <span>
+            <span className="font-semibold">Evidence</span> {move.text}
+          </span>
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <p className="eyebrow">Why it&apos;s here</p>
+          <DotRow tones={r.families.map(familyTone)} />
+        </div>
+        {r.fired_signals.length === 0 ? (
+          <p className="text-[13px] text-muted">No signal fired.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-1.5">
+            {r.fired_signals.map((s) => (
+              <li key={s}>
+                <Chip dot={signalTone(s)} title={SIGNAL_NAME[s] ? `${s} ${SIGNAL_NAME[s]}` : s}>
+                  {SIGNAL_PLAIN[s] ?? s}
+                </Chip>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <p className={cn("flex items-start gap-2 text-[13px]", FLAG[flags.tone])} title={flags.codes || undefined}>
+        <Icon name="shield" className={cn("mt-px", flags.tone === "good" && "text-subtle")} />
+        <span>{flags.text}</span>
+      </p>
+      <div className="mt-auto flex items-center gap-2">
+        <Link href={`/company/${r.company_id}`} className={cn(buttonVariants(), "flex-1")}>
+          Open<span className="sr-only"> {r.name}</span>
+        </Link>
+        {card ? (
+          <Link href={`/theses/${card.id}`} aria-describedby={nameId} className={buttonVariants({ variant: "secondary" })}>
+            Open card
+          </Link>
+        ) : (
+          <form action={research}>
+            <input type="hidden" name="company_id" value={r.company_id} />
+            <input type="hidden" name="back" value={back} />
+            <SubmitButton variant="secondary" aria-describedby={nameId}>
+              Research
+            </SubmitButton>
+          </form>
+        )}
+        {gone ? null : <Dismiss r={r} back={back} />}
+      </div>
+    </li>
+  );
+}
+
+/** Dismiss, with its reason, from a small form that opens above the button (a native disclosure: no script). */
+function Dismiss({ r, back }: { r: ScreenerRow; back: string }) {
+  return (
+    <details className="group/dismiss relative">
+      <summary
+        title="Dismiss: hide it until the evidence changes"
+        className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "list-none text-muted [&::-webkit-details-marker]:hidden")}
+      >
+        <Icon name="x" strokeWidth={2.2} />
+        <span className="sr-only">Dismiss {r.name}</span>
+      </summary>
+      <form action={dismiss} className="pop absolute right-0 bottom-full z-30 mb-2 flex w-72 max-w-[calc(100vw-3rem)] flex-col gap-2 rounded-tile p-4">
+        <input type="hidden" name="company_id" value={r.company_id} />
+        <input type="hidden" name="week_end" value={r.week_end} />
+        <input type="hidden" name="back" value={back} />
+        <Label htmlFor={`reason-${r.company_id}`}>Reason</Label>
+        <Input id={`reason-${r.company_id}`} name="reason" required className="w-full" />
+        <p className="text-[13px] text-subtle">Hidden until a new signal fires or Evidence moves {EVIDENCE_MOVE}.</p>
+        <SubmitButton size="sm">Confirm dismissal</SubmitButton>
+      </form>
+    </details>
+  );
+}
+
+/** Market, sector, family and show dismissed, folded behind one pill; the form opens under it. */
+function Filters({
+  bucket,
+  market,
+  family,
+  sector,
+  sectors,
+  showDismissed,
+  filtered,
+}: {
+  bucket: ShownBucket;
+  market: string | undefined;
+  family: string | undefined;
+  sector: string | undefined;
+  sectors: string[];
+  showDismissed: boolean;
+  filtered: boolean;
+}) {
+  return (
+    <details className="group/filters relative ml-auto">
+      <summary className={cn(buttonVariants({ variant: "outline", size: "sm" }), "list-none [&::-webkit-details-marker]:hidden")}>
+        Filters{filtered ? " · on" : ""}
+        <Icon name="chevron-down" className="transition-transform duration-200 group-open/filters:rotate-180" />
+      </summary>
+      <form method="get" action="/candidates" className="pop absolute top-full right-0 z-30 mt-2 grid w-[min(22rem,calc(100vw-2rem))] grid-cols-2 gap-3 rounded-tile p-4">
+        <input type="hidden" name="bucket" value={bucket} />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <Label htmlFor="f-market">Market</Label>
+          <Select id="f-market" name="market" defaultValue={market ?? ""} className="w-full">
+            <option value="">All</option>
+            <option value="us">US</option>
+            <option value="in">India</option>
+          </Select>
+        </div>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <Label htmlFor="f-family">Family</Label>
+          <Select id="f-family" name="family" defaultValue={family ?? ""} className="w-full">
+            <option value="">All</option>
+            {FAMILIES.map((f) => (
+              <option key={f} value={f}>
+                {FAMILY_LABEL[f]}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="col-span-2 flex min-w-0 flex-col gap-1.5">
+          <Label htmlFor="f-sector">Sector</Label>
+          <Select id="f-sector" name="sector" defaultValue={sector ?? ""} className="w-full">
+            <option value="">All</option>
+            {sectors.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="col-span-2 flex min-h-11 items-center gap-2">
+          <input id="f-dismissed" type="checkbox" name="dismissed" value="1" defaultChecked={showDismissed} />
+          <Label htmlFor="f-dismissed" className="font-normal text-fg">
+            Show dismissed
+          </Label>
+        </div>
+        <div className="col-span-2 flex items-center gap-3">
+          <Button type="submit" size="sm">
+            Filter
+          </Button>
+          {filtered ? (
+            <Link href={href({ bucket, dismissed: showDismissed ? "1" : undefined })} className="text-[13px]">
+              Clear filters
+            </Link>
+          ) : null}
+        </div>
+      </form>
+    </details>
+  );
+}
+
+/** The names that left this bucket this week, quieter than the cards: what happened, why, the Evidence move. */
+function Left({ title, items }: { title: string; items: ChangeItem[] }) {
+  return (
+    <section aria-labelledby="left" className="flex flex-col gap-2.5">
+      <h2 id="left" className="eyebrow">
+        {title}
+      </h2>
+      <ul className="flex flex-col gap-2">
+        {items.map((c) => (
+          <li
+            key={`${c.href} ${c.raw}`}
+            title={`${c.code} ${c.raw}`}
+            className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-tile border border-dashed border-line-strong px-4 py-3"
+          >
+            <TickerTile ticker={c.code} size="sm" className="bg-hover text-muted" />
+            <div className="flex min-w-48 flex-1 flex-col gap-0.5">
+              <p className="text-[15px] font-semibold text-fg">
+                {c.code} <span className="font-normal text-muted">{c.title}</span>
+              </p>
+              {c.why ? <p className="text-[14px] text-muted">{c.why}</p> : null}
+            </div>
+            {c.delta ? (
+              <p className="num text-[14px] font-semibold text-warn">
+                {c.delta.label} {c.delta.value}
+              </p>
+            ) : null}
+            <Link href={c.href} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+              Open<span className="sr-only"> {c.code}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

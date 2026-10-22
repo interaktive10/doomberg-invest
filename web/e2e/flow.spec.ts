@@ -61,23 +61,36 @@ test("the nav has three places and More; the Screener's and the Capex Desk's old
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
 });
 
-test("Home: the funnel strip, To do live from the theses and What changed from the seeded digest (overhaul PR 5)", async ({ page }) => {
+test("Home: the funnel strip, To do live from the theses and What changed from the seeded digest (overhaul PR 5, drawn in PR 6)", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Funnel" })).toContainText("US 4 → stage 4 → candidates 1 → new 0 · 1 of 4 fire one family, capped at 55");
+  // the digest's week, and one line that leads with the answer: nothing new, one candidate per market on the board
+  await expect(page.getByText("Week 38 · Sep 14–18")).toBeVisible();
+  await expect(page.getByRole("main")).toContainText("A quiet week: nothing new cleared the bar. Two ideas are still worth your time.");
+  // the funnel: the markets' lines added up into four numbers and one insight; the digest's own lines under Details
+  const funnel = page.getByRole("region", { name: "From 5 companies to 2 ideas" });
+  await expect(funnel).toContainText("1 of 5 shows only one kind of signal, so its score stops at 55.");
+  await expect(funnel).toContainText("US 4 → stage 4 → candidates 1 → new 0 · 1 of 4 fire one family, capped at 55");
   // To do is the Theses screen's Needs you group: the card to decide (ECHO) and the thesis in review (OMEGA)
   const todo = page.getByRole("region", { name: /^To do/ });
   await expect(todo.getByRole("link", { name: "Echo Grid Corp. (ECHO)" })).toBeVisible();
   await expect(todo.getByRole("link", { name: "Omega Systems Inc. (OMGA)" })).toBeVisible();
-  // What changed links each line to the company on this site, whatever host the digest was written for
+  // What changed: each line in plain words with its Evidence on the right, linked to the company on this site
+  // whatever host the digest was written for
   const changed = page.getByRole("region", { name: "What changed" });
-  await expect(changed).toContainText("entered Candidate: Evidence 72.5");
+  const echo = changed.getByRole("listitem").filter({ hasText: "ECHO" });
+  await expect(echo).toContainText("joined the board");
+  await expect(echo).toContainText("72.5");
   await expect(changed.getByRole("link", { name: "ECHO" })).toHaveAttribute("href", `/company/${ECHO}`);
+  // On the board: the latest scored week's Candidate bucket, each with its Evidence ring
+  const board = page.getByRole("region", { name: "On the board" });
+  await expect(board.getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toHaveAttribute("href", `/company/${ECHO}`);
+  await expect(board.getByRole("img", { name: "Evidence 73 of 100" })).toBeVisible();
   // the digest's To do and Health sections (the minutes line among them) are not repeated here
   await expect(page.getByText(/Cards to accept or dismiss: \d/)).toHaveCount(0);
   await expect(page.getByText(/Actions: 812 of 2,000/)).toHaveCount(0);
-  // the stale banner: twelvedata is seeded stale
-  await expect(page.getByRole("complementary", { name: "Stale data" })).toContainText("Twelve Data");
+  // Data health and the stale-data line: twelvedata is seeded stale
+  await expect(page.getByRole("region", { name: "Data health" })).toContainText("Twelve Data is out of date");
 });
 
 test("candidates: dismiss one with a reason, start research on another", async ({ page }) => {
@@ -85,6 +98,11 @@ test("candidates: dismiss one with a reason, start research on another", async (
   await expect(page.getByRole("heading", { level: 1, name: "Candidates" })).toBeVisible();
   // the NEW badge (overhaul PR 4): ECHO is in Candidate for the first time in 12 weeks
   await expect(card(page, "Echo Grid Corp.").getByText("NEW", { exact: true })).toBeVisible();
+  // the card (overhaul PR 6): the two rings, and why it's here in plain words with the signal's code in the tooltip
+  const echo = card(page, "Echo Grid Corp.");
+  await expect(echo.getByRole("img", { name: "Evidence 73 of 100" })).toBeVisible();
+  await expect(echo.getByRole("img", { name: "Gap 61 of 100" })).toBeVisible();
+  await expect(echo.getByText("Order book growing faster than sales")).toHaveAttribute("title", "S1 Order-book acceleration");
   const kappa = card(page, "Kappa Cables Ltd");
   await kappa.locator("summary").click();
   await kappa.getByLabel("Reason").fill("Promoter pledge is rising");
@@ -118,8 +136,8 @@ test("search → company → Research → 'Card queued' (overhaul PR 5)", async 
   await box.fill("Grid Corp");
   await box.press("Enter");
   await expect(page).toHaveURL(/\/search\?q=Grid\+Corp$/);
-  const results = page.getByRole("region", { name: "Search results" });
-  await expect(results.getByRole("row").filter({ hasText: "Echo Grid Corp." })).toContainText("Candidate");
+  const results = page.getByRole("list", { name: "Search results" }); // one row per company (overhaul PR 6)
+  await expect(results.getByRole("listitem").filter({ hasText: "Echo Grid Corp." })).toContainText("On the board"); // the Candidate bucket
   // "/" types a slash inside a field instead of jumping
   await box.fill("a");
   await box.press("/");
@@ -141,7 +159,7 @@ test("search → company → Research → 'Card queued' (overhaul PR 5)", async 
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Sigma Holdings Inc.");
   // the entry is live now: the Company page opens it instead of starting another
   await page.goto(`/company/${SIGMA}`);
-  await expect(page.getByRole("main").getByRole("link", { name: "Open card" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Open research card" })).toBeVisible();
   await expect(page.getByRole("main").getByRole("button", { name: "Research" })).toHaveCount(0);
 });
 
@@ -157,10 +175,21 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(why).toContainText("unproven"); // S1's out-of-sample t is 1.1
   await expect(why).toContainText("not testable yet"); // S9
   await expect(why).toContainText("Implied growth (g*)"); // C2's reverse DCF, folded in
+  // drawn (overhaul PR 6): the rings in the header, each signal's Lab verdict as a chip, the live card's kill criteria
+  // as a checklist and the insiders' buying as bars; the codes and workings above sit behind Why and Details
+  await expect(page.getByRole("main").getByRole("img", { name: "Evidence 73 of 100" })).toBeVisible();
+  await expect(why.getByText("Lab: unproven")).toBeVisible();
+  const kill = page.getByRole("region", { name: "What would kill it" });
+  await expect(kill).toContainText("TTM revenue growth under 5.0%");
+  await expect(kill).toContainText("Now 24.0% · safe");
+  await expect(page.getByRole("region", { name: "Insiders bought" })).toContainText("$510K");
   await expect(page.getByText("Revenue (TTM)")).toBeVisible();
-  await expect(page.getByText("Total backlog reached $13.2 billion at quarter end.")).toBeVisible();
+  // the verified facts are folded under their count (a card's citation opens them: components/open-target.tsx)
+  const facts = page.getByRole("region", { name: "Verified facts" });
+  await facts.locator("summary", { hasText: "Show the quotes" }).click();
+  await expect(facts.getByText("Total backlog reached $13.2 billion at quarter end.")).toBeVisible();
 
-  await page.getByRole("link", { name: /Research · week 2026-09-18 · routine/ }).click();
+  await page.getByRole("main").getByRole("link", { name: "Open research card" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Card" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why it may be mispriced" })).toBeVisible();
   await page.getByRole("button", { name: "Accept as thesis" }).click();
@@ -172,7 +201,7 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByText("waiting for a verdict")).toBeVisible();
   // the pack diff since the card (M7 review R1-F4): the quarter's figures and the kill criteria before -> now
   await expect(page.getByRole("region", { name: "Figures for review 2026-06-30" })).toContainText("1.16B → 1.22B");
-  await expect(page.getByRole("region", { name: "Kill criteria for review 2026-06-30" })).toContainText("m:revenue_ttm_yoy");
+  await expect(page.getByRole("region", { name: "Kill criteria for review 2026-06-30" })).toContainText("TTM revenue growth under 5.0%");
   // red flags from the scored week: R1 fired the two weeks before and is clear now (M7 review R2-F1)
   await expect(page.getByText(/Red flags: started none; stopped none/)).toBeVisible();
   // a fact about the June quarter published after the card's week (M7 review R2-F2)
@@ -209,8 +238,9 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByRole("heading", { name: "Post-mortem" })).toBeVisible();
 
   await page.goto("/journal");
-  const echo = page.getByRole("region", { name: "Journal entries" }).getByRole("row").filter({ hasText: "Echo Grid Corp." });
-  for (const action of ["Start position", "Review", "Exit"]) await expect(echo.getByRole("cell", { name: action, exact: true })).toHaveCount(1);
+  // one row per entry, led by its action (overhaul PR 6)
+  const echo = page.getByRole("list", { name: "Journal entries" }).getByRole("listitem").filter({ hasText: "Echo Grid Corp." });
+  for (const action of ["Start position", "Review", "Exit"]) await expect(echo.getByText(action, { exact: true })).toHaveCount(1);
   await expect(page.getByText("Backlog converted as expected.")).toBeVisible();
 });
 
@@ -218,7 +248,7 @@ test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-
   await page.goto(`/theses/${OMEGA_THESIS}`);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Review");
   await expect(page.getByText("A kill criterion triggered")).toBeVisible();
-  await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("m:evidence");
+  await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("Evidence score under 80");
   await openForm(page, "Record a verdict");
   await page.getByLabel("intact", { exact: true }).check();
   await page.getByRole("button", { name: "Record verdict" }).click();

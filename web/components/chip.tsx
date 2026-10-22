@@ -35,18 +35,27 @@ const VARIANT = {
 
 export type ChipVariant = keyof typeof VARIANT;
 
+/** md: a fact on its own ("Insiders bought $1.8M"); sm: a tag beside a name or a figure, the size of a Badge ("Lab:
+ * unproven", "On time", "+4.2%"). */
+const SIZE = {
+  md: "min-h-8 gap-2 px-3 py-1 text-[13px]",
+  sm: "min-h-6 gap-1.5 px-2.5 py-0.5 text-[12px]",
+} as const;
+
 /** A soft pill with one short fact ("Insiders bought $1.8M"), led by a family dot when `dot` is given. `title` can hold
  * the code or the detail (S7, the filing) so the chip itself stays in plain words. */
 export function Chip({
   children,
   dot,
   variant = "plain",
+  size = "md",
   title,
   className,
 }: {
   children: ReactNode;
   dot?: Tone;
   variant?: ChipVariant;
+  size?: keyof typeof SIZE;
   title?: string;
   className?: string;
 }) {
@@ -54,7 +63,8 @@ export function Chip({
     <span
       title={title}
       className={cn(
-        "inline-flex min-h-8 items-center gap-2 rounded-full px-3 py-1 text-[13px]",
+        "inline-flex items-center rounded-full",
+        SIZE[size],
         VARIANT[variant],
         variant !== "plain" && "font-medium",
         className,

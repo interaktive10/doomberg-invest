@@ -1,40 +1,50 @@
+import { Callout } from "@/components/callout";
 import { Logo } from "@/components/logo";
 import { SubmitButton } from "@/components/submit-button";
-import { Input, Label } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
 import { sendLink } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sign in" };
 
+// The sign-in screen, outside the app's shell (overhaul PR 6 look): one sheet with the mark, one line and the email
+// field; the answer to a send comes back as a status (the same words whether or not the address is allowed) or an
+// alert. The research-only line sits under it, as the shell's footer does on every other screen.
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const q = await searchParams;
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm rounded-md border border-line bg-panel p-6 sm:p-8">
-        <Logo className="size-10" />
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-fg">Doomberg Invest</h1>
-        <p className="mt-1 text-[13px] text-muted">Sign in with a one-time link sent to the allowed email.</p>
+    <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
+      <div className="sheet rise flex w-full max-w-sm flex-col gap-6 p-6 sm:p-8">
+        <div className="flex flex-col gap-4">
+          <span className="flex items-center gap-2.5">
+            <Logo className="size-10" />
+            <span className="text-[19px] font-bold tracking-[-0.02em] text-fg">doomberg</span>
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-[28px] leading-tight font-bold tracking-[-0.03em] text-fg">Sign in</h1>
+            <p className="text-[15px] text-muted">We email a one-time link to the allowed address. No password.</p>
+          </div>
+        </div>
         {q.sent ? (
-          <p role="status" className="mt-5 rounded-sm border border-up/40 border-l-2 border-l-up bg-up/10 px-3 py-2 text-[13px] text-fg">
+          <Callout tone="good" role="status">
             If that address is allowed, a sign-in link is on its way. Open it on this device.
-          </p>
+          </Callout>
         ) : null}
         {q.error ? (
-          <p role="alert" className="mt-5 rounded-sm border border-down/40 border-l-2 border-l-down bg-down/10 px-3 py-2 text-[13px] text-fg">
+          <Callout tone="bad" role="alert">
             {q.error}
-          </p>
+          </Callout>
         ) : null}
-        <form action={sendLink} className="mt-6 flex flex-col gap-3">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" required autoComplete="email" inputMode="email" className="h-10" />
-          <SubmitButton size="lg" className="mt-1 w-full">
+        <form action={sendLink} className="flex flex-col gap-4">
+          <Field label="Email" htmlFor="email">
+            <Input id="email" name="email" type="email" required autoComplete="email" inputMode="email" placeholder="you@example.com" />
+          </Field>
+          <SubmitButton size="lg" className="w-full">
             Send sign-in link
           </SubmitButton>
         </form>
       </div>
-      <p className="mt-6 max-w-sm text-center font-mono text-[11px] text-subtle">
-        Research only: no orders, no price alerts. Nothing here is investment advice.
-      </p>
+      <p className="mt-6 max-w-sm text-center text-[12px] text-subtle">Research only. No orders, no price alerts.</p>
     </main>
   );
 }

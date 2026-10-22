@@ -1,109 +1,175 @@
 import Link from "next/link";
+import { Chip, Dot } from "@/components/chip";
+import { Disclosure } from "@/components/disclosure";
+import { Icon, type IconName } from "@/components/icons";
 import { Empty, Flash, Page, Section } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
-import { Badge } from "@/components/ui/badge";
-import { Input, Label, Textarea } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { journal, postmortems, theses } from "@/lib/data";
+import { buttonVariants } from "@/components/ui/button";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { journal, postmortems, theses, type JournalEntry } from "@/lib/data";
+import { shortDate } from "@/lib/dates";
 import { localToday } from "@/lib/discipline";
 import { code, num } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
+import { journalLine, recordLine, signalsNote, trackRecord } from "@/lib/journal";
 import { ACTION_LABEL, label } from "@/lib/labels";
+import { cn } from "@/lib/utils";
 import { addNote } from "./actions";
 import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Journal" };
 
 // BRIEF §6 Journal: private entries and post-mortems. They live only in the database; the web app makes no LLM calls
-// and the pipeline's privacy check refuses them (llm/privacy.py).
+// and the pipeline's privacy check refuses them (llm/privacy.py). Drawn in overhaul PR 6: each entry a row led by its
+// action's icon, the post-mortems as tiles with the lesson up front and a dot per thesis called right or wrong.
+
+const ACTION: Record<JournalEntry["action"], { icon: IconName; ring: string }> = {
+  note: { icon: "book", ring: "bg-hover text-muted" },
+  start_position: { icon: "plus", ring: "bg-up/10 text-up" },
+  add: { icon: "arrow-up", ring: "bg-up/10 text-up" },
+  trim: { icon: "minus", ring: "bg-warn/10 text-warn" },
+  exit: { icon: "logout", ring: "bg-warn/10 text-warn" },
+  review: { icon: "check", ring: "bg-accent/10 text-accent" },
+};
+
 export default async function Journal({ searchParams }: { searchParams: Promise<Query> }) {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
   const [entries, pms, ths] = await Promise.all([journal(), postmortems(), theses()]);
   const names = new Map(ths.map((t) => [t.id, t.companies ? `${t.companies.name} (${code(t.companies)})` : t.company_id]));
+  const record = trackRecord(pms);
   return (
-    <Page title="Journal" description="Private: entries and post-mortems stay in your database and are never sent to any LLM.">
+    <Page
+      title="Journal"
+      description={journalLine(entries.length, pms.length)}
+      actions={
+        <>
+          <Chip title="Entries and post-mortems stay in your database">
+            <Icon name="shield" className="size-3.5 text-up" strokeWidth={2.4} />
+            Never sent to any LLM
+          </Chip>
+          <a href="#add-note" className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "lg:hidden")}>
+            <Icon name="plus" className="size-3.5" strokeWidth={2.4} />
+            Add a note
+          </a>
+        </>
+      }
+    >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-        <Section title="Entries" id="entries" description="Newest first. Entries about a thesis are added on its page.">
+      <div className="flex flex-wrap items-start gap-6">
+        <Section title="Entries" id="entries" count={entries.length} description="Newest first. Entries about a thesis are added on its page." className="flex-[999_1_560px]">
           {entries.length === 0 ? (
-            <Empty>No entries yet.</Empty>
+            <Empty>Your journal is empty. Write a first note: why something caught your eye, or what you&apos;d need to see.</Empty>
           ) : (
-            <Table label="Journal entries">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Thesis</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead num>% of portfolio</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Override</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="num whitespace-nowrap">{e.entry_date}</TableCell>
-                    <TableCell className="min-w-40">
-                      {e.thesis_id ? (
-                        <Link href={`/theses/${e.thesis_id}`} className="link-quiet">
-                          {names.get(e.thesis_id) ?? "thesis"}
-                        </Link>
-                      ) : (
-                        <span className="text-muted">general</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{label(ACTION_LABEL, e.action)}</TableCell>
-                    <TableCell num>{e.portfolio_pct === null ? "" : `${num(e.portfolio_pct)}%`}</TableCell>
-                    <TableCell className="max-w-md min-w-48 break-words">{e.reason}</TableCell>
-                    <TableCell className="max-w-xs break-words">{e.override_reason ?? ""}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ul aria-label="Journal entries" className="flex flex-col">
+              {entries.map((e) => {
+                const a = ACTION[e.action] ?? ACTION.note;
+                return (
+                  <li key={e.id} className="flex gap-3 border-t border-line py-3.5 first:border-t-0 first:pt-0">
+                    <span aria-hidden="true" className={cn("grid size-9 shrink-0 place-items-center rounded-full", a.ring)}>
+                      <Icon name={a.icon} strokeWidth={2.4} />
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-[15px] font-semibold text-fg">{label(ACTION_LABEL, e.action)}</span>
+                        {e.thesis_id ? (
+                          <Link href={`/theses/${e.thesis_id}`} className="link-quiet text-[14px]">
+                            {names.get(e.thesis_id) ?? "thesis"}
+                          </Link>
+                        ) : (
+                          <span className="text-[14px] text-subtle">general</span>
+                        )}
+                        {e.portfolio_pct !== null ? (
+                          <Chip size="sm">
+                            <span className="num">{num(e.portfolio_pct)}%</span> of portfolio
+                          </Chip>
+                        ) : null}
+                        <time dateTime={e.entry_date} className="num ml-auto text-[13px] whitespace-nowrap text-subtle">
+                          {shortDate(e.entry_date, true)}
+                        </time>
+                      </div>
+                      <p className="text-[14px] whitespace-pre-wrap break-words text-muted">{e.reason}</p>
+                      {e.override_reason ? (
+                        <p className="text-[13px] break-words text-warn">
+                          <span className="font-semibold">Override:</span> {e.override_reason}
+                        </p>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </Section>
-        <Section title="Add a note" id="add-note" description="A general note, not tied to a thesis.">
-          <form action={addNote} className="grid grid-cols-1 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="n-date">Date</Label>
+
+        <Section title="Add a note" id="add-note" description="A general note, not tied to a thesis." className="flex-[1_1_300px]">
+          <form action={addNote} className="flex flex-col gap-3">
+            <Field label="Date" htmlFor="n-date">
               <Input id="n-date" name="entry_date" type="date" defaultValue={localToday(new Date())} required />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="n-text">Note</Label>
-              <Textarea id="n-text" name="reason" required className="min-h-28" />
-            </div>
+            </Field>
+            <Field label="Note" htmlFor="n-text">
+              <Textarea id="n-text" name="reason" required className="min-h-32" placeholder="What you saw, and why it matters" />
+            </Field>
             <div>
               <SubmitButton>Add note</SubmitButton>
             </div>
           </form>
         </Section>
       </div>
-      <Section title="Post-mortems" id="postmortems">
+
+      <Section
+        title="Post-mortems"
+        id="postmortems"
+        count={pms.length}
+        description={recordLine(record) ?? undefined}
+        actions={
+          pms.length > 0 ? (
+            <span
+              role="img"
+              aria-label={`${record.right} right, ${record.wrong} wrong, ${record.unclear} unclear`}
+              className="flex max-w-48 flex-wrap items-center gap-1"
+            >
+              {pms.map((p) => (
+                <Dot key={p.thesis_id} tone={p.thesis_right === null ? "muted" : p.thesis_right ? "up" : "down"} className="size-2.5" />
+              ))}
+            </span>
+          ) : undefined
+        }
+      >
         {pms.length === 0 ? (
-          <Empty>No post-mortems yet. Closing a thesis asks for one.</Empty>
+          <Empty>No post-mortems yet. Closing a thesis asks for one: what happened, whether you were right, and the lesson.</Empty>
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {pms.map((p) => (
-              <li key={p.thesis_id} className="rounded-sm border border-line bg-canvas p-3 text-[13px] sm:p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/theses/${p.thesis_id}`} className="link-quiet">
-                    {names.get(p.thesis_id) ?? "thesis"}
-                  </Link>
-                  <span className="num text-xs text-muted">{p.created_at.slice(0, 10)}</span>
-                  <Badge variant={p.thesis_right === null ? "secondary" : p.thesis_right ? "success" : "destructive"}>
-                    thesis right: {p.thesis_right === null ? "unclear" : p.thesis_right ? "yes" : "no"}
-                  </Badge>
-                </div>
-                <p className="mt-2 whitespace-pre-wrap">{p.what_happened}</p>
-                <dl className="mt-2 grid gap-1">
-                  <dt className="text-xs font-medium text-muted">Signals</dt>
-                  <dd className="whitespace-pre-wrap">{String(p.signals_right?.note ?? "")}</dd>
-                  <dt className="mt-1 text-xs font-medium text-muted">Lessons</dt>
-                  <dd className="whitespace-pre-wrap">{p.lessons}</dd>
-                </dl>
-              </li>
-            ))}
+            {pms.map((p) => {
+              const note = signalsNote(p.signals_right);
+              return (
+                <li key={p.thesis_id} className="tile flex flex-col gap-3 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href={`/theses/${p.thesis_id}`} className="link-quiet text-[15px] font-semibold">
+                      {names.get(p.thesis_id) ?? "thesis"}
+                    </Link>
+                    <Chip variant={p.thesis_right === null ? "plain" : p.thesis_right ? "good" : "bad"} size="sm">
+                      {p.thesis_right === null ? "Unclear" : p.thesis_right ? "Called right" : "Called wrong"}
+                    </Chip>
+                    <time dateTime={p.created_at} className="num ml-auto text-[13px] text-subtle">
+                      {shortDate(p.created_at, true)}
+                    </time>
+                  </div>
+                  <p className="text-[14px] whitespace-pre-wrap break-words text-fg">{p.what_happened}</p>
+                  {p.lessons ? (
+                    <div className="rounded-tile bg-panel px-3.5 py-2.5">
+                      <p className="eyebrow">Lesson</p>
+                      <p className="mt-0.5 text-[14px] whitespace-pre-wrap break-words text-fg">{p.lessons}</p>
+                    </div>
+                  ) : null}
+                  {note ? (
+                    <Disclosure summary="What the signals said">
+                      <p className="whitespace-pre-wrap break-words">{note}</p>
+                    </Disclosure>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Section>

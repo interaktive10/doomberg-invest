@@ -80,11 +80,6 @@ export const DARK: Record<Token, string> = {
   "tint-clay": "#3d2e27",
 };
 
-/** The token as a CSS colour that follows the theme (for SVG attributes and inline styles). */
-export function cssVar(token: Token): string {
-  return `var(--${token})`;
-}
-
 /** Chart ink (components/charts.tsx). */
 export const INK = {
   grid: "var(--line)",
@@ -101,21 +96,9 @@ export const INK = {
 /** Chart series colours, in order: accent, violet, ownership amber, fg. The second and later series are also dashed. */
 export const SERIES = ["var(--accent)", "var(--violet)", "var(--fam-ownership)", "var(--fg)"] as const;
 
-/** What a dot, a bar or a sparkline is coloured by: an evidence family, a score, or a meaning. */
+/** What a dot or a bar is coloured by: an evidence family, a score, or a meaning (components/chip.tsx and meter.tsx
+ * map each to its theme class). */
 export type Tone = "business" | "insiders" | "ownership" | "text" | "evidence" | "gap" | "up" | "down" | "warn" | "muted";
-
-export const TONE_VAR: Record<Tone, string> = {
-  business: "var(--fam-business)",
-  insiders: "var(--fam-insiders)",
-  ownership: "var(--fam-ownership)",
-  text: "var(--fam-text)",
-  evidence: "var(--accent)",
-  gap: "var(--gap)",
-  up: "var(--up)",
-  down: "var(--down)",
-  warn: "var(--warn)",
-  muted: "var(--subtle)",
-};
 
 /** Plain words for a tone that is an evidence family (legends, tooltips). */
 export const TONE_WORD: Partial<Record<Tone, string>> = {

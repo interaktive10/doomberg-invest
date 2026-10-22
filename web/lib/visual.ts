@@ -1,6 +1,6 @@
-// The maths behind the shared visuals (overhaul PR 6): score rings, sparklines, meters and split bars, and ticker
-// tiles. Pure, so tests/visual.test.ts covers it; components/score-ring.tsx, sparkline.tsx, meter.tsx and
-// ticker-tile.tsx draw with it.
+// The maths behind the shared visuals (overhaul PR 6): score rings, meters and split bars, ticker tiles and evidence
+// dots. Pure, so tests/visual.test.ts covers it; components/score-ring.tsx, meter.tsx, ticker-tile.tsx and chip.tsx
+// draw with it. The sparklines are components/charts.tsx (recharts).
 
 /** v clamped to [lo, hi]; a non-finite v is lo. */
 export function clamp(v: number, lo: number, hi: number): number {
@@ -29,49 +29,6 @@ export function splitWidths(values: readonly number[], max = 100): number[] {
   const total = parts.reduce((a, b) => a + b, 0);
   const scale = total > max ? max / total : 1;
   return parts.map((v) => (max > 0 ? Number(((v * scale * 100) / max).toFixed(1)) : 0));
-}
-
-export interface SparkRun {
-  /** polyline points: "x,y x,y ..." (a lone value repeats its point, so a round cap draws it as a dot) */
-  line: string;
-  /** polygon points: the run closed down (or up) to the zero line */
-  area: string;
-  /** a stretch of one value: draw it as a dot */
-  dot: boolean;
-}
-
-/** A sparkline's shape in a width x height box with `pad` above and below: the y of the zero line (zero is always in
- * range, so a fall below it shows) and one run per stretch of consecutive values (a null breaks the line). Points are
- * spread evenly over the width by position, so a missing quarter leaves its gap. */
-export function sparkGeometry(
-  values: readonly (number | null | undefined)[],
-  width: number,
-  height: number,
-  pad = 6,
-): { zero: number; runs: SparkRun[] } {
-  const nums = values.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const lo = Math.min(0, ...nums);
-  const hi = Math.max(0, ...nums);
-  const span = hi - lo || 1;
-  const y = (v: number) => Number((pad + (height - 2 * pad) * (1 - (v - lo) / span)).toFixed(1));
-  const x = (i: number) => Number((values.length > 1 ? (width * i) / (values.length - 1) : width / 2).toFixed(1));
-  const zero = y(0);
-  const runs: SparkRun[] = [];
-  let run: [number, number][] = [];
-  const flush = () => {
-    if (run.length > 0) {
-      const pts = run.map(([px, py]) => `${px},${py}`).join(" ");
-      const dot = run.length === 1;
-      runs.push({ line: dot ? `${pts} ${pts}` : pts, area: `${run[0]![0]},${zero} ${pts} ${run[run.length - 1]![0]},${zero}`, dot });
-    }
-    run = [];
-  };
-  values.forEach((v, i) => {
-    if (typeof v === "number" && Number.isFinite(v)) run.push([x(i), y(v)]);
-    else flush();
-  });
-  flush();
-  return { zero, runs };
 }
 
 export type Tint = "sky" | "sage" | "sand" | "clay";

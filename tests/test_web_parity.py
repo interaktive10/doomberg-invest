@@ -90,6 +90,7 @@ def test_the_lab_pages_verdict_reads_the_labs_rule() -> None:
     assert int(const("PROPOSAL_HORIZON_MONTHS")) == cfg["proposal_horizon_months"]
     assert float(const("PROMOTE_MIN_T_NW")) == float(rules["promote_min_t_nw"])
     assert float(const("DEMOTE_MAX_T_NW")) == float(rules["demote_max_t_nw"])
+    assert float(const("PROMOTE_WEIGHT")) == float(rules["promote_weight"])  # the top of the weight bars (PR 6)
     assert re.findall(r'"(S\d+)"', const("NOT_TESTABLE")) == [s for s in cfg["not_testable"] if s != "S11"]
 
 

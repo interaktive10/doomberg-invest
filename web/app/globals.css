@@ -237,9 +237,10 @@
     accent-color: var(--accent);
   }
 
+  /* An id (m:revenue_ttm_yoy, human-approved) on a soft grey pill, in Inter like everything else. */
   code {
     @apply rounded-md bg-hover px-1.5 py-0.5 text-[0.85em] text-fg;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: inherit;
   }
 
   ::selection {
