@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal as D
 from pathlib import Path
 
-from pipeline.india.pit import parse_disclosure, parse_index_csv, parse_index_json
+from pipeline.india.pit import parse_disclosure, parse_index_json
 from pipeline.india.pledges import pledge_event
 from pipeline.india.shareholding import parse_shareholding
 
@@ -59,13 +59,11 @@ def test_everything_else_is_told_apart() -> None:
     assert director and director[0].category == "Director" and director[0].kind is None  # not a promoter
 
 
-def test_index_json_and_csv() -> None:
+def test_index_json() -> None:
+    """The index the daily run reads (NSE's API). Its CSV twin had no reader and went in overhaul PR 4."""
     j = parse_index_json((FIN / "pit" / "pit.json").read_bytes())
-    c = parse_index_csv((FIN / "pit" / "pit.csv").read_text(encoding="utf-8-sig"))
-    assert len(j) == len(c) == 2865
-    assert j[0].symbol == "SINCLAIR" and j[0].xbrl_url == c[0].xbrl_url
+    assert len(j) == 2865 and j[0].symbol == "SINCLAIR" and j[0].xbrl_url.startswith("https://")
     assert j[0].filed_at == datetime(2026, 9, 25, 7, 50, 13, tzinfo=UTC)  # dissemination 13:20:13 IST
-    assert c[0].filed_at == datetime(2026, 9, 25, 7, 50, 11, tzinfo=UTC)  # the CSV only has the broadcast time
     assert sum(x.revision for x in j) == 36
 
 

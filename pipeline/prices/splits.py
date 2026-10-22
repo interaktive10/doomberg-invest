@@ -8,8 +8,8 @@ share-count change confirms it. Unconfirmed jumps are flagged and never adjusted
 - A price jump is a week-over-week move whose inverse is within 3% of such a ratio.
 - A jump inside a split's window (from a month before the last old-count period end to 120 days after the first
   new-count period end, to allow for reporting lag) is confirmed: closes before it are divided by the ratio.
-- A split with no jump in the prices means the source is already adjusted (Stooq): prices stay as they are, and
-  older share counts are multiplied by the ratio so market caps use the current share basis.
+- A split with no jump in the prices means the source is already adjusted (Twelve Data is): prices stay as they are,
+  and older share counts are multiplied by the ratio so market caps use the current share basis.
 - A split-adjusted source re-adjusts its whole history when a split happens, so a fresh download whose closes for
   weeks already stored differ from them by a split ratio shows the split before any filing does (`rebased`, M4
   review R1-F6). Until a share count confirms it, every earlier count is multiplied by its ratio: price x the

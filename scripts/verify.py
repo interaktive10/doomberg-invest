@@ -126,6 +126,13 @@ def _both(first: list[str], second: list[str]) -> list[str]:
     return ["bash", "-c", f"{run} {' '.join(map(shlex.quote, first))} && {run} {' '.join(map(shlex.quote, second))}"]
 
 
+# Checks retired with what they tested (BRIEF §8 lists them as retired): id -> why. They are never run.
+RETIRED: dict[str, str] = {
+    "M5-05": "demand index: the Capex Desk was deleted (overhaul PR 4, docs/SPEC_ISSUES.md 52)",
+    "M5-06": "P-06 memberships: the Capex Desk was deleted (overhaul PR 4, docs/SPEC_ISSUES.md 52)",
+    "M5-07": "S11: the Capex Desk was deleted (overhaul PR 4, docs/SPEC_ISSUES.md 52)",
+}
+
 CHECKS: list[Check] = [
     Check("M0-01", "m0", "make setup && make test green", ["bash", "-c", "uv sync --frozen -q && " + " ".join(PYTEST)]),
     Check(
@@ -145,7 +152,7 @@ CHECKS: list[Check] = [
     Check(
         "M0-05",
         "m0",
-        "US universe >= 3,000; India EQ >= 1,500; capex seed resolved or listed in UNIVERSE_ISSUES",
+        "US universe >= 3,000; India EQ >= 1,500",
         [*PYTEST, "tests/test_universe.py", "-m", "snapshots"],
         requires=_needs_universe_snapshots,
     ),
@@ -304,7 +311,7 @@ CHECKS: list[Check] = [
     Check(
         "M4-01",
         "m4",
-        "every S1-S12 and R1-R6: a true, a false and a just-below-threshold case on F-SYNQ",
+        "every signal (S1-S10, S12) and R1-R6: a true, a false and a just-below-threshold case on F-SYNQ",
         [*PYTEST, "tests/signals/test_synq.py", "tests/signals/test_series.py"],
     ),
     Check(
@@ -389,30 +396,6 @@ CHECKS: list[Check] = [
         [*PYTEST, "tests/llm/test_privacy.py"],
     ),
     Check(
-        "M5-05",
-        "m5",
-        "demand index and direction on synthetic inputs",
-        _both(["tests/capex/test_index.py"], ["tests/db/test_capex.py", "-k", "index_from_point_in_time"]),
-        requires=_needs_database,
-    ),
-    Check(
-        "M5-06",
-        "m5",
-        "P-06 ungrounded categories dropped; memberships count only after confirmation",
-        _both(
-            ["tests/capex/test_membership.py"],
-            ["tests/db/test_capex.py", "-k", "memberships_count or p06_proposes"],
-        ),
-        requires=_needs_database,
-    ),
-    Check(
-        "M5-07",
-        "m5",
-        "S11 rules on a synthetic graph",
-        _both(["tests/capex/test_s11_graph.py"], ["tests/db/test_capex.py", "-k", "s11_view"]),
-        requires=_needs_database,
-    ),
-    Check(
         "M6-01",
         "m6",
         "pack schema, stable ids, public-data-only check",
@@ -462,8 +445,8 @@ CHECKS: list[Check] = [
     Check(
         "M7-01",
         "m7",
-        "Playwright: allowlist login; candidates -> company -> thesis -> journal -> review -> close with post-mortem; "
-        "screener save/load; capex membership confirm",
+        "Playwright: allowlist login; candidates -> company -> thesis -> journal entry -> review -> close with a "
+        "post-mortem",
         ["python3", "scripts/e2e_report.py", "auth.setup.ts", "flow.spec.ts"],
         requires=_needs_e2e_report,
     ),
@@ -568,6 +551,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{r.check.id:6} {r.status:10} {r.check.description}")
         if r.status == "FAIL" and r.tail:
             print("       " + r.tail.replace("\n", "\n       "))
+    for cid, why in RETIRED.items():
+        if cid[:2].lower() in upto and cid.startswith(a.only):
+            print(f"{cid:6} {'RETIRED':10} {why}")
     write_report(results, a.milestone)
     n_fail = sum(r.status == "FAIL" for r in results)
     n_block = sum(r.status.startswith("BLOCKED") for r in results)

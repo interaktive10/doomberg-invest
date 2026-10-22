@@ -5,36 +5,21 @@ description = "Private long-term investing research app (US + India). Research o
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "polars",
-  "duckdb",
-  "pyarrow",
   "httpx",
-  "tenacity",
   "pydantic>=2",
   "psycopg[binary]>=3",
-  "edgartools",
-  "selectolax",
-  "lxml",
   "pypdfium2",
   "rapidfuzz",
-  "python-dateutil",
-  "feedparser",
   "scipy",
-  "statsmodels",
-  "jinja2",
   "pyyaml",
-  "google-genai",
-  "groq",
-  "openai",
 ]
 
 [dependency-groups]
 dev = [
-  "vcrpy",
   "pytest",
   "ruff",
   "mypy",
   "types-pyyaml",
-  "types-python-dateutil",
 ]
 
 [build-system]
@@ -75,5 +60,5 @@ files = ["pipeline", "scripts"]
 exclude = ["tests/guard/cases"]
 
 [[tool.mypy.overrides]]
-module = ["edgar.*", "feedparser.*", "statsmodels.*", "scipy.*", "vcr.*", "pypdfium2.*"]
+module = ["scipy.*", "pypdfium2.*"]
 ignore_missing_imports = true

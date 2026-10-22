@@ -2,7 +2,7 @@ name: weekly
 # BRIEF §2.1 "weekly", §2.5 (Saturday): SEC bulk companyfacts + submissions -> fundamentals_q and the US universe
 # rules. M4 adds signals -> red flags -> prices -> context -> scores; M6 kill criteria, evidence packs, the thesis queue
 # (committed to main) and the digest issue. India is paused (docs/SPEC_ISSUES.md 46): it has no job and scores run on
-# the US alone. The Capex Desk has no jobs either: without EIA, S11 can't fire.
+# the US alone. The Capex Desk and S11 are deleted (docs/SPEC_ISSUES.md 52).
 # Jobs: us -> scores (only when us ran and succeeded) -> publish (every week; the queue only after this week's scores).
 # The bulk zips (a few GB) stay on the runner; only the per-company sha256 state is cached between weeks.
 on:

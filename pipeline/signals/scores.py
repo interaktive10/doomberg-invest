@@ -59,7 +59,8 @@ class Evidence:
 def evidence(
     results: Mapping[str, SignalResult], soft_flags: int, weights: Weights, cfg: Mapping[str, Any]
 ) -> Evidence:
-    """cfg is config/signals.yaml `scores`."""
+    """cfg is config/signals.yaml `scores`. Only its families and their signals are read, so a weight with no family
+    there (S11's and the capex family's, left in config/weights.yaml: SPEC_ISSUES 52) counts for nothing."""
     top = int(cfg["max_signals_per_family"])
     contrib: dict[str, Decimal] = {}
     for family, ids in cfg["families"].items():

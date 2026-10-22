@@ -34,7 +34,6 @@ from pipeline.db.models import (
     FundamentalsRow,
     InsiderEvent,
     LabResult,
-    LlmCall,
     OwnershipRow,
     PriceW,
     RedflagValue,
@@ -619,11 +618,6 @@ def tracked_run(conn: Conn, kind: str, source: str | None = None) -> Iterator[di
         mark_source_success(conn, source)
     finish_run(conn, run_id, "partial" if stats.get("errors") else "ok", stats)
     conn.commit()
-
-
-def record_llm_call(conn: Conn, call: LlmCall) -> None:
-    cols = tuple(LlmCall.model_fields)
-    conn.execute(_insert("llm_calls", cols, ""), call.model_dump())
 
 
 # ---------------------------------------------------------------- weekly scoring (M4)

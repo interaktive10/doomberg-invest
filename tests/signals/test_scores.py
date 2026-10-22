@@ -37,6 +37,18 @@ def test_family_takes_its_top_two_and_caps_at_one() -> None:
     assert ev2.contributions["fundamentals"] == D("0.5")
 
 
+def test_s11_and_the_capex_family_left_in_weights_yaml_count_for_nothing() -> None:
+    """Overhaul PR 4 (docs/SPEC_ISSUES.md 52): S11 and the capex family went with the Capex Desk, but
+    config/weights.yaml (protected) keeps their weights until a weights PR drops them. Evidence reads only
+    config/signals.yaml's families, so they load without error and change no score, even with a stray S11 result."""
+    assert "S11" in W.signals and "capex" in W.families  # still in weights.yaml
+    assert "capex" not in CFG["families"] and all("S11" not in ids for ids in CFG["families"].values())
+    heavy = Weights(W.version, {**W.families, "capex": D(5)}, {**W.signals, "S11": D(5)}, W.context)
+    with_s11 = evidence(fired(S1="0.8", S7="0.6", S11="1"), 0, heavy, CFG)
+    assert with_s11 == evidence(fired(S1="0.8", S7="0.6"), 0, W, CFG)
+    assert "capex" not in with_s11.contributions and with_s11.families == ("fundamentals", "behavior")
+
+
 def test_unfired_signals_do_not_count() -> None:
     res = {**fired(S1="0.8"), "S2": SignalResult(False, D(0), {})}
     assert evidence(res, 0, W, CFG).contributions["fundamentals"] == D("0.8")

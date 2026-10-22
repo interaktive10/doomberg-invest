@@ -26,7 +26,6 @@ def blocks(title: str) -> list[str]:
         ("P-02.system.txt", "### P-02 ENTITY_NORMALIZE", 0),
         ("P-04.system.txt", "### P-04 THESIS_CARD", 0),
         ("P-05.system.txt", "### P-05 CLAIM_SUPPORT · free", 0),
-        ("P-06.system.txt", "### P-06 CROSS_BORDER_MAP", 0),
         ("P-07.system.txt", "### P-07 ANNOUNCEMENT_TRIAGE", 0),
     ],
 )

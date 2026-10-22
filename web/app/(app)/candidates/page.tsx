@@ -1,30 +1,33 @@
 import Link from "next/link";
-import { Empty, Flash, Kpi, KpiRibbon, Page } from "@/components/page";
+import { Empty, Flash, Page } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
-import { dismissedThisWeek, latestThesisByCompany, screen, type Bucket } from "@/lib/data";
+import { dismissalHolds, evidenceChange, EVIDENCE_MOVE, isNew, signed, windowStart } from "@/lib/candidates";
+import { dismissals, latestThesisByCompany, scoreHistory, screen, type Bucket } from "@/lib/data";
 import { code, num } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
 import { FAMILY_LABEL, RED_FLAG_NAME, SIGNAL_PLAIN } from "@/lib/labels";
-import { FAMILIES, type ScreenSpec } from "@/lib/screener";
+import type { ScreenSpec } from "@/lib/screener";
 import { cn } from "@/lib/utils";
 import { dismiss, research } from "./actions";
 import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Candidates" };
 
-// BRIEF §6 Candidates, simplified (Manzoor, 2026-10-08): tabs Candidate · Early · Priced-in · Excluded; one row per
-// company in plain words (why it's here, the two scores, red flags) with open card, research and dismiss; filters
-// folded away. The C1–C4 detail is on the Company page. On a wide screen the rows line up under a column header (the
-// header is decoration: each row also names its columns for screen readers).
+// BRIEF §6 Candidates, simplified (Manzoor, 2026-10-08; overhaul PR 4): tabs Candidate · Early · Priced-in; one row
+// per company in plain words (why it's here, the two scores with the Evidence change, red flags, NEW when it is in the
+// bucket for the first time in 12 weeks) with open card, research and dismiss; filters folded away. A dismissal holds
+// until the evidence changes (lib/candidates.ts). The C1–C3 detail is on the Company page. On a wide screen the rows
+// line up under a column header (the header is decoration: each row also names its columns for screen readers).
 const TABS: readonly [Bucket, string][] = [
   ["candidate", "Candidate"],
   ["early", "Early"],
   ["priced_in", "Priced-in"],
-  ["excluded", "Excluded"],
 ];
+
+const FAMILIES = Object.keys(FAMILY_LABEL);
 
 const COLUMNS = "lg:grid-cols-[minmax(0,1.6fr)_7rem_7rem_minmax(0,2.4fr)_15rem]";
 
@@ -40,58 +43,48 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const q = await searchParams;
   const bucket = (TABS.find(([b]) => b === one(q, "bucket"))?.[0] ?? "candidate") as Bucket;
   const market = one(q, "market") === "us" || one(q, "market") === "in" ? (one(q, "market") as "us" | "in") : undefined;
-  const desk = one(q, "desk") === "yes" ? true : one(q, "desk") === "no" ? false : undefined;
   const family = FAMILIES.find((f) => f === one(q, "family"));
   const sector = one(q, "sector") || undefined;
   const showDismissed = one(q, "dismissed") === "1";
   const spec: ScreenSpec = { buckets: [bucket], limit: 2000 };
   if (market) spec.market = market;
-  if (desk !== undefined) spec.capex_desk = desk;
   if (family) spec.families_all = [family];
   const all = await screen(spec);
   const sectors = [...new Set(all.map((r) => r.sector).filter((s): s is string => !!s))].sort();
   const week = all[0]?.week_end;
   const inSector = all.filter((r) => !sector || r.sector === sector);
-  const [dismissed, cards] = await Promise.all([
-    week ? dismissedThisWeek(week) : Promise.resolve(new Set<string>()),
-    latestThesisByCompany(inSector.map((r) => r.company_id)),
+  const ids = inSector.map((r) => r.company_id);
+  const [held, cards, history] = await Promise.all([
+    week ? dismissals(ids, week) : Promise.resolve(new Map<string, never>()),
+    latestThesisByCompany(ids),
+    week ? scoreHistory(ids, windowStart(week), week) : Promise.resolve(new Map<string, never[]>()),
   ]);
+  // still dismissed: no week since the dismissal (this one included) had a new signal or family or moved Evidence 10
+  const dismissed = new Set(
+    inSector
+      .filter((r) => {
+        const d = held.get(r.company_id);
+        const now = { evidence: r.evidence, families: r.families, signals: r.fired_signals };
+        return d !== undefined && dismissalHolds(d.baseline, [...d.since, now]);
+      })
+      .map((r) => r.company_id),
+  );
   const shown = inSector.filter((r) => showDismissed || !dismissed.has(r.company_id));
-  const filters = {
-    bucket,
-    market,
-    desk: desk === undefined ? undefined : desk ? "yes" : "no",
-    family,
-    sector,
-    dismissed: showDismissed ? "1" : undefined,
-  };
+  const filters = { bucket, market, family, sector, dismissed: showDismissed ? "1" : undefined };
   const back = href(filters);
-  const filtered = market !== undefined || desk !== undefined || family !== undefined || sector !== undefined;
-  // The ribbon: what the list below holds (no link, no company name: the list's links and names stay unique).
-  const strongest = shown.reduce<(typeof shown)[number] | undefined>((best, r) => (best === undefined || r.evidence > best.evidence ? r : best), undefined);
-  const flagged = shown.filter((r) => r.red_flags.length > 0);
-  const withCard = shown.filter((r) => cards.has(r.company_id)).length;
+  const filtered = market !== undefined || family !== undefined || sector !== undefined;
+  const hidden = showDismissed ? 0 : inSector.length - shown.length;
   return (
     <Page
       title="Candidates"
-      description={week ? `The weekly scores for the week ending ${week}. Research only: nothing here is a trade.` : "The weekly scores, by bucket."}
+      description={
+        week
+          ? `The weekly scores for the week ending ${week}: ${shown.length} shown${hidden > 0 ? `, ${hidden} dismissed until the evidence changes` : ""}.`
+          : "The weekly scores, by bucket."
+      }
     >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <KpiRibbon>
-        <Kpi
-          label="Shown"
-          value={shown.length}
-          hint={dismissed.size > 0 && !showDismissed ? `${dismissed.size} dismissed this week` : "in this bucket"}
-        />
-        <Kpi label="Strongest evidence" value={strongest ? num(strongest.evidence, 0) : "–"} hint={strongest ? code(strongest) : undefined} />
-        <Kpi
-          label="With a red flag"
-          value={flagged.length}
-          tone={flagged.some((r) => r.hard_flag) ? "down" : flagged.length > 0 ? "warn" : undefined}
-        />
-        <Kpi label="Have a card" value={withCard} hint={`of ${shown.length}`} />
-      </KpiRibbon>
-      <nav aria-label="Buckets" className="grid w-full grid-cols-4 self-start rounded-md border border-line bg-panel p-0.5 sm:inline-flex sm:w-auto">
+      <nav aria-label="Buckets" className="grid w-full grid-cols-3 self-start rounded-md border border-line bg-panel p-0.5 sm:inline-flex sm:w-auto">
         {TABS.map(([b, text]) => (
           <Link
             key={b}
@@ -118,14 +111,6 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
               <option value="">All</option>
               <option value="us">US</option>
               <option value="in">India</option>
-            </Select>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <Label htmlFor="f-desk">Desk</Label>
-            <Select id="f-desk" name="desk" defaultValue={filters.desk ?? ""} className="w-full sm:w-auto">
-              <option value="">All</option>
-              <option value="yes">Capex Desk</option>
-              <option value="no">Not the desk</option>
             </Select>
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
@@ -190,6 +175,8 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
               const card = cards.get(r.company_id);
               const gone = dismissed.has(r.company_id);
               const reasons = r.fired_signals.map((s) => SIGNAL_PLAIN[s] ?? s);
+              const past = history.get(r.company_id) ?? [];
+              const change = evidenceChange(r.evidence, r.week_end, past);
               return (
                 <li
                   key={r.company_id}
@@ -203,6 +190,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
                       <Link href={`/company/${r.company_id}`} className="link-quiet text-sm font-semibold">
                         {r.name}
                       </Link>
+                      {isNew(r.bucket, r.week_end, past) ? <Badge title="In this bucket for the first time in 12 weeks">NEW</Badge> : null}
                       {gone ? <Badge variant="secondary">dismissed</Badge> : null}
                     </div>
                     <div className="mt-0.5 font-mono text-xs text-muted">
@@ -211,7 +199,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 lg:contents">
-                    <Score label="Strength of evidence" value={r.evidence} />
+                    <Score label="Strength of evidence" value={r.evidence} change={change} />
                     <Score label="Not priced in yet" value={r.gap} />
                   </div>
                   <div className="min-w-0">
@@ -259,8 +247,9 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
                             Reason
                           </Label>
                           <Input id={`reason-${r.company_id}`} name="reason" required className="w-full" />
+                          <p className="text-xs text-muted">Hidden until a new signal fires or Evidence moves {EVIDENCE_MOVE}.</p>
                           <SubmitButton size="xs" variant="outline">
-                            Dismiss for this week
+                            Confirm dismissal
                           </SubmitButton>
                         </form>
                       </details>
@@ -276,9 +265,9 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   );
 }
 
-/** A 0–100 score with a bar; the number is the value, the bar decoration. On a wide screen the column header names it
- * (the label stays for screen readers). */
-function Score({ label, value }: { label: string; value: number | string | null | undefined }) {
+/** A 0–100 score with a bar; the number is the value, the bar decoration, and the change since the previous scored
+ * score (and its week) under it when given. On a wide screen the column header names it (the label stays for screen readers). */
+function Score({ label, value, change }: { label: string; value: number | string | null | undefined; change?: { change: number; since: string } | null }) {
   const n = value === null || value === undefined || value === "" ? null : Number(value);
   const width = n === null || !Number.isFinite(n) ? 0 : Math.max(0, Math.min(100, n));
   return (
@@ -290,6 +279,11 @@ function Score({ label, value }: { label: string; value: number | string | null 
           <span className="block h-full bg-accent" style={{ width: `${width}%` }} />
         </span>
       </div>
+      {change === undefined ? null : (
+        <div className={cn("num mt-0.5 text-xs", change === null || change.change === 0 ? "text-muted" : change.change > 0 ? "text-up" : "text-down")}>
+          {change === null ? "no earlier score" : `${signed(change.change)} since ${change.since}`}
+        </div>
+      )}
     </div>
   );
 }

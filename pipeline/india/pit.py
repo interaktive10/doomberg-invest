@@ -1,8 +1,8 @@
 """Insider trading (SEBI PIT Reg 7(2)) disclosures -> insider_events (BRIEF §4.3, §4.6 S7-IN, §8 M3-04).
 
-NSE publishes an index (the insider-trading page's API `corporates-pit-gg`, or the page's "Download (.csv)") with one
-row per disclosure: symbol, regulation, broadcast time and a link to the disclosure's XBRL. The XBRL holds the trades
-(one typed-dimension context per disclosure line): category of person, name, shares, value, buy/sell, mode.
+NSE publishes an index (the insider-trading page's API `corporates-pit-gg`) with one row per disclosure: symbol,
+regulation, broadcast time and a link to the disclosure's XBRL. The XBRL holds the trades (one typed-dimension context
+per disclosure line): category of person, name, shares, value, buy/sell, mode.
 (The old `corporates-pit` API with the trades inline now returns nothing.)
 
 Kept: promoter / promoter-group trades in equity shares:
@@ -18,8 +18,6 @@ Times on NSE are IST; filed_at is the exchange's broadcast time in UTC.
 
 from __future__ import annotations
 
-import csv
-import io
 import json
 from collections import defaultdict
 from dataclasses import dataclass
@@ -88,24 +86,6 @@ def parse_index_json(raw: bytes | str) -> list[PitFiling]:
             continue
         out.append(PitFiling(str(r["symbol"]).upper(), str(r.get("companyName") or ""), str(r.get("regulation") or ""),
                              when, url, str(r.get("typeOfSubmission") or "").lower() == "revision"))  # fmt: skip
-    return out
-
-
-def parse_index_csv(text: str) -> list[PitFiling]:
-    reader = csv.reader(io.StringIO(text.lstrip("﻿")))
-    header = [" ".join(h.split()).upper().lstrip("*") for h in next(reader, [])]
-    ix = {h: i for i, h in enumerate(header)}
-    need = ("SYMBOL", "BROADCAST DATE/TIME", "XBRL")
-    if any(h not in ix for h in need):
-        raise ValueError(f"not an NSE insider-trading index CSV (header {header})")
-    out: list[PitFiling] = []
-    for row in reader:
-        get = {h: (row[i].strip() if i < len(row) else "") for h, i in ix.items()}
-        when = _time(get.get("BROADCAST DATE/TIME"))
-        if not get["SYMBOL"] or when is None or not get["XBRL"].startswith("https://"):
-            continue
-        out.append(PitFiling(get["SYMBOL"].upper(), get.get("COMPANY NAME", ""), get.get("REGULATION", ""), when,
-                             get["XBRL"], get.get("TYPE OF SUBMISSION", "").lower() == "revision"))  # fmt: skip
     return out
 
 

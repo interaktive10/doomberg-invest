@@ -1,13 +1,14 @@
 """Twelve Data's time_series endpoint: weekly bars for the US candidate set and the US benchmarks since 2026-10
 (docs/SPEC_ISSUES.md 38), and the Signal Lab's daily (or, failing that, monthly) history (pipeline/lab/price_history.py,
-docs/SPEC_ISSUES.md 51). Yahoo answers GitHub's runners 429 from the first request; Twelve Data is an official API
-with a free plan (8 credits a minute, 800 a day, no card; "internal non-display use", a private tool's case). One
-credit per symbol, one request every 8 s (pipeline/net/http.py). The key rides in a header, never in a URL, and is
+docs/SPEC_ISSUES.md 51). It is the only price source (52: Yahoo answered GitHub's runners 429 from the first request,
+and Stooq's CSV needs a CAPTCHA key): an official API with a free plan (8 credits a minute, 800 a day, no card;
+"internal non-display use", a private tool's case). One credit per symbol, one request every 8 s
+(pipeline/net/http.py). The key rides in a header, never in a URL, and is
 cut out of any error text. End-of-day intervals only (1day, 1week, 1month): a research tool reads no intraday data.
 
 A weekly bar is dated at its week's first day; it is keyed by that week's Friday, like prices_w everywhere. A daily bar
 is dated at its day and a monthly one at its month's first day. Prices are decimal strings, split-adjusted and not
-dividend-adjusted, like Stooq's and Yahoo's closes."""
+dividend-adjusted, like the manual import's (pipeline/prices/bars.py)."""
 
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from urllib.parse import quote
 import httpx
 
 from pipeline.net.http import DomainNotAllowed, HttpClient
-from pipeline.net.stooq import Bar, friday_of
+from pipeline.prices.bars import Bar, friday_of
 from pipeline.prices.source import NoSuchSymbol, PriceUnavailable
 
 TIME_SERIES = "https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={size}"

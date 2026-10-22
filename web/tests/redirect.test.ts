@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { redirectTo, toLogin } from "@/lib/redirect";
+import config from "../next.config";
 
 describe("redirects", () => {
   it("auth routes keep the browser on its own host: the Location is relative", () => {
@@ -18,5 +19,18 @@ describe("redirects", () => {
     expect(location.origin).toBe("http://localhost:3000");
     expect(location.pathname).toBe("/login");
     expect(location.search).toBe("");
+  });
+
+  it("the Screener's and the Capex Desk's old links land on Candidates and on This week (overhaul PR 4)", async () => {
+    const rules = (await config.redirects?.()) ?? [];
+    const to = (path: string) => {
+      const r = rules.find((x: { source: string; destination: string; permanent?: boolean }) => new RegExp(`^${x.source.replace("/:path*", "(?:/.*)?")}$`).test(path));
+      return r === undefined ? null : [r.destination, r.permanent];
+    };
+    expect(to("/screener")).toEqual(["/candidates", false]);
+    expect(to("/screener/export")).toEqual(["/candidates", false]);
+    expect(to("/capex")).toEqual(["/", false]);
+    expect(to("/candidates")).toBeNull();
+    expect(to("/screenerx")).toBeNull();
   });
 });

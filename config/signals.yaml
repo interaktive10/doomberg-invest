@@ -93,13 +93,6 @@ s10_special:
   holdco_list: config/holdcos.yaml
   strength: 0.6
 
-s11_capex:                      # BRIEF §4.11
-  min_lag_pp: 10.0
-  second_order_distance: 2
-  strength_base: 0.5
-  strength_india_export_bonus: 0.25
-  strength_s1_bonus: 0.25
-
 s12_cycle:
   max_capex_to_da: 1.0
   underinvest_years: 3
@@ -115,7 +108,6 @@ scores:                         # BRIEF §4.8 and §1.7
     behavior: [S7, S8]
     text: [S9]
     structural: [S10]
-    capex: [S11]
     cycle: [S12]
   max_signals_per_family: 2
   evidence_divisor: 2.0         # Evidence = 100 x min(1, raw/2.0)

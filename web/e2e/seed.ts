@@ -14,8 +14,6 @@ export const PAGES = [
   `/theses/${OMEGA_THESIS}`,
   `/theses/${SIGMA_THESIS}`,
   "/journal",
-  "/screener?run=1&min_evidence=10",
-  "/capex",
   "/lab",
   "/settings",
 ] as const;

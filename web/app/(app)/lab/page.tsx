@@ -1,18 +1,27 @@
 import { Markdown } from "@/components/markdown";
-import { Empty, Kpi, KpiRibbon, Page, Section } from "@/components/page";
+import { Empty, Note, Page, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CAVEATS } from "@/lib/caveats";
-import { labResults, weightsVersions, type LabResult } from "@/lib/data";
+import { labPricesRun, labResults, weightsVersions, type LabResult } from "@/lib/data";
 import { num, pct } from "@/lib/format";
+import { downloadLine, PROPOSAL_HORIZON_MONTHS, verdict, weightOf, type Verdict } from "@/lib/lab";
 import { SIGNAL_NAME } from "@/lib/labels";
 import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Signal Lab" };
 
-// BRIEF §6 Signal Lab: results by signal, horizon and period; score deciles; weights versions; open proposals. §7:
-// the first four honest limits at the top of the screen.
+// BRIEF §6 Signal Lab (overhaul PR 4): the price download's progress, each signal's verdict (§4.10.5) with the weight
+// in use (weights_versions), results by signal, horizon and period, score deciles and open proposals. §7: the first
+// four honest limits at the top of the screen.
 const DECILE = /^(EVIDENCE|GAP)_D(\d+)$/;
+
+const VERDICT_BADGE: Record<Verdict, "success" | "destructive" | "secondary" | "outline"> = {
+  works: "success",
+  hurts: "destructive",
+  unproven: "secondary",
+  "not testable yet": "outline",
+};
 
 /** An excess return's colour by its sign: up above zero, down below. */
 function sign(v: number | null): string | undefined {
@@ -74,20 +83,16 @@ function Head() {
 
 export default async function Lab() {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
-  const [results, versions] = await Promise.all([labResults(), weightsVersions()]);
+  const [results, versions, download] = await Promise.all([labResults(), weightsVersions(), labPricesRun()]);
   const deciles = results.filter((r) => DECILE.test(r.signal_id));
   const signals = results.filter((r) => !DECILE.test(r.signal_id));
-  const approved = versions.filter((v) => v.approved_at !== null);
+  const current = versions.find((v) => v.approved_at !== null);
   const open = versions.filter((v) => v.approved_at === null);
-  const lastRun = results[0]?.run_at.slice(0, 10);
+  const legacy = Object.keys((current?.weights.legacy as Record<string, unknown> | undefined) ?? {});
+  const ids = [...new Set([...Object.keys(SIGNAL_NAME), ...legacy, ...signals.map((r) => r.signal_id)])];
   return (
     <Page title="Signal Lab" description="Does each signal beat its market out of sample? The Lab measures it; weights change only through a reviewed pull request.">
-      <KpiRibbon>
-        <Kpi label="Last run" value={lastRun ?? "never"} />
-        <Kpi label="Signals tested" value={new Set(signals.map((r) => r.signal_id)).size} />
-        <Kpi label="Weights in use" value={approved[0]?.version ?? "none"} />
-        <Kpi label="Open proposals" value={open.length} tone={open.length > 0 ? "warn" : undefined} />
-      </KpiRibbon>
+      <p className="num rounded-md border border-line bg-panel px-4 py-2.5 text-[13px] text-fg">{downloadLine(download)}</p>
       <section aria-labelledby="limits" className="rounded-md border border-warn/40 border-l-2 border-l-warn bg-warn/10 p-4">
         <h2 id="limits" className="text-sm font-semibold text-warn">
           Honest limits
@@ -96,6 +101,50 @@ export default async function Lab() {
           <Markdown text={CAVEATS.join("\n")} />
         </div>
       </section>
+      <Section
+        title="Verdicts and weights in use"
+        id="verdicts"
+        description={
+          <>
+            Each signal&apos;s verdict at {PROPOSAL_HORIZON_MONTHS} months (§4.10.5): works, hurts, or unproven (not shown, not wrong).
+            {current
+              ? ` Weights in use: version ${current.version}, approved ${current.approved_at?.slice(0, 10) ?? ""}.`
+              : " No approved weights version is recorded yet."}
+          </>
+        }
+      >
+        <Table label="Verdicts and weights in use">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Signal</TableHead>
+              <TableHead>Verdict</TableHead>
+              <TableHead num>Weight in use</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {ids.map((id) => {
+              const v = verdict(id, signals);
+              const w = weightOf(current?.weights, id);
+              return (
+                <TableRow key={id}>
+                  <TableCell className="whitespace-nowrap">
+                    <span className="font-medium">{id}</span> <span className="text-muted">{SIGNAL_NAME[id] ?? (id.startsWith("L") ? "legacy rule" : "")}</span>
+                  </TableCell>
+                  <TableCell>
+                    {signals.length === 0 && v !== "not testable yet" ? (
+                      <span className="text-muted">no Lab run yet</span>
+                    ) : (
+                      <Badge variant={VERDICT_BADGE[v]}>{v}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell num>{w === null ? "–" : num(w, 1)}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        <Note className="mt-3">S7–S12 read data collected only since 2026, so the Lab can&apos;t test them yet; they keep their weights, and S9 never earns weight.</Note>
+      </Section>
       <Section
         title="Results by signal, horizon and period"
         id="results"
@@ -106,7 +155,7 @@ export default async function Lab() {
         }
       >
         {signals.length === 0 ? (
-          <Empty>No Lab run yet (lab.yml, manual; it needs the Stooq bulk file).</Empty>
+          <Empty>No Lab run yet: lab-prices.yml dispatches the first one when the price download is complete.</Empty>
         ) : (
           <Table label="Lab results by signal">
             <Head />
@@ -124,51 +173,23 @@ export default async function Lab() {
           </Table>
         )}
       </Section>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 xl:items-start">
-        <Section title="Open proposals (not approved)" id="proposals" className="xl:col-span-6">
-          {open.length === 0 ? (
-            <Empty>No open weight proposals.</Empty>
-          ) : (
-            <ul className="flex flex-col gap-2 text-[13px]">
-              {open.map((v) => (
-                <li key={v.version} className="rounded-sm border border-line bg-canvas p-3">
-                  <span className="font-medium">{v.version}</span> <Badge variant="warning">not approved</Badge>
-                  <p className="mt-1 break-words">{v.reason}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-[13px] text-muted">
-            Weights change only through a pull request with the <code>human-approved</code> label (config/weights.yaml).
-          </p>
-        </Section>
-        <Section title="Weights versions" id="weights" className="xl:col-span-6">
-          {approved.length === 0 ? (
-            <Empty>No approved weights version recorded yet.</Empty>
-          ) : (
-            <Table label="Weights versions">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Approved</TableHead>
-                  <TableHead>By</TableHead>
-                  <TableHead>Reason</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {approved.map((v) => (
-                  <TableRow key={v.version}>
-                    <TableCell className="font-medium">{v.version}</TableCell>
-                    <TableCell className="num whitespace-nowrap">{v.approved_at?.slice(0, 10)}</TableCell>
-                    <TableCell>{v.approved_by ?? ""}</TableCell>
-                    <TableCell className="max-w-md break-words">{v.reason}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </Section>
-      </div>
+      <Section title="Open proposals (not approved)" id="proposals">
+        {open.length === 0 ? (
+          <Empty>No open weight proposals.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-2 text-[13px]">
+            {open.map((v) => (
+              <li key={v.version} className="rounded-sm border border-line bg-canvas p-3">
+                <span className="font-medium">{v.version}</span> <Badge variant="warning">not approved</Badge>
+                <p className="mt-1 break-words">{v.reason}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-[13px] text-muted">
+          Weights change only through a pull request with the <code>human-approved</code> label (config/weights.yaml).
+        </p>
+      </Section>
     </Page>
   );
 }

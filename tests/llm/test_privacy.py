@@ -100,7 +100,6 @@ ROWS = {
 
 def wrappers(row: object) -> list[object]:
     """The row passed directly and nested in every PromptInput of the public modules."""
-    from pipeline.capex.membership import CrossBorderInput
     from pipeline.facts.entities import EntityInput
     from pipeline.facts.extract import ExtractInput
 
@@ -110,8 +109,6 @@ def wrappers(row: object) -> list[object]:
         ExtractInput("n", "T", "0630", "10-Q", "t", "2026-09-01", "mdna", 0, 10, row),  # type: ignore[arg-type]
         EntityInput((row,), ()),  # type: ignore[arg-type]
         EntityInput(("Acme",), (("e1", row),)),  # type: ignore[arg-type]
-        CrossBorderInput("n", "SYM", ("grid",), row),  # type: ignore[arg-type]
-        CrossBorderInput("n", "SYM", (row,), "text"),  # type: ignore[arg-type]
     ]
 
 

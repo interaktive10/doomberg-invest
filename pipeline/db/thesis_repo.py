@@ -98,7 +98,7 @@ def pack_facts(conn: Conn, company_id: UUID, cutoff: datetime, limit: int) -> li
 
 
 def pack_links(conn: Conn, company_id: UUID, cutoff: datetime) -> list[dict[str, Any]]:
-    """Counterparty links of the company whose fact was published before the cutoff (the Capex Desk graph)."""
+    """Counterparty links of the company whose fact was published before the cutoff (the counterparty graph)."""
     return _rows(
         conn,
         "select e.name as entity, e.kind as entity_kind, l.relation, l.fact_id from links l "
@@ -231,11 +231,6 @@ def reviews_due(conn: Conn, week: date) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------- the digest's other inputs
-
-
-def capex_brief(conn: Conn, week: date) -> str | None:
-    rows = _rows(conn, "select body_md from capex_briefs where week_end = %s", (week,))
-    return str(rows[0]["body_md"]) if rows else None
 
 
 def llm_use(conn: Conn, since: datetime, until: datetime) -> list[dict[str, Any]]:

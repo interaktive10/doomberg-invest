@@ -14,3 +14,4 @@ imports/*
 web/node_modules/
 web/.next/
 *.parquet
+docs/VERIFY_REPORT.md

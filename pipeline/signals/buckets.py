@@ -12,7 +12,7 @@ skipping any company shortlisted in the previous 12 weeks."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal
@@ -70,7 +70,3 @@ def market_cap_ok(market: str, market_cap: Decimal | None, universe_cfg: Mapping
     """§1.3: US market cap >= $300M, India >= Rs 500 crore, applied at the candidate stage. Unknown -> not ok."""
     key = {"us": "candidate_min_mcap_usd", "in": "candidate_min_mcap_inr"}[market]
     return market_cap is not None and market_cap >= _d(universe_cfg[market][key])
-
-
-def families_list(families: Sequence[str]) -> list[str]:
-    return sorted(families)

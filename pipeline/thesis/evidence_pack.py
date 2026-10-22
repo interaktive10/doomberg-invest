@@ -7,7 +7,8 @@ only, every item under a stable id.
   inputs, reverse-DCF assumptions included (`c:C2`), Evidence and Gap (`c:evidence`, `c:gap`);
 - at most 20 verified text facts with quote, URL and fact id (`f:<uuid>`), the newest first;
 - ownership by quarter (`m:<field>:<quarter_end>`) and insider events of the last year (`m:insider:<uuid>`);
-- the Capex Desk's counterparty links (each with the fact that made it) and confirmed categories;
+- the counterparty links (each with the fact that made it) and Manzoor's confirmed capex categories (kept from the
+  deleted Capex Desk, docs/SPEC_ISSUES.md 52);
 - candidate kill-criteria metrics, the current value of each (`m:<metric>`, e.g. `m:revenue_ttm_yoy`); a kill
   criterion names one of these and kill_criteria.py recomputes it from new data with the same code;
 - the next expected filing window (a kill criterion's check_after must fall after it).
@@ -35,7 +36,7 @@ from pipeline.db import thesis_repo
 from pipeline.db.models import Company, InsiderEvent, OwnershipRow
 from pipeline.db.pit import as_of
 from pipeline.lab.prices import add_months, month_end
-from pipeline.llm.prompt import PromptInput, obj, template
+from pipeline.llm.prompt import PromptInput, obj
 from pipeline.signals.series import Series, growth
 
 PACK_VERSION = 1
@@ -543,7 +544,3 @@ class ClaimInput(PromptInput):
 
     def schema(self) -> dict[str, Any]:
         return SUPPORT_SCHEMA
-
-
-def p04_system() -> str:
-    return template("P-04", "system")

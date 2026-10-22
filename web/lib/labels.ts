@@ -1,5 +1,7 @@
-// Display names for the ids the pipeline stores (BRIEF §1.4 signals, §1.5 red flags, §1.6 context, §4.7 reverse DCF).
-// Display only: forms, URLs and the database keep the ids.
+import { big, measure } from "@/lib/format";
+
+// Display names for the ids the pipeline stores (BRIEF §1.4 signals, §1.5 red flags, §1.6 context, §4.7 reverse DCF,
+// the kill-criteria metrics). Display only: forms, URLs and the database keep the ids.
 
 /** snake_case or kebab-case id -> "Sentence case" ("open_market_buy" -> "Open market buy"). */
 export function humanize(id: string | null | undefined): string {
@@ -21,7 +23,6 @@ export const FAMILY_LABEL: Record<string, string> = {
   behavior: "Behavior",
   text: "Text",
   structural: "Structural",
-  capex: "Capex",
   cycle: "Cycle",
 };
 
@@ -37,7 +38,6 @@ export const SIGNAL_NAME: Record<string, string> = {
   S8: "Discovery",
   S9: "Verified text facts",
   S10: "Special situations",
-  S11: "Capex propagation",
   S12: "Cycle position",
 };
 
@@ -53,7 +53,6 @@ export const SIGNAL_PLAIN: Record<string, string> = {
   S8: "More funds starting to own it",
   S9: "Verified wins in its filings",
   S10: "Spin-off or special situation",
-  S11: "Riding a capex wave upstream",
   S12: "Industry cycle turning up",
 };
 
@@ -72,7 +71,6 @@ export const CONTEXT_NAME: Record<string, string> = {
   C1: "Valuation percentile vs its own history",
   C2: "Expectations gap (evidence growth minus reverse-DCF implied growth)",
   C3: "Run-up: 12-month return percentile",
-  C4: "Attention: news-mention percentile",
 };
 
 export const ACTION_LABEL: Record<string, string> = {
@@ -84,30 +82,83 @@ export const ACTION_LABEL: Record<string, string> = {
   review: "Review",
 };
 
-/** The screener's metrics (lib/screener.ts METRICS), with the unit a filter value is in. */
-export const METRIC_LABEL: Record<string, string> = {
-  revenue_ttm: "Revenue, TTM (currency units)",
-  revenue_yoy: "Revenue growth YoY (0.10 = 10%)",
-  opm: "Operating margin (0.20 = 20%)",
-  roic: "ROIC (0.15 = 15%)",
-  fcf_ttm: "Free cash flow, TTM (currency units)",
-  ccr: "Cash conversion, CFO / net income (x)",
-  nd_to_ebitda: "Net debt / EBITDA (x)",
-  share_change_yoy: "Share count change YoY (−0.02 = −2%)",
-  market_cap: "Market cap (currency units)",
-  ev: "Enterprise value (currency units)",
-  return_52w: "52-week return (0.25 = 25%)",
+type MetricUnit = "money" | "ratio" | "count" | "percent" | "score" | "strength";
+
+/** The kill-criteria metrics (pipeline/thesis/evidence_pack.py KILL_METRICS; tests/test_web_parity.py pins the keys),
+ * named to sit in a sentence, with the unit their values are in. A card's metric id is "m:<key>" or "m:signal:S<n>". */
+export const METRIC_LABEL: Record<string, { label: string; unit: MetricUnit }> = {
+  revenue_ttm: { label: "trailing-twelve-month revenue", unit: "money" },
+  revenue_ttm_yoy: { label: "TTM revenue growth over the TTM a year earlier", unit: "ratio" },
+  revenue_q_yoy: { label: "the latest quarter's revenue growth over the same quarter a year earlier", unit: "ratio" },
+  op_margin_ttm: { label: "the TTM operating margin", unit: "ratio" },
+  roic: { label: "ROIC (TTM NOPAT over mean invested capital)", unit: "ratio" },
+  fcf_ttm: { label: "TTM free cash flow (operating cash flow minus capex)", unit: "money" },
+  net_debt: { label: "net debt (total debt minus cash)", unit: "money" },
+  rpo: { label: "remaining performance obligations (RPO)", unit: "money" },
+  rpo_yoy: { label: "RPO growth over a year earlier", unit: "ratio" },
+  shares_yoy: { label: "the share count's change over a year earlier", unit: "ratio" },
+  inst_holders: { label: "the number of 13F institutional holders", unit: "count" },
+  fii_dii_pct: { label: "the FII + DII holding", unit: "percent" },
+  promoter_pct: { label: "the promoter holding", unit: "percent" },
+  promoter_pledged_pct: { label: "the pledged share of the promoter holding", unit: "percent" },
+  evidence: { label: "the Evidence score", unit: "score" },
 };
+
+const OP_WORDS: Record<string, string> = {
+  "<": "falls below",
+  "<=": "falls to or below",
+  ">": "rises above",
+  ">=": "rises to or above",
+  "==": "equals",
+};
+
+/** A kill-criteria metric id ("m:roic", "m:signal:S1") as its sentence name and unit. */
+export function killMetric(id: string): { label: string; unit: MetricUnit | null } {
+  const name = id.replace(/^m:/, "");
+  const known = METRIC_LABEL[name];
+  if (known) return known;
+  const sig = /^signal:(S\d{1,2})$/.exec(name);
+  if (sig?.[1]) return { label: `${sig[1]}'s strength (${SIGNAL_NAME[sig[1]] ?? "signal"})`, unit: "strength" };
+  return { label: humanize(name), unit: null };
+}
+
+/** A kill-criteria value in its metric's unit: 1.20B, 12.5%, 1,340, 4.0% (a holding), 40, 0.35. */
+export function metricValue(v: number | string | null | undefined, unit: MetricUnit | null): string {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return "n/a";
+  switch (unit) {
+    case "money":
+      return big(n);
+    case "ratio":
+      return `${(n * 100).toFixed(1)}%`;
+    case "count":
+      return Math.round(n).toLocaleString("en-US");
+    case "percent":
+      return `${n.toFixed(1)}%`;
+    case "score":
+      return n.toFixed(0);
+    case "strength":
+      return n.toFixed(2);
+    default:
+      return measure(n);
+  }
+}
+
+/** A kill criterion in words, one sentence: "Kill if the TTM operating margin falls below 12.0% (checked from
+ * 2026-11-14)." "changes" compares with the value when the thesis was accepted (its baseline). */
+export function killSentence(k: { metric: string; operator: string; threshold: number | string | null; baseline?: number | string | null; check_after?: string | null }): string {
+  const { label: name, unit } = killMetric(k.metric);
+  const cond =
+    k.operator === "changes"
+      ? `changes${k.baseline === null || k.baseline === undefined ? " from its value when the thesis was accepted" : ` from ${metricValue(k.baseline, unit)}`}`
+      : `${OP_WORDS[k.operator] ?? k.operator} ${metricValue(k.threshold, unit)}`;
+  return `Kill if ${name} ${cond}${k.check_after ? ` (checked from ${k.check_after})` : ""}.`;
+}
 
 const SOURCE_LABEL: Record<string, string> = {
   sec: "SEC",
   sec_13f: "SEC 13F",
-  stooq: "Stooq",
-  yahoo: "Yahoo Finance",
   twelvedata: "Twelve Data",
-  gdelt: "GDELT",
-  fred: "FRED",
-  eia: "EIA",
   nse: "NSE",
   bse: "BSE",
 };

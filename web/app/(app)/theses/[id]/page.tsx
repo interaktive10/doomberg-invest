@@ -3,26 +3,30 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
 import { ReviewDiff } from "@/components/review-diff";
-import { Empty, Flash, Kpi, KpiRibbon, Note, Page, Section } from "@/components/page";
+import { Empty, Flash, Note, Page, Section } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { choiceChip, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { citeView, factOrder, stripSection, stripTitle } from "@/lib/cards";
 import { ensureReviews, journal, killCriteria, postmortem, reviews, setting, thesis as getThesis, thesisTitle } from "@/lib/data";
 import { localToday, thesisWeeks } from "@/lib/discipline";
-import { code, measure, num } from "@/lib/format";
+import { code, num } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
-import { ACTION_LABEL, label } from "@/lib/labels";
+import { ACTION_LABEL, killMetric, killSentence, label, metricValue } from "@/lib/labels";
 import type { PackDiff } from "@/lib/reviews";
 import { acceptable, canMove, markMoved, positionOpen, STATE_LABEL } from "@/lib/theses";
+import { cn } from "@/lib/utils";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
 import { requireUser } from "@/lib/auth";
 
-// BRIEF §6 Theses: the thesis page with the card, kill-criteria status, review history and journal entries, plus the
-// §1.8 moves (accept, dismiss, start a position, review verdicts, close with a post-mortem).
+// BRIEF §6 Theses: the thesis page with the card, kill criteria in words with their status, review history and
+// journal entries, plus the §1.8 moves (accept, dismiss, start a position, review verdicts, close with a
+// post-mortem). Overhaul PR 4: no ribbon; each form opens from its button and is left out when it can't be used.
 
-const OPS: Record<string, string> = { "<": "<", "<=": "≤", ">": ">", ">=": "≥", "==": "=", changes: "changes" }; // pipeline/thesis/render.py
+/** A form behind a button: a native disclosure whose summary looks like one (no script). */
+const OPENER = "list-none [&::-webkit-details-marker]:hidden";
 
 const STATE_BADGE = {
   research: "secondary",
@@ -32,9 +36,6 @@ const STATE_BADGE = {
   closed: "outline",
   dismissed: "outline",
 } as const;
-
-// The ribbon's Stage colour: accent for a thesis, up for a position, warn for a review.
-const STATE_TONE = { thesis: "accent", position: "up", review: "warn" } as const;
 
 function Hidden({ id }: { id: string }) {
   return <input type="hidden" name="thesis_id" value={id} />;
@@ -71,8 +72,6 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
   const card = kills.length > 0 ? stripSection(stripTitle(t.card_md), "Kill criteria") : stripTitle(t.card_md);
   const cited = factOrder(card);
   const triggered = kills.filter((k) => k.status === "triggered").length;
-  const ok = kills.filter((k) => k.status === "ok").length;
-  const tone = t.state === "thesis" || t.state === "position" || t.state === "review" ? STATE_TONE[t.state] : undefined;
   return (
     <Page
       title={
@@ -88,27 +87,13 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
           Card week {t.created_week} · {t.author}
           {t.accepted_at ? ` · accepted ${t.accepted_at.slice(0, 10)} (${weeks} week(s) ago)` : ""}
           {t.next_review ? ` · next review ${t.next_review}` : ""}
-          {open ? " · position open" : ""} · <Link href={`/company/${t.company_id}`}>company page</Link>
+          {open ? " · position open" : ""}
+          {kills.length > 0 ? ` · kill criteria ${triggered} of ${kills.length} triggered` : ""} ·{" "}
+          <Link href={`/company/${t.company_id}`}>company page</Link>
         </p>
       }
     >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <KpiRibbon>
-        <Kpi label="Stage" value={STATE_LABEL[t.state]} tone={tone} />
-        <Kpi
-          label="Weeks since accepted"
-          value={t.accepted_at ? weeks : "not accepted"}
-          hint={`${num(minWeeks, 0)} needed before a position`}
-        />
-        <Kpi label="Review due" value={t.next_review ?? "–"} />
-        <Kpi
-          label="Kill criteria"
-          value={kills.length}
-          hint={`${triggered} triggered · ${ok} ok`}
-          tone={triggered > 0 ? "down" : undefined}
-        />
-        <Kpi label="Journal entries" value={entries.length} hint={open ? "position open" : "no position"} />
-      </KpiRibbon>
       {t.dismissed_reason ? (
         <p className="rounded-md border border-line bg-panel px-4 py-3 text-[13px]">
           <span className="font-medium">Dismissed:</span> {t.dismissed_reason}
@@ -122,26 +107,29 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
           description="Accept to watch its kill criteria and review it after each filing, or dismiss it with a reason."
           className="border-l-2 border-l-accent"
         >
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
+          <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
             {acceptable(t) ? (
               <form action={accept}>
                 <Hidden id={t.id} />
                 <SubmitButton>Accept as thesis</SubmitButton>
               </form>
             ) : (
-              <p className="max-w-md text-[13px] text-muted">
+              <p className="max-w-md basis-full text-[13px] text-muted">
                 Manual research: there is no validated card yet, so this can&apos;t become a thesis (a thesis needs the card&apos;s
                 kill criteria and review dates). The weekly routine writes cards for the week&apos;s shortlist.
               </p>
             )}
-            <form action={dismissThesis} className="flex flex-wrap items-end gap-2">
-              <Hidden id={t.id} />
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="dismiss-reason">Reason to dismiss</Label>
-                <Input id="dismiss-reason" name="reason" required className="w-64 max-w-full" />
-              </div>
-              <SubmitButton variant="outline">Dismiss</SubmitButton>
-            </form>
+            <details>
+              <summary className={cn(buttonVariants({ variant: "outline" }), OPENER)}>Dismiss</summary>
+              <form action={dismissThesis} className="mt-3 flex flex-wrap items-end gap-2">
+                <Hidden id={t.id} />
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="dismiss-reason">Reason to dismiss</Label>
+                  <Input id="dismiss-reason" name="reason" required className="w-64 max-w-full" />
+                </div>
+                <SubmitButton variant="outline">Confirm dismissal</SubmitButton>
+              </form>
+            </details>
           </div>
         </Section>
       ) : null}
@@ -158,38 +146,30 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
         {kills.length === 0 ? (
           <Empty>No kill criteria.</Empty>
         ) : (
-          <Table label="Kill criteria">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Metric</TableHead>
-                <TableHead>Condition</TableHead>
-                <TableHead>Check after</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead num>Last value</TableHead>
-                <TableHead>Checked</TableHead>
-                <TableHead>Why</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {kills.map((k) => (
-                <TableRow key={k.id}>
-                  <TableCell>
-                    <code>{k.metric}</code>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {OPS[k.operator] ?? k.operator} {k.threshold ?? ""}
-                  </TableCell>
-                  <TableCell className="num whitespace-nowrap">{k.check_after}</TableCell>
-                  <TableCell>
-                    <Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{k.status}</Badge>
-                  </TableCell>
-                  <TableCell num>{measure(k.last_value)}</TableCell>
-                  <TableCell className="num whitespace-nowrap">{k.last_checked ?? ""}</TableCell>
-                  <TableCell className="max-w-sm min-w-48">{k.why ?? ""}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ul aria-label="Kill criteria" className="flex flex-col gap-2">
+            {kills.map((k) => (
+              <li key={k.id} className="rounded-sm border border-line bg-canvas p-3 text-[13px]">
+                <div className="flex flex-wrap items-start gap-2">
+                  <Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{k.status}</Badge>
+                  <span className="min-w-0 flex-1 text-fg">{killSentence(k)}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  Now <span className="num">{metricValue(k.last_value, killMetric(k.metric).unit)}</span>
+                  {k.last_checked ? (
+                    <>
+                      , checked week <span className="num">{k.last_checked}</span>
+                    </>
+                  ) : null}
+                  {k.triggered_week ? (
+                    <>
+                      ; triggered week <span className="num">{k.triggered_week}</span>
+                    </>
+                  ) : null}
+                  .{k.why ? ` Why: ${k.why}` : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
         )}
       </Section>
 
@@ -214,31 +194,34 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                 <ReviewDiff id={r.period_end ?? r.created_at.slice(0, 10)} diff={r.pack_diff as Partial<PackDiff>} />
                 {r.note ? <p className="mt-3 text-[13px]">Note: {r.note}</p> : null}
                 {r.verdict === null && t.state === "review" ? (
-                  <form action={decideReview} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
-                    <Hidden id={t.id} />
-                    <input type="hidden" name="review_id" value={r.id} />
-                    <fieldset className="min-w-0">
-                      <legend className="mb-2 text-xs font-medium text-muted">Verdict</legend>
-                      <div className="flex flex-wrap gap-2">
-                        {(["intact", "weakened", "broken"] as const).map((v) => (
-                          <label key={v} className={choiceChip}>
-                            <input type="radio" name="verdict" value={v} required />
-                            {v}
-                          </label>
-                        ))}
+                  <details className="mt-4 border-t border-line pt-4">
+                    <summary className={cn(buttonVariants({ size: "sm" }), OPENER)}>Record a verdict</summary>
+                    <form action={decideReview} className="mt-3 flex flex-col gap-3">
+                      <Hidden id={t.id} />
+                      <input type="hidden" name="review_id" value={r.id} />
+                      <fieldset className="min-w-0">
+                        <legend className="mb-2 text-xs font-medium text-muted">Verdict</legend>
+                        <div className="flex flex-wrap gap-2">
+                          {(["intact", "weakened", "broken"] as const).map((v) => (
+                            <label key={v} className={choiceChip}>
+                              <input type="radio" name="verdict" value={v} required />
+                              {v}
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor={`note-${r.id}`}>Note</Label>
+                        <Textarea id={`note-${r.id}`} name="note" />
                       </div>
-                    </fieldset>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor={`note-${r.id}`}>Note</Label>
-                      <Textarea id={`note-${r.id}`} name="note" />
-                    </div>
-                    <label className="flex items-center gap-2 text-[13px]">
-                      <input type="checkbox" name="to_journal" /> Also add the note to the journal
-                    </label>
-                    <div>
-                      <SubmitButton>Record verdict</SubmitButton>
-                    </div>
-                  </form>
+                      <label className="flex items-center gap-2 text-[13px]">
+                        <input type="checkbox" name="to_journal" /> Also add the note to the journal
+                      </label>
+                      <div>
+                        <SubmitButton>Record verdict</SubmitButton>
+                      </div>
+                    </form>
+                  </details>
                 ) : null}
               </li>
             ))}
@@ -273,78 +256,87 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
             </TableBody>
           </Table>
         )}
-        {t.state !== "dismissed" ? (
-          <form action={addJournal} className="mt-4 grid grid-cols-1 gap-4 rounded-sm border border-line bg-canvas p-3 sm:p-4 md:grid-cols-2">
-            <Hidden id={t.id} />
-            <h3 className="text-sm font-semibold md:col-span-2">Add a journal entry</h3>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="j-action">Action</Label>
-              <Select id="j-action" name="action" defaultValue={t.state === "thesis" && !open ? "start_position" : "note"}>
-                {(["note", "start_position", "add", "trim", "exit", "review"] as const).map((a) => (
-                  <option key={a} value={a}>
-                    {ACTION_LABEL[a]}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="j-date">Date</Label>
-              <Input id="j-date" name="entry_date" type="date" defaultValue={today} required />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="j-pct">% of portfolio (optional)</Label>
-              <Input id="j-pct" name="portfolio_pct" type="number" step="0.1" min="0" max="100" inputMode="decimal" />
-            </div>
-            <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label htmlFor="j-reason">Reason</Label>
-              <Textarea id="j-reason" name="reason" required />
-            </div>
-            <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label htmlFor="j-override">Override reason (a position before the thesis is {num(minWeeks, 0)} weeks old)</Label>
-              <Textarea id="j-override" name="override_reason" className="min-h-16" />
-              <Note>
-                Discipline rule (§11.9): the thesis is {weeks} week(s) old; a start-position entry needs {num(minWeeks, 0)}, or an override
-                reason.
-              </Note>
-            </div>
-            <div className="md:col-span-2">
-              <SubmitButton>Add entry</SubmitButton>
-            </div>
-          </form>
+        {t.state !== "dismissed" && t.state !== "closed" ? (
+          <details className="mt-4">
+            <summary className={cn(buttonVariants({ variant: "outline", size: "sm" }), OPENER)}>Add a journal entry</summary>
+            <form action={addJournal} className="mt-3 grid grid-cols-1 gap-4 rounded-sm border border-line bg-canvas p-3 sm:p-4 md:grid-cols-2">
+              <Hidden id={t.id} />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="j-action">Action</Label>
+                <Select id="j-action" name="action" defaultValue={t.state === "thesis" && !open ? "start_position" : "note"}>
+                  {(["note", "start_position", "add", "trim", "exit", "review"] as const).map((a) => (
+                    <option key={a} value={a}>
+                      {ACTION_LABEL[a]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="j-date">Date</Label>
+                <Input id="j-date" name="entry_date" type="date" defaultValue={today} required />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="j-pct">% of portfolio (optional)</Label>
+                <Input id="j-pct" name="portfolio_pct" type="number" step="0.1" min="0" max="100" inputMode="decimal" />
+              </div>
+              <div className="flex flex-col gap-1.5 md:col-span-2">
+                <Label htmlFor="j-reason">Reason</Label>
+                <Textarea id="j-reason" name="reason" required />
+              </div>
+              <div className="flex flex-col gap-1.5 md:col-span-2">
+                <Label htmlFor="j-override">Override reason (a position before the thesis is {num(minWeeks, 0)} weeks old)</Label>
+                <Textarea id="j-override" name="override_reason" className="min-h-16" />
+                <Note>
+                  Discipline rule (§11.9): the thesis is {weeks} week(s) old; a start-position entry needs {num(minWeeks, 0)}, or an override
+                  reason.
+                </Note>
+              </div>
+              <div className="md:col-span-2">
+                <SubmitButton>Add entry</SubmitButton>
+              </div>
+            </form>
+          </details>
         ) : null}
       </Section>
 
       {canMove(t.state, "close") ? (
-        <Section title="Close with a post-mortem" id="close" description="Closing is final: write down what happened while it's fresh.">
-          <form action={close} className="grid grid-cols-1 gap-4">
-            <Hidden id={t.id} />
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="pm-what">What happened, compared with the thesis</Label>
-              <Textarea id="pm-what" name="what_happened" required />
-            </div>
-            <fieldset className="min-w-0">
-              <legend className="mb-2 text-xs font-medium text-muted">Was the thesis right?</legend>
-              <div className="flex flex-wrap gap-2">
-                {(["yes", "no", "unclear"] as const).map((v) => (
-                  <label key={v} className={choiceChip}>
-                    <input type="radio" name="thesis_right" value={v} defaultChecked={v === "unclear"} />
-                    {v}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="pm-signals">What the signals said</Label>
-              <Textarea id="pm-signals" name="signals" required />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="pm-lessons">Lessons</Label>
-              <Textarea id="pm-lessons" name="lessons" required />
-            </div>
-            <div>
-              <SubmitButton variant="destructive">Close thesis</SubmitButton>
-            </div>
-          </form>
+        <Section title="Close" id="close" description="Closing is final: write down what happened while it's fresh.">
+          {open ? (
+            <p className="text-[13px] text-muted">A position is open: record the exit in the journal before closing.</p>
+          ) : (
+            <details>
+              <summary className={cn(buttonVariants({ variant: "outline", size: "sm" }), OPENER)}>Close with a post-mortem</summary>
+              <form action={close} className="mt-3 grid grid-cols-1 gap-4">
+                <Hidden id={t.id} />
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="pm-what">What happened, compared with the thesis</Label>
+                  <Textarea id="pm-what" name="what_happened" required />
+                </div>
+                <fieldset className="min-w-0">
+                  <legend className="mb-2 text-xs font-medium text-muted">Was the thesis right?</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {(["yes", "no", "unclear"] as const).map((v) => (
+                      <label key={v} className={choiceChip}>
+                        <input type="radio" name="thesis_right" value={v} defaultChecked={v === "unclear"} />
+                        {v}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="pm-signals">What the signals said</Label>
+                  <Textarea id="pm-signals" name="signals" required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="pm-lessons">Lessons</Label>
+                  <Textarea id="pm-lessons" name="lessons" required />
+                </div>
+                <div>
+                  <SubmitButton variant="destructive">Close thesis</SubmitButton>
+                </div>
+              </form>
+            </details>
+          )}
         </Section>
       ) : null}
 

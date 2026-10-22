@@ -1,5 +1,5 @@
-"""M4-04: Stooq's weekly CSV format, the format of a manual price import (imports/us_prices/<TICKER>.csv) since US
-prices come from Yahoo (docs/SPEC_ISSUES.md 37), and the answers Stooq gave instead of data (BRIEF §4.4)."""
+"""M4-04: the manual price import's weekly CSV (imports/us_prices/<TICKER>.csv, BRIEF §4.4's fallback; the format
+Stooq's weekly CSV had), read by pipeline/prices/bars.py since the Stooq client went (docs/SPEC_ISSUES.md 52)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline.net.stooq import StooqUnavailable, friday_of, parse_csv
+from pipeline.prices.bars import NotWeeklyCsv, friday_of, parse_csv
 
 PX = Path(__file__).resolve().parents[2] / "fixtures" / "px"
 
@@ -25,7 +25,7 @@ def test_index_file_has_no_volume() -> None:
     assert bars and all(b.volume is None for b in bars)
 
 
-@pytest.mark.parametrize("name", ["no_data.txt", "limit.txt"])
-def test_non_csv_answers_raise(name: str) -> None:
-    with pytest.raises(StooqUnavailable):
-        parse_csv((PX / name).read_bytes())
+@pytest.mark.parametrize("body", [b"No data", b"Exceeded the daily hits limit", b"", b"Date,Close\n"])
+def test_a_file_that_is_not_a_weekly_csv_raises(body: bytes) -> None:
+    with pytest.raises(NotWeeklyCsv):
+        parse_csv(body)

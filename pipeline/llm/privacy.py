@@ -37,7 +37,6 @@ from pydantic import BaseModel
 PUBLIC_MODULES = (
     "pipeline.llm",
     "pipeline.facts",
-    "pipeline.capex",
     "pipeline.india.triage",
     "pipeline.thesis.evidence_pack",
 )

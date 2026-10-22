@@ -12,8 +12,6 @@ const MAIN = [
 
 const MORE = [
   ["/journal", "Journal"],
-  ["/screener", "Screener"],
-  ["/capex", "Capex Desk"],
   ["/lab", "Signal Lab"],
   ["/settings", "Settings"],
 ] as const;

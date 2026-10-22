@@ -30,7 +30,6 @@ from pipeline.net.http import HttpClient, MockNotRegistered
 
 NSE_HOME = "https://www.nseindia.com/"
 NSE_API = "https://www.nseindia.com/api"
-NSE_ARCHIVES = "https://nsearchives.nseindia.com"
 WARM_EVERY_S = 600.0
 BLOCK_STATUSES = frozenset({401, 403, 429})
 MAX_CONSECUTIVE_BLOCKS = 3

@@ -1,9 +1,7 @@
-"""Stooq's weekly CSV format (Date,Open,High,Low,Close,Volume; a bar dated at its week's last trading day): the format
-of a manual price import (imports/us_prices/<TICKER>.csv, BRIEF §4.4's fallback) and of the F-PX fixtures. Stooq
-itself is no longer asked: since 2026 its CSV needs a CAPTCHA-issued apikey (the first live run, 2026-09-29, got an
-HTML page for every symbol), and US prices come from Yahoo (pipeline/net/yahoo.py, docs/SPEC_ISSUES.md 37).
-
-Bars are keyed by their week's Friday, like prices_w everywhere."""
+"""Weekly bars, keyed by their week's Friday like prices_w everywhere, and the manual price import's CSV format
+(imports/us_prices/<TICKER>.csv, BRIEF §4.4's fallback; the F-PX fixtures): Date,Open,High,Low,Close,Volume, a bar
+dated at its week's last trading day, the format Stooq's weekly CSV had. Twelve Data (pipeline/net/twelvedata.py) is
+the only price source that is asked (docs/SPEC_ISSUES.md 38, 52)."""
 
 from __future__ import annotations
 
@@ -14,8 +12,8 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 
-class StooqUnavailable(Exception):
-    """Not a weekly CSV (a manual import that isn't one, or one of the pages Stooq answered instead)."""
+class NotWeeklyCsv(Exception):
+    """A manual import that isn't a weekly price CSV."""
 
 
 @dataclass(frozen=True)
@@ -33,7 +31,7 @@ def friday_of(d: date) -> date:
 def parse_csv(body: bytes) -> list[Bar]:
     text = body.decode("utf-8-sig", "replace").strip()
     if not text.lower().startswith("date,"):
-        raise StooqUnavailable(text[:120] or "empty response")
+        raise NotWeeklyCsv(text[:120] or "empty file")
     bars: dict[date, Bar] = {}
     for row in csv.DictReader(io.StringIO(text)):
         try:
@@ -48,5 +46,5 @@ def parse_csv(body: bytes) -> list[Bar]:
         if close > 0:
             bars[friday_of(day)] = Bar(friday_of(day), close, volume)
     if not bars:
-        raise StooqUnavailable("CSV without price rows")
+        raise NotWeeklyCsv("CSV without price rows")
     return [bars[k] for k in sorted(bars)]

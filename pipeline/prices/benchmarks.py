@@ -1,8 +1,7 @@
 """Benchmarks (BRIEF §4.4, config/context.yaml `benchmarks`) -> benchmarks_w, keyed by the week's Friday.
 
 - US: ^spx and the sector ETFs from the US price source's weekly bars (pipeline/prices/source.py: Twelve Data, which
-  asks SPY for ^spx, or Yahoo, which asks ^GSPC; ten years come with each download). Rows keep the symbols
-  config/context.yaml names.
+  asks SPY for ^spx; ten years come with each download). Rows keep the symbols config/context.yaml names.
 - India: NIFTY 50 and NIFTY 500 from NSE's daily index-close file for the week's last trading day, fetched by the
   India weekly run next to the bhavcopy (it knows which day traded). History builds up week by week."""
 
@@ -15,7 +14,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from pipeline.db.models import BenchmarkW
-from pipeline.net.stooq import Bar, friday_of
+from pipeline.prices.bars import Bar, friday_of
 from pipeline.prices.source import PriceUnavailable, WeeklySource
 
 NSE_INDEX_CLOSE = "https://nsearchives.nseindia.com/content/indices/ind_close_all_{day:%d%m%Y}.csv"

@@ -4,8 +4,8 @@
 
 Everything as of week W reads through pipeline.db.pit.as_of(W), so a re-run over the same data gives the same rows
 whether or not later filings exist (M4-02). Evidence never uses price; prices enter only at the candidate stage
-(Evidence >= 40 this week or last): US closes come from Twelve Data for that set only (Stooq until 2026-10, then
-Yahoo; docs/SPEC_ISSUES.md 37, 38), in price_targets' order, India from the bhavcopy (M3).
+(Evidence >= 40 this week or last): US closes come from Twelve Data for that set only (docs/SPEC_ISSUES.md 38, 52), in
+price_targets' order, or from a manual CSV import, India from the bhavcopy (M3).
 
 Two passes over the universe in batches keep memory flat: the first collects the cross-sectional inputs (S8's
 revenue-size deciles, S12's sector medians), the second computes signals, flags and Evidence. `--markets` scores a
@@ -32,7 +32,6 @@ from uuid import UUID
 import psycopg
 import yaml
 
-from pipeline.capex.desk import load_views
 from pipeline.db import repo
 from pipeline.db.models import (
     Company,
@@ -51,15 +50,14 @@ from pipeline.db.pit import as_of, cutoff_for, select_as_of
 from pipeline.db.weights import read as read_weights
 from pipeline.db.weights import record_weights_in_use
 from pipeline.net.http import HttpClient
-from pipeline.net.stooq import Bar, parse_csv
 from pipeline.net.twelvedata import TwelveDataClient
-from pipeline.net.yahoo import YahooClient
 from pipeline.prices import benchmarks as bench
+from pipeline.prices.bars import Bar, parse_csv
 from pipeline.prices.source import NoSuchSymbol, PriceUnavailable, WeeklySource
 from pipeline.prices.splits import Adjusted, SourceSplit, adjust, date_source_split, rebased
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals import context, redflags, registry, reverse_dcf, s01_orderbook
-from pipeline.signals.base import CapexView, Ctx, Event, Fact, Holding, Insider, SectorView, months_before, num
+from pipeline.signals.base import Ctx, Event, Fact, Holding, Insider, SectorView, months_before, num
 from pipeline.signals.buckets import Ranked, bucket, market_cap_ok, shortlist
 from pipeline.signals.context import percentile_rank
 from pipeline.signals.scores import Evidence, Weights, evidence, gap
@@ -212,7 +210,6 @@ class CrossSection:
     tightness: Counter[tuple[str, str]] = field(default_factory=Counter)
     holder_pct: dict[UUID, Decimal] = field(default_factory=dict)
     sectors: dict[tuple[str, str], SectorView] = field(default_factory=dict)
-    capex: dict[UUID, CapexView] = field(default_factory=dict)  # S11: the Capex Desk's view (M5, capex/desk.py)
     tightness_quarters: int = 2  # config/signals.yaml s12_cycle.tightness_lookback_quarters
 
     def add(self, c: Company, s: Series, holdings: list[Holding], facts: list[Fact], week: date) -> None:
@@ -351,7 +348,6 @@ def score_company(
         holdco=(c.market, symbol.upper()) in cfgs.holdcos,
         holder_pct_in_size_decile=cross.holder_pct.get(c.id),
         sector=cross.sectors.get((c.market, c.sector)) if c.sector else SectorView(None),
-        capex=cross.capex.get(c.id, CapexView()),
         surveillance=surveillance,
         sic=c.sic,
     )
@@ -369,11 +365,6 @@ def score_company(
 
 
 # ---------------------------------------------------------------- prices and context (candidate stage)
-
-
-def price_source(http: HttpClient) -> WeeklySource:
-    """Twelve Data unless PRICE_SOURCE=yahoo (docs/SPEC_ISSUES.md 38)."""
-    return YahooClient(http) if http.settings.price_source == "yahoo" else TwelveDataClient(http)
 
 
 def price_targets(
@@ -617,7 +608,6 @@ def run(
                 week,
             )
     cross.finish()
-    cross.capex = load_views(conn, week, companies)
 
     scored: dict[UUID, Scored] = {}
     s2 = cfgs.signals["s2_incremental_roic"]
@@ -669,7 +659,7 @@ def run(
     progress(stats, t0, f"signals for {len(scored)} companies, stage {stats.stage}")
 
     if http is not None:
-        source = price_source(http)
+        source = TwelveDataClient(http)
         us_bench = list(cfgs.context["benchmarks"]["us"])
         have = repo.benchmarks_at(conn, us_bench, week)
         rows, errs = bench.fetch_us(source, [b for b in us_bench if b not in have], week)

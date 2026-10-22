@@ -24,7 +24,6 @@ routing:
   P-01: [gemini, groq, openrouter]
   P-02: [gemini, groq, openrouter]
   P-05: [gemini, groq]
-  P-06: [gemini, groq, openrouter]
   P-07: [gemini, groq, openrouter]
   P-04-fallback: [gemini]
 work_order: [thesis, stage]   # the text run's order (pipeline/facts/run.py RANK, which the code reads)

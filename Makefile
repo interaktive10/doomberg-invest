@@ -31,9 +31,8 @@ migrate-dev:
 	@if [ -f pipeline/db/migrate.py ]; then $(UV) python -m pipeline.db.migrate; \
 	else echo "migrate-dev: pipeline/db/migrate.py arrives in M1" >&2; exit 1; fi
 
-universe:         ## M0: fetch universe snapshots (network) and resolve the capex seed
+universe:         ## M0: fetch universe snapshots (network)
 	$(UV) python scripts/fetch_fixtures.py universe
-	$(UV) python scripts/resolve_capex_seed.py --write
 
 seed-dev:         ## M1: companies from the universe snapshots, initial weights version, source_health rows
 	$(UV) python -m pipeline.db.seed

@@ -10,8 +10,8 @@ MAX_PAGES = 400  # annual reports run to 300+ pages; anything longer is cut (log
 
 class PdfUnreadable(ValueError):
     """A body PDFium can't open (an error page served as a .pdf, a truncated download). A ValueError, so the callers
-    that skip a broken document (the Capex Desk's annual reports, the daily run's previous version) skip this one: the
-    first run with the LLM on stopped the whole capex job on one (2026-10-08)."""
+    that skip a broken document (the text run's documents, the daily run's previous version) skip this one: the first
+    run with the LLM on stopped a whole job on one (2026-10-08)."""
 
 
 def page_texts(data: bytes, max_pages: int = MAX_PAGES) -> list[str]:
@@ -44,10 +44,3 @@ def normalize_pages(pages: list[str]) -> Normalized:
 
 def normalize_pdf(data: bytes) -> Normalized:
     return normalize_pages(page_texts(data))
-
-
-def page_of(page_map: list[dict[str, int]], offset: int) -> int | None:
-    for p in page_map:
-        if p["char_start"] <= offset < p["char_end"] or p["char_start"] == offset == p["char_end"]:
-            return p["page"]
-    return None

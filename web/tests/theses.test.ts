@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { needsKillReview } from "@/lib/reviews";
-import { acceptable, afterVerdict, canMove, markMoved, positionOpen, verdicts } from "@/lib/theses";
+import { acceptable, afterVerdict, canMove, group, killTally, markMoved, positionOpen, STATES, verdicts } from "@/lib/theses";
 
 describe("thesis workflow (BRIEF §1.8)", () => {
   it("offers each move in its state only", () => {
@@ -80,5 +80,24 @@ describe("a broken verdict keeps the thesis in Review (§1.8; M7 review R2-F3)",
     expect(needsKillReview("review", [q2("intact"), q3("broken")])).toBe(false);
     expect(needsKillReview("review", [q3("broken"), q2("intact")])).toBe(false);
     expect(needsKillReview("review", [q3("intact"), q2("intact")])).toBe(true);
+  });
+});
+
+describe("the Theses screen's three groups (overhaul PR 4)", () => {
+  it("Needs you, Watching and Closed cover every state once", () => {
+    expect(STATES.map((s) => [s, group(s)])).toEqual([
+      ["research", "needs"],
+      ["thesis", "watching"],
+      ["position", "watching"],
+      ["review", "needs"],
+      ["closed", "closed"],
+      ["dismissed", "closed"],
+    ]);
+  });
+
+  it("counts the kill criteria as 'n of m triggered'", () => {
+    expect(killTally([])).toBe("none");
+    expect(killTally(["ok", "unknown"])).toBe("0 of 2 triggered");
+    expect(killTally(["triggered", "ok", "triggered"])).toBe("2 of 3 triggered");
   });
 });

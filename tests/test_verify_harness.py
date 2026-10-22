@@ -1,5 +1,5 @@
 """scripts/verify.py: BLOCKED is reported, never turned into PASS (BRIEF §9). M5-01 runs its mock-based structure
-tests first and reports BLOCKED(key) only when they pass and no cassette is recorded."""
+tests first and reports BLOCKED(key) only when they pass and no cassette is recorded. Retired checks are never run."""
 
 from __future__ import annotations
 
@@ -30,7 +30,39 @@ def test_m5_01_is_blocked_on_the_key_until_cassettes_exist() -> None:
     recorded = any((verify.CASSETTES / "P-01").glob("*.json"))
     assert (verify._needs_cassettes() is None) == recorded
     assert "pipeline.facts.evaluate --replay" in m5_01.command[-1] and "tests/facts/test_fsyn.py" in m5_01.command[-1]
-    assert [c.id for c in verify.CHECKS if c.milestone == "m5"] == [f"M5-0{i}" for i in range(1, 8)]
+    assert [c.id for c in verify.CHECKS if c.milestone == "m5"] == [f"M5-0{i}" for i in range(1, 5)]
+
+
+def test_the_capex_desk_checks_are_retired() -> None:
+    """Overhaul PR 4 (docs/SPEC_ISSUES.md 52): M5-05/06/07 tested the Capex Desk and S11, which are deleted, so they
+    are retired (never run, listed as RETIRED in verify-m5 and later), and no check runs a deleted test file."""
+    assert set(verify.RETIRED) == {"M5-05", "M5-06", "M5-07"}
+    assert not set(verify.RETIRED) & {c.id for c in verify.CHECKS}
+    commands = " ".join(" ".join(c.command) for c in verify.CHECKS)
+    assert "tests/capex" not in commands and "test_capex.py" not in commands
+    assert not any("capex" in c.description.lower() or "S1-S12" in c.description for c in verify.CHECKS)
+    assert all((ROOT / p).exists() for c in verify.CHECKS for p in c.command if p.startswith("tests/"))
+
+
+def test_retired_checks_are_listed_for_their_milestones(monkeypatch: pytest.MonkeyPatch,
+                                                        capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
+    monkeypatch.setattr(verify, "CHECKS", [])
+    monkeypatch.setattr(verify, "write_report", lambda results, target: None)  # not docs/VERIFY_REPORT.md
+    assert verify.main(["--milestone", "m4"]) == 0
+    assert "RETIRED" not in capsys.readouterr().out
+    assert verify.main(["--milestone", "m5"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    retired = [line.split()[:2] for line in out if "RETIRED" in line]
+    assert retired == [[i, "RETIRED"] for i in ("M5-05", "M5-06", "M5-07")]
+
+
+def test_m7_01_is_the_restated_flow() -> None:
+    """Overhaul PR 4: the Screener UI and the Capex Desk page are gone, so M7-01 is login -> candidates -> company ->
+    thesis -> journal entry -> review -> close with a post-mortem (BRIEF §8), still read from flow.spec.ts."""
+    m7_01 = next(c for c in verify.CHECKS if c.id == "M7-01")
+    assert "candidates -> company -> thesis -> journal entry -> review -> close with a post-mortem" in m7_01.description
+    assert "screener" not in m7_01.description and "capex" not in m7_01.description
+    assert m7_01.command[-2:] == ["auth.setup.ts", "flow.spec.ts"]
 
 
 def test_m6_checks() -> None:

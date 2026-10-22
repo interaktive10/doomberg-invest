@@ -317,8 +317,6 @@ def test_digest_issue_body_snapshot(conn: psycopg.Connection[Any]) -> None:
     conn.execute("update kill_criteria set status = 'triggered', triggered_week = %s, last_value = 0.031 "
                  "where thesis_id = %s", (W, tid))  # fmt: skip
     conn.execute("update theses set state = 'review' where id = %s", (tid,))
-    brief = "## Capex brief — week ending 2026-09-18\n\n### Demand index\n\n- grid: rising (+1.2σ)\n"
-    conn.execute("insert into capex_briefs (week_end, body_md) values (%s, %s)", (W, brief))
     conn.execute(
         "insert into source_health (source, last_success, last_error, stale) values "
         "('sec', '2026-09-18 06:00+00', null, false), ('twelvedata', '2026-09-07 06:00+00', null, false), "

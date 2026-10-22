@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Empty, Flash, Kpi, KpiRibbon, Page, Section } from "@/components/page";
+import { Empty, Flash, Page, Section } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label, Textarea } from "@/components/ui/input";
@@ -21,16 +21,9 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
   const q = await searchParams;
   const [entries, pms, ths] = await Promise.all([journal(), postmortems(), theses()]);
   const names = new Map(ths.map((t) => [t.id, t.companies ? `${t.companies.name} (${code(t.companies)})` : t.company_id]));
-  const count = (action: string) => entries.filter((e) => e.action === action).length;
   return (
     <Page title="Journal" description="Private: entries and post-mortems stay in your database and are never sent to any LLM.">
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <KpiRibbon>
-        <Kpi label="Entries" value={entries.length} />
-        <Kpi label="Positions started" value={count("start_position")} />
-        <Kpi label="Exits" value={count("exit")} />
-        <Kpi label="Thesis was right" value={pms.filter((p) => p.thesis_right === true).length} hint={`of ${pms.length} post-mortems`} />
-      </KpiRibbon>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <Section title="Entries" id="entries" description="Newest first. Entries about a thesis are added on its page.">
           {entries.length === 0 ? (

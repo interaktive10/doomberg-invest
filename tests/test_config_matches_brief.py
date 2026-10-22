@@ -1,4 +1,4 @@
-"""M0-06: every default in BRIEF §4.6-4.8 (plus §1.5, §1.7, §4.4, §4.7, §4.10.5, §4.11) equals the config value.
+"""M0-06: every default in BRIEF §4.6-4.8 (plus §1.5, §1.7, §4.4, §4.7, §4.10.5) equals the config value.
 
 Values below are transcribed by hand from docs/BRIEF.md, with the section each comes from. If a config value
 changes, this test fails until the brief (a protected path) is changed too.
@@ -98,11 +98,6 @@ EXPECTED: list[tuple[str, str, Any, str]] = [
     ("signals.yaml", "s10_special.reorganization_months", 24, "§4.6 S10"),
     ("signals.yaml", "s10_special.rights_issue_months", 6, "§4.6 S10"),
     ("signals.yaml", "s10_special.strength", 0.6, "§4.6 S10"),
-    ("signals.yaml", "s11_capex.min_lag_pp", 10.0, "§4.11 S11"),
-    ("signals.yaml", "s11_capex.second_order_distance", 2, "§4.11 S11"),
-    ("signals.yaml", "s11_capex.strength_base", 0.5, "§4.11 S11"),
-    ("signals.yaml", "s11_capex.strength_india_export_bonus", 0.25, "§4.11 S11"),
-    ("signals.yaml", "s11_capex.strength_s1_bonus", 0.25, "§4.11 S11"),
     ("signals.yaml", "s12_cycle.max_capex_to_da", 1.0, "§4.6 S12"),
     ("signals.yaml", "s12_cycle.underinvest_years", 3, "§4.6 S12"),
     ("signals.yaml", "s12_cycle.demand_turn_quarters", 2, "§4.6 S12"),
@@ -119,7 +114,6 @@ EXPECTED: list[tuple[str, str, Any, str]] = [
             "behavior": ["S7", "S8"],
             "text": ["S9"],
             "structural": ["S10"],
-            "capex": ["S11"],
             "cycle": ["S12"],
         },
         "§4.8.1",
@@ -154,7 +148,8 @@ EXPECTED: list[tuple[str, str, Any, str]] = [
     ("signals.yaml", "xbrl_map.rpo", ["RevenueRemainingPerformanceObligation"], "§4.1.2"),
     ("signals.yaml", "xbrl_map.diluted_shares", ["WeightedAverageNumberOfDilutedSharesOutstanding"], "§4.1.2"),
     ("signals.yaml", "xbrl_map.shares_outstanding", ["dei:EntityCommonStockSharesOutstanding"], "§4.1.2"),
-    # §4.8 weights (initially equal) and §4.10.5 lab rules
+    # §4.8 weights (initially equal) and §4.10.5 lab rules. S11 and the capex family stay in weights.yaml until a
+    # weights PR drops them; evidence() reads only signals.yaml's families (SPEC_ISSUES 52)
     (
         "weights.yaml",
         "families",
@@ -233,7 +228,6 @@ EXPECTED: list[tuple[str, str, Any, str]] = [
     ("universe_us.yaml", "exclude.sic", ["6770"], "§1.3 SPACs"),
     ("universe_in.yaml", "series", ["EQ"], "§1.3"),
     ("universe_in.yaml", "candidate_min_mcap_inr", 5_000_000_000, "§1.3 (Rs 500 crore)"),
-    ("categories.yaml", "direction", {"rising_min_sigma": 0.5, "falling_max_sigma": -0.5}, "§4.11"),
 ]
 
 
@@ -254,20 +248,13 @@ def test_default_matches_brief(file: str, key: str, expected: Any, ref: str) -> 
     assert _get(_load(file), key) == expected, f"{file}:{key} differs from BRIEF {ref}"
 
 
-def test_categories_match_brief() -> None:
-    assert sorted(_load("categories.yaml")["categories"]) == sorted(
-        [
-            "compute",
-            "networking",
-            "optical",
-            "power_equipment",
-            "grid",
-            "cooling",
-            "construction",
-            "on_site_power",
-            "electronics_manufacturing",
-        ]
-    ), "BRIEF §1.10 category map"
+def test_s11_and_the_category_map_are_gone() -> None:
+    """Overhaul PR 4 (SPEC_ISSUES 52): S11 went with the Capex Desk, so signals.yaml has no s11_capex block and no
+    capex family, the registry has no S11, and config/categories.yaml (the desk's category map) is deleted."""
+    from pipeline.signals.registry import FAMILY
+
+    assert "s11_capex" not in _load("signals.yaml") and "S11" not in FAMILY and "capex" not in FAMILY.values()
+    assert not (CONFIG / "categories.yaml").exists()
 
 
 def test_capex_seed_matches_appendix_h() -> None:

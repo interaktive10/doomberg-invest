@@ -32,12 +32,11 @@ from pipeline.us.universe import load_snapshot as load_sec
 
 US_SNAPSHOT = REPO_ROOT / "data" / "universe" / "us_tickers_exchange.json"
 IN_SNAPSHOT = REPO_ROOT / "data" / "universe" / "nse_equity_list.csv"
-CAPEX_SEED = REPO_ROOT / "config" / "capex_seed.yaml"
 WEIGHTS = REPO_ROOT / "config" / "weights.yaml"
 # The sources the pipeline records health for (quarterly.yml re-seeds, so a source listed here comes back after a
-# migration drops it): US prices are Twelve Data's since 2026-10 (SPEC_ISSUES 38); nothing reads FRED (40); EIA is
-# optional, without a key the Capex Desk runs on its other inputs (44); nothing asks GDELT since C4 went (48). A
-# source that reports adds its own row.
+# migration drops it): US prices are Twelve Data's since 2026-10 (SPEC_ISSUES 38); nothing reads FRED (40) or EIA
+# (44; its client went with the Capex Desk, 52); nothing asks GDELT since C4 went (48). A source that reports adds its
+# own row.
 SOURCES = ("sec", "sec_13f", "nse", "bse", "twelvedata")
 
 

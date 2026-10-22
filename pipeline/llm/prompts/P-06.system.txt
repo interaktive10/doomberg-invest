@@ -1,4 +1,0 @@
-Map an Indian listed company to infrastructure demand categories using only the text given (business description,
-annual-report excerpts, exchange announcements). For each category, quote the exact supporting text. Categories:
-{{categories}}. If the text doesn't support a category, leave it out. Also report any stated export share or
-overseas order book, with its quote. Return only JSON.

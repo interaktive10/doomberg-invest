@@ -9,7 +9,7 @@ import { db } from "@/lib/supabase/admin";
 
 // BRIEF §6 Candidates actions. "research" opens a thesis in state research (author manual; the weekly routine writes
 // cards for the shortlist) so the company is priced and scored even outside the universe (§4.4); "dismiss" needs a
-// reason (migration 0011's check) and hides the company for that week.
+// reason (migration 0011's check) and hides the company until the evidence changes (lib/candidates.ts dismissalHolds).
 
 export async function research(form: FormData): Promise<void> {
   await requireUser();
@@ -46,5 +46,5 @@ export async function dismiss(form: FormData): Promise<void> {
   const res = await db().from("candidate_actions").insert({ company_id: companyId, week_end: week, action: "dismiss", reason });
   if (res.error) redirect(withMessage(back, "error", res.error.message));
   revalidatePath("/candidates");
-  redirect(withMessage(back, "ok", "Dismissed for this week."));
+  redirect(withMessage(back, "ok", "Dismissed until a new signal fires or Evidence moves 10."));
 }

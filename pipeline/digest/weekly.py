@@ -4,9 +4,9 @@ markdown, from the `digests` table).
 Under the title, a banner lists every source that is stale or past its §2.7 SLA (config/staleness.yaml; M6 review
 R1-F12). Sections: new candidates (at most 10, one line each: families fired, Evidence, Gap, link; when the week has
 no scores, it says the candidates are missing and why, from weekly.yml's job results); theses needing attention
-(kill criteria triggered this week, reviews due); the Capex brief; source health and staleness; LLM quota use; Lab
-notes when a run happened this week. Source health ends with the Actions minutes line (pipeline/digest/minutes.py). No
-price-move content: no gainers, losers or returns.
+(kill criteria triggered this week, reviews due); source health and staleness; LLM quota use; Lab notes when a run
+happened this week (the Capex brief went with the Capex Desk, docs/SPEC_ISSUES.md 52). Source health ends with the
+Actions minutes line (pipeline/digest/minutes.py). No price-move content: no gainers, losers or returns.
 
 `python -m pipeline.digest.weekly [--week D]` (weekly.yml `publish` job: every week, whatever the other jobs did).
 The issue is published with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true)
@@ -115,18 +115,6 @@ def attention(conn: psycopg.Connection[Any], week: date) -> list[str]:
     return out or ["Nothing needs attention."]
 
 
-def capex(conn: psycopg.Connection[Any], week: date) -> list[str]:
-    body = thesis_repo.capex_brief(conn, week)
-    if not body:
-        return ["No Capex brief this week."]
-    lines = body.strip().splitlines()
-    if lines and lines[0].startswith("## "):
-        lines = lines[1:]  # the brief's own title; its ### sections stay
-    while lines and not lines[0].strip():
-        lines = lines[1:]
-    return lines or ["No Capex brief this week."]
-
-
 def late(h: SourceHealth, now: datetime, sla: Mapping[str, int]) -> bool:
     days = sla.get(h.source)
     return days is not None and h.last_success is not None and now - h.last_success > timedelta(days=days)
@@ -142,11 +130,13 @@ def resting(h: SourceHealth, rows: Sequence[SourceHealth], now: datetime, sla: M
 
 def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int],
            fallback_of: Mapping[str, str] | None = None) -> list[str]:  # fmt: skip
-    """§2.7: every source that is stale, or past its SLA, named under the title (a fallback only when its primary
-    isn't fine)."""
+    """§2.7: every source with an SLA in config/staleness.yaml that is stale, or past its SLA, named under the title (a
+    fallback only when its primary isn't fine). A source without an SLA is one the pipeline no longer reads (yahoo,
+    stooq, fred, eia, gdelt; India's while it is paused): its leftover health row stays in the table but never in the
+    banner, as on the app's Home (overhaul PR 4, docs/SPEC_ISSUES.md 52)."""
     items = []
     for h in rows:
-        if resting(h, rows, now, sla, fallback_of or {}):
+        if h.source not in sla or resting(h, rows, now, sla, fallback_of or {}):
             continue
         if h.stale:
             items.append(f"{h.source} (stale)")
@@ -213,7 +203,6 @@ def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: dat
     parts: list[tuple[str, list[str]]] = [
         ("New candidates", candidates(conn, week, companies, app_url, why_unscored)),
         ("Theses needing attention", attention(conn, week)),
-        ("Capex brief", capex(conn, week)),
         ("Source health", [*health(sources, now, sla, fb), *(["", *actions] if actions else [])]),
         ("LLM quota use", llm(thesis_repo.llm_use(conn, since, until))),
     ]

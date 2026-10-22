@@ -123,7 +123,7 @@ def test_p03_is_no_longer_called() -> None:
     assert importlib.util.find_spec("pipeline.facts.risk_diff") is None
     assert not hasattr(run, "risk_changes") and "risk_changes" not in run.TextStats.__dataclass_fields__
     truth = load_truth()
-    assert set(inputs(SYN, truth)) == {"P-02", "P-06", "P-07"}
+    assert set(inputs(SYN, truth)) == {"P-02", "P-07"}
     assert {"kyst_10k_2025_risk.htm", "kyst_10k_2026_risk.htm"} <= {d["file"] for d in truth["documents"]}
 
 
