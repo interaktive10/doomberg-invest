@@ -1,6 +1,6 @@
 name: diagnose
 # Manual and read-only: why the latest scored week's companies landed in their buckets (pipeline/db/diagnose.py):
-# families, C1-C4, Gap and market-cap coverage of the candidate stage, and the top of it. Market data only.
+# families, C1-C3, Gap and market-cap coverage of the candidate stage, and the top of it. Market data only.
 on:
   workflow_dispatch:
     inputs:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   diagnose:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}

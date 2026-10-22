@@ -3,6 +3,8 @@ spin-offs. `python -m pipeline.us.daily --date YYYY-MM-DD`.
 
 By default the run catches up: it lists the quarter's published daily indexes (index.json) and processes every day
 after the last one it finished (state file), so a day SEC publishes after the run starts is read the next day.
+Without the state file (the Actions cache is evicted after 7 days unused) it resumes from the latest us_daily runs
+row, so the days missed while the runs stopped are read too.
 Spin-off registrants are not in the universe yet, so a small state file (cache dir) remembers CIKs that filed a
 Form 10-12B; their later filings are checked until the registration is effective.
 """
@@ -12,7 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -43,8 +45,14 @@ from pipeline.us.form4 import Form4, Form4Error, parse_submission
 from pipeline.us.specials import effective_spinoff, html_to_text, parent_candidates
 from pipeline.us.submissions import Submissions, end_of_day_utc, parse_submissions
 
+RUN_KIND = "us_daily"  # its runs rows (repo.tracked_run)
 RESCAN_DAYS = 120  # Form 10 registrations usually take 1-4 months to become effective
 RETRY_RUNS = 3  # a day with failed downloads is read by up to this many runs (then logged and passed; review R2-F5)
+# A catch-up resumed from the runs table (no state file) starts at most this many days back: about 22 business days
+# of indexes, at well under a minute each (the SEC step took 20-60 s for a day in October 2026), fit the daily job's
+# 30 minutes with the text step after it. An older gap is logged and left to `python -m pipeline.us.backfill` (its
+# Form 4 purchases and 8-K/NT events).
+CATCH_UP_DAYS = 31
 
 
 def submissions_url(cik: str) -> str:
@@ -273,6 +281,21 @@ def load_last_day(path: Path | None) -> date | None:
     return date.fromisoformat(v) if v else None
 
 
+def resume_day(days: Sequence[Mapping[str, Any]]) -> date | None:
+    """The cursor a lost state file held, from the days a us_daily runs row recorded (run_catch_up's DailyStats): the
+    newest day read, or the day before the first one still being retried (failed downloads hold the cursor)."""
+    read: list[tuple[date, int]] = []
+    for d in days:
+        try:
+            read.append((date.fromisoformat(str(d.get("day"))), int(d.get("retry") or 0)))
+        except ValueError:
+            continue  # not a day: the listing errors' entry ("listings as of ...")
+    if not read:
+        return None
+    retried = [day for day, retry in read if retry > 0]
+    return min(retried) - timedelta(days=1) if retried else max(day for day, _ in read)
+
+
 def save_last_day(path: Path | None, day: date, held: date | None = None, attempts: int = 0) -> None:
     """The cursor, plus the day being retried (if any) and how many runs have read it."""
     if path is not None:
@@ -306,13 +329,31 @@ def run_catch_up(
     """Every published EDGAR day after the last one processed (review F2: at 01:30 UTC yesterday's index often
     isn't published yet; it is picked up by the next run instead of being skipped as a 'holiday').
 
-    Each day is committed before the cursor moves past it. A day with failed downloads holds the cursor, so the next
-    run reads it again (inserts are idempotent). Retries are counted in runs, not calendar days: Friday's index is
-    first read on Tuesday (review R2-F5). After RETRY_RUNS reads the cursor moves on and the errors stay logged."""
+    Each day is committed before the cursor moves past it, and the cursor is saved as it moves, so a run cut off
+    part-way (the job's timeout) keeps the days it read and the next run resumes after them. A day with failed
+    downloads holds the cursor, so the next run reads it again (inserts are idempotent). Retries are counted in runs,
+    not calendar days: Friday's index is first read on Tuesday (review R2-F5). After RETRY_RUNS reads the cursor moves
+    on and the errors stay logged.
+
+    Without a state file the cursor comes from the latest us_daily runs row (resume_day), at most CATCH_UP_DAYS back;
+    with no such row either, the run reads the latest few published days (a first run)."""
     state = _state(day_path)
     last = load_last_day(day_path)
     held_day = date.fromisoformat(state["held_day"]) if state.get("held_day") else None
     attempts = int(state.get("attempts", 0))
+    notes: list[str] = []
+    if last is None:
+        # In a transaction of its own: a read left open would turn each day's transaction below into a savepoint,
+        # committed only when tracked_run ends, after the cursor moved (overhaul PR 1 review, pipeline-F1).
+        with conn.transaction():
+            run_days = repo.latest_run_days(conn, RUN_KIND)
+        last = resume_day(run_days)
+        floor = today - timedelta(days=CATCH_UP_DAYS)
+        if last is not None and last < floor:
+            notes.append(f"no state file and the last run's cursor {last} is over {CATCH_UP_DAYS} days old: read from "
+                         f"{floor + timedelta(days=1)}; python -m pipeline.us.backfill reads the Form 4s and 8-Ks "
+                         "before that")  # fmt: skip
+            last = floor
     first = (last + timedelta(days=1)) if last else today - timedelta(days=7)
     listing_errors: list[str] = []
     published = listed_days(client, first, today, listing_errors)
@@ -331,8 +372,11 @@ def run_catch_up(
                 continue
             stats.errors.append(f"{day}: downloads still failing after {tries} runs; moving on")
         last = day
+        save_last_day(day_path, last)  # committed above: a run cut off later still resumes after it (spec-F2)
     if listing_errors:
         out.insert(0, DailyStats(f"listings as of {today}", errors=listing_errors))
+    if notes:
+        out.insert(0, DailyStats(f"cursor as of {today}", errors=notes))
     if last is None and held is not None:
         last = held - timedelta(days=1)  # a first run that holds its first day still remembers the attempt
     if last is not None:
@@ -353,12 +397,13 @@ def main(argv: list[str] | None = None) -> int:
     day_state = settings.cache_dir / "us" / "daily_state.json"
     today = datetime.now(UTC).date()
     rescan = a.rescan_days if a.rescan_days is not None else (0 if state.exists() else RESCAN_DAYS)
-    with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "us_daily", "sec") as run:
+    with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, RUN_KIND, "sec") as run:
         if rescan:
             _save_pending(state, _pending(state) | rescan_form10(client, a.date or today, rescan))
         days = (
             [run_daily(conn, client, a.date, state)] if a.date else run_catch_up(conn, client, today, state, day_state)
         )
+        run["date"] = a.date.isoformat() if a.date else None  # a one-day run: no cursor to resume from
         run.update({"days": [d.__dict__ for d in days], "errors": [e for d in days for e in d.errors]})
     for d in days:
         print(f"us daily {d.day}: {d.purchases} purchases, {d.corp_events} events, {d.spinoffs} spin-offs")

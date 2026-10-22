@@ -6,7 +6,7 @@ same code that filled the pack (evidence_pack.kill_value); `changes` compares wi
 a condition holds, the criterion is `triggered` (dated with the week), the thesis moves to `review`, and the digest
 lists it under "theses needing attention". A metric that can't be computed is `unknown`, never triggered.
 
-`python -m pipeline.thesis.kill_criteria [--week D]` (weekly.yml `thesis` job)."""
+`python -m pipeline.thesis.kill_criteria [--week D]` (weekly.yml `publish` job, after this week's scores)."""
 
 from __future__ import annotations
 

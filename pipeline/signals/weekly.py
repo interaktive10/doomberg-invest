@@ -1,13 +1,16 @@
 """Weekly scoring run (BRIEF §2.1 "weekly", §4.4-§4.8): signals -> red flags -> Evidence -> candidate prices
--> context C1-C3 -> Gap -> buckets -> shortlist. `python -m pipeline.signals.weekly [--week YYYY-MM-DD]`.
+-> context C1-C3 -> Gap -> buckets -> shortlist. `python -m pipeline.signals.weekly [--week YYYY-MM-DD]
+[--markets us,in]`.
 
 Everything as of week W reads through pipeline.db.pit.as_of(W), so a re-run over the same data gives the same rows
 whether or not later filings exist (M4-02). Evidence never uses price; prices enter only at the candidate stage
 (Evidence >= 40 this week or last): US closes come from Twelve Data for that set only (Stooq until 2026-10, then
-Yahoo; docs/SPEC_ISSUES.md 37, 38), India from the bhavcopy (M3).
+Yahoo; docs/SPEC_ISSUES.md 37, 38), in price_targets' order, India from the bhavcopy (M3).
 
 Two passes over the universe in batches keep memory flat: the first collects the cross-sectional inputs (S8's
-revenue-size deciles, S12's sector medians), the second computes signals, flags and Evidence.
+revenue-size deciles, S12's sector medians), the second computes signals, flags and Evidence. `--markets` scores a
+subset of the markets (both by default); the weekly job scores the US alone while India is paused
+(docs/SPEC_ISSUES.md 46).
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ import argparse
 import sys
 import time
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -63,7 +66,9 @@ from pipeline.signals.scores import Evidence, Weights, evidence, gap
 from pipeline.signals.series import Series
 
 BATCH = 300
+MARKETS = ("us", "in")
 US_PRICE_MAX_SYMBOLS = 400  # §4.4, benchmarks included
+US_PRICE_FILL_MAX = 250  # P8: one-family filler is priced only up to this many symbols, benchmarks included
 # A site that fails this many requests in a row is down or refusing the runner: it isn't asked again this run. Every
 # request waits for the site's rate limit and up to the 60 s timeout, and the first live run (2026-09-29) spent the
 # scores job's 40 minutes without finishing.
@@ -91,6 +96,7 @@ def chunks[T](items: Sequence[T], n: int) -> Iterator[Sequence[T]]:
 @dataclass
 class ScoresStats:
     week: str
+    markets: list[str] = field(default_factory=lambda: list(MARKETS))  # the markets scored (--markets)
     companies: int = 0
     signals_fired: dict[str, int] = field(default_factory=dict)
     flags_fired: dict[str, int] = field(default_factory=dict)
@@ -370,6 +376,43 @@ def price_source(http: HttpClient) -> WeeklySource:
     return YahooClient(http) if http.settings.price_source == "yahoo" else TwelveDataClient(http)
 
 
+def price_targets(
+    scored: Mapping[UUID, Scored],
+    research: Collection[UUID],
+    last_week: Collection[UUID],
+    min_evidence: Decimal,
+    min_families: int,
+    benchmarks: int,
+    limit: int = US_PRICE_MAX_SYMBOLS,
+    fill: int = US_PRICE_FILL_MAX,
+) -> list[Scored]:
+    """The US companies whose prices are downloaded this week, in order (P8, docs/DECISIONS.log). Tier 0: research
+    entries, theses and positions, at any Evidence. Tier 1: names that can reach a bucket (Evidence >= min_evidence,
+    min_families or more families, no hard red flag). Tier 2: the rest of §4.4's candidate set (one family, a hard
+    flag, or Evidence >= min_evidence last week only), priced only while the symbols, benchmarks included, stay within
+    `fill`. Each tier by Evidence, then company id; never more than `limit` symbols, benchmarks included (388
+    companies beside the 12 benchmarks of config/context.yaml)."""
+
+    def tier(cid: UUID, sc: Scored) -> int | None:
+        if cid in research:
+            return 0
+        if sc.evidence.score >= min_evidence:
+            return 1 if len(sc.evidence.families) >= min_families and not sc.hard else 2
+        return 2 if cid in last_week else None
+
+    ranked: list[tuple[tuple[int, Decimal, str], Scored]] = []
+    for cid, sc in scored.items():
+        t = tier(cid, sc)
+        if t is not None and sc.company.market == "us" and sc.company.ticker:
+            ranked.append(((t, -sc.evidence.score, str(cid)), sc))
+    out: list[Scored] = []
+    for (t, _, _), sc in sorted(ranked, key=lambda r: r[0]):
+        if benchmarks + len(out) >= (min(fill, limit) if t == 2 else limit):
+            break  # the tiers come in order and tier 2's cap is the lower one: nothing after this fits either
+        out.append(sc)
+    return out
+
+
 def ingest_us_prices(
     conn: psycopg.Connection[Any],
     source: WeeklySource,
@@ -544,13 +587,20 @@ def run(
     root: Path = REPO_ROOT,
     imports: Path | None = None,
     price_limit: int = US_PRICE_MAX_SYMBOLS,
+    markets: Collection[str] = MARKETS,
 ) -> ScoresStats:
+    """A market not in `markets` is skipped entirely: no signals, prices, context or scores. A re-run replaces the
+    whole week (repo.clear_week), so a US-only run leaves the week without India rows (docs/SPEC_ISSUES.md 46)."""
     t0 = time.monotonic()
-    stats = ScoresStats(week.isoformat())
+    stats = ScoresStats(week.isoformat(), markets=[m for m in MARKETS if m in markets])
     cfgs = Configs.load(root)
     record_weights_in_use(conn, read_weights(root))  # the version the scores name, recorded and approved (M8 R2-F3)
     research = repo.research_company_ids(conn)
-    companies = [c for c in repo.companies(conn) if c.id is not None and (c.in_universe or c.id in research)]
+    companies = [
+        c
+        for c in repo.companies(conn)
+        if c.id is not None and c.market in stats.markets and (c.in_universe or c.id in research)
+    ]
     stats.companies = len(companies)
     repo.clear_week(conn, week)
 
@@ -627,17 +677,8 @@ def run(
         stats.bench_ok, stats.bench_failed, stats.bench_skipped = len({r.symbol for r in rows}), len(errs), len(have)
         stats.errors += errs
         prev = {cid for cid, s in last.items() if s.evidence >= min_ev}
-        us = sorted(
-            (
-                sc
-                for cid, sc in scored.items()
-                if sc.company.market == "us"
-                and sc.company.ticker
-                and (sc.evidence.score >= min_ev or cid in prev or cid in research)
-            ),
-            key=lambda sc: -sc.evidence.score,
-        )
-        targets = us[: max(0, price_limit - len(us_bench))]
+        min_families = int(cfgs.signals["scores"]["min_families"])
+        targets = price_targets(scored, research, prev, min_ev, min_families, len(us_bench), price_limit)
         ingest_us_prices(
             conn,
             source,
@@ -777,19 +818,30 @@ def gap_scores(rows: Sequence[ContextValue], cfgs: Configs) -> dict[UUID, Decima
     return {cid: gap(m, cfgs.weights, need) for cid, m in by.items()}
 
 
+def markets_arg(text: str) -> tuple[str, ...]:
+    """--markets: a comma-separated subset of us,in, returned in MARKETS order."""
+    asked = {m.strip() for m in text.split(",") if m.strip()}
+    if not asked or not asked <= set(MARKETS):
+        raise argparse.ArgumentTypeError(f"expected a comma-separated subset of {','.join(MARKETS)}, got {text!r}")
+    return tuple(m for m in MARKETS if m in asked)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--week", type=date.fromisoformat, default=None, help="Friday to score (default: the latest)")
+    ap.add_argument("--markets", type=markets_arg, default=MARKETS,
+                    help="markets to score, comma-separated (default: us,in; the weekly job scores us while India "
+                         "is paused, docs/SPEC_ISSUES.md 46)")  # fmt: skip
     a = ap.parse_args(argv)
     settings = Settings.from_env()
     week = a.week or last_friday(datetime.now(UTC).date())
     http = HttpClient(settings)
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "scores_weekly") as run_:
-        stats = run(conn, week, http)
+        stats = run(conn, week, http, markets=a.markets)
         run_.update(stats.__dict__)
     print(
-        f"scores {stats.week}: {stats.companies} companies, stage {stats.stage}, buckets {stats.buckets}, "
-        f"shortlist {len(stats.shortlist)}, {stats.seconds}s"
+        f"scores {stats.week} ({','.join(stats.markets)}): {stats.companies} companies, stage {stats.stage}, "
+        f"buckets {stats.buckets}, shortlist {len(stats.shortlist)}, {stats.seconds}s"
     )
     return 0
 

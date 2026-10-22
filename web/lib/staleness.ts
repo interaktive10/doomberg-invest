@@ -3,19 +3,18 @@ import type { SourceHealth } from "@/lib/data";
 // BRIEF §2.7: "Stale beyond its SLA (US weekly 8 days; India weekly 10 days) -> a banner in the app and the digest".
 // The same SLAs and fallbacks as config/staleness.yaml (pipeline.digest.weekly); tests/staleness.test.ts pins them to
 // that file. A fallback source (BSE for NSE) records a success only in weeks it stood in, so it isn't late while its
-// primary is fine (M6 review R2-F5).
+// primary is fine (M6 review R2-F5). India is paused (docs/SPEC_ISSUES.md 46): its nse and bse rows and the BSE
+// fallback come back with it.
 export const SLA_DAYS: Record<string, number> = {
   sec: 8,
   twelvedata: 8,
   yahoo: 8,
   fred: 8,
   eia: 8,
-  nse: 10,
-  bse: 10,
   sec_13f: 100,
 };
 
-export const FALLBACK_OF: Record<string, string> = { bse: "nse" };
+export const FALLBACK_OF: Record<string, string> = {};
 
 const DAY = 86_400_000;
 

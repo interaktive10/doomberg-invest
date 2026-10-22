@@ -1,13 +1,13 @@
 name: weekly
 # BRIEF §2.1 "weekly", §2.5 (Saturday): SEC bulk companyfacts + submissions -> fundamentals_q and the US universe
-# rules; India: securities + ASM/GSM -> universe, bhavcopy -> prices_w (NSE, else BSE, else imports/), results XBRL
-# -> fundamentals_q, shareholding -> ownership_q. M4 adds signals -> red flags -> prices -> context -> scores; M5 the
-# Capex Desk (demand index and memberships before scores, the Capex brief after); M6 kill criteria, evidence packs,
-# the thesis queue (committed to main) and the digest issue.
+# rules. M4 adds signals -> red flags -> prices -> context -> scores; M6 kill criteria, evidence packs, the thesis queue
+# (committed to main) and the digest issue. India is paused (docs/SPEC_ISSUES.md 46): it has no job and scores run on
+# the US alone. The Capex Desk has no jobs either: without EIA, S11 can't fire.
+# Jobs: us -> scores (only when us ran and succeeded) -> publish (every week; the queue only after this week's scores).
 # The bulk zips (a few GB) stay on the runner; only the per-company sha256 state is cached between weeks.
 on:
   schedule:
-    - cron: "0 2 * * 6"
+    - cron: "7 2 * * 6"   # off the hour: GitHub delays or drops scheduled runs at :00 under load
   workflow_dispatch:
     inputs:
       force:
@@ -23,119 +23,64 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      ready: ${{ steps.secrets.outputs.ready }}
-      db: ${{ steps.secrets.outputs.db }}
-    steps:
-      - id: secrets
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
-        run: |
-          if [ -n "$DATABASE_URL" ]; then echo "db=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
-          if [ -n "$DATABASE_URL" ] && [ -n "$SEC_USER_AGENT" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$DATABASE_URL" ]; then echo "::notice::SEC_USER_AGENT is not set: US jobs skipped"; fi
-
   us:
-    needs: check
-    if: needs.check.outputs.ready == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # A full quarterize (no companyfacts state: the first run, a cache miss, --force) took 53 minutes on 2026-09-29;
     # a timeout loses the state, so the next run would be full again. Incremental runs take a few minutes.
     timeout-minutes: 120
+    outputs:
+      ran: ${{ steps.secrets.outputs.ok }}   # scores need this week's US data, not a run that skipped its steps
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
       DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
       FORCE: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
     steps:
+      - name: Secrets (BRIEF §2.4; without them the steps below are skipped, with a notice)
+        id: secrets
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
+          elif [ -z "$SEC_USER_AGENT" ]; then echo "::notice::SEC_USER_AGENT is not set: the US run and scores are skipped"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
       - uses: astral-sh/setup-uv@v6
+        if: steps.secrets.outputs.ok == 'true'
         with:
           enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv python install 3.12
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv sync --frozen --no-dev
       - name: companyfacts state (sha256 + TTM revenue per company)
+        if: steps.secrets.outputs.ok == 'true'
         uses: actions/cache@v4
         with:
           path: .cache/us/companyfacts_state.json
           key: us-companyfacts-state-${{ github.run_id }}
           restore-keys: us-companyfacts-state-
-      - run: uv run --frozen python -m pipeline.db.migrate
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
       - name: US fundamentals and universe
+        if: steps.secrets.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.us.weekly $FORCE
       - name: data issues (every §4.1.5 null reason)
-        if: always()
+        if: always() && steps.secrets.outputs.ok == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: us-data-issues
           path: .cache/us/issues.csv
           if-no-files-found: ignore
 
-  india:
-    needs: check
-    if: needs.check.outputs.db == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - name: India state (listing cursor, download queues, 3 years of results per company, last shareholding pattern)
-        uses: actions/cache@v4
-        with:
-          path: .cache/in/weekly_state.json
-          key: in-weekly-state-${{ github.run_id }}
-          restore-keys: in-weekly-state-
-      - run: uv run --frozen python -m pipeline.db.migrate
-      - name: India universe, prices, results and shareholding
-        run: uv run --frozen python -m pipeline.india.weekly
-
-  capex:
-    # M5 (BRIEF §4.11): EIA planned additions, the demand index per category (point in time, from verified facts)
-    # and membership proposals (US by the industry map; India by P-06 with grounded quotes). Before scores, so S11
-    # reads this week's index; if it fails, scores still run on the last one.
-    needs: [check, us, india]
-    if: always() && needs.check.outputs.db == 'true' && (needs.us.result == 'success' || needs.india.result == 'success')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - run: uv run --frozen python -m pipeline.db.migrate
-      - name: Capex Desk demand index and memberships
-        run: uv run --frozen python -m pipeline.capex.run --stage index
-
   scores:
-    # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Twelve Data) -> context C1-C4 -> Gap ->
-    # buckets -> shortlist. Runs after both markets' data; if one market's job failed, the other is still scored.
-    needs: [check, us, india, capex]
-    if: always() && needs.check.outputs.db == 'true' && (needs.us.result == 'success' || needs.india.result == 'success')
-    runs-on: ubuntu-latest
+    # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Twelve Data) -> context C1-C3 -> Gap ->
+    # buckets -> shortlist, for the US alone while India is paused. Only on this week's US data: when `us` failed or
+    # skipped its steps there are no scores this week, and the digest says so.
+    needs: us
+    if: needs.us.result == 'success' && needs.us.outputs.ran == 'true'
+    runs-on: ubuntu-24.04
     # One transaction: a run cut off by the limit keeps nothing. Prices are up to 400 downloads 8 s apart (Twelve
-    # Data's free 8 a minute: under an hour), GDELT 100 queries 5 s apart; the first live run (2026-09-29) spent 40
-    # minutes without finishing.
+    # Data's free 8 a minute: under an hour); the first live run (2026-09-29) spent 40 minutes without finishing.
     timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -149,56 +94,66 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
       - run: uv run --frozen python -m pipeline.db.migrate
-      - name: Signals, red flags, candidate prices, context, scores and the shortlist
-        run: uv run --frozen python -m pipeline.signals.weekly
+      - name: Signals, red flags, candidate prices, context, scores and the shortlist (US)
+        run: uv run --frozen python -m pipeline.signals.weekly --markets us
 
-  capex_brief:
-    # M5 (BRIEF §4.11): the weekly Capex brief (index moves, material new facts, links, memberships, S11 companies)
-    # for the digest, after this week's scores.
-    needs: [check, scores]
-    if: always() && needs.check.outputs.db == 'true' && needs.scores.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - run: uv run --frozen python -m pipeline.db.migrate
-      - name: Capex brief
-        run: uv run --frozen python -m pipeline.capex.run --stage brief
-
-  thesis:
-    # M6 (BRIEF §4.9): kill criteria on the week's new rows -> evidence packs -> the thesis queue file, committed to main
-    # for the Sunday routine (Appendix G). The queue is committed only from main, staging data/thesis_queue/ alone, on
-    # top of a freshly fetched origin/main (rebased and retried if main moved; M6 review R1-F5).
-    needs: [check, scores, capex_brief]
-    if: always() && needs.check.outputs.db == 'true' && needs.scores.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  publish:
+    # Every week, whatever us and scores did, in one job (one runner start instead of three):
+    # - M6 (BRIEF §4.9): kill criteria on the week's new rows -> evidence packs -> the thesis queue file, committed to
+    #   main for the Sunday routine (Appendix G); only after this week's scores. The queue is committed only from main,
+    #   staging data/thesis_queue/ alone, on top of a freshly fetched origin/main (rebased and retried if main moved;
+    #   M6 review R1-F5).
+    # - BRIEF §4.12: the digest issue, also when scores or the queue commit failed, since those are the weeks source
+    #   health matters (M6 review R1-F6). It lists this week's triggered criteria, source health with the §2.7
+    #   staleness banner and LLM quota use, and says why the candidates are missing in a week without scores.
+    # - BRIEF §2.8: the storage guard, after every job that writes and also when one failed (review R2-F1 on M3):
+    #   prune (signal_values past 3 years, NSE announcements past 120 days) and fail the run above 400 MB.
+    # Each work step has its own limit: a hung step fails alone and the digest and the guard still run (a job timeout
+    # cancels the job, and !cancelled() steps with it). Env is set per step, only where a step reads it.
+    needs: [us, scores]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write   # the queue commit
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      issues: write     # the digest issue
     steps:
+      - name: Secrets (BRIEF §2.4; without the database the steps below are skipped, with a notice)
+        id: secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -n "$DATABASE_URL" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
       - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
       - uses: astral-sh/setup-uv@v6
+        if: steps.secrets.outputs.ok == 'true'
         with:
           enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - run: uv run --frozen python -m pipeline.db.migrate
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv python install 3.12
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv sync --frozen --no-dev
+      - if: steps.secrets.outputs.ok == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: uv run --frozen python -m pipeline.db.migrate
       - name: Kill criteria (theses whose company got new rows this week)
+        if: needs.scores.result == 'success'
+        timeout-minutes: 5
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: uv run --frozen python -m pipeline.thesis.kill_criteria
       - name: Evidence packs -> data/thesis_queue/<week>.json
+        if: needs.scores.result == 'success'
+        timeout-minutes: 5
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: uv run --frozen python -m pipeline.thesis.queue
       - name: Commit the queue to main (Actions bot; from main only)
-        if: github.ref == 'refs/heads/main'
+        if: needs.scores.result == 'success' && github.ref == 'refs/heads/main'
+        timeout-minutes: 3
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -214,50 +169,22 @@ jobs:
             sleep $((attempt * 5))
           done
           exit 1
-
-  digest:
-    # BRIEF §4.12: the weekly digest issue, every week: also when the scores or the queue commit failed, since those
-    # are the weeks source health matters (M6 review R1-F6). It lists this week's triggered criteria, the Capex brief,
-    # source health with the §2.7 staleness banner, LLM quota use, and says when the candidates are missing.
-    needs: [check, scores, capex_brief, thesis]
-    if: always() && needs.check.outputs.db == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: write     # the digest issue
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      GITHUB_TOKEN: ${{ github.token }}
-      # the digest's company links; the deployed app unless the APP_URL repository variable says otherwise
-      APP_URL: ${{ vars.APP_URL || 'https://doomberg-invest.vercel.app' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - run: uv run --frozen python -m pipeline.db.migrate
       - name: Digest issue
+        if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
+        timeout-minutes: 5
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          # the digest's company links; the deployed app unless the APP_URL repository variable says otherwise
+          APP_URL: ${{ vars.APP_URL || 'https://doomberg-invest.vercel.app' }}
+          # why a week has no scores (pipeline.digest.weekly.unscored_why)
+          US_RESULT: ${{ needs.us.result }}
+          US_RAN: ${{ needs.us.outputs.ran }}
+          SCORES_RESULT: ${{ needs.scores.result }}
         run: uv run --frozen python -m pipeline.digest.weekly
-
-  size_guard:
-    # BRIEF §2.8: after every job that writes, prune (signal_values past 3 years, NSE announcements past 120 days) and
-    # fail the weekly run above 400 MB. Runs when a writer failed too (review R2-F1 on M3).
-    needs: [check, us, india, capex, scores, capex_brief, thesis, digest]
-    if: always() && needs.check.outputs.db == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --no-dev
-      - run: uv run --frozen python -m pipeline.db.migrate
       - name: Storage guard (prune, then fail above 400 MB)
+        if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
+        timeout-minutes: 8
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: uv run --frozen python -m pipeline.db.size_guard

@@ -6,6 +6,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -33,3 +35,21 @@ def test_m5_01_is_blocked_on_the_key_until_cassettes_exist() -> None:
 
 def test_m6_checks() -> None:
     assert [c.id for c in verify.CHECKS if c.milestone == "m6"] == [f"M6-0{i}" for i in range(1, 7)]
+
+
+def test_a_failing_check_prints_its_whole_output(monkeypatch: pytest.MonkeyPatch,
+                                                 capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
+    """Overhaul PR 1 review (pipeline-F3): CI's only test run is M0-01 inside verify, so a failing check's whole
+    output reaches the log (tracebacks and every FAILED line), not only the 6-line tail the summary and the report
+    keep; a passing check's output stays out."""
+    lines = [f"failure line {i}" for i in range(1, 21)]
+    failing = [sys.executable, "-c", f"print({chr(10).join(lines)!r}); raise SystemExit(1)"]
+    passing = [sys.executable, "-c", "print('quiet line')"]
+    monkeypatch.setattr(verify, "CHECKS", [verify.Check("X-01", "m0", "fails", failing),
+                                           verify.Check("X-02", "m0", "passes", passing)])  # fmt: skip
+    monkeypatch.setattr(verify, "write_report", lambda results, target: None)  # not docs/VERIFY_REPORT.md
+    assert verify.main(["--milestone", "m0"]) == 1
+    out = capsys.readouterr().out.splitlines()
+    assert [line for line in out if line.startswith("failure line")] == lines
+    assert out[-1] == "verify-m0: 1 PASS, 0 BLOCKED, 1 FAIL" and not any("quiet line" in line for line in out)
+    assert "       failure line 20" in out  # the summary's tail, as before

@@ -41,6 +41,7 @@ class Result:
     status: str
     seconds: float
     tail: str
+    output: str = ""  # the command's whole stdout and stderr, printed for a FAIL (CI's only test run is M0-01)
 
 
 def _needs_universe_snapshots() -> str | None:
@@ -533,13 +534,14 @@ def run_check(c: Check) -> Result:
     t0 = time.monotonic()
     env = {**os.environ, "MOCK_EXTERNALS": "true"}
     p = subprocess.run(c.command, cwd=ROOT, capture_output=True, text=True, env=env)
-    tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-6:])
+    output = (p.stdout + p.stderr).strip()
+    tail = "\n".join(output.splitlines()[-6:])
     status = "PASS" if p.returncode == 0 else "FAIL"
     if status == "PASS" and c.requires_after is not None:
         blocked = c.requires_after()
         if blocked:
             status = f"BLOCKED({blocked})"
-    return Result(c, status, time.monotonic() - t0, tail)
+    return Result(c, status, time.monotonic() - t0, tail, output)
 
 
 def write_report(results: list[Result], target: str) -> None:
@@ -568,6 +570,11 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     upto = MILESTONES[: MILESTONES.index(a.milestone) + 1]
     results = [run_check(c) for c in CHECKS if c.milestone in upto and c.id.startswith(a.only)]
+    # A failing check's whole log first (tracebacks, every FAILED line: CI shows nothing else), then the summary with
+    # its 6-line tails (overhaul PR 1 review, pipeline-F3).
+    for r in results:
+        if r.status == "FAIL" and r.output:
+            print(f"----- {r.check.id} output -----\n{r.output}\n----- end of {r.check.id} output -----")
     for r in results:
         print(f"{r.check.id:6} {r.status:10} {r.check.description}")
         if r.status == "FAIL" and r.tail:
