@@ -55,6 +55,7 @@ def test_the_real_client_pages_runs_and_every_attempts_jobs(tmp_path: Path) -> N
     http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
     base = f"{API}/repos/o/r/actions/runs"
     urls = {
+        f"{API}/repos/o/r": "repo_private.json",
         f"{base}?created=%3E%3D2026-11-01&exclude_pull_requests=true&per_page=2&page=1": "runs_page1.json",
         f"{base}?created=%3E%3D2026-11-01&exclude_pull_requests=true&per_page=2&page=2": "runs_page2.json",
         f"{base}/101/jobs?filter=all&per_page=2&page=1": "jobs_101_page1.json",
@@ -66,7 +67,7 @@ def test_the_real_client_pages_runs_and_every_attempts_jobs(tmp_path: Path) -> N
         http.register_mock(url, (FIX / name).read_bytes())
     gh = GitHubRuns(http, "o/r", "t0ken", per_page=2)
     meter = minutes.measure(gh, BUDGET, datetime(2026, 11, 8, 12, tzinfo=UTC), REPO_ROOT)
-    assert meter.here == 2 + 1 + 0 + 2 + 0 + 11 and meter.start == date(2026, 11, 1)
+    assert meter.here == 2 + 1 + 0 + 2 + 0 + 11 and meter.start == date(2026, 11, 1) and not meter.public
     assert http.calls == list(urls)  # each page once; no page past total_count
     assert gh._headers()["Authorization"] == "Bearer t0ken"
 
@@ -310,3 +311,46 @@ def test_the_digest_projects_no_more_download_runs_than_the_gate_admits() -> Non
     assert quiet.download == 8 * 95  # room for every run: nothing capped
     assert busy.download == minutes.admitted_runs(budget, 1300 + busy.scheduled) * 95 < 8 * 95
     assert busy.projected() <= 1900 - 180 + 95  # at most one run's actual minutes past the gate's own line
+
+
+# ---------------------------------------------------------------- a public repository
+
+
+def test_a_public_repositorys_runs_are_free(tmp_path: Path) -> None:
+    """GitHub bills only private repositories' minutes: while this one is public its own runs, crons and downloads
+    count 0, the gate allows and the digest says so; the other repositories still count (they stay private)."""
+    budget = replace(BUDGET, other_repos_per_day=31, download_run=95)
+    root = workflows(tmp_path, REPO_CRONS)
+    now = datetime(2026, 11, 11, 9, tzinfo=UTC)
+    heavy = {1: [job(1800 * 60)]}  # over the gate on its own
+    private = minutes.measure(MockRuns(runs=heavy), budget, now, root, download_pending=5200, tickers_per_run=650)
+    public = minutes.measure(MockRuns(runs=heavy, is_public=True), budget, now, root, download_pending=5200,
+                             tickers_per_run=650)  # fmt: skip
+    assert not minutes.gate(private, 120)[0] and private.scheduled > 0
+    assert public.public and (public.here, public.scheduled, public.download) == (0, 0, 0)
+    assert public.others == 31 * 10
+    assert minutes.gate(public, 120) == (
+        True,
+        "Actions minutes: this repository is public, so its runs are free: allowed",
+    )
+    assert minutes.digest_line(public) == (
+        "Actions: free while this repository is public; the other repositories used about 310 of 2,000 this cycle."
+    )
+
+
+def test_the_real_client_reads_the_repositorys_visibility(tmp_path: Path) -> None:
+    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    http.register_mock(f"{API}/repos/o/r", (FIX / "repo_public.json").read_bytes())
+    meter = minutes.measure(GitHubRuns(http, "o/r", "t"), BUDGET, datetime(2026, 11, 8, 12, tzinfo=UTC), tmp_path)
+    assert meter.public and meter.here == 0
+    assert http.calls == [f"{API}/repos/o/r"]  # a public repository's runs aren't read at all
+    http.register_mock(f"{API}/repos/o/r", (FIX / "repo_private.json").read_bytes())
+    assert GitHubRuns(http, "o/r", "t").public() is False
+
+
+def test_a_public_repositorys_gate_writes_allowed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+                                                capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
+    runs = MockRuns(runs={1: [job(1900 * 60)]}, is_public=True)
+    code, output, printed = gate_run(monkeypatch, tmp_path, runs, capsys)
+    assert code == 0 and output == "earlier=1\nallowed=true\n"
+    assert printed == "Actions minutes: this repository is public, so its runs are free: allowed\n"
