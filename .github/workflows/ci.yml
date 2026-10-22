@@ -1,7 +1,7 @@
 name: ci
-# Pull requests only: main gets no run after a merge (with the branch rule 'require branches to be up to date', the
-# PR's last run tested the merged code), and a label change runs only protected.yml. verify-m8's M0-01 runs the whole
-# offline suite, so there is no separate `make test`.
+# Pull requests only: main gets no run after a merge. GitHub Free has no branch protection for private repos, so main
+# is merged into a PR's branch before its last run, which then tests the merged code. A label change runs only
+# protected.yml. verify-m8's M0-01 runs the whole offline suite, so there is no separate `make test`.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
