@@ -20,6 +20,8 @@ inside the free minutes.
   refusal is a notice, not a failure. A meter that can't read the runs refuses.
 - The weekly digest's line (pipeline/digest/weekly.py): 'Actions: N of 2,000 this cycle, projected M', with a warning
   above `actions.warn_above`.
+- A public repository's runs are free (GitHub bills only private repositories' minutes), so while this one is public
+  (GET /repos/{repo} `private`) its own runs, crons and downloads count 0: the gate allows and the digest says so.
 
 `MockRuns` is the mock (MOCK_EXTERNALS=true, tests): it holds runs and their jobs in memory."""
 
@@ -193,6 +195,7 @@ def download_minutes(runs_left: int, pending: int, per_run: int, run_minutes: in
 
 
 class Runs(Protocol):
+    def public(self) -> bool: ...
     def run_ids(self, since: date) -> list[int]: ...
     def jobs(self, run_id: int) -> list[dict[str, Any]]: ...
 
@@ -222,6 +225,10 @@ class GitHubRuns:
                 return out
             page += 1
 
+    def public(self) -> bool:
+        body = json.loads(self.http.get_bytes(f"{API}/repos/{self.repo}", headers=self._headers()))
+        return body["private"] is False
+
     def run_ids(self, since: date) -> list[int]:
         created = quote(f">={since.isoformat()}")
         url = f"{API}/repos/{self.repo}/actions/runs?created={created}&exclude_pull_requests=true"
@@ -235,6 +242,10 @@ class GitHubRuns:
 class MockRuns:
     runs: dict[int, list[dict[str, Any]]] = field(default_factory=dict)  # run id -> its jobs
     created: dict[int, date] = field(default_factory=dict)  # run id -> its day (default: inside any cycle)
+    is_public: bool = False
+
+    def public(self) -> bool:
+        return self.is_public
 
     def run_ids(self, since: date) -> list[int]:
         return [i for i in self.runs if self.created.get(i, since) >= since]
@@ -265,6 +276,7 @@ class Meter:
     download: int = 0  # the Lab download's remaining runs (download_minutes); the digest's projection only
     others_so_far: int = 0  # the other repositories' daily rate times the cycle's days before today
     others_ahead: int = 0  # the same rate times the cycle's days from today on
+    public: bool = False  # this repository is public: its runs are free, so here, scheduled and download are 0
 
     @property
     def others(self) -> int:
@@ -283,16 +295,18 @@ def measure(runs: Runs, budget: Budget, now: datetime, root: Path = REPO_ROOT, d
     """`download_pending`, `tickers_per_run`: the Lab download's pending tickers and a run's share of them (the
     digest passes them; the gate doesn't, so they count 0 there)."""
     start, end = cycle(now.date(), budget.cycle_day)
-    here = sum(job_minutes(j) for run_id in runs.run_ids(start) for j in runs.jobs(run_id))
+    public = runs.public()
+    here = 0 if public else sum(job_minutes(j) for run_id in runs.run_ids(start) for j in runs.jobs(run_id))
     until = datetime.combine(end, time(0), tzinfo=UTC)
-    fires_left = scheduled_runs(now, until, root)
+    fires_left = {} if public else scheduled_runs(now, until, root)
     download = download_minutes(fires_left.get(DOWNLOAD, 0), download_pending, tickers_per_run, budget.download_run)
     rate = budget.other_repos_per_day
     scheduled = scheduled_minutes(fires_left, budget.typical)
     so_far, ahead = rate * (now.date() - start).days, rate * (end - now.date()).days
     base = here + budget.other_repos + so_far + ahead + scheduled
     download = min(download, admitted_runs(budget, base) * budget.download_run)
-    return Meter(budget, start, end, here, scheduled, download, others_so_far=so_far, others_ahead=ahead)
+    return Meter(budget, start, end, here, scheduled, download, others_so_far=so_far, others_ahead=ahead,
+                 public=public)  # fmt: skip
 
 
 def admitted_runs(budget: Budget, base: int, need: int = DOWNLOAD_NEED) -> int:
@@ -309,6 +323,8 @@ def gate(meter: Meter, need: int) -> tuple[bool, str]:
     """Allowed when used + this run + the reserve + the remaining scheduled runs stays at or below gate_max; the line
     the workflow prints (a notice when refused)."""
     b = meter.budget
+    if meter.public:
+        return True, "Actions minutes: this repository is public, so its runs are free: allowed"
     projected = meter.projected(need, b.reserve)
     ok = projected <= b.gate_max
     verdict = "<= {:,}: allowed" if ok else "> {:,}: refused, the run is skipped"
@@ -322,6 +338,9 @@ def gate(meter: Meter, need: int) -> tuple[bool, str]:
 def digest_line(meter: Meter) -> str:
     """'Actions: N of 2,000 this cycle, projected M', and a warning above warn_above."""
     b = meter.budget
+    if meter.public:
+        return (f"Actions: free while this repository is public; the other repositories used about {meter.others:,} "
+                f"of {b.included:,} this cycle.")  # fmt: skip
     projected = meter.projected()
     line = f"Actions: {meter.used:,} of {b.included:,} this cycle, projected {projected:,}."
     if projected > b.warn_above:
