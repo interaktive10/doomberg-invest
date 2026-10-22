@@ -1,19 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
+import { DARK, LIGHT } from "@/lib/palette";
+import { themeMode } from "@/lib/theme-server";
 import "./globals.css";
 
-// The Logo mark (components/logo.tsx) as the tab icon, inline: no request, so it shows on the sign-in page too.
+// The Logo mark (components/logo.tsx) as the tab icon, inline: no request, so it shows on the sign-in page too. Its own
+// media query follows the device's theme (a favicon can't read the page's CSS variables).
 const ICON =
   "data:image/svg+xml," +
   encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="0.5" y="0.5" width="31" height="31" rx="6.5" fill="#121821" stroke="#2c3947" stroke-width="1"/>' +
-      '<rect x="7" y="17" width="4.5" height="8" rx="1.2" fill="#1f8fc8"/><rect x="13.75" y="12" width="4.5" height="13" rx="1.2" fill="#4cc3ff"/>' +
-      '<rect x="20.5" y="7" width="4.5" height="18" rx="1.2" fill="#e7edf3"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+      `<style>rect{fill:${LIGHT.ink}}path{stroke:${LIGHT["on-ink"]}}` +
+      `@media (prefers-color-scheme:dark){rect{fill:${DARK.ink}}path{stroke:${DARK["on-ink"]}}}</style>` +
+      '<rect width="32" height="32" rx="10"/>' +
+      '<path d="M4 17l5-5 4 3 7-8" transform="translate(7 7) scale(0.75)" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      "</svg>",
   );
 
+// Inter for everything, self-hosted by next/font at build time (the browser asks no font host).
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
-// Figures, dates, tickers and table headers (globals.css --font-mono). Self-hosted by next/font at build time, like Inter.
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono-face", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "Doomberg Invest", template: "%s · Doomberg Invest" },
@@ -22,12 +27,32 @@ export const metadata: Metadata = {
   icons: { icon: ICON },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#07090c" };
+/** The browser's own chrome (the phone's status bar) takes the canvas colour of the theme in use. */
+export async function generateViewport(): Promise<Viewport> {
+  const mode = await themeMode();
+  return {
+    width: "device-width",
+    initialScale: 1,
+    colorScheme: mode === "auto" ? "light dark" : mode,
+    themeColor:
+      mode === "auto"
+        ? [
+            { media: "(prefers-color-scheme: light)", color: LIGHT.canvas },
+            { media: "(prefers-color-scheme: dark)", color: DARK.canvas },
+          ]
+        : mode === "light"
+          ? LIGHT.canvas
+          : DARK.canvas,
+  };
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// Light or Dark from the theme cookie is written on <html> here, on the server, so the first paint is right; Auto
+// writes nothing and globals.css follows the device (prefers-color-scheme).
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const mode = await themeMode();
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-      <body className="min-h-screen">{children}</body>
+    <html lang="en" className={inter.variable} data-theme={mode === "auto" ? undefined : mode}>
+      <body className="min-h-dvh">{children}</body>
     </html>
   );
 }

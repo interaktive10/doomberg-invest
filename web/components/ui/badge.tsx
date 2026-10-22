@@ -2,18 +2,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-// shadcn/ui Badge: a colour's own text on its 15% tint (the tightest, down on a hovered row, is 4.8:1). No uppercase.
+// shadcn/ui Badge as a soft chip: a colour's own text on its 10% tint (>= 4.5:1 in both themes, tests/palette.test.ts),
+// or muted text on the chip grey. No uppercase.
 export const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
+  "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] leading-none font-semibold whitespace-nowrap",
   {
     variants: {
       variant: {
-        default: "bg-accent/15 text-accent ring-accent/30",
-        secondary: "bg-raised text-muted ring-line-strong",
-        destructive: "bg-down/15 text-down ring-down/35",
-        warning: "bg-warn/15 text-warn ring-warn/35",
-        success: "bg-up/15 text-up ring-up/35",
-        outline: "bg-transparent text-muted ring-line-strong",
+        default: "bg-accent/10 text-accent",
+        secondary: "bg-hover text-muted",
+        destructive: "bg-down/10 text-down",
+        warning: "bg-warn/10 text-warn",
+        success: "bg-up/10 text-up",
+        outline: "bg-transparent text-muted ring-1 ring-inset ring-line-strong",
       },
     },
     defaultVariants: { variant: "default" },

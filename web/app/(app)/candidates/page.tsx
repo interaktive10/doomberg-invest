@@ -92,7 +92,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
             aria-current={b === bucket ? "page" : undefined}
             className={cn(
               "inline-flex h-7 items-center justify-center rounded-sm px-2 text-[13px] font-medium no-underline transition-colors sm:px-3",
-              b === bucket ? "bg-raised text-fg shadow-[inset_0_-2px_0_var(--color-accent)] hover:text-fg" : "text-muted hover:text-fg",
+              b === bucket ? "bg-raised text-fg shadow-[inset_0_-2px_0_var(--accent)] hover:text-fg" : "text-muted hover:text-fg",
             )}
           >
             {text}
