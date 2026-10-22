@@ -1,5 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "git": { "deploymentEnabled": { "*": false, "main": true } },
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../config"
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "main": true
+    }
+  },
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../config",
+  "crons": [
+    {
+      "path": "/api/keepalive",
+      "schedule": "17 9 * * *"
+    }
+  ]
 }

@@ -5,7 +5,7 @@ import { toLogin } from "@/lib/redirect";
 
 // BRIEF §6 "Auth: Supabase magic link for APP_ALLOWED_EMAIL only": every page but the sign-in flow needs a session
 // whose email is the allowed one. The pages and server actions check again (lib/auth.ts requireUser).
-const PUBLIC = ["/login", "/auth/callback"];
+const PUBLIC = ["/login", "/auth/callback", "/api/keepalive"]; // keepalive: Vercel cron, returns no data
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
