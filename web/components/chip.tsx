@@ -93,14 +93,15 @@ export function DotRow({ tones, of, className }: { tones: readonly Tone[]; of?: 
   );
 }
 
-/** A legend: one dot and word per tone ("business", "insiders"), for a group of chips or a split bar. */
+/** A legend: one dot and word per tone ("business", "insiders"), for a group of chips or a split bar. Each label is
+ * one run of text, so a long one wraps under its own start with the dot on its first line (PR 6 final review HC-9). */
 export function Legend({ items, className }: { items: readonly { tone: Tone; label: ReactNode }[]; className?: string }) {
   return (
     <ul className={cn("flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted", className)}>
       {items.map((it, i) => (
-        <li key={i} className="inline-flex items-center gap-1.5">
-          <Dot tone={it.tone} />
-          {it.label}
+        <li key={i} className="inline-flex items-baseline gap-1.5">
+          <Dot tone={it.tone} className="-translate-y-px" />
+          <span>{it.label}</span>
         </li>
       ))}
     </ul>

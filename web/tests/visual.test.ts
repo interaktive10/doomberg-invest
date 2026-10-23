@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clamp, kindsLabel, meterPct, ringGeometry, splitWidths, tileText, tintFor } from "@/lib/visual";
+import { clamp, countPillTone, kindsLabel, meterPct, ringGeometry, splitWidths, tileText, tintFor } from "@/lib/visual";
 
 describe("score rings (lib/visual.ts ringGeometry)", () => {
   it("draws the arc for the score out of the ring's circumference, and shows it rounded", () => {
@@ -59,5 +59,12 @@ describe("evidence dots (kindsLabel)", () => {
     expect(kindsLabel(["business", "insiders"])).toBe("2 kinds of evidence: business, insiders");
     expect(kindsLabel(["text facts"])).toBe("1 kind of evidence: text facts");
     expect(kindsLabel([])).toBe("No kind of evidence yet");
+  });
+});
+
+describe("count pills (PR 6 final review EYE-9)", () => {
+  it("draws a zero quietly and a count in the accent", () => {
+    expect(countPillTone(0)).toBe("bg-hover text-muted");
+    expect(countPillTone(3)).toBe("bg-accent text-on-accent");
   });
 });

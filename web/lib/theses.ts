@@ -93,6 +93,13 @@ export function group(t: { state: ThesisState; author: string; card_md: string }
   return state === "research" || state === "review" ? "needs" : state === "thesis" || state === "position" ? "watching" : "closed";
 }
 
+/** Whether the thesis page shows its Reviews: when it has any, or while one can still come (a thesis, a position, one
+ * in Review). A research card gets none until it is accepted, and a closed or dismissed one never does, so neither
+ * promises one (PR 6 final review V4-5). */
+export function showsReviews(state: ThesisState, reviews: number): boolean {
+  return reviews > 0 || state === "thesis" || state === "position" || state === "review";
+}
+
 /** Kill criteria as "n of m triggered" ("none" without any). */
 export function killTally(statuses: readonly string[]): string {
   return statuses.length === 0 ? "none" : `${statuses.filter((s) => s === "triggered").length} of ${statuses.length} triggered`;

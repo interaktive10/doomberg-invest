@@ -1,5 +1,5 @@
 import type { LlmUse } from "@/lib/data";
-import type { HealthRow } from "@/lib/home";
+import { midSentence, pluralSource, type HealthRow } from "@/lib/home";
 
 // Settings drawn (overhaul PR 6): each source as a dot row with a status chip, one line that says whether anything
 // needs a look, and each LLM provider's week as a bar split into answered, rate-limited and failed calls. Pure, so
@@ -7,11 +7,12 @@ import type { HealthRow } from "@/lib/home";
 
 export type ChipTone = "good" | "warn" | "bad" | "plain";
 
-/** lib/staleness.ts sourceStatus's text as a chip: a word, the detail it had in brackets, and a tone. */
+/** lib/staleness.ts sourceStatus's text as a chip: a word, the detail it had in brackets (its SLA in days: "no success
+ * for 11 days; due every 8 days"; PR 6 final review L5-14), and a tone. */
 export function statusChip(text: string): { word: string; detail: string | null; tone: ChipTone } {
   const m = /^([^(]+?)\s*\((.*)\)$/.exec(text);
   const head = (m?.[1] ?? text).trim();
-  const detail = m?.[2] ?? null;
+  const detail = m?.[2]?.replace(/; SLA (\d+)$/, "; due every $1 days") ?? null;
   if (head === "ok") return { word: "On time", detail, tone: "good" };
   if (head.startsWith("fallback")) return { word: "Not needed", detail, tone: "plain" };
   if (head === "late") return { word: "Late", detail, tone: "warn" };
@@ -20,16 +21,19 @@ export function statusChip(text: string): { word: string; detail: string | null;
   return { word: head.charAt(0).toUpperCase() + head.slice(1), detail, tone: "bad" };
 }
 
-/** Settings' line under its title: "All 3 sources are on time." or "Weekly prices needs a look; the other 2 are on
- * time." A source resting as a fallback counts as fine. */
-export function sourcesLine(rows: readonly Pick<HealthRow, "name" | "state">[]): string {
+/** Settings' line under its title: "All 3 sources are on time." or "Weekly prices need a look; the other 2 are on
+ * time." A source resting as a fallback counts as fine. The names read as Home's late line says them: lower-case after
+ * the first, and a Data health name ("SEC filings", "Weekly prices") is plural (PR 6 final review C8, DT-7). */
+export function sourcesLine(rows: readonly Pick<HealthRow, "source" | "name" | "state">[]): string {
   if (rows.length === 0) return "No source has reported yet.";
-  const bad = rows.filter((r) => r.state === "late" || r.state === "down").map((r) => r.name);
+  const bad = rows.filter((r) => r.state === "late" || r.state === "down");
   const fine = rows.length - bad.length;
   if (bad.length === 0) return rows.length === 1 ? "The one source is on time." : `All ${rows.length} sources are on time.`;
-  const names = bad.length === 1 ? bad[0]! : `${bad.slice(0, -1).join(", ")} and ${bad[bad.length - 1]}`;
+  const said = bad.map((r, i) => (i > 0 ? midSentence(r.name) : r.name));
+  const names = said.length === 1 ? said[0]! : `${said.slice(0, -1).join(", ")} and ${said[said.length - 1]}`;
   const rest = fine === 0 ? "." : `; the other ${fine === 1 ? "one is" : `${fine} are`} on time.`;
-  return `${names} ${bad.length === 1 ? "needs" : "need"} a look${rest}`;
+  const many = bad.length > 1 || pluralSource(bad[0]!.source);
+  return `${names} ${many ? "need" : "needs"} a look${rest}`;
 }
 
 /** A provider's calls split three ways: answered, rate-limited (a free tier's limit) and failed otherwise. */

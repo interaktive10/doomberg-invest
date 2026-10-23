@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { needsKillReview } from "@/lib/reviews";
-import { acceptable, afterVerdict, canMove, cardQueued, group, killTally, markMoved, positionOpen, STATES, verdicts } from "@/lib/theses";
+import { acceptable, afterVerdict, canMove, cardQueued, group, killTally, markMoved, positionOpen, showsReviews, STATES, verdicts } from "@/lib/theses";
 
 describe("thesis workflow (BRIEF §1.8)", () => {
   it("offers each move in its state only", () => {
@@ -111,5 +111,13 @@ describe("the Theses screen's three groups (overhaul PR 4)", () => {
     expect(killTally([])).toBe("none");
     expect(killTally(["ok", "unknown"])).toBe("0 of 2 triggered");
     expect(killTally(["triggered", "ok", "triggered"])).toBe("2 of 3 triggered");
+  });
+});
+
+describe("the thesis page's Reviews (PR 6 final review V4-5)", () => {
+  it("shows while a review can still come, or when there are reviews; never promises one to a card or a closed thesis", () => {
+    for (const st of ["research", "closed", "dismissed"] as const) expect([st, showsReviews(st, 0)]).toEqual([st, false]);
+    for (const st of ["thesis", "position", "review"] as const) expect([st, showsReviews(st, 0)]).toEqual([st, true]);
+    for (const st of STATES) expect([st, showsReviews(st, 2)]).toEqual([st, true]);
   });
 });

@@ -45,6 +45,16 @@ function plural(n: number, one: string, many = `${one}s`): string {
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 
+/** A What changed figure as the rings and To do show it: each score rounded to a whole number with the same Math.round
+ * ("72.5" -> "73", "81.5 → 45.2" -> "82 → 45"; PR 6 final review HC-1). A move whose two sides round alike keeps its
+ * decimals ("72.6 → 72.9"), so it still reads as a move. The digest's own figure stays in the row's tooltip. */
+export function shownDelta(v: string): string {
+  const round = (s: string) => s.replace(/\d+(?:\.\d+)?/g, (n) => String(Math.round(Number(n))));
+  const sides = v.split(" → ");
+  if (sides.length === 2 && sides[0] !== sides[1] && round(sides[0]!) === round(sides[1]!)) return v;
+  return round(v);
+}
+
 /** A signal's or a red flag's everyday words, lower-case first ("insiders buying shares"); an unknown code as it is. */
 function plain(id: string): string {
   const s = SIGNAL_PLAIN[id] ?? RED_FLAG_NAME[id];
@@ -389,16 +399,25 @@ export function leftBucket(items: readonly ChangeItem[], bucket: keyof typeof BU
 
 // ---------------------------------------------------------------- To do and Coming up
 
-/** A To do row's line and its button: a card to accept or pass, or a review to give a verdict on. */
-export function todoAsk(state: string, f?: { now: number | null; kills: readonly string[] }): { ask: string; action: string; alert: boolean } {
+/** A To do row's line and its button: a card to accept or pass, or a review to give a verdict on. `short` is the
+ * phone's one line (the phone mock's "Card ready · Evidence 94"; PR 6 final review HC-10). */
+export function todoAsk(
+  state: string,
+  f?: { now: number | null; kills: readonly string[] },
+): { ask: string; short: string; action: string; alert: boolean } {
   if (state === "review") {
     const hit = (f?.kills ?? []).filter((k) => k === "triggered").length;
     return hit > 0
-      ? { ask: `${hit === 1 ? "A kill check" : `${hit} kill checks`} triggered: record a verdict`, action: "Open review", alert: true }
-      : { ask: "New filing in: is the thesis still intact?", action: "Open review", alert: false };
+      ? {
+          ask: `${hit === 1 ? "A kill check" : `${hit} kill checks`} triggered: record a verdict`,
+          short: `${hit === 1 ? "Kill check" : `${hit} kill checks`} triggered`,
+          action: "Open review",
+          alert: true,
+        }
+      : { ask: "New filing in: is the thesis still intact?", short: "New filing in", action: "Open review", alert: false };
   }
   const ev = f?.now === null || f?.now === undefined ? "" : ` · Evidence ${Math.round(f.now)}`;
-  return { ask: `New research card: accept it or pass${ev}`, action: "Review card", alert: false };
+  return { ask: `New research card: accept it or pass${ev}`, short: `Card ready${ev}`, action: "Review card", alert: false };
 }
 
 /** About how long To do takes: three minutes a row, rounded up to five. */
@@ -429,7 +448,10 @@ export function comingUp(list: readonly Live[], today: string, kills: ReadonlyMa
     const form = closes === date && typeof nf?.form === "string" && nf.form ? nf.form : null;
     const own = (t.card_json as { kill_criteria?: unknown }).kill_criteria;
     const k = kills.get(t.id) ?? (Array.isArray(own) ? own.length : 0);
-    const what = `${form ?? "review"} by ${shortDate(date)}${k > 0 ? ` · ${k} kill ${plural(k, "check")}` : ""}`;
+    // a filing window closes by its date; a thesis's own date is its next scheduled review, not a deadline for one
+    // already open (PR 6 final review DT-5)
+    const when = form ? `${form} by ${shortDate(date)}` : `next review ${shortDate(date)}`;
+    const what = `${when}${k > 0 ? ` · ${k} kill ${plural(k, "check")}` : ""}`;
     out.push({ id: t.id, code: code(t.companies), what, date });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.code.localeCompare(b.code)).slice(0, max);
@@ -460,6 +482,18 @@ export interface HealthRow {
 }
 
 const HEALTH_NAME: Record<string, string> = { sec: "SEC filings", twelvedata: "Weekly prices", sec_13f: "Fund holdings (13F)" };
+
+/** A source's name after the first in a sentence: "Weekly prices" -> "weekly prices"; one that starts with an acronym
+ * ("SEC filings", "NSE") stays as it is. Home's late line and Settings' line both say names this way. */
+export function midSentence(name: string): string {
+  return /^[A-Z][a-z]/.test(name) ? name[0]!.toLowerCase() + name.slice(1) : name;
+}
+
+/** Whether a source's Data health name is a plural noun ("SEC filings are", "Weekly prices need"), so a sentence
+ * about it alone takes the plural verb. */
+export function pluralSource(source: string): boolean {
+  return source in HEALTH_NAME;
+}
 /** The provider a Data health name doesn't already say: "Weekly prices" come from Twelve Data. */
 const HEALTH_PROVIDER: Record<string, string> = { twelvedata: "Twelve Data" };
 
@@ -484,10 +518,10 @@ export function lateLine(sources: readonly SourceHealth[], now: Date): string | 
   if (late.length === 0) return null;
   const names = late.map((s, i) => {
     const name = HEALTH_NAME[s.source] ?? sourceLabel(s.source);
-    const said = i > 0 && /^[A-Z][a-z]/.test(name) ? name[0]!.toLowerCase() + name.slice(1) : name; // "and weekly prices"
+    const said = i > 0 ? midSentence(name) : name; // "and weekly prices"
     return HEALTH_PROVIDER[s.source] ? `${said} (${HEALTH_PROVIDER[s.source]})` : said;
   });
   const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  const one = names.length === 1 && !(late[0]!.source in HEALTH_NAME); // "SEC filings are", "NSE is"
+  const one = names.length === 1 && !pluralSource(late[0]!.source); // "SEC filings are", "NSE is"
   return `${list} ${one ? "is" : "are"} out of date, so scores that read ${one ? "it" : "them"} may be behind.`;
 }

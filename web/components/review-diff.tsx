@@ -3,14 +3,15 @@ import { Chip, type ChipVariant } from "@/components/chip";
 import { Badge } from "@/components/ui/badge";
 import { shortDate } from "@/lib/dates";
 import { GAP_SHORT, killRule, KILL_WORD, pc, signalShort } from "@/lib/explain";
-import { big, measure, num } from "@/lib/format";
+import { big, num } from "@/lib/format";
 import { RED_FLAG_NAME } from "@/lib/labels";
-import type { KillSnapshot, PackDiff, StateDiff } from "@/lib/reviews";
+import { changeLines, contextValue, killValue, type KillSnapshot, type PackDiff, type StateDiff } from "@/lib/reviews";
 
 // A review's pack diff (BRIEF §4.9 "the pack diff since the last review"; M7 review R1-F4), as clean rows (overhaul
-// PR 6): the quarter's key figures against the quarter before with the change, the kill criteria as they stood, and
-// what changed since the last review (or the card): signals and red flags by name (the codes in their titles), the
-// context, new verified facts as quotes, ownership filings and insider events.
+// PR 6): the quarter's key figures against the quarter before with the change, the kill criteria as they stood (in
+// their metric's unit, as the checklist beside them), and what changed since the last review (or the card): only the
+// signals and red flags that did, by name (the codes in their titles), the context (Evidence and Gap as whole scores),
+// new verified facts as quotes, ownership filings and insider events (PR 6 final review V4-2, V4-9).
 
 const FIGURE_LABEL: Record<string, string> = {
   revenue: "Revenue",
@@ -86,7 +87,7 @@ function KillRows({ label, kills, state }: { label: string; kills: readonly Kill
           key={k.metric}
           name={killRule(k)}
           title={k.metric}
-          value={arrow(before.get(k.metric) ?? null, k.last_value, measure)}
+          value={arrow(before.get(k.metric) ?? null, k.last_value, (v) => killValue(k.metric, v))}
           end={<Badge variant={k.status === "triggered" ? "destructive" : k.status === "ok" ? "success" : "secondary"}>{KILL_WORD[k.status] ?? k.status}</Badge>}
         />
       ))}
@@ -94,9 +95,8 @@ function KillRows({ label, kills, state }: { label: string; kills: readonly Kill
   );
 }
 
-/** Ids as their names, each with its code as the title: "Order book, Insider buying"; "none" for an empty list. */
+/** Ids as their names, each with its code as the title: "Order book, Insider buying". */
 function Names({ ids, name }: { ids: readonly string[]; name: (id: string) => string }) {
-  if (ids.length === 0) return <>none</>;
   return (
     <>
       {ids.map((id, i) => (
@@ -109,22 +109,26 @@ function Names({ ids, name }: { ids: readonly string[]; name: (id: string) => st
   );
 }
 
+const flagName = (f: string) => RED_FLAG_NAME[f] ?? f;
+
 function Changes({ id, state }: { id: string; state: StateDiff }) {
+  const lines = changeLines(state);
   return (
     <div className="flex flex-col gap-2.5 text-[14px] text-fg">
       <h3 className="eyebrow">What changed {state.since ? <>since {shortDate(state.since, true)}</> : "since the card"}</h3>
-      <p>
-        <span className="font-semibold">Signals:</span> started <Names ids={state.signals.fired} name={signalShort} />; stopped{" "}
-        <Names ids={state.signals.dropped} name={signalShort} />.
-      </p>
-      <p>
-        <span className="font-semibold">Red flags:</span> started <Names ids={state.red_flags.fired} name={(f) => RED_FLAG_NAME[f] ?? f} />; stopped{" "}
-        <Names ids={state.red_flags.dropped} name={(f) => RED_FLAG_NAME[f] ?? f} />.
-      </p>
+      {lines.length === 0 ? (
+        <p className="text-muted">No signal or red flag changes.</p>
+      ) : (
+        lines.map((l) => (
+          <p key={l.lead}>
+            <span className="font-semibold">{l.lead}:</span> <Names ids={l.ids} name={l.kind === "signal" ? signalShort : flagName} />.
+          </p>
+        ))
+      )}
       {state.context.length > 0 ? (
         <Rows label={`Context for review ${id}`}>
           {state.context.map((c) => (
-            <Row key={c.id} name={CONTEXT_LABEL[c.id] ?? c.id} title={c.id} value={arrow(c.before, c.now, measure)} />
+            <Row key={c.id} name={CONTEXT_LABEL[c.id] ?? c.id} title={c.id} value={arrow(c.before, c.now, (v) => contextValue(c.id, v))} />
           ))}
         </Rows>
       ) : null}

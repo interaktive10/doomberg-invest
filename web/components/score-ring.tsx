@@ -73,13 +73,13 @@ export function ScoreTile({
   className?: string;
 }) {
   return (
-    <div className={cn("tile flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5", className)}>
+    <div className={cn("tile flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2.5", className)}>
       <ScoreRing value={value} kind={kind} size={size} />
       <div className="flex min-w-0 flex-col">
-        <span aria-hidden="true" className="text-[13px] font-semibold text-fg">
+        <span aria-hidden="true" className="text-[13px] font-semibold whitespace-nowrap text-fg">
           {NAME[kind]}
         </span>
-        <span className="text-[12px] text-subtle">{hint}</span>
+        <span className="text-[12px] whitespace-nowrap text-subtle">{hint}</span>
       </div>
     </div>
   );

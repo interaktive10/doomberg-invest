@@ -9,6 +9,7 @@ import {
   labHeadline,
   tally,
   verdict,
+  weightChanges,
   weightOf,
   type LabPricesRun,
   type LabRow,
@@ -150,5 +151,28 @@ describe("the Lab screen's visuals (overhaul PR 6)", () => {
     expect(columnGeometry([1, 2]).zero).toBe(100); // all positive: zero at the bottom
     expect(columnGeometry([-1, -2]).zero).toBe(0); // all negative: zero at the top
     expect(columnGeometry([null, null])).toEqual({ zero: 0, bars: [{ top: 0, height: 0, sign: 0 }, { top: 0, height: 0, sign: 0 }] });
+  });
+});
+
+describe("a weights proposal's changes (PR 6 final review EYE-14)", () => {
+  it("reads each changed weight out of the proposal's reason", () => {
+    expect(weightChanges("Signal Lab §4.10.5 proposals: evidence.S1 1.0 -> 1.2 (works); evidence.S3 1.0 -> 0 (hurts)")).toEqual([
+      { signal: "S1", from: "1.0", to: "1.2" },
+      { signal: "S3", from: "1.0", to: "0" },
+    ]);
+    // run.py's own shape: the section, and a reason with brackets of its own
+    expect(
+      weightChanges(
+        "Signal Lab §4.10.5 proposals: signals.S2 1.0 -> 1.5 (OOS mean +0.0120, t_nw 2.40 >= 2, in-sample +0.0210); legacy.L3 1 -> 0 (OOS insignificant (mean -0.0010, t_nw -0.20))",
+      ),
+    ).toEqual([
+      { signal: "S2", from: "1.0", to: "1.5" },
+      { signal: "L3", from: "1", to: "0" },
+    ]);
+    expect(weightChanges("config/weights.yaml on main")).toEqual([]);
+  });
+
+  it("names no workflow file in the download's line", () => {
+    expect(downloadLine(null)).toBe("Price download: not started yet (month-end prices download first).");
   });
 });

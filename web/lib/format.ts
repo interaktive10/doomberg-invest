@@ -34,14 +34,28 @@ export function code(c: { market: string; ticker: string | null; nse_symbol: str
   return (c.market === "us" ? c.ticker : c.nse_symbol) ?? c.market.toUpperCase();
 }
 
+const TIERS: readonly (readonly [number, string, number])[] = [
+  [1e12, "T", 2],
+  [1e9, "B", 2],
+  [1e6, "M", 2],
+  [1e3, "K", 0],
+  [1, "", 0],
+];
+
 /** An amount as people say it: $1.83M, $447K, ₹2.5B; another currency's code goes first ("EUR 1.2M"). `digits`
- * rounds to that many significant figures instead ($818M, $1.23B: a chart's headline figure). */
+ * rounds to that many significant figures instead ($818M, $1.23B: a chart's headline figure). The unit is chosen after
+ * rounding, so $999.7K reads "$1M", not "$1000K" (PR 6 final review C6). */
 export function money(v: number | null, currency?: string | null, digits?: number): string {
   if (v === null || !Number.isFinite(v)) return "n/a";
   const a = Math.abs(v);
-  const [d, s, dp] = a >= 1e12 ? [1e12, "T", 2] : a >= 1e9 ? [1e9, "B", 2] : a >= 1e6 ? [1e6, "M", 2] : a >= 1e3 ? [1e3, "K", 0] : [1, "", 0];
+  const round = (k: number) => {
+    const [d, , dp] = TIERS[k]!;
+    return digits === undefined ? Number((a / d).toFixed(dp)) : Number((a / d).toPrecision(digits));
+  };
+  let i = TIERS.findIndex(([d]) => a >= d);
+  if (i < 0) i = TIERS.length - 1;
+  if (i > 0 && round(i) >= 1000) i -= 1;
   const cur = (currency ?? "").toUpperCase();
   const sym = cur === "USD" ? "$" : cur === "INR" ? "₹" : cur ? `${cur} ` : "";
-  const shown = digits === undefined ? Number((a / d).toFixed(dp)) : Number((a / d).toPrecision(digits));
-  return `${v < 0 ? "−" : ""}${sym}${shown}${s}`;
+  return `${v < 0 ? "−" : ""}${sym}${round(i)}${TIERS[i]![1]}`;
 }

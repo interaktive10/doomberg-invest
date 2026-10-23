@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Chip, DotRow, Legend } from "@/components/chip";
+import { Chip, Legend } from "@/components/chip";
 import { DetailsMenu } from "@/components/details-menu";
 import { Icon } from "@/components/icons";
 import { Empty, Flash, Page } from "@/components/page";
@@ -29,9 +29,9 @@ import { dismissals, latestDigest, latestThesisByCompany, scoreHistory, screen, 
 import { weekEyebrow } from "@/lib/dates";
 import { code } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
-import { changeItems, homeSections, leftBucket, type ChangeItem } from "@/lib/home";
+import { changeItems, homeSections, leftBucket, shownDelta, type ChangeItem } from "@/lib/home";
 import { FAMILY_LABEL, SIGNAL_NAME, SIGNAL_PLAIN } from "@/lib/labels";
-import { familyTone, signalTone } from "@/lib/palette";
+import { signalTone } from "@/lib/palette";
 import type { ScreenSpec } from "@/lib/screener";
 import { cn } from "@/lib/utils";
 import { dismiss, research } from "./actions";
@@ -40,11 +40,13 @@ export const metadata = { title: "Candidates" };
 
 // BRIEF §6 Candidates (overhaul PR 4: one entry per company in plain words, filters folded away), drawn as the overhaul
 // PR 6 mock: a segmented switch for the three buckets (Candidate is "On the board"), then one card per company with its
-// ticker tile, the Evidence and Gap rings, the Evidence change since its previous scores row, why it's here as chips
-// with a dot per family (the codes in their tooltips), the red-flag line, NEW when it is in the bucket for the first
-// time in 12 weeks, and Open / Open card or Research / Dismiss. A dismissal holds until the evidence changes
-// (lib/candidates.ts). Under the cards, the names that left this bucket this week (the digest's What changed lines,
-// when the digest is of the week shown) and a legend.
+// ticker tile, the Evidence and Gap rings, the Evidence change since its previous scores row (none under a NEW name,
+// which has no earlier row), why it's here as chips with a dot per family (the codes in their tooltips), the red-flag
+// line, NEW when it is in the bucket for the first time in 12 weeks, and Open / Open card or Research / Dismiss. A
+// dismissal holds until the evidence changes (lib/candidates.ts). Under the cards, the names that left this bucket
+// this week (the digest's What changed lines, when the digest is of the week shown) and a legend. Before the first
+// weekly run (no digest, no scores) it says so, with no filters and no button to an Early tab as empty (PR 6 final
+// review).
 
 const FAMILIES = Object.keys(FAMILY_LABEL);
 
@@ -96,6 +98,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const back = href(filters);
   const filtered = market !== undefined || family !== undefined || sector !== undefined;
   const hidden = showDismissed ? 0 : inSector.length - shown.length;
+  const firstRun = digest === null && week === undefined && !filtered;
   // the digest's lines about names that left this bucket, only when it is the digest of the week shown
   const left = digest && week && digest.week_end === week ? leftBucket(changeItems(homeSections(digest.body_md).changed), bucket) : [];
   const range = BUCKET_RANGE[bucket];
@@ -117,33 +120,36 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       }
     >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
-      <div className="flex flex-wrap items-center gap-3">
-        {shown.length > 0 || hidden > 0 ? (
-          <p className="text-[14px] text-muted">
-            {shown.length} {shown.length === 1 ? "name" : "names"}
-            {hidden > 0 ? (
-              <>
-                {" "}
-                · {hidden} dismissed until the evidence changes ·{" "}
-                <Link href={href({ ...filters, dismissed: "1" })} className="inline-flex min-h-11 items-center md:min-h-0">
-                  show
-                </Link>
-              </>
-            ) : null}
-            {showDismissed ? " · dismissed ones shown" : ""}
-          </p>
-        ) : null}
-        <Filters bucket={bucket} market={market} family={family} sector={sector} sectors={sectors} showDismissed={showDismissed} filtered={filtered} />
-      </div>
+      {firstRun ? null : (
+        <div className="flex flex-wrap items-center gap-3">
+          {shown.length > 0 || hidden > 0 ? (
+            <p className="text-[14px] text-muted">
+              {shown.length} {shown.length === 1 ? "name" : "names"}
+              {hidden > 0 ? (
+                <>
+                  {" "}
+                  · {hidden} dismissed until the evidence changes ·{" "}
+                  <Link href={href({ ...filters, dismissed: "1" })} className="inline-flex min-h-11 items-center md:min-h-0">
+                    show
+                  </Link>
+                </>
+              ) : null}
+              {showDismissed ? " · dismissed ones shown" : ""}
+            </p>
+          ) : null}
+          <Filters bucket={bucket} market={market} family={family} sector={sector} sectors={sectors} showDismissed={showDismissed} filtered={filtered} />
+        </div>
+      )}
       {shown.length === 0 ? (
+        // on the canvas, so the outline button (a secondary one has no edge there; PR 6 final review L5-4)
         <Empty
           action={
             filtered ? (
-              <Link href={href({ bucket, dismissed: filters.dismissed })} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+              <Link href={href({ bucket, dismissed: filters.dismissed })} className={buttonVariants({ variant: "outline", size: "sm" })}>
                 Clear filters
               </Link>
-            ) : bucket === "candidate" ? (
-              <Link href={href({ ...filters, bucket: "early" })} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+            ) : bucket === "candidate" && !firstRun ? (
+              <Link href={href({ ...filters, bucket: "early" })} className={buttonVariants({ variant: "outline", size: "sm" })}>
                 See Early
               </Link>
             ) : undefined
@@ -151,9 +157,11 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         >
           {filtered
             ? "Nothing here with these filters."
-            : inSector.length > 0
-              ? "Every name here is dismissed until the evidence changes."
-              : BUCKET_EMPTY[bucket]}
+            : firstRun
+              ? "No scores yet: the weekly run writes the first on Saturday."
+              : inSector.length > 0
+                ? "Every name here is dismissed until the evidence changes."
+                : BUCKET_EMPTY[bucket]}
         </Empty>
       ) : (
         <ul aria-label="Candidates" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-5">
@@ -237,18 +245,17 @@ function CandidateCard({
           <ScoreTile value={score(r.evidence)} kind="evidence" />
           <ScoreTile value={score(r.gap)} kind="gap" />
         </div>
-        <p className={cn("flex items-center gap-1.5 text-[13px]", MOVE[move.tone].text)}>
-          <Icon name={MOVE[move.tone].icon} className="size-3.5" strokeWidth={2.4} />
-          <span>
-            <span className="font-semibold">Evidence</span> {move.text}
-          </span>
-        </p>
+        {change !== null ? (
+          <p className={cn("flex items-center gap-1.5 text-[13px]", MOVE[move.tone].text)}>
+            <Icon name={MOVE[move.tone].icon} className="size-3.5" strokeWidth={2.4} />
+            <span>
+              <span className="font-semibold">Evidence</span> {move.text}
+            </span>
+          </p>
+        ) : null}
       </div>
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <p className="eyebrow">Why it&apos;s here</p>
-          <DotRow tones={r.families.map(familyTone)} />
-        </div>
+        <p className="eyebrow">Why it&apos;s here</p>
         {r.fired_signals.length === 0 ? (
           <p className="text-[13px] text-muted">No signal fired.</p>
         ) : (
@@ -416,7 +423,7 @@ function Left({ title, items }: { title: string; items: ChangeItem[] }) {
             </div>
             {c.delta ? (
               <p className="num text-[14px] font-semibold text-warn">
-                {c.delta.label} {c.delta.value}
+                {c.delta.label} {shownDelta(c.delta.value)}
               </p>
             ) : null}
             <Link href={c.href} className={buttonVariants({ variant: "secondary", size: "sm" })}>

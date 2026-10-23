@@ -12,6 +12,12 @@ export function journalLine(entries: number, postmortems: number): string {
   return `${e} and ${p}, all private.`;
 }
 
+/** Journal entries newest first by the date each one is about (entry_date, which can be set back), then by when it was
+ * written, so the list matches the "Newest first" it says (PR 6 final review EYE-13). */
+export function byEntryDate<T extends { entry_date: string; created_at: string }>(xs: readonly T[]): T[] {
+  return [...xs].sort((a, b) => b.entry_date.localeCompare(a.entry_date) || b.created_at.localeCompare(a.created_at));
+}
+
 /** How the closed theses' post-mortems judged them. */
 export function trackRecord(pms: readonly Pick<Postmortem, "thesis_right">[]): { right: number; wrong: number; unclear: number } {
   const out = { right: 0, wrong: 0, unclear: 0 };

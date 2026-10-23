@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useCloseOnOutside } from "@/components/details-menu";
 import { Icon } from "@/components/icons";
@@ -114,9 +114,13 @@ export function Dock({ email }: { email: string }) {
 
 /** The company search (overhaul PR 5): a plain GET form to /search, so it works without script; "/" jumps to it from
  * anywhere but a text field. app/(app)/search/page.tsx checks the query again on the server. Its edge is the control
- * edge colour (>= 3:1 on the canvas and on its own panel colour), like every field's. */
+ * edge colour (>= 3:1 on the canvas and on its own panel colour), like every field's. On the results it keeps the
+ * query, so it can be refined (PR 6 final review L5-15); elsewhere it starts empty. */
 export function SearchBox({ className }: { className?: string }) {
   const box = useRef<HTMLInputElement>(null);
+  const path = usePathname();
+  const params = useSearchParams();
+  const q = path === "/search" ? (params?.get("q") ?? "") : "";
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
@@ -137,6 +141,8 @@ export function SearchBox({ className }: { className?: string }) {
         <Icon name="search" className="text-subtle" />
         <input
           ref={box}
+          key={q}
+          defaultValue={q}
           id="company-search"
           name="q"
           type="search"

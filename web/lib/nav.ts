@@ -28,3 +28,13 @@ export function isCurrent(path: string, href: string): boolean {
 export function inMore(path: string): boolean {
   return MORE.some((p) => isCurrent(path, p.href));
 }
+
+/** The element id an address's #hash names ("#fact-<id>"), decoded; "" for none or for a malformed escape such as a
+ * cut-off "%E0%A4", which would otherwise throw and replace the page with its error screen (PR 6 final review C13). */
+export function hashId(hash: string): string {
+  try {
+    return decodeURIComponent(hash.replace(/^#/, ""));
+  } catch {
+    return "";
+  }
+}

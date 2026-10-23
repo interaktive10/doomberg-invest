@@ -57,7 +57,8 @@ export default async function Search({ searchParams }: { searchParams: Promise<Q
           : `${many ? `The first ${SEARCH_ROWS}` : hits.length} ${hits.length === 1 ? "company matches" : "companies match"} "${parsed.q}".`
       }
     >
-      <Section title="Results" id="results" count={hits.length} description={week ? `Bucket and Evidence in the week ending ${shortDate(week, true)}.` : "No week has been scored yet."}>
+      {/* the line above counts the hits; this one only says which week the chips and rings are of (PR 6 final review V4-11) */}
+      <Section title="Results" id="results" description={week ? `As of the week ending ${shortDate(week, true)}.` : "No week has been scored yet."}>
         {hits.length === 0 ? (
           <Empty>No company matches. Try fewer letters, or the ticker.</Empty>
         ) : (

@@ -44,7 +44,6 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const now = new Date();
   const sources = watched(all);
   const health = new Map(healthRows(all, now).map((h) => [h.source, h]));
-  const most = Math.max(1, ...llm.map((u) => u.calls));
   const n = Number(weeks);
   return (
     <Page title="Settings" description={sourcesLine([...health.values()])}>
@@ -53,19 +52,26 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
           <Section title="Sources" id="sources" description="The US sources the pipeline reads, each held to how fresh it must be.">
             {sources.length === 0 ? (
-              <Empty>No source has reported yet. The first weekly run fills this in.</Empty>
+              <Empty>The first weekly run fills this in.</Empty>
             ) : (
               <ul aria-label="Sources" className="flex flex-col">
                 {sources.map((s) => {
                   const chip = statusChip(sourceStatus(s, all, now));
-                  const when = s.last_success ? `last success ${stamp(s.last_success)}` : "no success yet";
+                  // the provider only where the name doesn't say it, the day (the time in its title) and how late against
+                  // its SLA in days (PR 6 final review EYE-16)
+                  const name = health.get(s.source)?.name ?? sourceLabel(s.source);
+                  const provider = name.toLowerCase().includes(sourceLabel(s.source).toLowerCase()) ? null : sourceLabel(s.source);
+                  const when = s.last_success ? `last success ${shortDate(s.last_success, true)}` : "no success yet";
+                  const late = chip.detail?.replace(/^no success for (\d+) days;/, "$1 days ago;") ?? null;
                   return (
                     <li key={s.source} className="flex flex-col gap-1 border-t border-line py-3.5 first:border-t-0 first:pt-1">
                       <div className="flex items-center gap-3">
                         <Dot tone={DOT[chip.tone]} className="size-2.5" />
                         <div className="flex min-w-0 flex-1 flex-col">
-                          <span className="text-[15px] font-semibold text-fg">{health.get(s.source)?.name ?? sourceLabel(s.source)}</span>
-                          <span className="num text-[13px] text-subtle">{[sourceLabel(s.source), when, chip.detail].filter(Boolean).join(" · ")}</span>
+                          <span className="text-[15px] font-semibold text-fg">{name}</span>
+                          <span className="num text-[13px] text-subtle" title={s.last_success ? stamp(s.last_success) : undefined}>
+                            {[provider, when, late].filter(Boolean).join(" · ")}
+                          </span>
                         </div>
                         <SourceStatus source={s} all={all} now={now} />
                       </div>
@@ -83,7 +89,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
           <Section title="LLM use" id="llm" description={llmLine(llm)}>
             {llm.length === 0 ? (
-              <Empty>Nothing in the last 7 days. The pipeline reads filings with free tiers only, so a quiet week costs nothing.</Empty>
+              <Empty>Free tiers only, so a quiet week costs nothing.</Empty>
             ) : (
               <ul aria-label="LLM calls by provider, last 7 days" className="flex flex-col gap-5">
                 {llm.map((u) => {
@@ -97,8 +103,10 @@ export default async function Settings({ searchParams }: { searchParams: Promise
                           <span className="text-[17px] font-bold text-fg">{u.calls.toLocaleString("en-US")}</span> {u.calls === 1 ? "call" : "calls"}
                         </span>
                       </div>
+                      {/* against its own calls, so a provider whose every call was answered reads as full (PR 6 final
+                          review L5-10); the count is the number above */}
                       <SplitBar
-                        max={most}
+                        max={Math.max(1, u.calls)}
                         size="md"
                         label={`${name}: ${p.ok} answered, ${p.limited} rate-limited, ${p.failed} failed`}
                         parts={[

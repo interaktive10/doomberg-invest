@@ -24,6 +24,7 @@ import {
   tally,
   verdict,
   VERDICTS,
+  weightChanges,
   weightOf,
   type DownloadState,
   type Verdict,
@@ -39,7 +40,9 @@ export const metadata = { title: "Signal Lab" };
 // (§4.10.5) as a chip with the weight in use as a bar (weights_versions); each signal's headline result (out of
 // sample at the proposal horizon) as a bar either side of the market, with every horizon and period behind Details;
 // the score deciles as two small column charts (their rows behind Details); the price download's progress as a meter;
-// the open proposals. Plain names on the page; the signal codes sit in each row's tooltip and in the tables.
+// the open proposals, each changed weight by its signal's name. Plain names on the page; the signal codes sit in each
+// row's tooltip and in the tables. Before the first Lab run the page says so once: no verdict tally, no results or
+// decile sheets, and the weight column only with an approved weights version (PR 6 final review L5-1, L5-5).
 
 /** A signal's name as every screen gives it (lib/labels.ts SIGNAL_SHORT: S4 "Earnings quality", as the Company page's
  * Why rows), a legacy rule L3 "Legacy rule 3"; the BRIEF's name and the code are the row's title (codeTitle). */
@@ -58,6 +61,10 @@ const VERDICT_CHIP: Record<Verdict, { variant: ChipVariant; icon: IconName; word
   unproven: { variant: "plain", icon: "minus", word: "Unproven" },
   "not testable yet": { variant: "plain", icon: "calendar", word: "Not testable yet" },
 };
+
+/** The verdict rows' columns: with the weight in use when a weights version is approved, else signal and verdict only. */
+const COLS_WEIGHT = "sm:grid-cols-[minmax(0,1fr)_9.5rem_11rem]";
+const COLS = "sm:grid-cols-[minmax(0,1fr)_9.5rem]";
 
 const TALLY_TEXT: Record<Verdict, string> = { works: "text-up", unproven: "text-fg", hurts: "text-down", "not testable yet": "text-subtle" };
 
@@ -158,7 +165,7 @@ function Download({ run }: { run: Parameters<typeof downloadProgress>[0] }) {
       actions={<Chip variant={chip.variant}>{chip.word}</Chip>}
     >
       {p.state === "not started" ? (
-        <Empty>Not started yet. lab-prices.yml fetches Twelve Data&apos;s month-end prices first, with nothing for you to do.</Empty>
+        <Empty>It starts on its own; nothing for you to do.</Empty>
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between gap-3">
@@ -184,8 +191,17 @@ function Download({ run }: { run: Parameters<typeof downloadProgress>[0] }) {
   );
 }
 
-/** Ten columns either side of a zero line: a score decile's mean excess return, lowest score on the left. */
+/** Ten columns either side of a zero line: a score decile's mean excess return, lowest score on the left; a line
+ * saying so when the run has none for this score, not an empty frame (PR 6 final review L5-7). */
 function Deciles({ name, values }: { name: string; values: (number | null)[] }) {
+  if (values.every((v) => v === null)) {
+    return (
+      <figure className="tile flex flex-col gap-3 p-4">
+        <figcaption className="text-[14px] font-semibold text-fg">{name}</figcaption>
+        <p className="grid h-24 place-items-center text-center text-[13px] text-muted">No {name} deciles in this run.</p>
+      </figure>
+    );
+  }
   const g = columnGeometry(values);
   const said = values.map((v, i) => `decile ${i + 1} ${v === null ? "no result" : signed(v)}`).join(", ");
   const high = values[values.length - 1] ?? null;
@@ -241,7 +257,7 @@ export default async function Lab() {
   return (
     <Page
       title="Signal Lab"
-      eyebrow={runAt ? `Run of ${shortDate(runAt, true)}` : "Not run yet"}
+      eyebrow={runAt ? `Run of ${shortDate(runAt, true)}` : undefined}
       description={labHeadline(counts, ran, downloadProgress(download).state)}
     >
       <section aria-labelledby="limits" className="rise rounded-sheet bg-warn/10 px-5 py-4 md:px-6 md:py-5">
@@ -266,39 +282,48 @@ export default async function Lab() {
             }
           >
             <div className="flex flex-col gap-4">
-              <ul aria-label="Verdicts, counted" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {VERDICTS.map((v) => (
-                  <li key={v} className="tile flex flex-col gap-0.5 px-3.5 py-3">
-                    <span className={cn("num text-[26px] leading-tight font-bold tracking-[-0.02em]", TALLY_TEXT[v])}>{counts[v]}</span>
-                    <span className="text-[13px] text-muted">{VERDICT_CHIP[v].word.toLowerCase()}</span>
-                  </li>
-                ))}
-              </ul>
-              <div aria-hidden="true" className="caps hidden grid-cols-[minmax(0,1fr)_9.5rem_11rem] gap-x-4 sm:grid">
+              {/* counted only once a run has given verdicts: before it every row says "No run yet" */}
+              {ran ? (
+                <ul aria-label="Verdicts, counted" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {VERDICTS.map((v) => (
+                    <li key={v} className="tile flex flex-col gap-0.5 px-3.5 py-3">
+                      <span className={cn("num text-[26px] leading-tight font-bold tracking-[-0.02em]", TALLY_TEXT[v])}>{counts[v]}</span>
+                      <span className="text-[13px] text-muted">{VERDICT_CHIP[v].word.toLowerCase()}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div aria-hidden="true" className={cn("caps hidden gap-x-4 sm:grid", current ? COLS_WEIGHT : COLS)}>
                 <span>Signal</span>
                 <span>Verdict</span>
-                <span>Weight in use</span>
+                {current ? <span>Weight in use</span> : null}
               </div>
               <ul aria-label="Verdicts and weights in use" className="-mt-2 flex flex-col">
                 {rows.map(({ id, v, w }) => (
                   <li
                     key={id}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-t border-line py-3 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_9.5rem_11rem]"
+                    className={cn(
+                      "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-t border-line py-3 first:border-t-0",
+                      current ? COLS_WEIGHT : COLS,
+                    )}
                   >
                     <span className="flex min-w-0 items-center gap-2.5" title={codeTitle(id)}>
                       <Dot tone={signalTone(id)} />
-                      <span className="truncate text-[15px] font-medium text-fg">{signalName(id)}</span>
+                      {/* wraps on a phone, where a title can't be read; one line from sm up (PR 6 final review L5-11) */}
+                      <span className="text-[15px] font-medium text-fg sm:truncate">{signalName(id)}</span>
                     </span>
                     <span className="justify-self-end sm:justify-self-start">
                       {!ran && v !== "not testable yet" ? <Chip size="sm" className="text-muted">No run yet</Chip> : <VerdictChip v={v} />}
                     </span>
-                    <span className="col-span-2 flex items-center gap-2.5 sm:col-span-1">
-                      <Meter value={w ?? 0} max={PROMOTE_WEIGHT} size="md" className="flex-1" />
-                      <span className="num w-9 text-right text-[13px] font-semibold text-fg">
-                        <span className="sr-only">Weight in use </span>
-                        {w === null ? "–" : num(w, 1)}
+                    {current ? (
+                      <span className="col-span-2 flex items-center gap-2.5 sm:col-span-1">
+                        <Meter value={w ?? 0} max={PROMOTE_WEIGHT} size="md" className="flex-1" />
+                        <span className="num w-9 text-right text-[13px] font-semibold text-fg">
+                          <span className="sr-only">Weight in use </span>
+                          {w === null ? "–" : num(w, 1)}
+                        </span>
                       </span>
-                    </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -311,14 +336,12 @@ export default async function Lab() {
             </div>
           </Section>
 
-          <Section
-            title="Does it beat the market?"
-            id="results"
-            description={ran ? `Out of sample, ${PROPOSAL_HORIZON_MONTHS} months after each signal fired: its mean return above the market's.` : undefined}
-          >
-            {!ran ? (
-              <Empty>No Lab run yet: lab-prices.yml starts the first one when the price download is complete.</Empty>
-            ) : (
+          {ran ? (
+            <Section
+              title="Does it beat the market?"
+              id="results"
+              description={`Out of sample, ${PROPOSAL_HORIZON_MONTHS} months after each signal fired: its mean return above the market's.`}
+            >
               <div className="flex flex-col gap-4">
                 {heads.length === 0 ? (
                   <p className="text-[14px] text-muted">No signal has an out-of-sample result at {PROPOSAL_HORIZON_MONTHS} months yet.</p>
@@ -357,31 +380,33 @@ export default async function Lab() {
                   </div>
                 </Disclosure>
               </div>
-            )}
-          </Section>
+            </Section>
+          ) : null}
 
-          <Section
-            title="Does a higher score pay?"
-            id="deciles"
-            description={deciles.length > 0 ? `Each tenth of companies by score, ${PROPOSAL_HORIZON_MONTHS} months later, out of sample.` : undefined}
-          >
-            {deciles.length === 0 ? (
-              <Empty>No decile results yet: they come with the first Lab run.</Empty>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Deciles name="Evidence" values={decileMeans(deciles, "EVIDENCE")} />
-                  <Deciles name="Gap" values={decileMeans(deciles, "GAP")} />
+          {ran || deciles.length > 0 ? (
+            <Section
+              title="Does a higher score pay?"
+              id="deciles"
+              description={deciles.length > 0 ? `Each tenth of companies by score, ${PROPOSAL_HORIZON_MONTHS} months later, out of sample.` : undefined}
+            >
+              {deciles.length === 0 ? (
+                <Empty>No decile results in this run.</Empty>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Deciles name="Evidence" values={decileMeans(deciles, "EVIDENCE")} />
+                    <Deciles name="Gap" values={decileMeans(deciles, "GAP")} />
+                  </div>
+                  <Disclosure summary="Every decile">
+                    <ResultTable
+                      label="Score deciles"
+                      rows={[...deciles].sort((a, b) => a.signal_id.localeCompare(b.signal_id, "en", { numeric: true }))}
+                    />
+                  </Disclosure>
                 </div>
-                <Disclosure summary="Every decile">
-                  <ResultTable
-                    label="Score deciles"
-                    rows={[...deciles].sort((a, b) => a.signal_id.localeCompare(b.signal_id, "en", { numeric: true }))}
-                  />
-                </Disclosure>
-              </div>
-            )}
-          </Section>
+              )}
+            </Section>
+          ) : null}
         </div>
 
         <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-6">
@@ -392,15 +417,33 @@ export default async function Lab() {
                 <Empty>No open weight proposals. The Lab opens one as a pull request when a result is clear enough.</Empty>
               ) : (
                 <ul className="flex flex-col gap-2">
-                  {open.map((v) => (
-                    <li key={v.version} className="tile flex flex-col gap-1.5 p-3.5">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-[15px] font-semibold text-fg">{v.version}</span>
-                        <Badge variant="warning">waiting for approval</Badge>
-                      </span>
-                      <p className="text-[13px] break-words text-muted">{v.reason}</p>
-                    </li>
-                  ))}
+                  {open.map((v) => {
+                    // each changed weight by its signal's name; the reason as the pipeline wrote it in the title (PR 6
+                    // final review EYE-14)
+                    const changes = weightChanges(v.reason);
+                    return (
+                      <li key={v.version} className="tile flex flex-col gap-1.5 p-3.5">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-[15px] font-semibold text-fg">{v.version}</span>
+                          <Badge variant="warning">waiting for approval</Badge>
+                        </span>
+                        {changes.length > 0 ? (
+                          <ul title={v.reason} className="flex flex-col gap-0.5 text-[13px] text-muted">
+                            {changes.map((c) => (
+                              <li key={c.signal}>
+                                {signalName(c.signal)}: weight{" "}
+                                <span className="num">
+                                  {c.from} → {c.to}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-[13px] break-words text-muted">{v.reason}</p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <Note>

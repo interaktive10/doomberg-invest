@@ -228,6 +228,10 @@ describe("charts and cards", () => {
     expect(trendNote([0.1, 0.1, 0.1, 0.1, 0.131, null], "pct")).toBe("Up 3.1 points over a year");
     expect(trendNote([0.1, 0.1, 0.1, 0.1, 0.1], "pct")).toBe("Flat over a year");
     expect(trendNote([1.8, 2, 2, 2, 3.9], "x")).toBe("1.8× a year ago");
+    // flat says so in every format, and a negative multiple has a true minus (PR 6 final review C11, C12)
+    expect(trendNote([100, 100, 100, 100, 100], "big")).toBe("Flat over a year");
+    expect(trendNote([100, 100, 100, 100, 100.04], "money")).toBe("Flat over a year");
+    expect(trendNote([-0.4, 0, 0, 0, 0.2], "x")).toBe("−0.4× a year ago");
     expect(trendNote([1, 2, 3], "big")).toBeNull();
     expect(trendNote([null, 2, 3, 4, 5], "big")).toBeNull();
     expect(trendNote([-5, 2, 3, 4, 5], "big")).toBeNull();

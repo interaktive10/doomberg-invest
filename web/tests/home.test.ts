@@ -19,7 +19,10 @@ import {
   lateLine,
   leftBucket,
   localLinks,
+  midSentence,
   parseFunnel,
+  pluralSource,
+  shownDelta,
   todoAsk,
   todoMinutes,
 } from "@/lib/home";
@@ -234,10 +237,22 @@ describe("What changed as rows in plain words (overhaul PR 6)", () => {
 
 describe("To do, Coming up, On the board and Data health (overhaul PR 6)", () => {
   it("asks for the decision each To do row needs", () => {
-    expect(todoAsk("research", { now: 72.5, kills: [] })).toEqual({ ask: "New research card: accept it or pass · Evidence 73", action: "Review card", alert: false });
-    expect(todoAsk("research")).toEqual({ ask: "New research card: accept it or pass", action: "Review card", alert: false });
-    expect(todoAsk("review", { now: 66, kills: ["triggered", "ok"] })).toEqual({ ask: "A kill check triggered: record a verdict", action: "Open review", alert: true });
-    expect(todoAsk("review", { now: 66, kills: ["ok"] }).alert).toBe(false);
+    // `short` is the phone's one line, as the phone mock's "Card ready · Evidence 94" (PR 6 final review HC-10)
+    expect(todoAsk("research", { now: 72.5, kills: [] })).toEqual({
+      ask: "New research card: accept it or pass · Evidence 73",
+      short: "Card ready · Evidence 73",
+      action: "Review card",
+      alert: false,
+    });
+    expect(todoAsk("research")).toEqual({ ask: "New research card: accept it or pass", short: "Card ready", action: "Review card", alert: false });
+    expect(todoAsk("review", { now: 66, kills: ["triggered", "ok"] })).toEqual({
+      ask: "A kill check triggered: record a verdict",
+      short: "Kill check triggered",
+      action: "Open review",
+      alert: true,
+    });
+    expect(todoAsk("review", { now: 66, kills: ["triggered", "triggered"] }).short).toBe("2 kill checks triggered");
+    expect(todoAsk("review", { now: 66, kills: ["ok"] })).toMatchObject({ short: "New filing in", alert: false });
     expect([0, 1, 2, 3, 4].map(todoMinutes)).toEqual([0, 5, 10, 10, 15]);
   });
 
@@ -258,10 +273,30 @@ describe("To do, Coming up, On the board and Data health (overhaul PR 6)", () =>
     expect(comingUp(list, "2026-10-22", new Map([["omga", 1]])).map((u) => `${u.code} ${u.what}`)).toEqual([
       "CELH 10-Q by Nov 14 · 3 kill checks",
       "HHH 10-Q by Nov 14",
-      "OMGA review by Nov 14 · 1 kill check",
+      "OMGA next review Nov 14 · 1 kill check", // its next scheduled review, not a deadline (PR 6 final review DT-5)
       "EMBC 10-K by Dec 29",
     ]);
     expect(comingUp(list, "2026-10-22", new Map(), 1)).toHaveLength(1);
+  });
+
+  it("rounds What changed's Evidence as the rings and To do do, unless that hides a move (PR 6 final review HC-1)", () => {
+    expect(shownDelta("72.5")).toBe("73");
+    expect(shownDelta("81.5 → 45.2")).toBe("82 → 45");
+    expect(shownDelta("81 → 45.5")).toBe("81 → 46");
+    expect(shownDelta("64")).toBe("64");
+    expect(shownDelta("58.3")).toBe("58");
+    expect(shownDelta("72.6 → 72.9")).toBe("72.6 → 72.9"); // "73 → 73" would read as no move
+    expect(shownDelta("n/a")).toBe("n/a");
+  });
+
+  it("says a source's name mid-sentence and knows the Data health names are plural (PR 6 final review DT-7, C8)", () => {
+    expect(["Weekly prices", "SEC filings", "Fund holdings (13F)", "NSE"].map(midSentence)).toEqual([
+      "weekly prices",
+      "SEC filings",
+      "fund holdings (13F)",
+      "NSE",
+    ]);
+    expect(["sec", "twelvedata", "sec_13f", "nse"].map(pluralSource)).toEqual([true, true, true, false]);
   });
 
   it("says why a name is on the board in two signals, by the Company page's short names (PR 6 review design-F3)", () => {

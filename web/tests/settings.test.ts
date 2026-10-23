@@ -7,7 +7,8 @@ import { sourceStatus } from "@/lib/staleness";
 describe("Settings drawn (overhaul PR 6)", () => {
   it("turns each source status into a chip: a word, its detail and a tone", () => {
     expect(statusChip("ok")).toEqual({ word: "On time", detail: null, tone: "good" });
-    expect(statusChip("late (no success for 11 days; SLA 8)")).toEqual({ word: "Late", detail: "no success for 11 days; SLA 8", tone: "warn" });
+    // the SLA in days, not a bare "SLA 8" (PR 6 final review L5-14)
+    expect(statusChip("late (no success for 11 days; SLA 8)")).toEqual({ word: "Late", detail: "no success for 11 days; due every 8 days", tone: "warn" });
     expect(statusChip("stale")).toEqual({ word: "Stale", detail: null, tone: "bad" });
     expect(statusChip("never succeeded")).toEqual({ word: "Never ran", detail: null, tone: "bad" });
     expect(statusChip("fallback, not needed (nse ok)")).toEqual({ word: "Not needed", detail: "nse ok", tone: "plain" });
@@ -25,19 +26,27 @@ describe("Settings drawn (overhaul PR 6)", () => {
     const now = new Date("2026-09-20T00:00:00Z");
     const s = (source: string, last_success: string | null, stale = false): SourceHealth => ({ source, last_success, last_error: null, stale });
     const ok = s("sec", "2026-09-18T06:00:00Z");
-    expect(sourcesLine(healthRows([ok, s("twelvedata", null, true)], now))).toBe("Weekly prices needs a look; the other one is on time.");
+    // a Data health name is plural, and lower-case after the first, as Home's late line says it (PR 6 final review C8,
+    // DT-7)
+    expect(sourcesLine(healthRows([ok, s("twelvedata", null, true)], now))).toBe("Weekly prices need a look; the other one is on time.");
     expect(sourcesLine(healthRows([ok, s("twelvedata", null, true), s("sec_13f", "2026-03-01T00:00:00Z")], now))).toBe(
-      "Weekly prices and Fund holdings (13F) need a look; the other one is on time.",
+      "Weekly prices and fund holdings (13F) need a look; the other one is on time.",
     );
-    expect(sourcesLine(healthRows([s("twelvedata", null, true)], now))).toBe("Weekly prices needs a look.");
+    expect(sourcesLine(healthRows([s("twelvedata", null, true)], now))).toBe("Weekly prices need a look.");
+    expect(sourcesLine(healthRows([s("twelvedata", null, true), s("sec", null)], now))).toBe("Weekly prices and SEC filings need a look.");
     expect(sourcesLine(healthRows([ok, s("twelvedata", "2026-09-18T06:00:00Z"), s("sec_13f", "2026-08-15T00:00:00Z")], now))).toBe(
       "All 3 sources are on time.",
     );
     expect(sourcesLine(healthRows([ok], now))).toBe("The one source is on time.");
     expect(sourcesLine([])).toBe("No source has reported yet.");
-    expect(sourcesLine([{ name: "BSE", state: "resting" }, { name: "A", state: "down" }, { name: "B", state: "ok" }, { name: "C", state: "ok" }])).toBe(
-      "A needs a look; the other 3 are on time.",
-    );
+    expect(
+      sourcesLine([
+        { source: "bse", name: "BSE", state: "resting" },
+        { source: "a", name: "A", state: "down" },
+        { source: "b", name: "B", state: "ok" },
+        { source: "c", name: "C", state: "ok" },
+      ]),
+    ).toBe("A needs a look; the other 3 are on time.");
   });
 
   it("splits a provider's calls into answered, rate-limited and failed", () => {

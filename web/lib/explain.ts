@@ -1,5 +1,5 @@
 import { CITE, stripTitle } from "@/lib/cards";
-import type { ChartFormat } from "@/lib/chart";
+import { minus, type ChartFormat } from "@/lib/chart";
 import { shortDate } from "@/lib/dates";
 import { money } from "@/lib/format";
 import { FAMILY_LABEL, humanize, killMetric, killName, label, metricValue, SIGNAL_NAME, SIGNAL_PLAIN } from "@/lib/labels";
@@ -416,6 +416,7 @@ export function trendNote(values: readonly (number | null | undefined)[], format
     case "big": {
       if (then <= 0) return null;
       const ch = now / then - 1;
+      if (Math.abs(ch) < 0.0005) return "Flat over a year"; // as the pct branch says it, not "+0%" (PR 6 final review C11)
       return `${ch >= 0 ? "+" : "−"}${pc(Math.abs(ch))} over a year`;
     }
     case "pct": {
@@ -423,9 +424,9 @@ export function trendNote(values: readonly (number | null | undefined)[], format
       return Math.abs(d) < 0.05 ? "Flat over a year" : `${d > 0 ? "Up" : "Down"} ${Math.abs(d).toFixed(1)} points over a year`;
     }
     case "x":
-      return `${then.toFixed(1)}× a year ago`;
+      return `${minus(then.toFixed(1))}× a year ago`;
     case "num":
-      return `${then.toFixed(0)} a year ago`;
+      return `${minus(then.toFixed(0))} a year ago`;
   }
 }
 

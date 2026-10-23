@@ -26,7 +26,8 @@ export default async function Theses() {
       {all.length === 0 ? (
         <Empty
           action={
-            <Link href="/candidates" className={buttonVariants({ variant: "secondary" })}>
+            // on the canvas: the outline button, as every empty state's (PR 6 final review L5-4)
+            <Link href="/candidates" className={buttonVariants({ variant: "outline", size: "sm" })}>
               See the candidates
             </Link>
           }

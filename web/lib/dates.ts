@@ -24,11 +24,14 @@ export function shortDate(iso: string, year = false): string {
   return year ? `${s}, ${t.getUTCFullYear()}` : s;
 }
 
-/** The calendar quarter a period ends in, as the charts label it: "2023-09-30" -> "Q3 ’23". */
+/** The calendar quarter a period ends in, as the charts label it: "2023-09-30" -> "Q3 ’23". A period that ends in a
+ * quarter's first week counts as the quarter before, so a 52/53-week filer's quarters ("2023-07-01", "2023-09-30")
+ * never share a label and "2026-07-04" is Q2 ’26 (PR 6 final review C5). */
 export function quarterLabel(iso: string): string {
   const t = utcDay(iso);
   if (t === null) return iso;
-  return `Q${Math.floor(t.getUTCMonth() / 3) + 1} ’${String(t.getUTCFullYear() % 100).padStart(2, "0")}`;
+  const q = new Date(t.getTime() - 7 * DAY);
+  return `Q${Math.floor(q.getUTCMonth() / 3) + 1} ’${String(q.getUTCFullYear() % 100).padStart(2, "0")}`;
 }
 
 /** "Fri, Sep 18". */

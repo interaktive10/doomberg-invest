@@ -81,7 +81,9 @@ test("Home: the funnel strip, To do live from the theses and What changed from t
   const changed = page.getByRole("region", { name: "What changed" });
   const echo = changed.getByRole("listitem").filter({ hasText: "ECHO" });
   await expect(echo).toContainText("joined the board");
-  await expect(echo).toContainText("72.5");
+  // rounded as the ring and To do round it (the digest's 72.5 stays in the row's tooltip; PR 6 final review HC-1)
+  await expect(echo).toContainText("Evidence 73");
+  await expect(echo).toHaveAttribute("title", /Evidence 72\.5/);
   await expect(changed.getByRole("link", { name: "ECHO" })).toHaveAttribute("href", `/company/${ECHO}`);
   // On the board: the latest scored week's Candidate bucket, each with its Evidence ring
   const board = page.getByRole("region", { name: "On the board" });
@@ -146,6 +148,9 @@ test("candidates: dismiss one with a reason, start research on another", async (
   await expect(board.getByRole("link", { name: /Echo Grid Corp\./ })).toHaveCount(1);
   await expect(board.getByRole("link", { name: /Kappa Cables Ltd/ })).toHaveCount(0);
   await expect(board.getByRole("link", { name: "All 1 on the board" })).toBeVisible();
+  // and says what it left out, so the headline's and the funnel's count (the digest's 2) adds up (PR 6 final review DT-3)
+  await expect(board).toContainText("1 dismissed until the evidence changes");
+  await expect(board.getByRole("link", { name: "show dismissed names" })).toHaveAttribute("href", "/candidates?dismissed=1");
   await page.goto("/candidates?dismissed=1");
   await expect(card(page, "Kappa Cables Ltd").getByText("dismissed", { exact: true })).toBeVisible();
 
@@ -171,6 +176,7 @@ test("search → company → Research → 'Card queued' (overhaul PR 5)", async 
   await box.fill("Grid Corp");
   await box.press("Enter");
   await expect(page).toHaveURL(/\/search\?q=Grid\+Corp$/);
+  await expect(box).toHaveValue("Grid Corp"); // the query stays in the box, to refine it (PR 6 final review L5-15)
   const results = page.getByRole("list", { name: "Search results" }); // one row per company (overhaul PR 6)
   await expect(results.getByRole("listitem").filter({ hasText: "Echo Grid Corp." })).toContainText("On the board"); // the Candidate bucket
   // "/" types a slash inside a field instead of jumping
@@ -229,6 +235,12 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByRole("heading", { name: "Why it may be mispriced" })).toBeVisible();
   await page.getByRole("button", { name: "Accept as thesis" }).click();
   await flash(page, "Accepted");
+  // each header chip reads as one run of words, the date and its comma together (as rendered: innerText splits a
+  // chip's flex items apart; PR 6 final review V4-4)
+  const stands = page.getByRole("list", { name: "Where it stands" });
+  await expect(stands).toContainText(/Accepted [A-Z][a-z]{2} \d{1,2}, \d{4}, (this week|\d+ weeks? ago)/, { useInnerText: true });
+  await expect(stands).toContainText(/Kill criteria: \d+ of \d+ triggered/, { useInnerText: true });
+  await expect(stands).toContainText(/Card of Sep 18, 2026/, { useInnerText: true });
   // accept keeps the card's filing window: the one after the pack's quarter, 2026-03-31 (M7 review R2-F4); dates read
   // as the screens say them (PR 6 review design-F6)
   await expect(page.getByText("next review Aug 14, 2026")).toBeVisible();
@@ -237,9 +249,14 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(page.getByText("waiting for a verdict")).toBeVisible();
   // the pack diff since the card (M7 review R1-F4): the quarter's figures and the kill criteria before -> now
   await expect(page.getByRole("region", { name: "Figures for review 2026-06-30" })).toContainText("1.16B → 1.22B");
-  await expect(page.getByRole("region", { name: "Kill criteria for review 2026-06-30" })).toContainText("TTM revenue growth under 5.0%");
-  // red flags from the scored week: R1 fired the two weeks before and is clear now (M7 review R2-F1)
-  await expect(page.getByText(/Red flags: started none; stopped none/)).toBeVisible();
+  const killThen = page.getByRole("region", { name: "Kill criteria for review 2026-06-30" });
+  await expect(killThen).toContainText("TTM revenue growth under 5.0%");
+  // in the metric's unit, as the checklist beside it says it, not as a raw fraction (PR 6 final review V4-2)
+  await expect(killThen).toContainText(/ → 24\.0%/);
+  // red flags from the scored week: R1 fired the two weeks before and is clear now, so nothing shows as a new red flag
+  // (M7 review R2-F1); only what changed is listed (PR 6 final review V4-9)
+  await expect(page.getByText("No signal or red flag changes.")).toBeVisible();
+  await expect(page.getByText(/New red flags:/)).toHaveCount(0);
   // a fact about the June quarter published after the card's week (M7 review R2-F2)
   await expect(page.getByText(/New fact \(as of Jun 30, 2026, published Sep 21, 2026\): backlog 14\.00B/)).toBeVisible();
 
@@ -285,6 +302,7 @@ test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Review");
   await expect(page.getByText("A kill criterion triggered")).toBeVisible();
   await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("Evidence score under 80");
+  await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("82 → 66"); // whole scores (PR 6 final review V4-2)
   await openForm(page, "Record a verdict");
   await page.getByLabel("intact", { exact: true }).check();
   await page.getByRole("button", { name: "Record verdict" }).click();

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Callout } from "@/components/callout";
 import { cn } from "@/lib/utils";
+import { countPillTone } from "@/lib/visual";
 
 /** The width every screen, the header and the footer share: 1160 px, with a 16 px gutter on a phone. */
 export const FRAME = "mx-auto w-full max-w-[1160px] px-4 md:px-8";
@@ -35,22 +36,18 @@ export function Page({
   );
 }
 
-/** A small accent pill with a count, next to a title ("To do 3"). */
+/** A small accent pill with a count, next to a title ("To do 3"); a zero is a quiet grey one (lib/visual.ts). */
 export function CountPill({ n, className }: { n: number; className?: string }) {
   return (
-    <span
-      className={cn(
-        "num inline-grid h-6 min-w-6 place-items-center rounded-full bg-accent px-2 text-[13px] font-semibold text-on-accent",
-        className,
-      )}
-    >
+    <span className={cn("num inline-grid h-6 min-w-6 place-items-center rounded-full px-2 text-[13px] font-semibold", countPillTone(n), className)}>
       {n}
     </span>
   );
 }
 
 /** A titled sheet (a region landmark named by its h2 when `id` is given): an optional eyebrow, the title with an
- * optional count and one line under it, `actions` on the right, then the body. `plain` drops the sheet (a heading over
+ * optional count (left out at zero: the body says there is nothing; PR 6 final review L5-6) and one line under it,
+ * `actions` on the right, then the body. `plain` drops the sheet (a heading over
  * a grid of its own sheets); `quiet` sets the title small and muted (a side panel like "Data health"). */
 export function Section({
   title,
@@ -90,7 +87,7 @@ export function Section({
             >
               {title}
             </h2>
-            {count !== undefined ? <CountPill n={count} /> : null}
+            {count ? <CountPill n={count} /> : null}
           </div>
           {description ? <div className="text-[14px] text-muted">{description}</div> : null}
         </div>

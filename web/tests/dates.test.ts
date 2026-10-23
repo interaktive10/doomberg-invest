@@ -33,6 +33,11 @@ describe("dates as the screens say them", () => {
     expect(quarterLabel("2026-01-31")).toBe("Q1 ’26"); // a fiscal quarter that ends in January
     expect(quarterLabel("2009-12-31")).toBe("Q4 ’09");
     expect(quarterLabel("n/a")).toBe("n/a");
+    // a 52/53-week filer's quarter that ends in the next quarter's first week is still its own quarter, so two
+    // quarters never share a label (PR 6 final review C5)
+    expect(["2023-04-01", "2023-07-01", "2023-09-30", "2023-12-30", "2024-03-30"].map(quarterLabel)).toEqual(["Q1 ’23", "Q2 ’23", "Q3 ’23", "Q4 ’23", "Q1 ’24"]);
+    expect(quarterLabel("2024-01-01")).toBe("Q4 ’23");
+    expect(quarterLabel("2026-07-04")).toBe("Q2 ’26");
   });
 
   it("leaves what isn't a date as it is", () => {

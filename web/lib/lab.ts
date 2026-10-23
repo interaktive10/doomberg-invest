@@ -64,7 +64,7 @@ export interface LabPricesRun {
 
 /** The Lab page's progress line for the price download (the latest lab_prices runs row). */
 export function downloadLine(run: LabPricesRun | null): string {
-  if (run === null) return "Price download: not started yet (lab-prices.yml downloads the Twelve Data month-end prices first).";
+  if (run === null) return "Price download: not started yet (month-end prices download first)."; // no file names (PR 6 final review EYE-14)
   const s = run.stats;
   const total = Number(s.tickers ?? 0);
   const settled = Math.max(0, total - Number(s.pending ?? 0));
@@ -195,4 +195,18 @@ export function columnGeometry(values: readonly (number | null)[]): { zero: numb
     return v > 0 ? { top: Math.max(0, Number((zero - h).toFixed(1))), height: h, sign: 1 as const } : { top: zero, height: h, sign: -1 as const };
   });
   return { zero, bars };
+}
+
+/** One weight a Lab proposal changes: the signal (S1, L3) and its weight before and after. */
+export interface WeightChange {
+  signal: string;
+  from: string;
+  to: string;
+}
+
+/** A weights proposal's reason (pipeline/lab/run.py record_proposal: "Signal Lab §4.10.5 proposals: signals.S1 1.0 ->
+ * 1.5 (OOS mean ...); legacy.L3 1 -> 0 (...)") as one change per weight, for the Lab page to name in plain words (PR 6
+ * final review EYE-14); [] for a reason in any other shape, which the page shows as it is. */
+export function weightChanges(reason: string): WeightChange[] {
+  return [...reason.matchAll(/\b\w+\.([SL]\d{1,2}) (-?\d+(?:\.\d+)?) -> (-?\d+(?:\.\d+)?)/g)].map((m) => ({ signal: m[1]!, from: m[2]!, to: m[3]! }));
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { hashId } from "@/lib/nav";
 
 /** Opens the closed disclosures around the element the address's #hash names, then scrolls to it: a card's fact
  * citation (/company/<id>#fact-<id>) lands inside the Company page's folded quotes, and not every browser opens a
@@ -8,7 +9,7 @@ import { useEffect } from "react";
 export function OpenTarget() {
   useEffect(() => {
     const open = () => {
-      const id = decodeURIComponent(window.location.hash.slice(1));
+      const id = hashId(window.location.hash); // "" for a malformed one, so a garbled link still opens the page
       const el = id ? document.getElementById(id) : null;
       if (el === null) return;
       let opened = false;

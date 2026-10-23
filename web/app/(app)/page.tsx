@@ -27,6 +27,7 @@ import {
   homeSections,
   lateLine,
   parseFunnel,
+  shownDelta,
   todoAsk,
   todoMinutes,
   type ChangeDir,
@@ -48,9 +49,10 @@ export const metadata = { title: "This week" };
 // screen's Needs you group, read live) as rows with the decision each needs; What changed (the digest's section) as a
 // feed with a direction and the Evidence move per line, then Coming up (the live cards' next filings); On the board
 // (the Candidate bucket of the latest scored week, less the names a dismissal still hides, as Candidates counts them)
-// with Evidence rings; Data health with a dot per source the pipeline reads, and the stale-data line when one is late
-// (Home alone has it). The digest's own words, codes and all, stay in each row's tooltip and the funnel's Details, so
-// Home and the issue still read the same.
+// with Evidence rings, and a line counting the names a dismissal hides; Data health with a dot per source the pipeline
+// reads, and the stale-data line when one is late (Home alone has it). The digest's own words, codes and all, stay in
+// each row's tooltip and the funnel's Details, so Home and the issue still read the same. Before the first weekly run
+// (no digest) the headline says so once: no funnel, and no buttons to screens that are empty too (PR 6 final review).
 export default async function Home() {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const [digest, sources, first, ranked] = await Promise.all([
@@ -74,6 +76,7 @@ export default async function Home() {
   const kills = new Map([...figures].map(([id, f]) => [id, f.kills.length]));
   const upcoming = comingUp(all, now.toISOString().slice(0, 10), kills);
   const late = lateSources(sources, now).length;
+  const lateText = lateLine(sources, now);
   return (
     <Page
       eyebrow={digest ? weekEyebrow(digest.week_end) : undefined}
@@ -81,23 +84,27 @@ export default async function Home() {
       description={headline({ digest: digest !== null, totals, funnel, legacy })}
       actions={digest ? <AsOf week={digest.week_end} late={late} /> : undefined}
     >
-      <Section id="funnel" title={totals ? funnelTitle(totals) : "This week's funnel"} quiet>
-        <Funnel totals={totals} lines={lines.map((l) => l.text)} funnel={funnel} legacy={legacy} />
-      </Section>
+      {digest ? (
+        <Section id="funnel" title={totals ? funnelTitle(totals) : "This week's funnel"} quiet>
+          <Funnel totals={totals} lines={lines.map((l) => l.text)} funnel={funnel} legacy={legacy} />
+        </Section>
+      ) : null}
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
           <Section
             id="todo"
             title="To do"
-            count={needs.length > 0 ? needs.length : undefined}
+            count={needs.length}
             actions={needs.length > 0 ? <span className="text-[14px] text-subtle">about {todoMinutes(needs.length)} minutes</span> : undefined}
           >
             {needs.length === 0 ? (
               <Empty
                 action={
-                  <Link href="/candidates" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-                    See the candidates
-                  </Link>
+                  digest ? (
+                    <Link href="/candidates" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                      See the candidates
+                    </Link>
+                  ) : undefined
                 }
               >
                 Nothing needs you this week.
@@ -136,10 +143,21 @@ export default async function Home() {
               ) : undefined
             }
           >
-            <Board rows={board} />
+            <Board rows={board} hidden={hidden.size} waiting={digest === null} />
           </Section>
-          <Section id="health" title="Data health" quiet>
-            <Health rows={healthRows(sources, now)} late={lateLine(sources, now)} />
+          <Section
+            id="health"
+            title="Data health"
+            quiet
+            actions={
+              lateText ? (
+                <Link href="/settings#sources" className="inline-flex min-h-11 items-center text-[14px] font-medium no-underline md:min-h-0">
+                  Sources<span className="sr-only"> in Settings</span>
+                </Link>
+              ) : undefined
+            }
+          >
+            <Health rows={healthRows(sources, now)} late={lateText} />
           </Section>
         </div>
       </div>
@@ -236,7 +254,7 @@ type Figure = { atCard: number | null; now: number | null; kills: string[] };
 function TodoRow({ t, f }: { t: Thesis; f: Figure | undefined }) {
   const c = t.companies;
   const ticker = c ? code(c) : "";
-  const { ask, action, alert } = todoAsk(t.state, f);
+  const { ask, short, action, alert } = todoAsk(t.state, f);
   return (
     <li>
       <Link
@@ -249,7 +267,11 @@ function TodoRow({ t, f }: { t: Thesis; f: Figure | undefined }) {
             {c?.name ?? t.company_id}
             {ticker ? <span className="sr-only"> ({ticker})</span> : null}
           </span>
-          <span className={cn("text-[13px]", alert ? "font-medium text-down" : "text-muted")}>{ask}</span>
+          {/* a phone's one short line (the phone mock), the full ask from sm up */}
+          <span className={cn("text-[13px]", alert ? "font-medium text-down" : "text-muted")}>
+            <span className="sm:hidden">{short}</span>
+            <span className="hidden sm:inline">{ask}</span>
+          </span>
         </span>
         <span className={cn(buttonVariants({ size: "sm" }), "hidden sm:inline-flex")}>{action}</span>
         <Icon name="chevron-right" className="text-subtle sm:hidden" />
@@ -292,7 +314,8 @@ function Feed({ items }: { items: ChangeItem[] }) {
 }
 
 /** One change: a glyph for its direction, the company and what happened, why in plain words, and the Evidence move on
- * the right. The digest's line, codes and all, is the row's tooltip. */
+ * the right, rounded as the rings round it (lib/home.ts shownDelta). The digest's line, codes and all, is the row's
+ * tooltip. */
 function ChangeRow({ c }: { c: ChangeItem }) {
   const g = GLYPH[c.dir];
   return (
@@ -313,7 +336,7 @@ function ChangeRow({ c }: { c: ChangeItem }) {
       {c.delta ? (
         <p className={cn("num shrink-0 pt-0.5 text-[14px] font-semibold", g.text)}>
           {c.delta.label === "Evidence" ? <span className="sr-only">Evidence </span> : "Gap "}
-          {c.delta.value}
+          {shownDelta(c.delta.value)}
         </p>
       ) : null}
     </li>
@@ -343,10 +366,28 @@ function ComingUp({ list }: { list: Upcoming[] }) {
 
 const BOARD_SHOWN = 5;
 
+const SHOW_DISMISSED = "/candidates?dismissed=1";
+
 /** The latest scored week's Candidate bucket: an Evidence ring, the name, a dot per kind of evidence and why. Both lines
- * wrap (two lines at most) rather than cut off; the row's title has the name and every fired signal in full. */
-function Board({ rows }: { rows: ScreenerRow[] }) {
+ * wrap (two lines at most) rather than cut off; the row's title has the name and every fired signal in full. `hidden`
+ * names a dismissal still hides, counted under the rows as Candidates counts them, so the headline's and the funnel's
+ * count (the digest's) adds up (PR 6 final review DT-3); `waiting`: no digest yet, so no week to speak of. */
+function Board({ rows, hidden, waiting }: { rows: ScreenerRow[]; hidden: number; waiting: boolean }) {
   if (rows.length === 0) {
+    if (hidden > 0) {
+      return (
+        <Empty
+          action={
+            <Link href={SHOW_DISMISSED} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+              Show dismissed
+            </Link>
+          }
+        >
+          Every name on the board is dismissed until the evidence changes.
+        </Empty>
+      );
+    }
+    if (waiting) return <Empty>Nothing on the board yet.</Empty>;
     return (
       <Empty
         action={
@@ -360,35 +401,46 @@ function Board({ rows }: { rows: ScreenerRow[] }) {
     );
   }
   return (
-    <ul className="flex flex-col gap-2">
-      {rows.slice(0, BOARD_SHOWN).map((r) => (
-        <li key={r.company_id}>
-          <Link
-            href={`/company/${r.company_id}`}
-            title={`${code(r)} ${r.name}: ${boardWhyAll(r.fired_signals)}`}
-            className="tile flex items-center gap-3 p-2.5 text-fg no-underline transition-colors duration-150 hover:bg-hover hover:text-fg"
-          >
-            <ScoreRing value={Number(r.evidence)} kind="evidence" />
-            <span className="flex min-w-0 flex-col gap-1">
-              <span className="line-clamp-2 text-[15px] leading-snug font-bold">
-                {code(r)} <span className="font-medium text-muted">{r.name}</span>
+    <div className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-2">
+        {rows.slice(0, BOARD_SHOWN).map((r) => (
+          <li key={r.company_id}>
+            <Link
+              href={`/company/${r.company_id}`}
+              title={`${code(r)} ${r.name}: ${boardWhyAll(r.fired_signals)}`}
+              className="tile flex items-center gap-3 p-2.5 text-fg no-underline transition-colors duration-150 hover:bg-hover hover:text-fg"
+            >
+              <ScoreRing value={Number(r.evidence)} kind="evidence" />
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="line-clamp-2 text-[15px] leading-snug font-bold">
+                  {code(r)} <span className="font-medium text-muted">{r.name}</span>
+                </span>
+                <span className="flex min-w-0 items-start gap-2 text-[13px] leading-snug text-muted">
+                  <DotRow tones={r.families.map(familyTone)} className="mt-[3px] shrink-0" />
+                  <span className="line-clamp-2">{boardWhy(r.fired_signals)}</span>
+                </span>
               </span>
-              <span className="flex min-w-0 items-start gap-2 text-[13px] leading-snug text-muted">
-                <DotRow tones={r.families.map(familyTone)} className="mt-[3px] shrink-0" />
-                <span className="line-clamp-2">{boardWhy(r.fired_signals)}</span>
-              </span>
-            </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 ? (
+        <p className="text-[13px] text-muted">
+          {hidden} dismissed until the evidence changes ·{" "}
+          <Link href={SHOW_DISMISSED} className="inline-flex min-h-11 items-center md:min-h-0">
+            show<span className="sr-only"> dismissed names</span>
           </Link>
-        </li>
-      ))}
-    </ul>
+        </p>
+      ) : null}
+    </div>
   );
 }
 
 const HEALTH_DOT: Record<HealthState, Tone> = { ok: "up", late: "warn", down: "down", resting: "muted" };
 const HEALTH_TEXT: Record<HealthState, string> = { ok: "text-subtle", late: "text-warn", down: "text-down", resting: "text-subtle" };
 
-/** A dot and a date per source the pipeline reads; the stale-data line (BRIEF §2.7) under them when one is late. */
+/** A dot and a date per source the pipeline reads; the stale-data line (BRIEF §2.7) under them when one is late (the
+ * section's Sources link goes to each source's last success and error; PR 6 final review HC-4). */
 function Health({ rows, late }: { rows: ReturnType<typeof healthRows>; late: string | null }) {
   return (
     <div className="flex flex-col gap-3">
@@ -406,9 +458,7 @@ function Health({ rows, late }: { rows: ReturnType<typeof healthRows>; late: str
         </ul>
       )}
       {late ? (
-        <Callout tone="warn">
-          {late} Each source&apos;s last success and error are under <Link href="/settings#sources">Sources</Link> in Settings.
-        </Callout>
+        <Callout tone="warn">{late}</Callout>
       ) : null}
     </div>
   );

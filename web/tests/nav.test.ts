@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inMore, isCurrent, MAIN, MORE } from "@/lib/nav";
+import { hashId, inMore, isCurrent, MAIN, MORE } from "@/lib/nav";
 
 describe("the app's places (lib/nav.ts)", () => {
   it("has three main places and three under More (e2e/flow.spec.ts counts the six links)", () => {
@@ -19,5 +19,14 @@ describe("the app's places (lib/nav.ts)", () => {
   it("shows More as current on Journal, Signal Lab and Settings", () => {
     expect(["/journal", "/lab", "/settings", "/settings/x"].map(inMore)).toEqual([true, true, true, true]);
     expect(["/", "/candidates", "/theses/1", "/search"].map(inMore)).toEqual([false, false, false, false]);
+  });
+});
+
+describe("the element an address's hash names (PR 6 final review C13)", () => {
+  it("decodes it, and gives nothing for a malformed escape instead of throwing", () => {
+    expect(hashId("#fact-00000000-0000-4000-8000-0000000000f1")).toBe("fact-00000000-0000-4000-8000-0000000000f1");
+    expect(hashId("#a%20b")).toBe("a b");
+    expect(hashId("")).toBe("");
+    expect(hashId("#fact-%E0%A4")).toBe("");
   });
 });

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { chartValue, yScale, type ChartFormat } from "@/lib/chart";
+import { chartSpan, chartValue, drawnSeries, yScale, type ChartFormat } from "@/lib/chart";
 import { quarterLabel } from "@/lib/dates";
 import { CHART_TONE, INK, SERIES, type ChartTone } from "@/lib/palette";
 import { cn } from "@/lib/utils";
@@ -12,8 +12,9 @@ import { cn } from "@/lib/utils";
 // (lib/palette.ts), so a chart follows the theme with no re-render; each card has its own colour (`tone`, the Company
 // mock's accent, business green and insiders blue). The second and later series are dashed lines without an area, so
 // they differ without colour. Figures read as the page says them (lib/chart.ts chartValue: "$818M", "3.9×", "5.3%"),
-// periods as quarters ("Q3 ’23 – Q2 ’26"). The drawing itself is hidden from screen readers: the caption and the note
-// under it say what it shows.
+// periods as quarters ("Q3 ’23 – Q2 ’26"). A card draws only the quarters its own series has (lib/chart.ts chartSpan:
+// a TTM starts four quarters in) and keys only the series it draws (PR 6 final review V4-1, V4-6). The drawing itself
+// is hidden from screen readers: the caption and the note under it say what it shows.
 export type Format = ChartFormat;
 export interface Series {
   key: string;
@@ -52,12 +53,14 @@ export function LineChartCard({
   surface?: "tile" | "sheet";
   className?: string;
 }) {
-  const rows = data.filter((r) => series.some((s) => typeof r[s.key] === "number"));
-  const y = yScale(data, series.map((s) => s.key));
+  const span = chartSpan(data, series.map((s) => s.key));
+  const drawn = drawnSeries(span, series);
+  const rows = span.filter((r) => drawn.some((s) => typeof r[s.key] === "number"));
+  const y = yScale(span, drawn.map((s) => s.key));
   const first = series[0]?.key;
-  const lastValue = first === undefined ? undefined : data.map((r) => r[first]).filter((v): v is number => typeof v === "number").at(-1);
-  const from = rows[0]?.[xKey];
-  const to = rows.at(-1)?.[xKey];
+  const lastValue = first === undefined ? undefined : span.map((r) => r[first]).filter((v): v is number => typeof v === "number").at(-1);
+  const from = span[0]?.[xKey];
+  const to = span.at(-1)?.[xKey];
   const colour = (i: number) => (i === 0 ? CHART_TONE[tone] : SERIES[i % SERIES.length]);
   const value = (v: unknown) => chartValue(Number(v), format, currency);
   const period = (v: unknown) => quarterLabel(String(v ?? ""));
@@ -77,7 +80,7 @@ export function LineChartCard({
       {rows.length > 0 ? (
         <div aria-hidden="true" className="h-20 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+            <AreaChart data={span} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
               <XAxis dataKey={xKey} hide />
               <YAxis hide domain={y.domain} />
               <ReferenceLine y={0} stroke={INK.axis} strokeWidth={1} />
@@ -96,12 +99,12 @@ export function LineChartCard({
                 itemStyle={{ color: INK.fg }}
                 cursor={{ stroke: INK.axis }}
               />
-              {series.map((s, i) => (
+              {drawn.map(({ key, label, i }) => (
                 <Area
-                  key={s.key}
+                  key={key}
                   type="monotone"
-                  dataKey={s.key}
-                  name={s.label}
+                  dataKey={key}
+                  name={label}
                   stroke={colour(i)}
                   strokeWidth={i === 0 ? 2.5 : 1.75}
                   strokeDasharray={i > 0 ? "4 3" : undefined}
@@ -120,14 +123,14 @@ export function LineChartCard({
       ) : (
         <p className="py-6 text-center text-[13px] text-muted">No data yet.</p>
       )}
-      {series.length > 1 ? (
+      {drawn.length > 1 ? (
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
-          {series.map((s, i) => (
-            <li key={s.key} className="inline-flex items-center gap-1.5">
+          {drawn.map(({ key, label, i }) => (
+            <li key={key} className="inline-flex items-center gap-1.5">
               <svg aria-hidden="true" width="16" height="4" viewBox="0 0 16 4">
                 <line x1="1" x2="15" y1="2" y2="2" stroke={colour(i)} strokeWidth="2" strokeLinecap="round" strokeDasharray={i > 0 ? "3 3" : undefined} />
               </svg>
-              {s.label}
+              {label}
             </li>
           ))}
         </ul>

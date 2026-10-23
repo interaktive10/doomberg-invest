@@ -11,7 +11,7 @@ import { shortDate } from "@/lib/dates";
 import { localToday } from "@/lib/discipline";
 import { code, num } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
-import { journalLine, recordLine, signalsNote, trackRecord } from "@/lib/journal";
+import { byEntryDate, journalLine, recordLine, signalsNote, trackRecord } from "@/lib/journal";
 import { ACTION_LABEL, label } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { addNote } from "./actions";
@@ -21,7 +21,8 @@ export const metadata = { title: "Journal" };
 
 // BRIEF §6 Journal: private entries and post-mortems. They live only in the database; the web app makes no LLM calls
 // and the pipeline's privacy check refuses them (llm/privacy.py). Drawn in overhaul PR 6: each entry a row led by its
-// action's icon, the post-mortems as tiles with the lesson up front and a dot per thesis called right or wrong.
+// action's icon (newest first by its date), the post-mortems as tiles with the lesson up front and a dot per thesis
+// called right or wrong beside the record it draws (PR 6 final review).
 
 const ACTION: Record<JournalEntry["action"], { icon: IconName; ring: string }> = {
   note: { icon: "book", ring: "bg-hover text-muted" },
@@ -48,7 +49,8 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
             <Icon name="shield" className="size-3.5 text-up" strokeWidth={2.4} />
             Never sent to any LLM
           </Chip>
-          <a href="#add-note" className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "lg:hidden")}>
+          {/* on the canvas, so the outline button: a secondary one reads like the chip beside it (PR 6 final review L5-4) */}
+          <a href="#add-note" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "lg:hidden")}>
             <Icon name="plus" className="size-3.5" strokeWidth={2.4} />
             Add a note
           </a>
@@ -57,12 +59,18 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
     >
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
       <div className="flex flex-wrap items-start gap-6">
-        <Section title="Entries" id="entries" count={entries.length} description="Newest first. Entries about a thesis are added on its page." className="flex-[999_1_560px]">
+        <Section
+          title="Entries"
+          id="entries"
+          count={entries.length}
+          description={entries.length > 0 ? "Newest first. Entries about a thesis are added on its page." : undefined}
+          className="flex-[999_1_560px]"
+        >
           {entries.length === 0 ? (
             <Empty>Your journal is empty. Write a first note: why something caught your eye, or what you&apos;d need to see.</Empty>
           ) : (
             <ul aria-label="Journal entries" className="flex flex-col">
-              {entries.map((e) => {
+              {byEntryDate(entries).map((e) => {
                 const a = ACTION[e.action] ?? ACTION.note;
                 return (
                   <li key={e.id} className="flex gap-3 border-t border-line py-3.5 first:border-t-0 first:pt-0">
@@ -81,7 +89,9 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
                         )}
                         {e.portfolio_pct !== null ? (
                           <Chip size="sm">
-                            <span className="num">{num(e.portfolio_pct)}%</span> of portfolio
+                            <span>
+                              <span className="num">{num(e.portfolio_pct)}%</span> of portfolio
+                            </span>
                           </Chip>
                         ) : null}
                         <time dateTime={e.entry_date} className="num ml-auto text-[13px] whitespace-nowrap text-subtle">
@@ -121,17 +131,20 @@ export default async function Journal({ searchParams }: { searchParams: Promise<
         title="Post-mortems"
         id="postmortems"
         count={pms.length}
-        description={recordLine(record) ?? undefined}
-        actions={
+        description={
           pms.length > 0 ? (
-            <span
-              role="img"
-              aria-label={`${record.right} right, ${record.wrong} wrong, ${record.unclear} unclear`}
-              className="flex max-w-48 flex-wrap items-center gap-1"
-            >
-              {pms.map((p) => (
-                <Dot key={p.thesis_id} tone={p.thesis_right === null ? "muted" : p.thesis_right ? "up" : "down"} className="size-2.5" />
-              ))}
+            // the dots beside the record they draw, not alone at the sheet's far edge (PR 6 final review L5-8)
+            <span className="inline-flex flex-wrap items-center gap-2">
+              {recordLine(record)}
+              <span
+                role="img"
+                aria-label={`${record.right} right, ${record.wrong} wrong, ${record.unclear} unclear`}
+                className="inline-flex flex-wrap items-center gap-1"
+              >
+                {pms.map((p) => (
+                  <Dot key={p.thesis_id} tone={p.thesis_right === null ? "muted" : p.thesis_right ? "up" : "down"} className="size-2.5" />
+                ))}
+              </span>
             </span>
           ) : undefined
         }

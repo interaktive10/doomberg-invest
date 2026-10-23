@@ -88,7 +88,8 @@ export function citeView(id: string, companyId: string | null, facts: readonly s
     case "m": {
       const dated = /^(.*):(\d{4}-\d{2}-\d{2})$/.exec(body); // m:<metric>:<period end> (validate.py METRIC_ID)
       const name = killName(dated ? dated[1]! : body);
-      return { label: dated ? `${name}, ${shortDate(dated[2]!)}` : name, title: `Metric ${body}`, href: at("fundamentals") };
+      // with the year, so a card's year-over-year pair reads as two dates (PR 6 final review C2)
+      return { label: dated ? `${name}, ${shortDate(dated[2]!, true)}` : name, title: `Metric ${body}`, href: at("fundamentals") };
     }
     case "s": {
       // the fired signals and the red flags are listed in the Company page's Why this score panel (overhaul PR 5)
@@ -101,6 +102,14 @@ export function citeView(id: string, companyId: string | null, facts: readonly s
     default:
       return { label: id, title: id, href: null };
   }
+}
+
+/** A card section's body as the page shows it: under "Inferences" and "Assumptions" each item drops the label
+ * validate.py requires of it ("- Inference: ...", "- Assumption: ..."), since the section's title already says it (PR 6
+ * final review V4-12). Display only: the stored card keeps its labels. */
+export function unlabel(title: string, body: string): string {
+  if (!/^(inferences|assumptions)$/i.test(title.trim())) return body;
+  return body.replace(/^(\s*[-*]\s+)(?:Inference|Assumption):\s*/gim, "$1");
 }
 
 // A minimal hast shape (the rehype tree react-markdown builds); @types/hast isn't a direct dependency.

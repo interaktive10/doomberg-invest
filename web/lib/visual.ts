@@ -52,3 +52,10 @@ export function kindsLabel(words: readonly string[]): string {
   if (words.length === 0) return "No kind of evidence yet";
   return `${words.length} ${words.length === 1 ? "kind" : "kinds"} of evidence: ${words.join(", ")}`;
 }
+
+/** A count pill's colours: the accent for a count that asks to be seen, the quiet chip grey for zero, which has
+ * nothing to point at (a segment's "On the board 0"; PR 6 final review EYE-9). Both pairs clear 4.5:1
+ * (tests/palette.test.ts). */
+export function countPillTone(n: number): string {
+  return n === 0 ? "bg-hover text-muted" : "bg-accent text-on-accent";
+}

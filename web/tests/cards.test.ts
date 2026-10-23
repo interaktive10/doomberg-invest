@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CITE, citeView, factOrder, rehypeCites, stripSection, stripTitle } from "@/lib/cards";
+import { CITE, citeView, factOrder, rehypeCites, stripSection, stripTitle, unlabel } from "@/lib/cards";
 import { repoFile } from "./repo";
 
 // A card as pipeline/thesis/render.py writes it.
@@ -69,7 +69,9 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
     });
     expect(citeView("f:ffff", co, facts).label).toBe("fact");
     // a metric by the name the kill criteria use, its period end as the screens say dates (PR 6 review design-F1)
-    expect(citeView("m:revenue:2026-03-31", co, facts)).toEqual({ label: "Revenue, Mar 31", title: "Metric revenue:2026-03-31", href: `/company/${co}#fundamentals` });
+    expect(citeView("m:revenue:2026-03-31", co, facts)).toEqual({ label: "Revenue, Mar 31, 2026", title: "Metric revenue:2026-03-31", href: `/company/${co}#fundamentals` });
+    // a year-over-year pair reads as two dates, not two identical chips (PR 6 final review C2)
+    expect(citeView("m:revenue:2026-06-30", co, facts).label).not.toBe(citeView("m:revenue:2025-06-30", co, facts).label);
     expect(citeView("m:revenue_ttm_yoy", co, facts).label).toBe("TTM revenue growth");
     expect(citeView("m:signal:S7", co, facts).label).toBe("Insider buying signal strength");
     // signals, red flags and the Gap's parts by the names the Why panel gives their rows; the code in the title
@@ -122,5 +124,16 @@ describe("citation anchors (integration review web-WEB-1)", () => {
       const hash = (citeView(id, co, []).href ?? "").split("#")[1];
       expect([id, page.includes(`id="${hash}"`) || page.includes(`["${hash}",`)]).toEqual([id, true]);
     }
+  });
+});
+
+describe("a card section as the page shows it (PR 6 final review V4-12)", () => {
+  it("drops the label validate.py requires under Inferences and Assumptions, and nowhere else", () => {
+    expect(unlabel("Inferences", "- Inference: backlog converts to revenue over roughly two years.")).toBe("- backlog converts to revenue over roughly two years.");
+    expect(unlabel("Assumptions", "- Assumption: margins hold near 20% (assumed).\n- Assumption: no large customer cancels.")).toBe(
+      "- margins hold near 20% (assumed).\n- no large customer cancels.",
+    );
+    expect(unlabel("Facts", "- Inference: kept as written.")).toBe("- Inference: kept as written.");
+    expect(unlabel("Assumptions", "Assumption: not a list item stays.")).toBe("Assumption: not a list item stays.");
   });
 });

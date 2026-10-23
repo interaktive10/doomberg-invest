@@ -16,17 +16,18 @@ import { TickerTile } from "@/components/ticker-tile";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { choiceChip, Input, Label, Select, Textarea } from "@/components/ui/input";
-import { citeView, factOrder, stripSection, stripTitle } from "@/lib/cards";
+import { citeView, factOrder, stripSection, stripTitle, unlabel } from "@/lib/cards";
 import { ensureReviews, journal, killCriteria, postmortem, reviews, setting, thesis as getThesis, thesisTitle } from "@/lib/data";
 import { shortDate } from "@/lib/dates";
 import { localToday, thesisWeeks } from "@/lib/discipline";
 import { cardSections, caseLine, plainText } from "@/lib/explain";
 import { code, num } from "@/lib/format";
+import { byEntryDate } from "@/lib/journal";
 import { one, UUID, type Query } from "@/lib/forms";
 import { ACTION_LABEL, label } from "@/lib/labels";
 import type { Tone } from "@/lib/palette";
 import type { PackDiff } from "@/lib/reviews";
-import { acceptable, canMove, markMoved, positionOpen, RESEARCH_QUEUED, STATE_LABEL } from "@/lib/theses";
+import { acceptable, canMove, markMoved, positionOpen, RESEARCH_QUEUED, showsReviews, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
 import { requireUser } from "@/lib/auth";
@@ -35,7 +36,9 @@ import { requireUser } from "@/lib/auth";
 // thesis stands; the card as readable sections (its lead, then Facts, Why it may be mispriced, ... each under its own
 // title, citations linking to the evidence); What would kill it as a checklist; the reviews, the open one unfolded;
 // the private journal; and the §1.8 moves (accept, dismiss, start a position, review verdicts, close with a
-// post-mortem), each form behind its button and left out when it can't be used (overhaul PR 4).
+// post-mortem), each form behind its button and left out when it can't be used (overhaul PR 4). A section that can't
+// fill (Reviews on a card or a closed thesis, no kill criteria) is left out rather than promising what won't come, and
+// each header chip is one run of text (PR 6 final review).
 
 /** A form behind a button: a native disclosure whose summary looks like one (no script). */
 const OPENER = "list-none [&::-webkit-details-marker]:hidden";
@@ -137,16 +140,21 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
         </div>
         <ul aria-label="Where it stands" className="flex flex-wrap gap-2">
           <li>
+            {/* one text span per chip, so the chip's gap sits between its icon and its words only (PR 6 final review V4-4) */}
             <Chip title={`Written by: ${t.author}`}>
               <Icon name="doc" className="size-3.5" />
-              Card week <span className="num">{t.created_week}</span>
+              <span>
+                Card of <Day iso={t.created_week} />
+              </span>
             </Chip>
           </li>
           {t.accepted_at ? (
             <li>
               <Chip>
-                Accepted <Day iso={t.accepted_at} />
-                {weeks <= 0 ? ", this week" : `, ${weeks} ${weeks === 1 ? "week" : "weeks"} ago`}
+                <span>
+                  Accepted <Day iso={t.accepted_at} />
+                  {weeks <= 0 ? ", this week" : `, ${weeks} ${weeks === 1 ? "week" : "weeks"} ago`}
+                </span>
               </Chip>
             </li>
           ) : null}
@@ -154,7 +162,9 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
             <li>
               <Chip>
                 <Icon name="calendar" className="size-3.5" />
-                Next review <Day iso={t.next_review} />
+                <span>
+                  Next review <Day iso={t.next_review} />
+                </span>
               </Chip>
             </li>
           ) : null}
@@ -167,7 +177,13 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
             <li>
               <Chip variant={triggered > 0 ? "bad" : "good"}>
                 <Icon name="shield" className="size-3.5" />
-                Kill criteria: <span className="num">{triggered}</span> of <span className="num">{kills.length}</span> triggered
+                <span>
+                  Kill criteria:{" "}
+                  <span className="num">
+                    {triggered} of {kills.length}
+                  </span>{" "}
+                  triggered
+                </span>
               </Chip>
             </li>
           ) : null}
@@ -182,7 +198,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
       ) : null}
 
       {canMove(t.state, "accept") ? (
-        <Section title="Decide" id="decide" description="Accept to watch its kill criteria and review it after each filing, or dismiss it with a reason.">
+        <Section title="Decide" id="decide" description="Watch it, or pass with a reason.">
           <div className="flex flex-wrap items-start gap-3">
             {acceptable(t) ? (
               <form action={accept}>
@@ -218,20 +234,18 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
           {pm ? (
             <Section title="Post-mortem" id="postmortem">
               <div className="flex flex-col gap-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="eyebrow">Thesis right?</span>
-                  <Badge variant={pm.thesis_right === null ? "secondary" : pm.thesis_right ? "success" : "destructive"}>
-                    {pm.thesis_right === null ? "unclear" : pm.thesis_right ? "yes" : "no"}
-                  </Badge>
-                </div>
+                {/* as the Journal says it (PR 6 final review L5-13) */}
+                <Chip variant={pm.thesis_right === null ? "plain" : pm.thesis_right ? "good" : "bad"} size="sm" className="self-start">
+                  {pm.thesis_right === null ? "Unclear" : pm.thesis_right ? "Called right" : "Called wrong"}
+                </Chip>
                 <Block title="What happened">{pm.what_happened}</Block>
                 <Block title="What the signals said">{String(pm.signals_right?.note ?? "")}</Block>
-                <Block title="Lessons">{pm.lessons}</Block>
+                <Block title="Lesson">{pm.lessons}</Block>
               </div>
             </Section>
           ) : null}
 
-          <Section title="Research card" id="card" description={t.card_md.trim() ? "Citations open the evidence on the company page." : undefined}>
+          <Section title="Research card" id="card">
             {t.card_md.trim() && !lead && parts.sections.length === 0 ? (
               <Empty>The card has nothing beyond its kill criteria.</Empty>
             ) : t.card_md.trim() ? (
@@ -247,7 +261,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                       <Dot tone={SECTION_TONE[s.title.toLowerCase()] ?? "muted"} className="size-2.5" />
                       {s.title}
                     </h3>
-                    <Markdown text={s.body} cite={cite} />
+                    <Markdown text={unlabel(s.title, s.body)} cite={cite} />
                   </div>
                 ))}
               </div>
@@ -260,95 +274,101 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
             )}
           </Section>
 
-          <Section title="Reviews" id="reviews" count={revs.length > 0 ? revs.length : undefined}>
-            {revs.length === 0 ? (
-              <Empty>No review yet. One comes after each new quarterly filing.</Empty>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {revs.map((r) => (
-                  <li key={r.id} className="tile flex flex-col gap-2 p-4">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                      <span className="text-[15px] font-semibold text-fg">
-                        {r.period_end ? (
-                          <>
-                            Quarter to <Day iso={r.period_end} />
-                          </>
+          {showsReviews(t.state, revs.length) ? (
+            <Section title="Reviews" id="reviews" count={revs.length}>
+              {revs.length === 0 ? (
+                <Empty>No review yet. One comes after each new quarterly filing.</Empty>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {revs.map((r) => (
+                    <li key={r.id} className="tile flex flex-col gap-2 p-4">
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <span className="text-[15px] font-semibold text-fg">
+                          {r.period_end ? (
+                            <>
+                              Quarter to <Day iso={r.period_end} />
+                            </>
+                          ) : (
+                            "A kill criterion triggered"
+                          )}
+                        </span>
+                        <span className="text-[13px] text-subtle">
+                          created <Day iso={r.created_at} />
+                        </span>
+                        {r.verdict ? (
+                          <Badge variant={r.verdict === "broken" ? "destructive" : r.verdict === "weakened" ? "warning" : "success"}>{r.verdict}</Badge>
                         ) : (
-                          "A kill criterion triggered"
+                          <Badge variant="warning">waiting for a verdict</Badge>
                         )}
-                      </span>
-                      <span className="text-[13px] text-subtle">
-                        created <Day iso={r.created_at} />
-                      </span>
-                      {r.verdict ? (
-                        <Badge variant={r.verdict === "broken" ? "destructive" : r.verdict === "weakened" ? "warning" : "success"}>{r.verdict}</Badge>
-                      ) : (
-                        <Badge variant="warning">waiting for a verdict</Badge>
-                      )}
-                    </div>
-                    <Disclosure summary="What changed" open={r.verdict === null}>
-                      <ReviewDiff id={r.period_end ?? r.created_at.slice(0, 10)} diff={r.pack_diff as Partial<PackDiff>} />
-                    </Disclosure>
-                    {r.note ? (
-                      <p className="text-[14px] text-fg">
-                        <span className="font-semibold">Note:</span> {r.note}
-                      </p>
-                    ) : null}
-                    {r.verdict === null && t.state === "review" ? (
-                      <details className="mt-1 border-t border-line pt-3">
-                        <summary className={cn(buttonVariants({ size: "sm" }), OPENER)}>Record a verdict</summary>
-                        <form action={decideReview} className="mt-3 flex flex-col gap-3">
-                          <Hidden id={t.id} />
-                          <input type="hidden" name="review_id" value={r.id} />
-                          <fieldset className="min-w-0">
-                            <legend className="mb-2 text-[13px] font-medium text-muted">Verdict</legend>
-                            <div className="flex flex-wrap gap-2">
-                              {(["intact", "weakened", "broken"] as const).map((v) => (
-                                <label key={v} className={choiceChip}>
-                                  <input type="radio" name="verdict" value={v} required />
-                                  {v}
-                                </label>
-                              ))}
+                      </div>
+                      <Disclosure summary="What changed" open={r.verdict === null}>
+                        <ReviewDiff id={r.period_end ?? r.created_at.slice(0, 10)} diff={r.pack_diff as Partial<PackDiff>} />
+                      </Disclosure>
+                      {r.note ? (
+                        <p className="text-[14px] text-fg">
+                          <span className="font-semibold">Note:</span> {r.note}
+                        </p>
+                      ) : null}
+                      {r.verdict === null && t.state === "review" ? (
+                        <details className="mt-1 border-t border-line pt-3">
+                          <summary className={cn(buttonVariants({ size: "sm" }), OPENER)}>Record a verdict</summary>
+                          <form action={decideReview} className="mt-3 flex flex-col gap-3">
+                            <Hidden id={t.id} />
+                            <input type="hidden" name="review_id" value={r.id} />
+                            <fieldset className="min-w-0">
+                              <legend className="mb-2 text-[13px] font-medium text-muted">Verdict</legend>
+                              <div className="flex flex-wrap gap-2">
+                                {(["intact", "weakened", "broken"] as const).map((v) => (
+                                  <label key={v} className={choiceChip}>
+                                    <input type="radio" name="verdict" value={v} required />
+                                    {v}
+                                  </label>
+                                ))}
+                              </div>
+                            </fieldset>
+                            <div className="flex flex-col gap-1.5">
+                              <Label htmlFor={`note-${r.id}`}>Note</Label>
+                              <Textarea id={`note-${r.id}`} name="note" />
                             </div>
-                          </fieldset>
-                          <div className="flex flex-col gap-1.5">
-                            <Label htmlFor={`note-${r.id}`}>Note</Label>
-                            <Textarea id={`note-${r.id}`} name="note" />
-                          </div>
-                          <label className="flex min-h-11 items-center gap-2 text-[14px] md:min-h-0">
-                            <input type="checkbox" name="to_journal" /> Also add the note to the journal
-                          </label>
-                          <div>
-                            <SubmitButton>Record verdict</SubmitButton>
-                          </div>
-                        </form>
-                      </details>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
+                            <label className="flex min-h-11 items-center gap-2 text-[14px] md:min-h-0">
+                              <input type="checkbox" name="to_journal" /> Also add the note to the journal
+                            </label>
+                            <div>
+                              <SubmitButton>Record verdict</SubmitButton>
+                            </div>
+                          </form>
+                        </details>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          ) : null}
         </div>
 
         <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-6">
-          <Section title="What would kill it" id="kill" description={kills.length > 0 ? "Checked against the latest filed figures; one that triggers sends the thesis to Review." : undefined}>
-            {kills.length === 0 ? <Empty>No kill criteria.</Empty> : <KillList kills={kills} detail />}
-          </Section>
+          {kills.length > 0 ? (
+            <Section title="What would kill it" id="kill" description="Checked after each filing.">
+              <KillList kills={kills} detail />
+            </Section>
+          ) : null}
 
           <Section title="Journal" id="journal" description="Private: never sent to any LLM.">
             {entries.length === 0 ? (
               <Empty>No journal entries for this thesis.</Empty>
             ) : (
               <ul aria-label="Journal entries" className="flex flex-col">
-                {entries.map((e) => (
+                {byEntryDate(entries).map((e) => (
                   <li key={e.id} className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
                       <span className="font-semibold text-fg">{label(ACTION_LABEL, e.action)}</span>
                       <Day iso={e.entry_date} className="text-subtle" />
                       {e.portfolio_pct === null ? null : (
                         <Chip size="sm">
-                          <span className="num">{num(e.portfolio_pct)}%</span> of portfolio
+                          <span>
+                            <span className="num">{num(e.portfolio_pct)}%</span> of portfolio
+                          </span>
                         </Chip>
                       )}
                     </div>

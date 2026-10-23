@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ChartGrid, LineChartCard, type Format, type Row, type Series } from "@/components/charts";
-import { Chip, DotRow } from "@/components/chip";
+import { Chip } from "@/components/chip";
 import { Disclosure } from "@/components/disclosure";
 import { FactItem } from "@/components/fact";
 import { Icon } from "@/components/icons";
@@ -51,16 +51,17 @@ import { big, code } from "@/lib/format";
 import { one, UUID, type Query } from "@/lib/forms";
 import { detailText, humanize } from "@/lib/labels";
 import { chartRows } from "@/lib/metrics";
-import { familyTone, type ChartTone, type Tone } from "@/lib/palette";
+import type { ChartTone, Tone } from "@/lib/palette";
 import { LIVE_STATES, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { research } from "../../candidates/actions";
 
 // BRIEF §6 Company, redrawn (overhaul PR 6, the Company mock): a header sheet with the ticker, the name, the case in one
-// line (the live card's summary, else what its bucket means), the Evidence and Gap rings, the bucket and the next step
-// (open the card, or Research); then Why this score (components/score.tsx) beside What would kill it (the live
-// thesis's kill criteria), the insiders' buying as bars and the corporate events; the business quarter by quarter as
-// sparkline cards (the weekly run's company_series, §4.6 definitions); the verified facts as quotes, folded.
+// line (the live card's summary, else what its bucket means), the Evidence and Gap rings, the bucket (no family dots
+// beside it: Why this score names the kinds; PR 6 final review EYE-19) and the next step (open the card, or Research);
+// then Why this score (components/score.tsx) beside What would kill it (the live thesis's kill criteria), the
+// insiders' buying as bars and the corporate events; the business quarter by quarter as sparkline cards (the weekly
+// run's company_series, §4.6 definitions); the verified facts as quotes, folded.
 
 function str(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -232,7 +233,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
         key="kill"
         title="What would kill it"
         id="kill"
-        actions={firstCheck ? <span className="text-[13px] text-subtle">checked after {shortDate(firstCheck)}</span> : undefined}
+        description={firstCheck ? `Checked after ${shortDate(firstCheck)}` : undefined}
       >
         <KillList kills={kills} />
       </Section>,
@@ -314,7 +315,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
             <li key={t.id} className="border-t border-line first:border-t-0">
               <Link href={`/theses/${t.id}`} className="link-quiet flex min-h-11 items-center justify-between gap-3 text-[14px]">
                 <span>
-                  {STATE_LABEL[t.state]} · card week <span className="num">{t.created_week}</span>
+                  {STATE_LABEL[t.state]} · card of {shortDate(t.created_week, true)}
                 </span>
                 <Icon name="chevron-right" className="text-subtle" />
               </Link>
@@ -341,7 +342,6 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
               <span className="sr-only"> ({ticker})</span>
             </h1>
             {score ? <Badge variant={BUCKET_BADGE[score.bucket] ?? "outline"}>{BOARD_LABEL[score.bucket] ?? humanize(score.bucket)}</Badge> : null}
-            {score && score.families.length > 0 ? <DotRow tones={score.families.map(familyTone)} of={Math.max(2, score.families.length)} /> : null}
           </div>
           <p className="text-[14px] text-subtle">
             {[ticker, c.sector, c.industry].filter(Boolean).join(" · ")} · {c.market === "us" ? "US" : "India"}

@@ -12,12 +12,15 @@ import { code } from "@/lib/format";
 import { GROUP_LABEL, STATE_LABEL, type Group } from "@/lib/theses";
 
 // The Theses screen's groups and rows (overhaul PR 4). Drawn as clean rows (overhaul PR 6): the ticker tile, the name
-// and what the row asks of you, Evidence now as a ring (and what it was at the card), the kill criteria triggered, and
-// the next review. Home's To do lists the same Needs you group with its own rows (app/(app)/page.tsx).
+// with its state and the kill criteria triggered as a chip in words at every width, what the row asks of you and the
+// next review, and Evidence now as a ring (and what it was at the card; PR 6 final review V4-7). Home's To do lists the
+// same Needs you group with its own rows (app/(app)/page.tsx).
 
+/** A group's line under its title: only Closed, whose summary has room for it; the rows of the other two say what
+ * they ask (PR 6 final review EYE-18). */
 export const GROUP_HINT: Record<Group, string> = {
-  needs: "Cards to accept or pass, and reviews waiting for your verdict.",
-  watching: "Kill criteria checked every week; queued research waits for its card.",
+  needs: "",
+  watching: "",
   closed: "Closed with a post-mortem, or dismissed.",
 };
 
@@ -66,6 +69,18 @@ export function ThesisRows({ list, figures }: { list: readonly Thesis[]; figures
                   {c ? <span className="sr-only"> ({code(c)})</span> : null}
                 </Link>
                 <Badge variant={STATE_BADGE[t.state]}>{STATE_LABEL[t.state]}</Badge>
+                {kills.length > 0 ? (
+                  <Chip size="sm" variant={hit > 0 ? "bad" : "good"} title="Kill criteria triggered">
+                    <Icon name="shield" className="size-3" />
+                    <span>
+                      <span className="sr-only">Kill criteria: </span>
+                      <span className="num">
+                        {hit} of {kills.length}
+                      </span>{" "}
+                      triggered
+                    </span>
+                  </Chip>
+                ) : null}
               </div>
               <p className="text-[13px] text-subtle">
                 {thesisAsk(t)}
@@ -78,25 +93,9 @@ export function ThesisRows({ list, figures }: { list: readonly Thesis[]; figures
                     </time>
                   </>
                 ) : null}
-                {kills.length > 0 ? (
-                  <span className="sm:hidden">
-                    {" "}
-                    · kill criteria <span className="num">{hit}</span> of <span className="num">{kills.length}</span> triggered
-                  </span>
-                ) : null}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2.5">
-              {kills.length > 0 ? (
-                <Chip variant={hit > 0 ? "bad" : "good"} title="Kill criteria triggered" className="hidden sm:inline-flex">
-                  <Icon name="shield" className="size-3.5" />
-                  <span className="sr-only">Kill criteria: </span>
-                  <span className="num">
-                    {hit} of {kills.length}
-                  </span>
-                  <span className="sr-only"> triggered</span>
-                </Chip>
-              ) : null}
               <div className="flex flex-col items-center">
                 <ScoreRing value={now} kind="evidence" size={44} label="Evidence now" />
                 {was !== null && was !== now ? (
