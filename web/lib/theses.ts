@@ -1,4 +1,5 @@
 import type { ThesisState } from "@/lib/data";
+import { shortDate } from "@/lib/dates";
 
 // BRIEF §1.8 thesis states and the moves the web app offers (Research → Thesis → Position → Review → Closed, plus
 // dismissed from research). Pure, so tests/theses.test.ts covers the rules.
@@ -93,7 +94,22 @@ export function group(t: { state: ThesisState; author: string; card_md: string }
   return state === "research" || state === "review" ? "needs" : state === "thesis" || state === "position" ? "watching" : "closed";
 }
 
+/** Whether the thesis page shows its Reviews: when it has any, or while one can still come (a thesis, a position, one
+ * in Review). A research card gets none until it is accepted, and a closed or dismissed one never does, so neither
+ * promises one (PR 6 final review V4-5). */
+export function showsReviews(state: ThesisState, reviews: number): boolean {
+  return reviews > 0 || state === "thesis" || state === "position" || state === "review";
+}
+
 /** Kill criteria as "n of m triggered" ("none" without any). */
 export function killTally(statuses: readonly string[]): string {
   return statuses.length === 0 ? "none" : `${statuses.filter((s) => s === "triggered").length} of ${statuses.length} triggered`;
+}
+
+/** When the kill criteria are checked, as the Company and Thesis pages both say it: the pipeline checks a criterion
+ * every week from its check_after date on (pipeline/thesis/kill_criteria.py), so the line names the earliest one
+ * (PR 6 final review EYE2-1). */
+export function killCheckLine(kills: readonly { check_after: string }[]): string | undefined {
+  const first = kills.map((k) => k.check_after).sort()[0];
+  return first ? `Checked after ${shortDate(first)}` : undefined;
 }

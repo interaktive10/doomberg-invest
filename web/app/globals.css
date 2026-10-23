@@ -1,88 +1,260 @@
 @import "tailwindcss";
 
-/* The look: a dark terminal. Near-black canvas, flat hairline panels, numbers in monospace columns, and colour only for
-   meaning (up = good, down = bad, warn = needs a look). Dark only.
-   Mirror: lib/palette.ts holds the same hex values for SVG (the recharts charts). Change both together
-   (tests/palette.test.ts pins them). Font sizes are plain or arbitrary utilities (text-[13px]), never custom text
-   tokens: tailwind-merge reads an unknown text-<name> as a colour and would drop the size. */
-@theme {
-  --color-*: initial; /* only these names exist; tests/palette.test.ts rejects Tailwind's stock palette names */
-  --color-canvas: #07090c; /* page, wells inside panels */
-  --color-panel: #0c1016; /* Section, KPI ribbon, tables, kanban columns, list panel */
-  --color-raised: #121821; /* section header bar, chips, tiles, menus, outline/secondary buttons */
-  --color-hover: #17202b; /* row hover, menu-item hover */
-  --color-field: #090c11; /* input/select/textarea/choice-chip background */
-  --color-line: #1d2632; /* hairlines (decorative) */
-  --color-line-strong: #2c3947; /* table header rule, badge rings, dashed empties, bar track */
-  --color-edge: #5f7084; /* control borders (>= 3:1 on every surface) */
-  --color-fg: #e7edf3;
-  --color-muted: #a3b1bf;
-  --color-subtle: #8494a5;
-  --color-accent: #4cc3ff; /* links, focus, primary button, active tab, score bars, chart series 1 */
-  --color-accent-hover: #7dd4ff;
-  --color-on-accent: #03131d;
-  --color-up: #3ddc84; /* good */
-  --color-down: #ff6b6b; /* bad */
-  --color-warn: #f5b942; /* needs a look */
-  --color-violet: #b79cff; /* chart series 2 only */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-mono-face), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 4px;
-  --radius-2xl: 4px;
-  --shadow-pop: 0 12px 32px -8px rgb(0 0 0 / 0.7); /* More menu only */
+/* The look (overhaul PR 6): Curator's calm light theme (paper-grey canvas, white sheets, soft shadows, round pills) and
+   its charcoal dark one. Three modes: Auto (the default: no data-theme, the device's prefers-color-scheme decides),
+   Light and Dark (the theme cookie, written as data-theme on <html> by app/layout.tsx, so the first paint is right).
+   Every colour is a CSS variable defined three times below: light on :root, dark under the Auto media query and dark
+   again under data-theme="dark" (the two dark blocks are identical). Tailwind reads them through @theme inline, so
+   bg-canvas, text-fg and the rest switch with the theme and no component needs a dark: variant.
+   Mirror: lib/palette.ts holds the same hex values; tests/palette.test.ts pins both themes to it and checks that every
+   text colour reaches 4.5:1 on every surface. Font sizes are plain or arbitrary utilities (text-[13px]), never custom
+   text tokens: tailwind-merge reads an unknown text-<name> as a colour and would drop the size. */
+
+:root {
+  color-scheme: light;
+  --canvas: #f5f6f8;
+  --panel: #ffffff;
+  --raised: #f7f8fa;
+  --hover: #f1f3f6;
+  --field: #ffffff;
+  --track: #e6e8ee;
+  --thumb: #ffffff;
+  --line: #ebecef;
+  --line-strong: #d9dbe0;
+  --edge: #8a8a90;
+  --fg: #1c1c1e;
+  --muted: #55555b;
+  --subtle: #636369;
+  --accent: #3656d6;
+  --accent-hover: #2a47b8;
+  --on-accent: #ffffff;
+  --ink: #1c1c1e;
+  --on-ink: #ffffff;
+  --up: #2b6d44;
+  --down: #a33a3a;
+  --warn: #8a5a2a;
+  --violet: #6e5bbf;
+  --gap: #3f8a5b;
+  --fam-business: #6f9478;
+  --fam-insiders: #7089ab;
+  --fam-ownership: #c29b5a;
+  --fam-text: #b58468;
+  --tint-sky: #e7eefb;
+  --tint-sage: #e8f1ea;
+  --tint-sand: #f6efe2;
+  --tint-clay: #f5ebe5;
+  --sheet-shadow: 0 1px 2px rgb(17 24 39 / 0.03), 0 8px 24px -14px rgb(17 24 39 / 0.12);
+  --sheet-edge: rgb(17 24 39 / 0.04);
+  --lift-shadow: 0 1px 2px rgb(17 24 39 / 0.06);
+  --pop-shadow: 0 2px 6px rgb(17 24 39 / 0.06), 0 18px 44px -14px rgb(17 24 39 / 0.24);
+  --glass: rgb(255 255 255 / 0.86);
+  --glass-edge: rgb(17 24 39 / 0.07);
+  --glass-shadow: 0 1px 2px rgb(17 24 39 / 0.04), 0 14px 34px -14px rgb(17 24 39 / 0.22);
 }
 
-/* BRIEF §6: readable at 390 px; axe 0 serious issues. Text is fg, muted or subtle (>= 5.3:1 on every surface); a
-   coloured tint carries fg or its own colour, never subtle. Everything here sits in Tailwind's layers, so a utility
-   class on an element (a button-styled link's text-on-accent, no-underline) still wins over these defaults. */
-@layer base {
-  :root {
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
-    scrollbar-color: var(--color-line-strong) var(--color-canvas);
+    --canvas: #0b0c0e;
+    --panel: #1a1b1f;
+    --raised: #222328;
+    --hover: #2a2b30;
+    --field: #141518;
+    --track: #2e2f35;
+    --thumb: #4a4b52;
+    --line: #28292e;
+    --line-strong: #3a3b41;
+    --edge: #6e6e76;
+    --fg: #f2f2f4;
+    --muted: #b4b4ba;
+    --subtle: #9b9ba2;
+    --accent: #9bb0cb;
+    --accent-hover: #b9c8dd;
+    --on-accent: #0b0c0e;
+    --ink: #f2f2f4;
+    --on-ink: #0b0c0e;
+    --up: #80b190;
+    --down: #e08a8a;
+    --warn: #d4a574;
+    --violet: #b4a8e6;
+    --gap: #7aab8a;
+    --fam-business: #93b39a;
+    --fam-insiders: #a0b4ce;
+    --fam-ownership: #d6b77e;
+    --fam-text: #c99d82;
+    --tint-sky: #2a3550;
+    --tint-sage: #24382c;
+    --tint-sand: #3d3424;
+    --tint-clay: #3d2e27;
+    --sheet-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    --sheet-edge: rgb(235 235 245 / 0.08);
+    --lift-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.4);
+    --pop-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 20px 48px -14px rgb(0 0 0 / 0.7);
+    --glass: rgb(30 31 36 / 0.84);
+    --glass-edge: rgb(255 255 255 / 0.1);
+    --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 20px 48px -14px rgb(0 0 0 / 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #0b0c0e;
+  --panel: #1a1b1f;
+  --raised: #222328;
+  --hover: #2a2b30;
+  --field: #141518;
+  --track: #2e2f35;
+  --thumb: #4a4b52;
+  --line: #28292e;
+  --line-strong: #3a3b41;
+  --edge: #6e6e76;
+  --fg: #f2f2f4;
+  --muted: #b4b4ba;
+  --subtle: #9b9ba2;
+  --accent: #9bb0cb;
+  --accent-hover: #b9c8dd;
+  --on-accent: #0b0c0e;
+  --ink: #f2f2f4;
+  --on-ink: #0b0c0e;
+  --up: #80b190;
+  --down: #e08a8a;
+  --warn: #d4a574;
+  --violet: #b4a8e6;
+  --gap: #7aab8a;
+  --fam-business: #93b39a;
+  --fam-insiders: #a0b4ce;
+  --fam-ownership: #d6b77e;
+  --fam-text: #c99d82;
+  --tint-sky: #2a3550;
+  --tint-sage: #24382c;
+  --tint-sand: #3d3424;
+  --tint-clay: #3d2e27;
+  --sheet-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --sheet-edge: rgb(235 235 245 / 0.08);
+  --lift-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.4);
+  --pop-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 20px 48px -14px rgb(0 0 0 / 0.7);
+  --glass: rgb(30 31 36 / 0.84);
+  --glass-edge: rgb(255 255 255 / 0.1);
+  --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 20px 48px -14px rgb(0 0 0 / 0.7);
+}
+
+/* Only these colour names exist (tests/palette.test.ts rejects Tailwind's stock palette names). */
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--canvas); /* the page */
+  --color-panel: var(--panel); /* sheets (Section), menus */
+  --color-raised: var(--raised); /* tiles inside a sheet */
+  --color-hover: var(--hover); /* chips, secondary pills, row hover */
+  --color-field: var(--field); /* inputs */
+  --color-track: var(--track); /* ring and bar tracks, the segmented nav */
+  --color-thumb: var(--thumb); /* the segmented nav's active pill */
+  --color-line: var(--line); /* hairlines between rows */
+  --color-line-strong: var(--line-strong); /* field borders, dashed empties */
+  --color-edge: var(--edge); /* control borders that must stand out (>= 3:1) */
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent); /* links, focus, the Evidence ring, count pills */
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-ink: var(--ink); /* primary pills */
+  --color-on-ink: var(--on-ink);
+  --color-up: var(--up); /* good */
+  --color-down: var(--down); /* bad */
+  --color-warn: var(--warn); /* needs a look */
+  --color-violet: var(--violet); /* chart series 2 only */
+  --color-gap: var(--gap); /* the Gap ring and bars: a fill, never text */
+  --color-fam-business: var(--fam-business);
+  --color-fam-insiders: var(--fam-insiders);
+  --color-fam-ownership: var(--fam-ownership);
+  --color-fam-text: var(--fam-text);
+  --color-tint-sky: var(--tint-sky);
+  --color-tint-sage: var(--tint-sage);
+  --color-tint-sand: var(--tint-sand);
+  --color-tint-clay: var(--tint-clay);
+}
+
+/* Inter only (self-hosted by next/font, app/layout.tsx). font-mono stays as a name so older classes keep compiling,
+   but it is Inter too: figures line up through tabular numbers (.num), not a second face. */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 28px;
+  --radius-tile: 18px; /* tiles and rows inside a sheet */
+  --radius-sheet: 24px; /* sheets */
+}
+
+/* BRIEF §6: readable at 390 px; axe 0 serious issues. Text is fg, muted or subtle (>= 4.5:1 on every surface in both
+   themes); a coloured tint carries fg or its own colour. Everything here sits in Tailwind's layers, so a utility class
+   on an element (a button-styled link's no-underline) still wins over these defaults. */
+@layer base {
+  /* Scrolling to an anchor or to keyboard focus keeps clear of the sticky header and, on a phone, of the floating dock
+     (68 px, about 80 px off the bottom: the footer's clearance), so focus is never hidden under it (WCAG 2.4.11). */
+  html {
+    background-color: var(--canvas);
+    scrollbar-color: var(--line-strong) transparent;
+    scroll-padding-top: 5.5rem;
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 6.5rem);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  @media (width >= 48rem) {
+    html {
+      scroll-padding-bottom: 0;
+    }
   }
 
   /* Tailwind v4's preflight gives borders currentColor; a bare `border` is a hairline here. */
   *,
   ::before,
   ::after {
-    border-color: var(--color-line);
+    border-color: var(--line);
   }
 
   body {
-    @apply bg-canvas font-sans text-sm text-fg antialiased;
-    font-feature-settings: "cv11", "ss01";
+    @apply bg-canvas font-sans text-[15px] leading-normal text-fg antialiased;
+    font-feature-settings: "cv11", "ss03";
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.011em;
+    overflow-wrap: break-word;
   }
 
-  /* Links in text are underlined, not told apart by colour alone (axe link-in-text-block). */
+  /* Links in text are underlined, not told apart by colour alone (axe link-in-text-block). A link that stands alone
+     (a pill, a row, a card) sets no-underline. */
   a {
-    @apply text-accent underline decoration-accent/40 underline-offset-4 transition-colors hover:text-accent-hover hover:decoration-accent-hover;
+    @apply text-accent underline decoration-accent/35 underline-offset-[3px] transition-colors duration-150 hover:text-accent-hover hover:decoration-accent-hover;
   }
 
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-accent;
   }
 
+  button:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
   input[type="checkbox"],
   input[type="radio"] {
     @apply size-4;
-    accent-color: var(--color-accent);
+    accent-color: var(--accent);
   }
 
-  summary {
-    @apply cursor-pointer;
-  }
-
+  /* An id (m:revenue_ttm_yoy, human-approved) on a soft grey pill, in Inter like everything else. */
   code {
-    @apply rounded-sm bg-raised px-1 py-0.5 font-mono text-[0.85em] text-fg ring-1 ring-line ring-inset;
+    @apply rounded-md bg-hover px-1.5 py-0.5 text-[0.85em] text-fg;
+    font-family: inherit;
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--color-accent) 35%, transparent);
-    color: var(--color-fg);
+    background: color-mix(in oklab, var(--accent) 24%, transparent);
+    color: var(--fg);
   }
 
   h1,
@@ -93,14 +265,19 @@
 }
 
 @layer components {
-  /* Figures: monospace, tabular. */
+  /* Figures: tabular, so columns of numbers line up. */
   .num {
-    @apply font-mono tabular-nums;
+    font-variant-numeric: tabular-nums;
   }
 
-  /* Small monospace capitals: KPI labels, table headers, the Candidates column header. Never on text a test reads. */
+  /* A small tracked label over a title or a group ("Week 42", "Why it's here"). */
+  .eyebrow {
+    @apply text-[12px] leading-4 font-semibold tracking-[0.08em] text-subtle uppercase;
+  }
+
+  /* Table headers and small labels: the eyebrow, a size down. Never on text a test reads. */
   .caps {
-    @apply font-mono text-[11px] leading-4 font-medium tracking-[0.08em] text-subtle uppercase;
+    @apply text-[11px] leading-4 font-semibold tracking-[0.08em] text-subtle uppercase;
   }
 
   /* A link that stands alone (a table's company name): weight tells it apart, the colour comes on hover. */
@@ -108,28 +285,171 @@
     @apply font-medium text-fg no-underline hover:text-accent;
   }
 
-  .recharts-text {
-    font-family: var(--font-mono);
+  /* A sheet: the white (charcoal) card every section sits in. */
+  .sheet {
+    border-radius: var(--radius-sheet);
+    background-color: var(--panel);
+    box-shadow: var(--sheet-shadow);
+    outline: 1px solid var(--sheet-edge);
+    outline-offset: -1px;
+  }
+
+  /* A tile or row inside a sheet. */
+  .tile {
+    border-radius: var(--radius-tile);
+    background-color: var(--raised);
+  }
+
+  /* A control that sits on the canvas (the header's search and theme button): the panel colour, lifted a hair. */
+  .lift {
+    background-color: var(--panel);
+    box-shadow: var(--lift-shadow);
+    outline: 1px solid var(--sheet-edge);
+    outline-offset: -1px;
+  }
+
+  /* The segmented nav's active pill. */
+  .seg-on {
+    background-color: var(--thumb);
+    box-shadow: var(--lift-shadow);
+  }
+
+  /* Menus and popovers. */
+  .pop {
+    background-color: var(--panel);
+    box-shadow: var(--pop-shadow);
+    outline: 1px solid var(--glass-edge);
+    outline-offset: -1px;
+  }
+
+  /* The phone's bottom dock: floating glass over whatever scrolls under it. */
+  .glass {
+    background-color: var(--glass);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    box-shadow: var(--glass-shadow);
+    outline: 1px solid var(--glass-edge);
+    outline-offset: -1px;
+  }
+
+  /* Their resting edge would hide the base focus ring: keyboard focus shows on every one. */
+  .sheet:focus-visible,
+  .lift:focus-visible,
+  .pop:focus-visible,
+  .glass:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Small motion (150-250 ms; none under prefers-reduced-motion, below). */
+  .rise {
+    animation: rise 250ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+  .ring-fill {
+    animation: ring-fill 250ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .grow-x {
+    transform-origin: left center;
+    animation: grow-x 250ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .press {
+    transition: transform 150ms ease-out;
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /* A tab or pill whose navigation is waiting for the server (components/link-pending.tsx, next/link useLinkStatus):
+     the tapped link dims and pulses at once, and a thin accent bar runs along the top of the page until the next
+     screen arrives. Both wait 100 ms, so a quick navigation doesn't flicker. */
+  .link-pending {
+    display: none;
+  }
+  a:has(> .link-pending[data-pending]) {
+    animation: pending-pulse 900ms ease-in-out 100ms infinite;
+  }
+  body:has(.link-pending[data-pending])::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 60;
+    height: 3px;
+    background-color: var(--accent);
+    transform-origin: left center;
+    animation: pending-bar 8s cubic-bezier(0.1, 0.7, 0.2, 1) 100ms both;
+  }
+
+  /* "Skip to content": off screen until it has keyboard focus. */
+  .skip-link {
+    @apply fixed top-3 left-3 z-50 -translate-y-24 rounded-full bg-ink px-4 py-2.5 text-[14px] font-semibold text-on-ink no-underline transition-transform duration-150 focus-visible:translate-y-0;
   }
 
   /* Markdown the pipeline wrote (components/markdown.tsx): headings render two levels down (# -> h3, ## -> h4). */
   .prose-md {
-    @apply max-w-3xl text-sm leading-relaxed text-fg;
+    @apply max-w-3xl text-[15px] leading-relaxed text-fg;
   }
   .prose-md > :first-child { @apply mt-0; }
-  .prose-md h3 { @apply mt-6 mb-2 text-lg font-semibold text-fg; }
-  .prose-md h4 { @apply mt-6 mb-2 text-base font-semibold text-fg; }
+  .prose-md h3 { @apply mt-6 mb-2 text-[18px] font-bold tracking-tight text-fg; }
+  .prose-md h4 { @apply mt-5 mb-2 text-[16px] font-semibold text-fg; }
   .prose-md h5, .prose-md h6 { @apply mt-4 mb-1 font-semibold; }
   .prose-md p { @apply my-2; }
   .prose-md ul { @apply my-2 list-disc space-y-1 pl-5; }
   .prose-md ol { @apply my-2 list-decimal space-y-1 pl-5; }
   .prose-md li::marker { @apply text-subtle; }
-  .prose-md blockquote { @apply my-3 border-l-2 border-warn bg-warn/10 px-3 py-2 text-fg; }
+  .prose-md blockquote { @apply my-3 rounded-tile bg-warn/10 px-4 py-3 text-fg; }
   .prose-md strong { @apply font-semibold; }
-  .prose-md table { @apply my-3 w-full border-collapse text-sm; }
-  .prose-md thead { @apply border-b border-line-strong; }
-  /* The .caps look, spelled out: @apply takes utilities only. */
-  .prose-md th { @apply px-3 py-2 text-left font-mono text-[11px] leading-4 font-medium tracking-[0.08em] whitespace-nowrap text-subtle uppercase; }
-  .prose-md td { @apply border-b border-line px-3 py-2 text-left align-top; }
-  .prose-md hr { @apply my-4 border-line; }
+  .prose-md table { @apply my-3 w-full border-collapse text-[14px]; }
+  /* The .caps look, spelled out: @apply takes utilities only. Clean rows: a hairline between them, no grid. */
+  .prose-md th { @apply px-3 py-2 text-left text-[11px] leading-4 font-semibold tracking-[0.08em] whitespace-nowrap text-subtle uppercase; }
+  .prose-md td { @apply border-t border-line px-3 py-2.5 text-left align-top; }
+  .prose-md hr { @apply my-5 border-line; }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+}
+
+/* A ring fills from empty to its score: the arc's dash grows from 0 (the gap only has to be longer than the ring). */
+@keyframes ring-fill {
+  from {
+    stroke-dasharray: 0 400;
+  }
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes pending-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Most of the way across quickly, then a slow crawl: it never reaches the end; the next screen replaces it. */
+@keyframes pending-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

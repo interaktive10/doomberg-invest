@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { needsKillReview } from "@/lib/reviews";
-import { acceptable, afterVerdict, canMove, cardQueued, group, killTally, markMoved, positionOpen, STATES, verdicts } from "@/lib/theses";
+import {
+  acceptable,
+  afterVerdict,
+  canMove,
+  cardQueued,
+  group,
+  killCheckLine,
+  killTally,
+  markMoved,
+  positionOpen,
+  showsReviews,
+  STATES,
+  verdicts,
+} from "@/lib/theses";
 
 describe("thesis workflow (BRIEF §1.8)", () => {
   it("offers each move in its state only", () => {
@@ -111,5 +124,24 @@ describe("the Theses screen's three groups (overhaul PR 4)", () => {
     expect(killTally([])).toBe("none");
     expect(killTally(["ok", "unknown"])).toBe("0 of 2 triggered");
     expect(killTally(["triggered", "ok", "triggered"])).toBe("2 of 3 triggered");
+  });
+});
+
+describe("the thesis page's Reviews (PR 6 final review V4-5)", () => {
+  it("shows while a review can still come, or when there are reviews; never promises one to a card or a closed thesis", () => {
+    for (const st of ["research", "closed", "dismissed"] as const) expect([st, showsReviews(st, 0)]).toEqual([st, false]);
+    for (const st of ["thesis", "position", "review"] as const) expect([st, showsReviews(st, 0)]).toEqual([st, true]);
+    for (const st of STATES) expect([st, showsReviews(st, 2)]).toEqual([st, true]);
+  });
+});
+
+describe("when the kill criteria are checked (PR 6 final review EYE2-1)", () => {
+  it("names the earliest check_after date, the same line on the Company and Thesis pages", () => {
+    expect(killCheckLine([{ check_after: "2026-11-20" }, { check_after: "2026-09-01" }])).toBe("Checked after Sep 1");
+    expect(killCheckLine([{ check_after: "2026-11-20" }])).toBe("Checked after Nov 20");
+    expect(killCheckLine([])).toBeUndefined();
+  });
+  it("never claims a per-filing schedule (the pipeline checks every week from check_after on)", () => {
+    expect(killCheckLine([{ check_after: "2026-09-01" }])).not.toMatch(/filing/);
   });
 });

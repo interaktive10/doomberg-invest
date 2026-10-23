@@ -3,6 +3,9 @@
 // too, pipeline/thesis/kill_criteria.py). Pure, so tests/reviews.test.ts covers it; lib/data.ts reads the rows and
 // writes the reviews.
 
+import { measure } from "@/lib/format";
+import { killMetric, metricValue } from "@/lib/labels";
+
 export interface FilingRow {
   period_end: string;
   filed_at: string;
@@ -275,4 +278,38 @@ export function killReview(
     state: stateDiff(before, now, items),
     snapshot: now,
   };
+}
+
+// ------------------------------------------------------------------ the pack diff as the thesis page shows it
+
+/** A kill criterion's value in a review's "Kill criteria then", in its metric's unit as the checklist beside it says
+ * it ("24.0%", "66"), not as a raw fraction; "–" when there is none (PR 6 final review V4-2). */
+export function killValue(metric: string, v: number | null): string {
+  return v === null ? "–" : metricValue(v, killMetric(metric).unit);
+}
+
+/** A review's context value: Evidence and Gap as the whole scores every screen shows ("82"); the Gap's parts C1-C3 are
+ * stored values, not scores, so they read as stored; "–" when there is none (PR 6 final review V4-2). */
+export function contextValue(id: string, v: number | null): string {
+  if (v === null) return "–";
+  return id === "evidence" || id === "gap" ? v.toFixed(0) : measure(v);
+}
+
+/** One line of a review's What changed: its lead ("New signals") and the ids it names. */
+export interface ChangeLine {
+  lead: string;
+  ids: string[];
+  kind: "signal" | "flag";
+}
+
+/** What changed among the signals and red flags, one line per list that has something in it; [] when nothing did
+ * (the page then says so once instead of four "none"s; PR 6 final review V4-9). */
+export function changeLines(s: Pick<StateDiff, "signals" | "red_flags">): ChangeLine[] {
+  const lines: [string, readonly string[], ChangeLine["kind"]][] = [
+    ["New signals", s.signals.fired, "signal"],
+    ["Signals stopped", s.signals.dropped, "signal"],
+    ["New red flags", s.red_flags.fired, "flag"],
+    ["Red flags cleared", s.red_flags.dropped, "flag"],
+  ];
+  return lines.filter(([, ids]) => ids.length > 0).map(([lead, ids, kind]) => ({ lead, ids: [...ids], kind }));
 }

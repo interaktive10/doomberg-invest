@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  changeLines,
+  contextValue,
   dayAfter,
+  killValue,
   killReview,
   lastSnapshot,
   needsKillReview,
@@ -199,5 +202,33 @@ describe("reviews (BRIEF §4.9: a review after each new quarterly filing, with t
     expect(r.kill_criteria).toEqual(KILLS);
     expect(r.state?.kill).toEqual([{ metric: "m:revenue_ttm_yoy", before: 0.24, now: 0.2 }]);
     expect(r.snapshot).toEqual(NOW);
+  });
+});
+
+describe("the pack diff as the thesis page shows it (PR 6 final review V4-2, V4-9)", () => {
+  it("writes a kill criterion's value in its metric's unit, as the checklist beside it does", () => {
+    expect(killValue("m:revenue_ttm_yoy", 0.24)).toBe("24.0%");
+    expect(killValue("m:evidence", 82)).toBe("82");
+    expect(killValue("m:evidence", null)).toBe("–");
+    expect(killValue("m:roic", 0.153)).toBe("15.3%");
+  });
+
+  it("writes Evidence and Gap as whole scores and the Gap's parts as stored", () => {
+    expect(contextValue("evidence", 82)).toBe("82");
+    expect(contextValue("gap", 61.6)).toBe("62");
+    expect(contextValue("gap", null)).toBe("–");
+    expect(contextValue("C2", 0.12)).toBe("0.1200");
+    expect(contextValue("C1", 3.2)).toBe("3.2000");
+  });
+
+  it("lists only what changed among signals and red flags", () => {
+    const none = { signals: { fired: [], dropped: [] }, red_flags: { fired: [], dropped: [] } };
+    expect(changeLines(none)).toEqual([]);
+    expect(changeLines({ ...none, red_flags: { fired: ["R4"], dropped: [] } })).toEqual([{ lead: "New red flags", ids: ["R4"], kind: "flag" }]);
+    expect(changeLines({ signals: { fired: ["S1"], dropped: ["S7", "S9"] }, red_flags: { fired: [], dropped: ["R1"] } }).map((l) => l.lead)).toEqual([
+      "New signals",
+      "Signals stopped",
+      "Red flags cleared",
+    ]);
   });
 });

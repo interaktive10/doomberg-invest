@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CITE, citeView, factOrder, rehypeCites, stripSection, stripTitle } from "@/lib/cards";
+import { CITE, citeView, factOrder, rehypeCites, stripSection, stripTitle, unlabel } from "@/lib/cards";
 import { repoFile } from "./repo";
 
 // A card as pipeline/thesis/render.py writes it.
@@ -59,7 +59,7 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
     expect(factOrder("no citations")).toEqual([]);
   });
 
-  it("shows each citation as a short label that links to its evidence on the company page", () => {
+  it("shows each citation as a short label in plain words that links to its evidence on the company page", () => {
     const facts = factOrder(CARD);
     const co = "00000000-0000-4000-8000-0000000000e1";
     expect(citeView("f:00000000-0000-4000-8000-0000000000f2", co, facts)).toEqual({
@@ -68,15 +68,26 @@ describe("thesis cards on the page (lib/cards.ts)", () => {
       href: `/company/${co}#fact-00000000-0000-4000-8000-0000000000f2`,
     });
     expect(citeView("f:ffff", co, facts).label).toBe("fact");
-    expect(citeView("m:revenue:2026-03-31", co, facts)).toEqual({ label: "Revenue 2026-03-31", title: "Metric revenue:2026-03-31", href: `/company/${co}#fundamentals` });
-    expect(citeView("m:revenue_ttm_yoy", co, facts).label).toBe("Revenue ttm yoy");
-    expect(citeView("s:S1", co, facts)).toEqual({ label: "S1", title: "Order-book acceleration", href: `/company/${co}#why` });
-    expect(citeView("s:R3", co, facts).title).toBe("Auditor change, late filing or going-concern language");
-    expect(citeView("c:C2", co, facts)).toMatchObject({ label: "C2", href: `/company/${co}#why` });
+    // a metric by the name the kill criteria use, its period end as the screens say dates (PR 6 review design-F1)
+    expect(citeView("m:revenue:2026-03-31", co, facts)).toEqual({ label: "Revenue, Mar 31, 2026", title: "Metric revenue:2026-03-31", href: `/company/${co}#fundamentals` });
+    // a year-over-year pair reads as two dates, not two identical chips (PR 6 final review C2)
+    expect(citeView("m:revenue:2026-06-30", co, facts).label).not.toBe(citeView("m:revenue:2025-06-30", co, facts).label);
+    expect(citeView("m:revenue_ttm_yoy", co, facts).label).toBe("TTM revenue growth");
+    expect(citeView("m:signal:S7", co, facts).label).toBe("Insider buying signal strength");
+    // signals, red flags and the Gap's parts by the names the Why panel gives their rows; the code in the title
+    expect(citeView("s:S1", co, facts)).toEqual({ label: "Order book", title: "S1 Order-book acceleration", href: `/company/${co}#why` });
+    expect(citeView("s:S4", co, facts).label).toBe("Earnings quality");
+    expect(citeView("s:R3", co, facts)).toMatchObject({ label: "Auditor change, late filing or going-concern language", title: "R3 Auditor change, late filing or going-concern language" });
+    expect(citeView("s:S99", co, facts)).toMatchObject({ label: "S99", title: "Signal S99" });
+    expect(citeView("c:C2", co, facts)).toMatchObject({ label: "Growth test", href: `/company/${co}#why` });
     expect(citeView("c:C2", null, facts).href).toBeNull();
-    expect(citeView("c:C1", co, facts)).toEqual({ label: "C1", title: "Valuation percentile vs its own history", href: `/company/${co}#why` });
-    expect(citeView("c:C3", co, facts).href).toBe(`/company/${co}#why`);
+    expect(citeView("c:C1", co, facts)).toEqual({ label: "Cheap vs its past", title: "C1 Valuation percentile vs its own history", href: `/company/${co}#why` });
+    expect(citeView("c:C3", co, facts)).toMatchObject({ label: "Price move", href: `/company/${co}#why` });
     expect(citeView("c:C1", null, facts).href).toBeNull();
+    // no code is a chip's label
+    for (const id of ["s:S1", "s:S12", "s:R1", "c:C1", "c:C2", "c:C3", "m:revenue_ttm_yoy", "m:signal:S4"]) {
+      expect([id, /\b[SRC]\d{1,2}\b/.test(citeView(id, co, facts).label)]).toEqual([id, false]);
+    }
   });
 
   it("splits citations out of text for the chips, and leaves code alone", () => {
@@ -113,5 +124,22 @@ describe("citation anchors (integration review web-WEB-1)", () => {
       const hash = (citeView(id, co, []).href ?? "").split("#")[1];
       expect([id, page.includes(`id="${hash}"`) || page.includes(`["${hash}",`)]).toEqual([id, true]);
     }
+  });
+});
+
+describe("a card section as the page shows it (PR 6 final review V4-12)", () => {
+  it("drops the label validate.py requires under Inferences and Assumptions, and nowhere else", () => {
+    expect(unlabel("Inferences", "- Inference: backlog converts to revenue over roughly two years.")).toBe("- Backlog converts to revenue over roughly two years.");
+    expect(unlabel("Assumptions", "- Assumption: margins hold near 20% (assumed).\n- Assumption: no large customer cancels.")).toBe(
+      "- Margins hold near 20% (assumed).\n- No large customer cancels.",
+    );
+    // the item reads as a sentence (re-review FR-1), but a name written with an inner capital, a number or a
+    // citation stays as written
+    expect(unlabel("Inferences", "- Inference: iPhone demand holds.\n- Inference: 40% of backlog converts.")).toBe(
+      "- iPhone demand holds.\n- 40% of backlog converts.",
+    );
+    expect(unlabel("Inferences", "- Inference: [f:abc] supports it.")).toBe("- [f:abc] supports it.");
+    expect(unlabel("Facts", "- Inference: kept as written.")).toBe("- Inference: kept as written.");
+    expect(unlabel("Assumptions", "Assumption: not a list item stays.")).toBe("Assumption: not a list item stays.");
   });
 });

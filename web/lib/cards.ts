@@ -1,4 +1,5 @@
-import { CONTEXT_NAME, humanize, RED_FLAG_NAME, SIGNAL_NAME } from "@/lib/labels";
+import { shortDate } from "@/lib/dates";
+import { CONTEXT_NAME, GAP_SHORT, killName, RED_FLAG_NAME, SIGNAL_NAME, signalShort } from "@/lib/labels";
 
 // Display helpers for the markdown the pipeline writes (thesis cards, the digest). Display only: the stored text is
 // what pipeline/thesis/validate.py checked, and nothing here changes it.
@@ -71,8 +72,9 @@ export interface CiteView {
   href: string | null;
 }
 
-/** How a citation shows in a card: a short label, the full id as its title, and where its evidence is on the company
- * page (facts carry anchors there: #fact-<id>). */
+/** How a citation shows in a card: a short label in plain words, named as the Company page names what it points at
+ * (the Why panel's signal, red-flag and Gap rows, the charts' metrics), with the code in its title; and where its
+ * evidence is on the company page (facts carry anchors there: #fact-<id>). */
 export function citeView(id: string, companyId: string | null, facts: readonly string[]): CiteView {
   const page = companyId ? `/company/${companyId}` : null;
   const at = (hash: string) => (page ? `${page}#${hash}` : null);
@@ -85,18 +87,32 @@ export function citeView(id: string, companyId: string | null, facts: readonly s
     }
     case "m": {
       const dated = /^(.*):(\d{4}-\d{2}-\d{2})$/.exec(body); // m:<metric>:<period end> (validate.py METRIC_ID)
-      const name = humanize(dated ? dated[1] : body);
-      return { label: dated ? `${name} ${dated[2]}` : name, title: `Metric ${body}`, href: at("fundamentals") };
+      const name = killName(dated ? dated[1]! : body);
+      // with the year, so a card's year-over-year pair reads as two dates (PR 6 final review C2)
+      return { label: dated ? `${name}, ${shortDate(dated[2]!, true)}` : name, title: `Metric ${body}`, href: at("fundamentals") };
     }
-    case "s":
+    case "s": {
       // the fired signals and the red flags are listed in the Company page's Why this score panel (overhaul PR 5)
-      return { label: body, title: SIGNAL_NAME[body] ?? RED_FLAG_NAME[body] ?? `Signal ${body}`, href: at("why") };
+      const name = SIGNAL_NAME[body] ?? RED_FLAG_NAME[body];
+      return { label: RED_FLAG_NAME[body] ?? signalShort(body), title: name ? `${body} ${name}` : `Signal ${body}`, href: at("why") };
+    }
     case "c":
       // so is Gap's split into C1-C3, the reverse DCF folded into C2 (overhaul PR 5; integration review web-WEB-1)
-      return { label: body, title: CONTEXT_NAME[body] ?? `Context ${body}`, href: at("why") };
+      return { label: GAP_SHORT[body] ?? body, title: CONTEXT_NAME[body] ? `${body} ${CONTEXT_NAME[body]}` : `Context ${body}`, href: at("why") };
     default:
       return { label: id, title: id, href: null };
   }
+}
+
+/** A card section's body as the page shows it: under "Inferences" and "Assumptions" each item drops the label
+ * validate.py requires of it ("- Inference: ...", "- Assumption: ..."), since the section's title already says it (PR 6
+ * final review V4-12), and starts with a capital as a sentence does (re-review FR-1; "iPhone" stays as written).
+ * Display only: the stored card keeps its labels. */
+export function unlabel(title: string, body: string): string {
+  if (!/^(inferences|assumptions)$/i.test(title.trim())) return body;
+  return body.replace(/^(\s*[-*]\s+)(?:[Ii]nference|[Aa]ssumption|INFERENCE|ASSUMPTION):\s*(?:([a-z])(?![A-Z]))?/gm, (_m, lead: string, first?: string) =>
+    lead + (first ? first.toUpperCase() : ""),
+  );
 }
 
 // A minimal hast shape (the rehype tree react-markdown builds); @types/hast isn't a direct dependency.

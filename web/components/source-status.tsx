@@ -1,20 +1,16 @@
-import { Badge } from "@/components/ui/badge";
+import { Chip } from "@/components/chip";
 import type { SourceHealth } from "@/lib/data";
+import { statusChip } from "@/lib/settings";
 import { sourceStatus } from "@/lib/staleness";
 
-/** A source's status (lib/staleness.ts sourceStatus) as a short badge with its detail next to it ("late" · "no success
- * for 11 days; SLA 8"): green when on time, amber when late, grey for a resting fallback, red when stale or never
- * succeeded. */
+/** A source's status (lib/staleness.ts sourceStatus) as a soft chip: "On time" in green, "Late" in amber, "Stale" or
+ * "Never ran" in red, a resting fallback "Not needed" in grey. The detail ("no success for 11 days; SLA 8") is its
+ * tooltip. */
 export function SourceStatus({ source, all, now }: { source: SourceHealth; all: readonly SourceHealth[]; now: Date }) {
-  const text = sourceStatus(source, all, now);
-  const m = /^([^(]+?)\s*\((.*)\)$/.exec(text);
-  const head = m?.[1] ?? text;
-  const detail = m?.[2];
-  const variant = text === "ok" ? "success" : text.startsWith("fallback") ? "secondary" : text.startsWith("late") ? "warning" : "destructive";
+  const c = statusChip(sourceStatus(source, all, now));
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
-      <Badge variant={variant}>{head}</Badge>
-      {detail ? <span className="text-xs whitespace-nowrap text-muted">{detail}</span> : null}
-    </span>
+    <Chip variant={c.tone} size="sm" title={c.detail ?? undefined} className="shrink-0 font-semibold">
+      {c.word}
+    </Chip>
   );
 }

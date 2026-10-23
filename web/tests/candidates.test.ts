@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { dismissalHolds, evidenceChange, isNew, releases, signed, windowStart, type ScorePoint } from "@/lib/candidates";
+import { bucketLine } from "@/lib/explain";
+import {
+  BUCKET_LINE,
+  BUCKET_TABS,
+  dismissalHolds,
+  evidenceChange,
+  evidenceMove,
+  flagLine,
+  isNew,
+  releases,
+  signed,
+  stillDismissed,
+  windowStart,
+  type ScorePoint,
+} from "@/lib/candidates";
 
 const W = "2026-09-18";
 const row = (week_end: string, evidence: number, bucket = "candidate"): ScorePoint => ({ week_end, evidence, bucket });
@@ -38,6 +52,20 @@ describe("a dismissal holds until the evidence changes (overhaul PR 4)", () => {
   it("a dismissal without its week's scores row doesn't hide the name", () => {
     expect(dismissalHolds(null, [then])).toBe(false);
   });
+
+  it("names the rows a dismissal still hides, for Candidates and Home's On the board alike (PR 6 review ci-BEH-1)", () => {
+    const r = (company_id: string, evidence: number, fired_signals = ["S1"]) => ({ company_id, evidence, families: ["fundamentals"], fired_signals });
+    const held = new Map([
+      ["kappa", { baseline: then, since: [] }], // dismissed this week, nothing changed
+      ["echo", { baseline: then, since: [{ ...then, evidence: 75 }] }], // Evidence moved 13 since
+      ["omega", { baseline: null, since: [] }], // no scores row on its week
+    ]);
+    const rows = [r("kappa", 63), r("echo", 75), r("omega", 63), r("delta", 63), r("sigma", 63, ["S1", "S4"])];
+    expect([...stillDismissed(rows, held)]).toEqual(["kappa"]);
+    // the shown week counts: a new signal this week releases it
+    expect([...stillDismissed([r("kappa", 63, ["S1", "S4"])], held)]).toEqual([]);
+    expect(stillDismissed(rows, new Map()).size).toBe(0);
+  });
 });
 
 describe("the NEW badge and the Evidence change read the same 12 weeks of scores rows", () => {
@@ -63,5 +91,26 @@ describe("the NEW badge and the Evidence change read the same 12 weeks of scores
     expect(evidenceChange(62.5, W, [])).toBeNull(); // first week scored
     expect(evidenceChange(62.5, W, [row("2026-06-19", 40)])).toBeNull(); // nothing within 12 weeks
     expect([signed(4.1), signed(-3.4), signed(0)]).toEqual(["+4.1", "−3.4", "0.0"]);
+  });
+});
+
+describe("a card's lines in plain words (overhaul PR 6)", () => {
+  it("says the Evidence change with its week, and which way it went", () => {
+    expect(evidenceMove({ change: 4.1, since: "2026-09-11" })).toEqual({ tone: "up", text: "+4.1 since Sep 11" });
+    expect(evidenceMove({ change: -3.4, since: "2026-09-11" })).toEqual({ tone: "down", text: "−3.4 since Sep 11" });
+    expect(evidenceMove({ change: 0, since: "2026-09-04" })).toEqual({ tone: "flat", text: "unchanged since Sep 4" });
+    expect(evidenceMove(null)).toEqual({ tone: "flat", text: "has no earlier score" });
+  });
+
+  it("names the three views as every screen names the buckets, each with the line the Company header uses", () => {
+    expect(BUCKET_TABS.map(([, text]) => text)).toEqual(["On the board", "Early", "Priced in"]);
+    for (const [b] of BUCKET_TABS) expect(BUCKET_LINE[b]).toBe(bucketLine(b));
+  });
+
+  it("names the red flags, amber when soft and red when one is hard, with the codes kept for the tooltip", () => {
+    expect(flagLine([], false)).toEqual({ tone: "good", text: "No red flags", codes: "" });
+    expect(flagLine(["R2"], false)).toEqual({ tone: "warn", text: "Watch out: Receivables outgrowing revenue", codes: "R2" });
+    expect(flagLine(["R1", "R3"], true).tone).toBe("bad");
+    expect(flagLine(["R9"], false).text).toBe("Watch out: R9");
   });
 });
