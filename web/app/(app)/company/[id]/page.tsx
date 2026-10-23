@@ -52,7 +52,7 @@ import { one, UUID, type Query } from "@/lib/forms";
 import { detailText, humanize } from "@/lib/labels";
 import { chartRows } from "@/lib/metrics";
 import type { ChartTone, Tone } from "@/lib/palette";
-import { LIVE_STATES, STATE_LABEL } from "@/lib/theses";
+import { killCheckLine, LIVE_STATES, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { research } from "../../candidates/actions";
 
@@ -223,7 +223,6 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   }));
   const { bought, sold } = insiderSummary(trades, currency);
   const capped = insidersCapped(ins.length);
-  const firstCheck = kills.map((k) => k.check_after).sort()[0];
   const noteHref = live ? `/theses/${live.id}#journal` : "/journal#add-note";
 
   const side: ReactNode[] = [];
@@ -233,7 +232,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
         key="kill"
         title="What would kill it"
         id="kill"
-        description={firstCheck ? `Checked after ${shortDate(firstCheck)}` : undefined}
+        description={killCheckLine(kills)}
       >
         <KillList kills={kills} />
       </Section>,

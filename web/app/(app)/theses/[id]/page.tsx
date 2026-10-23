@@ -27,7 +27,7 @@ import { one, UUID, type Query } from "@/lib/forms";
 import { ACTION_LABEL, label } from "@/lib/labels";
 import type { Tone } from "@/lib/palette";
 import type { PackDiff } from "@/lib/reviews";
-import { acceptable, canMove, markMoved, positionOpen, RESEARCH_QUEUED, showsReviews, STATE_LABEL } from "@/lib/theses";
+import { acceptable, canMove, killCheckLine, markMoved, positionOpen, RESEARCH_QUEUED, showsReviews, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
 import { requireUser } from "@/lib/auth";
@@ -349,7 +349,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
 
         <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-6">
           {kills.length > 0 ? (
-            <Section title="What would kill it" id="kill" description="Checked after each filing.">
+            <Section title="What would kill it" id="kill" description={killCheckLine(kills)}>
               <KillList kills={kills} detail />
             </Section>
           ) : null}

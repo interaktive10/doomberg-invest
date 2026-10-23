@@ -223,6 +223,8 @@ test("company → thesis → journal → review → close with a post-mortem", a
   const kill = page.getByRole("region", { name: "What would kill it" });
   await expect(kill).toContainText("TTM revenue growth under 5.0%");
   await expect(kill).toContainText("Now 24.0% · safe");
+  // checked every week from the criterion's check_after date on, the same line the Thesis page says (PR 6 final review EYE2-1)
+  await expect(kill).toContainText("Checked after Nov 20");
   await expect(page.getByRole("region", { name: "Insiders bought" })).toContainText("$510K");
   await expect(page.getByText("Revenue (TTM)")).toBeVisible();
   // the verified facts are folded under their count (a card's citation opens them: components/open-target.tsx)
@@ -241,6 +243,9 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await expect(stands).toContainText(/Accepted [A-Z][a-z]{2} \d{1,2}, \d{4}, (this week|\d+ weeks? ago)/, { useInnerText: true });
   await expect(stands).toContainText(/Kill criteria: \d+ of \d+ triggered/, { useInnerText: true });
   await expect(stands).toContainText(/Card of Sep 18, 2026/, { useInnerText: true });
+  const thesisKill = page.getByRole("region", { name: "What would kill it" });
+  await expect(thesisKill).toContainText("Checked after Nov 20"); // as the Company page says it (PR 6 final review EYE2-1)
+  await expect(thesisKill).not.toContainText("each filing");
   // accept keeps the card's filing window: the one after the pack's quarter, 2026-03-31 (M7 review R2-F4); dates read
   // as the screens say them (PR 6 review design-F6)
   await expect(page.getByText("next review Aug 14, 2026")).toBeVisible();
@@ -303,6 +308,8 @@ test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-
   await expect(page.getByText("A kill criterion triggered")).toBeVisible();
   await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("Evidence score under 80");
   await expect(page.getByRole("region", { name: /^Kill criteria for review / })).toContainText("82 → 66"); // whole scores (PR 6 final review V4-2)
+  // the Evidence score is checked weekly from check_after, not with filings (PR 6 final review EYE2-1)
+  await expect(page.getByRole("region", { name: "What would kill it" })).toContainText("Checked after Sep 1");
   await openForm(page, "Record a verdict");
   await page.getByLabel("intact", { exact: true }).check();
   await page.getByRole("button", { name: "Record verdict" }).click();
