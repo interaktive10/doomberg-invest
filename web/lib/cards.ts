@@ -106,10 +106,13 @@ export function citeView(id: string, companyId: string | null, facts: readonly s
 
 /** A card section's body as the page shows it: under "Inferences" and "Assumptions" each item drops the label
  * validate.py requires of it ("- Inference: ...", "- Assumption: ..."), since the section's title already says it (PR 6
- * final review V4-12). Display only: the stored card keeps its labels. */
+ * final review V4-12), and starts with a capital as a sentence does (re-review FR-1; "iPhone" stays as written).
+ * Display only: the stored card keeps its labels. */
 export function unlabel(title: string, body: string): string {
   if (!/^(inferences|assumptions)$/i.test(title.trim())) return body;
-  return body.replace(/^(\s*[-*]\s+)(?:Inference|Assumption):\s*/gim, "$1");
+  return body.replace(/^(\s*[-*]\s+)(?:[Ii]nference|[Aa]ssumption|INFERENCE|ASSUMPTION):\s*(?:([a-z])(?![A-Z]))?/gm, (_m, lead: string, first?: string) =>
+    lead + (first ? first.toUpperCase() : ""),
+  );
 }
 
 // A minimal hast shape (the rehype tree react-markdown builds); @types/hast isn't a direct dependency.

@@ -129,10 +129,16 @@ describe("citation anchors (integration review web-WEB-1)", () => {
 
 describe("a card section as the page shows it (PR 6 final review V4-12)", () => {
   it("drops the label validate.py requires under Inferences and Assumptions, and nowhere else", () => {
-    expect(unlabel("Inferences", "- Inference: backlog converts to revenue over roughly two years.")).toBe("- backlog converts to revenue over roughly two years.");
+    expect(unlabel("Inferences", "- Inference: backlog converts to revenue over roughly two years.")).toBe("- Backlog converts to revenue over roughly two years.");
     expect(unlabel("Assumptions", "- Assumption: margins hold near 20% (assumed).\n- Assumption: no large customer cancels.")).toBe(
-      "- margins hold near 20% (assumed).\n- no large customer cancels.",
+      "- Margins hold near 20% (assumed).\n- No large customer cancels.",
     );
+    // the item reads as a sentence (re-review FR-1), but a name written with an inner capital, a number or a
+    // citation stays as written
+    expect(unlabel("Inferences", "- Inference: iPhone demand holds.\n- Inference: 40% of backlog converts.")).toBe(
+      "- iPhone demand holds.\n- 40% of backlog converts.",
+    );
+    expect(unlabel("Inferences", "- Inference: [f:abc] supports it.")).toBe("- [f:abc] supports it.");
     expect(unlabel("Facts", "- Inference: kept as written.")).toBe("- Inference: kept as written.");
     expect(unlabel("Assumptions", "Assumption: not a list item stays.")).toBe("Assumption: not a list item stays.");
   });

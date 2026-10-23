@@ -180,17 +180,20 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         </ul>
       )}
       {left.length > 0 ? <Left title={LEFT_TITLE[bucket]} items={left} /> : null}
-      <Legend
-        className="rounded-[20px] border border-dashed border-line-strong px-5 py-4"
-        items={[
-          { tone: "evidence", label: <><strong className="font-semibold text-fg">Evidence</strong> how many independent kinds of signal agree ({range.evidence})</> },
-          { tone: "gap", label: <><strong className="font-semibold text-fg">Gap</strong> how far the price lags them ({range.gap})</> },
-          { tone: "business", label: "business" },
-          { tone: "insiders", label: "insiders" },
-          { tone: "ownership", label: "ownership" },
-          { tone: "text", label: "text facts" },
-        ]}
-      />
+      {/* before the first weekly run there are no rings or dots to explain (PR 6 re-review FR-2) */}
+      {firstRun ? null : (
+        <Legend
+          className="rounded-[20px] border border-dashed border-line-strong px-5 py-4"
+          items={[
+            { tone: "evidence", label: <><strong className="font-semibold text-fg">Evidence</strong> how many independent kinds of signal agree ({range.evidence})</> },
+            { tone: "gap", label: <><strong className="font-semibold text-fg">Gap</strong> how far the price lags them ({range.gap})</> },
+            { tone: "business", label: "business" },
+            { tone: "insiders", label: "insiders" },
+            { tone: "ownership", label: "ownership" },
+            { tone: "text", label: "text facts" },
+          ]}
+        />
+      )}
     </Page>
   );
 }
