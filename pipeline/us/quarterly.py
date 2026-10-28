@@ -27,7 +27,7 @@ from pipeline.settings import REPO_ROOT, Settings
 from pipeline.us.thirteenf import (
     DataSet,
     company_holder_counts,
-    dataset_url,
+    dataset_urls,
     holders_by_cusip,
     issuer_names,
     main_period,
@@ -83,24 +83,45 @@ def run_13f(conn: psycopg.Connection[Any], ds: DataSet, overrides: Mapping[str, 
 SPARE_WINDOWS = 2  # how many of the newest windows may still be unpublished before a run fails
 
 
-def fetch_windows(download: Callable[[str, Path], Path], cache: Path, today: date, n: int) -> list[tuple[Path, date]]:
+def download_first(download: Callable[[str, Path], Path], urls: list[str], dest: Path) -> httpx.HTTPStatusError | None:
+    """Download the first of `urls` that exists into `dest`: None when one did, else the last 404. Any other error
+    raises (a 403 is SEC refusing us, not a missing file)."""
+    last: httpx.HTTPStatusError | None = None
+    for url in urls:
+        try:
+            download(url, dest)
+            return None
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 404:
+                raise
+            last = e
+    return last
+
+
+def fetch_windows(
+    download: Callable[[str, Path], Path], cache: Path, today: date, n: int, notes: list[str] | None = None
+) -> list[tuple[Path, date]]:
     """The `n` newest 13F data sets SEC has published, oldest first, each with its window's last filing date (downloaded
-    into `cache` unless already there). A window is assumed out PUBLISH_LAG_DAYS after it closes, but SEC can take
-    longer, so while the newest windows answer 404 the run falls back to the ones before them; a 404 after that is an
-    error (a real gap, not a late release)."""
+    into `cache` unless already there), each tried at every SEC directory (thirteenf.dataset_urls). A window is assumed
+    out PUBLISH_LAG_DAYS after it closes, but SEC can take longer, so while the newest windows answer 404 everywhere the
+    run falls back to the ones before them and says so in `notes` (load() then marks sec_13f stale); a 404 after a
+    published window is an error (a real gap, not a late release)."""
     out: list[tuple[Path, date]] = []
     for start, end in windows_before(today, n + SPARE_WINDOWS):
         if len(out) == n:
             break
         dest = cache / f"{start:%Y%m%d}-{end:%Y%m%d}.zip"
         if not dest.exists():
-            try:
-                download(dataset_url(start, end), dest)
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404 and not out:
-                    print(f"13F data set {start}..{end} is not published yet: using the window before it")
-                    continue
-                raise
+            urls = dataset_urls(start, end)
+            missing = download_first(download, urls, dest)
+            if missing is not None:
+                if out:
+                    raise missing
+                note = f"13F data set {start}..{end} answers 404 at {' and '.join(urls)}: using the window before it"
+                print(f"::warning::{note}")
+                if notes is not None:
+                    notes.append(note)
+                continue
         out.append((dest, end))
     if len(out) < n:
         raise RuntimeError(f"only {len(out)} of the {n} newest 13F data sets are published")
@@ -117,20 +138,34 @@ def main(argv: list[str] | None = None) -> int:
     client = HttpClient(settings)
     today = datetime.now(UTC).date()
     jobs: list[tuple[Path, date]] = []
+    notes: list[str] = []  # newest windows SEC didn't serve: the run is partial and sec_13f reads stale
     if a.zip:
         if a.filed_through is None:
             ap.error("--zip needs --filed-through")
         jobs.append((a.zip, a.filed_through))
     else:
-        jobs.extend(fetch_windows(client.download, settings.cache_dir / "us" / "13f", today, a.windows))
-    overrides = load_overrides()
-    with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "us_13f", "sec_13f") as run:
+        jobs.extend(fetch_windows(client.download, settings.cache_dir / "us" / "13f", today, a.windows, notes))
+    with psycopg.connect(settings.database_url) as conn:
+        load(conn, jobs, load_overrides(), notes)
+    return 0
+
+
+def load(
+    conn: psycopg.Connection[Any], jobs: list[tuple[Path, date]], overrides: Mapping[str, str], notes: list[str]
+) -> None:
+    """The us_13f run over the downloaded data sets. With `notes` (a newest window SEC didn't serve) the run is partial
+    and sec_13f is stale until a later run loads the newest window: Home's and the digest's banner show it."""
+    with repo.tracked_run(conn, "us_13f", "sec_13f") as run:
         run["windows"] = []
+        if notes:
+            run["errors"] = list(notes)
         for path, filed_through in jobs:
             stats = run_13f(conn, read_dataset_zip(path, filed_through), overrides)
             run["windows"].append(stats.__dict__)
             print(f"13F {stats.period}: {stats.companies} companies, {stats.unmapped} unmapped CUSIPs")
-    return 0
+    if notes:  # after tracked_run's success mark, which clears stale
+        repo.mark_source_error(conn, "sec_13f", "stale: " + notes[0], stale=True)
+        conn.commit()
 
 
 if __name__ == "__main__":

@@ -271,7 +271,7 @@ doomberg-invest/
 | `weekly.yml` | `7 2 * * 6` (Saturday) | ≤ 45 min |
 | `thesis-fallback.yml` | `0 6 * * 1` | ≤ 10 min, only if no cards |
 | `thesis-ingest.yml` | on push touching `data/thesis_cards/**` | ≤ 3 min |
-| `quarterly.yml` | `0 3 20 1,4,7,10 *` | ≤ 60 min |
+| `quarterly.yml` | `23 3 22 3,6,9,12 *` | ≤ 60 min |
 | `lab.yml` | manual | ≤ 90 min |
 | `ci.yml` | PRs only (no push to `main`; a label change doesn't re-run it) | — |
 | `protected.yml` | PRs, label changes included: the `protected` job (Appendix D) | — |
