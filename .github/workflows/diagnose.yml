@@ -18,7 +18,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       WEEK: ${{ github.event.inputs.week }}
@@ -31,3 +31,5 @@ jobs:
       - run: uv sync --frozen --no-dev
       - name: Bucket diagnostics
         run: uv run --frozen python -m pipeline.db.diagnose ${WEEK:+--week "$WEEK"}
+      - name: Watch calibration (scratch branch)
+        run: uv run --frozen python scripts/calibrate_watch.py
