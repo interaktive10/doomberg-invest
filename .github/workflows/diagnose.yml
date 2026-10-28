@@ -18,7 +18,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       WEEK: ${{ github.event.inputs.week }}
@@ -33,3 +33,5 @@ jobs:
         run: uv run --frozen python -m pipeline.db.diagnose ${WEEK:+--week "$WEEK"}
       - name: Watch calibration (scratch branch)
         run: uv run --frozen python scripts/calibrate_watch.py
+      - name: Calibration round 2 (scratch branch)
+        run: uv run --frozen python scripts/calibrate2.py
