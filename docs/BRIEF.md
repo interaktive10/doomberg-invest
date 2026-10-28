@@ -114,7 +114,7 @@ The app then asks one question: **is this already priced in?** Candidates are ge
   - NSE equity series `EQ` (from NSE's securities list)
   - excludes SME, and anything on the ASM/GSM surveillance lists
   - candidate stage: market cap ≥ ₹500 crore (price × shares from shareholding filings)
-  - **paused** (SPEC_ISSUES 46): the India code and stored data stay, but no schedule fetches India and the weekly run scores the US only; SPEC_ISSUES 46 says how to restart it
+  - running again since 2026-10-28 (SPEC_ISSUES 55; paused Oct 20-28, SPEC_ISSUES 46): the weekly run scores both markets, and companies whose newest quarter is more than 210 days old are scored without fundamentals (a half-loaded history never counts as current)
 - **Capex seed:** the Capex Ledger's US and India names (Appendix H, resolved in M0; unresolved names in `docs/UNIVERSE_ISSUES.md`) are flagged `companies.capex_desk`. The Capex Desk that read them was deleted (SPEC_ISSUES 52).
 
 ### 1.4 Evidence signals (price-free; formulas in §4.6)
@@ -305,7 +305,7 @@ doomberg-invest/
 | US events | EDGAR daily index / submissions: Form 4, 8-K items (4.01 auditor, 1.01, 2.02, 2.03), NT 10-K/10-Q, Form 10-12B (spin-offs) | daily | SEC fair access: user agent, ≤ 8 req/s |
 | US ownership | SEC Form 13F data sets | quarterly | Holder counts per CUSIP → mapped to companies |
 | US prices | Twelve Data weekly bars (free key), **candidate set + benchmarks only** (≤ 400 symbols/week; ^spx asked as SPY) | weekly | Free plan: 8 credits a minute, 800 a day (1 req/8 s); manual CSV import fallback (SPEC_ISSUES 38) |
-| US prices, Signal Lab | Twelve Data daily closes (monthly if the free plan's daily history doesn't reach 2010), downloaded by `lab-prices.yml` with **no human step**: resumable, ≤ 650 credits and 90 minutes a run, Sunday to Thursday → month-end bars in the private GitHub release `lab-data-v1` | once (November 2026) | Survivorship bias warning (§7) |
+| US prices, Signal Lab | Twelve Data daily closes (monthly if the free plan's daily history doesn't reach 2010), downloaded by `lab-prices.yml` with **no human step**: resumable, ≤ 650 credits and 90 minutes a run, Sunday to Thursday → month-end bars kept in the database (`pipeline_state`; never a release asset, since the repository is public: SPEC_ISSUES 55) | once (November 2026) | Survivorship bias warning (§7) |
 | India prices | NSE CM-UDiFF Common Bhavcopy (daily file; use the Friday file) | weekly | BSE bhavcopy fallback |
 | India securities list, ASM/GSM lists | NSE reports | weekly | |
 | India fundamentals | NSE corporate filings: financial results (XBRL), shareholding patterns, insider trading (PIT), pledged data, announcements | weekly (announcements daily) | NSE site needs session cookies and polite rates (≤ 1 req/3 s); BSE fallback; **manual CSV import** from the pages' own "Download (.csv)" when blocked |
@@ -317,7 +317,7 @@ doomberg-invest/
   - `fundamentals_q` as one **wide row per company-quarter** (about 5,000 US + 2,000 IN companies × 60 quarters ≈ 420k rows ≈ 150 MB with indexes)
   - weekly prices for India (all EQ) and US candidates/benchmarks only
   - signals, scores, facts, theses, journal
-- **Don't store:** raw bulk files. They live on the runner, with the Actions cache for incremental runs. The Signal Lab panel is kept as Parquet in a release asset.
+- **Don't store:** raw bulk files. They live on the runner, with the Actions cache for incremental runs. The Signal Lab panel is kept as Parquet in the Actions cache. **Nothing is published:** the repository is public (since 2026-10-26, so its Actions minutes are free), and a release asset or workflow artifact of a public repository can be downloaded by anyone, so free data (Twelve Data, NSE) and anything private never goes into one (SPEC_ISSUES 55).
 - **Guard:** `db/size_guard.py` fails the weekly run above 400 MB and prunes old `signal_values` (keeps 3 years; the lab keeps its own Parquet).
 - **Keep-alive:** Supabase free projects pause after inactivity; the daily workflow keeps the project active.
 
@@ -442,7 +442,7 @@ All thresholds live in `config/signals.yaml` (a protected path) with the default
   - unmapped CUSIPs are logged
 
 ### 4.3 India (`pipeline/india/*`)
-**Paused** (SPEC_ISSUES 46): no workflow runs these steps and the weekly scoring run scores the US only. The code and the stored India data stay as described below; SPEC_ISSUES 46 says how to restart it.
+Running again since 2026-10-28 (SPEC_ISSUES 55; paused Oct 20-28, SPEC_ISSUES 46). The India jobs' state (listing cursors, download queues, each company's parsed results history) is kept in the database (`pipeline_state`, `python -m pipeline.db.state`), not the Actions cache, which evicts an entry after 7 days unused. Every NSE job runs in the `nse` concurrency group, one at a time.
 - **Securities and prices:**
   - the NSE securities list gives the EQ-series universe, ISINs and symbols
   - the weekly Friday **CM-UDiFF Common Bhavcopy** is parsed by column names (`TckrSymb`, `ISIN`, `SctySrs`, `ClsPric`, `TtlTradgVol`, …)
@@ -568,7 +568,7 @@ Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:
 1. **Panel:**
    - month-end dates from 2010 onward
    - features computed **point-in-time** (filings accepted ≤ the date) with exactly the same code as the live signals (import, don't copy)
-   - prices from the Twelve Data download (`lab-prices.yml`, `pipeline/lab/price_history.py`) in the private release `lab-data-v1` → month-end closes (the current, incomplete month dropped)
+   - prices from the Twelve Data download (`lab-prices.yml`, `pipeline/lab/price_history.py`) kept in the database (`pipeline_state`) → month-end closes (the current, incomplete month dropped)
    - forward total price returns (dividends not included in v1; noted) at 12, 24 and 36 months
    - excess return vs the equal-weighted universe average at the same date
 2. **Events:** the first fire of each signal per company within a rolling 12 months.
@@ -805,7 +805,7 @@ Return only JSON.
 | M9-01 | actionlint clean; a full dry-run week on fixtures and cassettes in CI |
 | M9-02 | Estimated Actions minutes ≤ 1,200/month |
 | M9-03 | Size-guard test |
-| M9-04 | Weekly `pg_dump` → private release asset (keep 8), plus a restore test |
+| M9-04 | Weekly `pg_dump` → private storage that only Manzoor can read (keep 8; never a release asset or artifact of the public repository: it holds the journal), plus a restore test |
 | M9-05 | Live smoke with free keys: US weekly on a 300-company subset + India bhavcopy + one text document extraction + 2 fallback thesis cards → report. BLOCKED(key) until keys exist |
 | M9-06 | RUNBOOK, VERSIONS and QUOTAS docs complete |
 
@@ -863,7 +863,7 @@ Return only JSON.
 2. **After M0:** read `docs/DOOMBERG_AUDIT.md` (15 min) and confirm which old rules go into the Lab.
 3. **Free accounts and keys** (0.5) by M2/M5. Add the GitHub secrets, and copy the live quota values from each console into `config/quotas.yaml`.
 4. **M3:** if NSE blocks the fixture fetch, download the sample files by hand from the NSE pages.
-5. **M8:** nothing to download: `lab-prices.yml` fetches the Lab's prices from Twelve Data into the private release `lab-data-v1` (November 2026) and starts the first Lab run itself.
+5. **M8:** nothing to download: `lab-prices.yml` fetches the Lab's prices from Twelve Data into the database (November 2026) and starts the first Lab run itself.
 6. **After M6:** create the weekly routine (Appendix G).
 7. **Weekly** (about 30 min, weekend):
    - read the digest

@@ -15,7 +15,7 @@ OLD = datetime(2026, 9, 1, 6, tzinfo=UTC)
 
 def test_dead_sources_are_never_in_the_banner_but_stay_in_the_table() -> None:
     sla = digest.sla_days()
-    assert set(sla) == {"sec", "twelvedata", "sec_13f"}
+    assert set(sla) == {"sec", "twelvedata", "sec_13f", "nse", "bse"}  # India back (SPEC_ISSUES 55)
     dead = [SourceHealth(source=s, last_success=OLD, last_error="stale: gone", stale=True)
             for s in ("yahoo", "stooq", "fred", "eia", "gdelt")]  # fmt: skip
     assert digest.banner(dead, NOW, sla) == []

@@ -264,7 +264,7 @@ def cross_sections(
             b = f.batch(m, cutoff)
             cid = f.company.id
             assert cid is not None
-            cross.add(f.company, f.series, b.ownership[cid], b.facts[cid], m)
+            cross.add(f.company, live.fresh(f.series, m), b.ownership[cid], b.facts[cid], m)  # as the live run
             if opts.with_legacy:
                 shares, close = f.shares(), f.close(m)
                 inputs.append(_legacy_inputs(f, m, None if shares is None or close is None else close * shares))

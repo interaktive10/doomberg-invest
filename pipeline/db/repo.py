@@ -625,10 +625,16 @@ def tracked_run(conn: Conn, kind: str, source: str | None = None) -> Iterator[di
 WEEKLY_TABLES = ("signal_values", "redflag_values", "context_values", "scores", "shortlists")
 
 
-def clear_week(conn: Conn, week: date) -> None:
-    """A re-run of a week replaces it (a flag that cleared must not linger from the first run)."""
+def clear_week(conn: Conn, week: date, markets: Sequence[str] = ("us", "in")) -> None:
+    """A re-run of a week replaces it (a flag that cleared must not linger from the first run): the rows of the
+    companies of the markets it scores, and only those, so a one-market re-run keeps the other market's week (India
+    restart, docs/SPEC_ISSUES.md 55)."""
     for t in WEEKLY_TABLES:
-        conn.execute(_q(f"delete from {t} where week_end = %s"), (week,))  # noqa: S608 — fixed table names
+        conn.execute(
+            _q(f"delete from {t} where week_end = %s and company_id in "  # noqa: S608 — fixed table names
+               "(select id from companies where market = any(%s))"),
+            (week, list(markets)),
+        )  # fmt: skip
 
 
 def prices(conn: Conn, company_ids: Sequence[UUID], start: date, end: date) -> list[PriceW]:
@@ -683,13 +689,18 @@ def recently_shortlisted(conn: Conn, before: date, since: date) -> set[UUID]:
     return {r[0] for r in rows}
 
 
-def insert_shortlist(conn: Conn, week: date, rows: Sequence[tuple[UUID, Any, Any]]) -> None:
-    """rows: (company_id, evidence, gap) in rank order."""
+def insert_shortlist(conn: Conn, week: date, rows: Sequence[tuple[UUID, Any, Any]], first_rank: int = 1) -> None:
+    """rows: (company_id, evidence, gap) in rank order, ranked from `first_rank` (after a market's kept names)."""
     with conn.cursor() as cur:
         cur.executemany(
             _q("insert into shortlists (week_end, company_id, rank, evidence, gap) values (%s, %s, %s, %s, %s)"),
-            [(week, cid, i + 1, ev, gap) for i, (cid, ev, gap) in enumerate(rows)],
+            [(week, cid, first_rank + i, ev, gap) for i, (cid, ev, gap) in enumerate(rows)],
         )
+
+
+def shortlist_count(conn: Conn, week: date) -> int:
+    row = conn.execute(_q("select count(*) from shortlists where week_end = %s"), (week,)).fetchone()
+    return int(row[0]) if row else 0
 
 
 def upsert_company_metrics(conn: Conn, week: date, metrics: Mapping[UUID, Mapping[str, Any]]) -> None:

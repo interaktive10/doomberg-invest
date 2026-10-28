@@ -9,8 +9,8 @@ price_targets' order, or from a manual CSV import, India from the bhavcopy (M3).
 
 Two passes over the universe in batches keep memory flat: the first collects the cross-sectional inputs (S8's
 revenue-size deciles, S12's sector medians), the second computes signals, flags and Evidence. `--markets` scores a
-subset of the markets (both by default); the weekly job scores the US alone while India is paused
-(docs/SPEC_ISSUES.md 46).
+subset of the markets (both by default, as the weekly job runs; a one-market re-run keeps the other market's week:
+docs/SPEC_ISSUES.md 55).
 """
 
 from __future__ import annotations
@@ -75,6 +75,12 @@ EVENT_MONTHS = 25  # S10 reorganizations (24 months) and R3/R4 (12 months)
 FACT_YEARS = 3  # S9 "longer lead time" compares with the previous statement
 NONE_SCORE_WEEKS = 13  # 'none' rows are kept for a quarter (the novelty window is 12 weeks)
 KEEP_YEARS = 3  # §2.8
+# A company whose newest stored quarter ended more than this long before the scoring week is scored without
+# fundamentals (its fundamentals signals, red flags and C1/C2 read missing): a company that stopped filing, or an India
+# company whose history is half-loaded, is never scored as if its old quarter were current (India restart,
+# docs/SPEC_ISSUES.md 55). 210 days lets one late filing through: a December 10-K due by March 31 plus an NT 10-K's 15
+# days, or India's 60-day Q4 results.
+FUNDAMENTALS_MAX_AGE_DAYS = 210
 
 
 def progress(stats: ScoresStats, t0: float, text: str) -> None:
@@ -328,11 +334,22 @@ def series_points(
     return out[::-1]
 
 
+def fresh(s: Series, week: date) -> Series:
+    """`s`, or an empty series when its newest quarter ended more than FUNDAMENTALS_MAX_AGE_DAYS before `week`."""
+    end = s.latest_end
+    if end is not None and (week - end).days <= FUNDAMENTALS_MAX_AGE_DAYS:
+        return s
+    return Series([], s.market)
+
+
 def score_company(
     c: Company, s: Series, b: Batch, cfgs: Configs, cross: CrossSection, week: date,
     modules: Sequence[ModuleType] = registry.SIGNALS,
 ) -> tuple[dict[str, Any], list[redflags.FlagResult], Scored]:  # fmt: skip
+    """Signals, red flags and Evidence for one company on `week`'s data. Its fundamentals count only while they are
+    fresh (`fresh`); the Signal Lab scores its months through this function too, so the rule holds there as well."""
     assert c.id is not None
+    s = fresh(s, week)
     symbol = (c.ticker if c.market == "us" else c.nse_symbol) or ""
     surveillance = c.excluded_reason if (c.excluded_reason or "").startswith("surveillance") else None
     ctx = Ctx(
@@ -581,7 +598,8 @@ def run(
     markets: Collection[str] = MARKETS,
 ) -> ScoresStats:
     """A market not in `markets` is skipped entirely: no signals, prices, context or scores. A re-run replaces the
-    whole week (repo.clear_week), so a US-only run leaves the week without India rows (docs/SPEC_ISSUES.md 46)."""
+    week's rows of the markets it scores and keeps the other market's (repo.clear_week; docs/SPEC_ISSUES.md 55); the
+    shortlist's 10 new names a week stay 10 across both markets."""
     t0 = time.monotonic()
     stats = ScoresStats(week.isoformat(), markets=[m for m in MARKETS if m in markets])
     cfgs = Configs.load(root)
@@ -593,7 +611,7 @@ def run(
         if c.id is not None and c.market in stats.markets and (c.in_universe or c.id in research)
     ]
     stats.companies = len(companies)
-    repo.clear_week(conn, week)
+    repo.clear_week(conn, week, stats.markets)
 
     cross = CrossSection(tightness_quarters=int(cfgs.signals["s12_cycle"]["tightness_lookback_quarters"]))
     for part in chunks(companies, BATCH):
@@ -602,7 +620,7 @@ def run(
             assert c.id is not None
             cross.add(
                 c,
-                Series.from_rows(b.rows.get(c.id, []), c.market),
+                fresh(Series.from_rows(b.rows.get(c.id, []), c.market), week),
                 b.ownership.get(c.id, []),
                 b.facts.get(c.id, []),
                 week,
@@ -734,7 +752,8 @@ def run(
 
     cfg_scores = cfgs.signals["scores"]
     seen = repo.recently_shortlisted(conn, week, week - timedelta(weeks=int(cfg_scores["novelty_weeks"])))
-    top = shortlist(ranked, seen, int(cfg_scores["weekly_new_candidates"]))
+    kept = repo.shortlist_count(conn, week)  # the other market's names, when this run scores one market
+    top = shortlist(ranked, seen, max(0, int(cfg_scores["weekly_new_candidates"]) - kept))
     repo.insert_shortlist(
         conn,
         week,
@@ -746,6 +765,7 @@ def run(
             )
             for r in top
         ],
+        first_rank=kept + 1,
     )
     stats.shortlist = [scored[r.company_id].company.name for r in top]
     repo.upsert_company_metrics(conn, week, metrics)
@@ -820,8 +840,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--week", type=date.fromisoformat, default=None, help="Friday to score (default: the latest)")
     ap.add_argument("--markets", type=markets_arg, default=MARKETS,
-                    help="markets to score, comma-separated (default: us,in; the weekly job scores us while India "
-                         "is paused, docs/SPEC_ISSUES.md 46)")  # fmt: skip
+                    help="markets to score, comma-separated (default: us,in, as the weekly job runs; a one-market "
+                         "re-run keeps the other market's week, docs/SPEC_ISSUES.md 55)")  # fmt: skip
     a = ap.parse_args(argv)
     settings = Settings.from_env()
     week = a.week or last_friday(datetime.now(UTC).date())

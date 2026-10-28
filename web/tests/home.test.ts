@@ -290,13 +290,15 @@ describe("To do, Coming up, On the board and Data health (overhaul PR 6)", () =>
   });
 
   it("says a source's name mid-sentence and knows the Data health names are plural (PR 6 final review DT-7, C8)", () => {
-    expect(["Weekly prices", "SEC filings", "Fund holdings (13F)", "NSE"].map(midSentence)).toEqual([
+    expect(["Weekly prices", "SEC filings", "Fund holdings (13F)", "NSE data", "NSE"].map(midSentence)).toEqual([
       "weekly prices",
       "SEC filings",
       "fund holdings (13F)",
+      "NSE data",
       "NSE",
     ]);
-    expect(["sec", "twelvedata", "sec_13f", "nse"].map(pluralSource)).toEqual([true, true, true, false]);
+    // India's rows are back with India (docs/SPEC_ISSUES.md 55): "NSE data are", "BSE prices are"; an unnamed one is not
+    expect(["sec", "twelvedata", "sec_13f", "nse", "bse", "gdelt"].map(pluralSource)).toEqual([true, true, true, true, true, false]);
   });
 
   it("says why a name is on the board in two signals, by the Company page's short names (PR 6 review design-F3)", () => {

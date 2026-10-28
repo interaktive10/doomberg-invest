@@ -4,15 +4,17 @@ import type { SourceHealth } from "@/lib/data";
 // The same SLAs and fallbacks as config/staleness.yaml (pipeline.digest.weekly); tests/staleness.test.ts pins them to
 // that file. They are the sources the pipeline reads (overhaul PR 4): Home's banner and Settings show only these, so a
 // dead source's leftover health row (yahoo, stooq, fred, eia, gdelt) raises no alarm. A fallback source (BSE for NSE)
-// records a success only in weeks it stood in, so it isn't late while its primary is fine (M6 review R2-F5). India is
-// paused (docs/SPEC_ISSUES.md 46): its nse and bse rows and the BSE fallback come back with it.
+// records a success only in weeks it stood in, so it isn't late while its primary is fine (M6 review R2-F5). India's
+// nse and bse rows and the BSE fallback are back with India (docs/SPEC_ISSUES.md 55; paused Oct 20-28, 46).
 export const SLA_DAYS: Record<string, number> = {
   sec: 8,
   twelvedata: 8,
   sec_13f: 100,
+  nse: 10,
+  bse: 10,
 };
 
-export const FALLBACK_OF: Record<string, string> = {};
+export const FALLBACK_OF: Record<string, string> = { bse: "nse" };
 
 const DAY = 86_400_000;
 

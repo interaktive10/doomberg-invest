@@ -279,6 +279,27 @@ def test_daily_catch_up_rereads_a_failed_day(conn: psycopg.Connection[Any], tmp_
     assert sorted(e.event_date for e in as_of(mon).corp_events(conn)) == [sat, sun, mon]
 
 
+def test_announcements_from_catches_up_past_the_14_day_limit(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """India restart (docs/SPEC_ISSUES.md 55): after a pause longer than 14 days, `--announcements-from` reads every day
+    from the given one, whatever the cursor; without it the run starts 14 days back and says so."""
+    nitco(conn)
+    DailyState(announcements_to="2026-08-01").save(tmp_path / "daily.json", date(2026, 9, 21))
+    http, nse, _ = clients(tmp_path)
+    days = [date(2026, 9, 1) + timedelta(days=n) for n in range(21)]
+    for d in days:
+        http.register_mock(f"{NSE_API}/{announcements.api_path(d, d)}", announcements_on(d))
+    http.register_mock(f"{NSE_API}/{pit.API_PATH}", json.dumps({"data": []}).encode())
+    stats = run_daily(conn, nse, days[-1], tmp_path / "daily.json", imports=tmp_path / "imports",
+                      announcements_from=days[0])  # fmt: skip
+    assert stats.announcement_days == [d.isoformat() for d in days] and stats.listings_ok and not stats.errors
+    capped = run_daily(conn, nse, days[-1], tmp_path / "daily0.json", imports=tmp_path / "imports")
+    assert capped.announcement_days[0] == (days[-1] - timedelta(days=2)).isoformat()  # no cursor: the last 3 days
+    DailyState(announcements_to="2026-08-01").save(tmp_path / "daily1.json", days[-1])
+    limited = run_daily(conn, nse, days[-1], tmp_path / "daily1.json", imports=tmp_path / "imports")
+    assert limited.announcement_days[0] == (days[-1] - timedelta(days=13)).isoformat()
+    assert any("14-day limit" in e for e in limited.errors)
+
+
 def kei_row(seq: str, quarter: str, created: str, name: str) -> dict[str, Any]:
     url = f"https://nsearchives.nseindia.com/corporate/xbrl/INTEGRATED_FILING_INDAS_{seq}_01012026000000_WEB.xml"
     basis = name.split("_")[2].split(".")[0].title()  # KEI_FY2026Q4_consolidated.xml -> Consolidated

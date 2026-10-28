@@ -50,7 +50,7 @@ def sla_days(root: Any = REPO_ROOT) -> dict[str, int]:
 
 
 def fallbacks(root: Any = REPO_ROOT) -> dict[str, str]:
-    """Fallback source -> its primary (config/staleness.yaml `fallback_of`: bse -> nse, none while India is paused)."""
+    """Fallback source -> its primary (config/staleness.yaml `fallback_of`: bse -> nse)."""
     doc = yaml.safe_load((root / "config" / "staleness.yaml").read_text(encoding="utf-8"))
     return {str(k): str(v) for k, v in (doc.get("fallback_of") or {}).items()}
 
@@ -92,7 +92,7 @@ def this_week(funnel: Sequence[Mapping[str, Any]], week: date, cap: Any, why: st
         return [f"**Candidates are missing this week:** no scores were written for {week:%Y-%m-%d} ({why}; see "
                 "health below)."]  # fmt: skip
     out: list[str] = []
-    for r in funnel:  # one paragraph per market (the US alone while India is paused)
+    for r in funnel:  # one paragraph per market scored that week
         out += [*([""] if out else []), funnel_line(r, cap)]
     return out
 
@@ -129,8 +129,8 @@ def banner(rows: Sequence[SourceHealth], now: datetime, sla: Mapping[str, int],
            fallback_of: Mapping[str, str] | None = None) -> list[str]:  # fmt: skip
     """§2.7: every source with an SLA in config/staleness.yaml that is stale, or past its SLA, in one line (a fallback
     only when its primary isn't fine). A source without an SLA is one the pipeline no longer reads (yahoo, stooq,
-    fred, eia, gdelt; India's while it is paused): its leftover health row never reaches the line, as on the app's
-    Home (overhaul PR 4, docs/SPEC_ISSUES.md 52)."""
+    fred, eia, gdelt): its leftover health row never reaches the line, as on the app's Home (overhaul PR 4,
+    docs/SPEC_ISSUES.md 52)."""
     items = []
     for h in rows:
         if h.source not in sla or resting(h, rows, now, sla, fallback_of or {}):

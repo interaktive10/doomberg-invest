@@ -18,8 +18,8 @@ describe("staleness (BRIEF §2.7; config/staleness.yaml, as the digest reads it)
     expect(FALLBACK_OF).toEqual(yamlBlock(yaml, "fallback_of"));
   });
 
-  it("watches the US sources the pipeline reads: sec, twelvedata and sec_13f (overhaul PR 4)", () => {
-    expect(Object.keys(SLA_DAYS).sort()).toEqual(["sec", "sec_13f", "twelvedata"]);
+  it("watches the sources the pipeline reads: sec, twelvedata, sec_13f and India's nse with bse (overhaul PR 4, 55)", () => {
+    expect(Object.keys(SLA_DAYS).sort()).toEqual(["bse", "nse", "sec", "sec_13f", "twelvedata"]);
   });
 
   const now = new Date("2026-09-19T03:00:00Z");
@@ -32,23 +32,19 @@ describe("staleness (BRIEF §2.7; config/staleness.yaml, as the digest reads it)
   it("raises no alarm for a dead source's leftover health row, stale or old (overhaul PR 4)", () => {
     const dead = ["yahoo", "stooq", "fred", "eia", "gdelt"].map((s) => at(s, "2026-06-01T06:00:00Z", true));
     expect(staleSources([...dead, at("sec", "2026-09-18T06:00:00Z")], now)).toEqual([]);
-    expect(watched([...dead, at("sec", "2026-09-18T06:00:00Z"), at("bse", null)]).map((s) => s.source)).toEqual(["sec"]);
+    expect(watched([...dead, at("sec", "2026-09-18T06:00:00Z"), at("bse", null)]).map((s) => s.source)).toEqual(["sec", "bse"]);
   });
 
-  it("raises no alarm for a paused India's sources (docs/SPEC_ISSUES.md 46)", () => {
-    expect(Object.keys(SLA_DAYS)).not.toContain("nse");
-    expect(Object.keys(SLA_DAYS)).not.toContain("bse");
-    expect(FALLBACK_OF).toEqual({}); // BSE stands in for NSE again when India restarts (M6 review R2-F5)
-    const paused = [at("bse", "2026-08-01T06:00:00Z"), at("nse", "2026-08-01T06:00:00Z")];
-    expect(staleSources(paused, now)).toEqual([]);
-    expect(paused.map((s) => sourceStatus(s, paused, now))).toEqual(["ok", "ok"]);
-  });
-
-  it("leaves production's never-succeeded bse row out of Settings and the banner (PR 1 review pipeline-F2)", () => {
-    // BSE records a success only in a week it stood in for NSE, and production's row never has. Settings lists the
-    // watched US sources only (overhaul PR 4), so it shows neither nse nor bse; docs/SPEC_ISSUES.md 46.
-    const prod = [at("bse", null), at("nse", "2026-09-12T06:00:00Z"), at("sec", "2026-09-18T06:00:00Z")];
-    expect(staleSources(prod, now)).toEqual([]);
-    expect(watched(prod).map((s) => [s.source, sourceStatus(s, prod, now)])).toEqual([["sec", "ok"]]);
+  it("watches India again: a late NSE is named, and BSE rests while NSE is fine (docs/SPEC_ISSUES.md 55)", () => {
+    expect(FALLBACK_OF).toEqual({ bse: "nse" }); // BSE stands in for NSE (M6 review R2-F5)
+    const ok = [at("bse", null), at("nse", "2026-09-12T06:00:00Z"), at("sec", "2026-09-18T06:00:00Z")];
+    expect(staleSources(ok, now)).toEqual([]);
+    expect(watched(ok).map((s) => [s.source, sourceStatus(s, ok, now)])).toEqual([
+      ["bse", "fallback, not needed (nse ok)"],
+      ["nse", "ok"],
+      ["sec", "ok"],
+    ]);
+    const late = [at("bse", null), at("nse", "2026-09-01T06:00:00Z")];
+    expect(staleSources(late, now)).toEqual(["nse (no success for 17 days; SLA 10)"]); // a never-used fallback isn't late
   });
 });

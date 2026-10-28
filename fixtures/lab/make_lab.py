@@ -10,7 +10,8 @@ built in memory (seeded) for the Signal Lab tests (M8-01, M8-02).
   A: shares down >= 2% YoY, FCF > 0, net debt flat); the price does nothing.
 - Prices: month-end closes 2015-01 to 2019-12, log returns N(0.5%, 8%) a month plus the planted drift.
 - `shift_filed_days` moves every filing of the planted companies later (the leak test, M8-02): S1 then fires after
-  the drift, so a point-in-time Lab finds nothing.
+  the drift, so a point-in-time Lab finds nothing (with a shift past the freshness rule's 210 days, S1 doesn't fire
+  on those filings at all: pipeline/signals/weekly.py FUNDAMENTALS_MAX_AGE_DAYS).
 """
 
 from __future__ import annotations

@@ -25,10 +25,14 @@ FAST = panel.Options(modules=(s01_orderbook, s05_capital_discipline), with_legac
 
 
 @cache
-def stats(shift: int) -> dict[tuple[str, str], evaluate.Stat]:
+def stats(shift: int, max_age_days: int = live.FUNDAMENTALS_MAX_AGE_DAYS) -> dict[tuple[str, str], evaluate.Stat]:
     gen = load_generator()
     data, _ = gen.make(seed=7, n=500, shift_filed_days=shift)
-    rows = panel.build(data, month_ends(gen.FIRST_MONTH, gen.LAST_MONTH), live.Configs.load(), (12,), FAST)
+    saved, live.FUNDAMENTALS_MAX_AGE_DAYS = live.FUNDAMENTALS_MAX_AGE_DAYS, max_age_days  # one process (workers=1)
+    try:
+        rows = panel.build(data, month_ends(gen.FIRST_MONTH, gen.LAST_MONTH), live.Configs.load(), (12,), FAST)
+    finally:
+        live.FUNDAMENTALS_MAX_AGE_DAYS = saved
     out = evaluate.event_stats(events(rows, 12), (12,), gen.PERIODS)
     return {(s.signal_id, s.period): s for s in out}
 
@@ -48,10 +52,14 @@ def test_noise_signal_is_not() -> None:
 
 
 def test_moving_filed_at_later_removes_the_planted_effect() -> None:
-    """M8-02 (leak test): the planted companies' filings are made public 400 days later. S1 then fires after the
-    drift, and a point-in-time panel finds nothing; a panel that read by period end would still find it."""
-    s = stats(400)[("S1", "out_of_sample")]
+    """M8-02 (leak test): the planted companies' filings are made public 400 days later. With the freshness rule out
+    of the way, S1 then fires after the drift, and a point-in-time panel finds nothing; a panel that read by period end
+    would still find it. With the rule, as the live run scores, each of those filings is stale the day it is made
+    public (its quarter ended 430 days before), so S1 never fires on them at all (docs/SPEC_ISSUES.md 55)."""
+    s = stats(400, max_age_days=10_000)[("S1", "out_of_sample")]
     assert s.n >= 20 and s.t_nw is not None and abs(s.t_nw) < 2 and s.mean is not None and abs(s.mean) < 0.1
+    live_rule = stats(400).get(("S1", "out_of_sample"))
+    assert live_rule is None or live_rule.n == 0
 
 
 def test_the_panel_runs_the_live_signal_code() -> None:

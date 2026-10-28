@@ -23,8 +23,8 @@ def test_a_run_without_prices_is_blocked(tmp_path: Path, capsys: pytest.CaptureF
     assert run.main(args) == run.BLOCKED_EXIT
     out = capsys.readouterr().out
     assert (
-        "lab: BLOCKED: no Lab prices yet: lab-prices.yml downloads them from Twelve Data into the `lab-data-v1` "
-        "release (us_month_prices.csv.gz) with no human step"
+        "lab: BLOCKED: no Lab prices yet: lab-prices.yml downloads them from Twelve Data into the database "
+        "(lab_us_month_prices) with no human step"
     ) in out and "BLOCKED(human" not in out
 
 
@@ -52,17 +52,19 @@ def test_india_waits_for_eight_quarters(capsys: pytest.CaptureFixture[str]) -> N
     assert "not enabled" in capsys.readouterr().out
 
 
-def test_the_release_is_the_one_lab_prices_fills() -> None:
-    """BRIEF §11.5: lab-prices.yml keeps the prices and the download's state in the release `lab-data-v1`, lab.yml
-    reads them and keeps the panel there; config/lab.yaml names them."""
+def test_the_database_is_where_lab_prices_keeps_them() -> None:
+    """BRIEF §11.5, docs/SPEC_ISSUES.md 55: lab-prices.yml keeps the prices and the download's state in the database
+    (pipeline_state, under config/lab.yaml's names) and lab.yml reads them from there; nothing goes into a release of
+    the public repository (the old lab-data-v1 release is only read once, to move its files, then deleted)."""
     p = run.lab_config()["prices"]
-    tag = p["release_tag"]
-    assert f"release `{tag}`" in (ROOT / "docs" / "BRIEF.md").read_text(encoding="utf-8")
+    assert "pipeline_state" in (ROOT / "docs" / "BRIEF.md").read_text(encoding="utf-8")
     wf = ROOT / ".github" / "workflows"
     lab, prices = ((wf / n).read_text(encoding="utf-8") for n in ("lab.yml", "lab-prices.yml"))
-    assert f"gh release download {tag} " in lab and f"gh release upload {tag} " in lab
-    assert all(f"--pattern '{p[k]}'" in lab and f"--pattern '{p[k]}'" in prices for k in ("asset", "state"))
-    assert f"gh release upload {tag} " in prices and f"gh release create {tag} " in prices
+    for k in ("asset", "state"):
+        pair = f"{p['stored_as'][k]}=.cache/lab/{p[k]}"
+        assert pair in lab and lab.count("python -m pipeline.db.state get") == 1
+        assert prices.count(pair) == 2  # read before the download, stored after it
+    assert "gh release upload" not in lab + prices and "gh release create" not in lab + prices
     assert "d_us_txt" not in lab + prices and "Stooq" not in lab + prices
 
 

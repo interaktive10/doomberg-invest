@@ -6,7 +6,9 @@
   API can't give is read from an announcements CSV of the NSE page in imports/ when there is one (review F4).
 - Insider-trading (PIT) disclosures -> the disclosure XBRLs -> promoter market purchases and sales -> insider_events
   (pit.py). The index lists about five months; the run reads it from the oldest disclosure not read yet (a cursor),
-  and remembers the disclosures read (the state file, Actions cache).
+  and remembers the disclosures read (the state file, kept in the database: pipeline.db.state).
+- Catching up after a gap (docs/SPEC_ISSUES.md 55): `--announcements-from D` reads announcements from D whatever the
+  cursor and the 14-day limit say; `--pit-days N` reads the disclosures of the last N days (S7's window is 90).
 Every EQ company is kept, ASM/GSM ones included (review F7; in_universe decides scoring only). NSE's rate (1 request
 per 3 s) caps the XBRL downloads per run; the rest are read the next day.
 """
@@ -39,7 +41,7 @@ MAX_CATCH_UP_DAYS = 14  # an older cursor is read from 14 days back (and reporte
 PIT_LOOKBACK_DAYS = 7
 MAX_PIT_FETCH = 80  # ~4 min at 3 s per request
 SEEN_KEEP_DAYS = 200
-TIME_BUDGET_S = 10 * 60  # no NSE request after 10 min (daily.yml's India job had 15 min; paused: SPEC_ISSUES 46)
+TIME_BUDGET_S = 10 * 60  # no NSE request after 10 min (daily.yml's India job has 20 min; docs/SPEC_ISSUES.md 55)
 
 
 @dataclass
@@ -97,16 +99,18 @@ def _events(items: list[Announcement], ids: dict[str, Any]) -> list[CorpEvent]:
 
 def ingest_announcements(
     conn: psycopg.Connection[Any], nse: NseClient, day: date, ids: dict[str, Any], state: DailyState,
-    stats: IndiaDailyStats, imports: Path,
+    stats: IndiaDailyStats, imports: Path, start_from: date | None = None,
 ) -> bool:  # fmt: skip
-    """Every day from the cursor to `day`, one day at a time; the cursor moves after each stored day. True when
-    the run got to `day`."""
-    if state.announcements_to:
+    """Every day from the cursor (or `start_from`) to `day`, one day at a time; the cursor moves after each stored
+    day. True when the run got to `day`."""
+    if start_from is not None:
+        start = start_from
+    elif state.announcements_to:
         start = date.fromisoformat(state.announcements_to) + timedelta(days=1)
     else:
         start = day - timedelta(days=FIRST_RUN_DAYS - 1)
     floor = day - timedelta(days=MAX_CATCH_UP_DAYS - 1)
-    if start < floor:
+    if start < floor and start_from is None:
         stats.errors.append(f"announcements before {floor} were not read ({MAX_CATCH_UP_DAYS}-day limit)")
         start = floor
     manual: dict[date, list[Announcement]] | None = None
@@ -202,11 +206,12 @@ def listed_ids(conn: psycopg.Connection[Any]) -> dict[str, Any]:
 
 def run_daily(conn: psycopg.Connection[Any], nse: NseClient, day: date, state_path: Path | None = None,
               max_fetch: int = MAX_PIT_FETCH, lookback_days: int = PIT_LOOKBACK_DAYS,
-              imports: Path = manual_import.IMPORTS_DIR) -> IndiaDailyStats:  # fmt: skip
+              imports: Path = manual_import.IMPORTS_DIR,
+              announcements_from: date | None = None) -> IndiaDailyStats:  # fmt: skip
     stats = IndiaDailyStats(day.isoformat())
     ids = listed_ids(conn)
     state = DailyState.load(state_path)
-    ann_ok = ingest_announcements(conn, nse, day, ids, state, stats, imports)
+    ann_ok = ingest_announcements(conn, nse, day, ids, state, stats, imports, announcements_from)
     pit_ok = ingest_pit(conn, nse, day, ids, state, stats, max_fetch, lookback_days)
     state.save(state_path, day)
     stats.listings_ok = ann_ok and pit_ok
@@ -228,12 +233,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--date", type=date.fromisoformat, default=(datetime.now(UTC) - timedelta(days=1)).date())
     ap.add_argument("--max-fetch", type=int, default=MAX_PIT_FETCH)
     ap.add_argument("--minutes", type=float, default=TIME_BUDGET_S / 60, help="time budget for NSE requests")
+    ap.add_argument("--pit-days", type=int, default=PIT_LOOKBACK_DAYS, help="read the disclosures of the last N days")
+    ap.add_argument("--announcements-from", type=date.fromisoformat, default=None,
+                    help="read announcements from this day, past the cursor and the 14-day limit")  # fmt: skip
     a = ap.parse_args(argv)
     settings = Settings.from_env()
     nse = NseClient(HttpClient(settings))
     nse.deadline = nse.clock() + a.minutes * 60
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "in_daily") as run:
-        stats = run_daily(conn, nse, a.date, settings.cache_dir / "in" / "daily_state.json", a.max_fetch)
+        stats = run_daily(conn, nse, a.date, settings.cache_dir / "in" / "daily_state.json", a.max_fetch,
+                          a.pit_days, announcements_from=a.announcements_from)  # fmt: skip
         mark_source(conn, stats, nse)
         run.update(stats.__dict__)
     print(
