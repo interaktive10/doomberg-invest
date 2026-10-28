@@ -31,3 +31,5 @@ jobs:
       - run: uv sync --frozen --no-dev
       - name: Bucket diagnostics
         run: uv run --frozen python -m pipeline.db.diagnose ${WEEK:+--week "$WEEK"}
+      - name: Text calibration (scratch branch, never merged)
+        run: uv run --frozen python scripts/calibrate_text.py
