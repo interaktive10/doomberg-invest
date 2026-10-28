@@ -20,7 +20,7 @@ METRICS = frozenset({
     "revenue_ttm", "revenue_yoy", "opm", "roic", "fcf_ttm", "ccr", "nd_to_ebitda", "share_change_yoy", "market_cap",
     "ev", "return_52w",
 })  # fmt: skip
-Bucket = Literal["candidate", "priced_in", "early", "excluded", "none"]
+Bucket = Literal["candidate", "priced_in", "early", "watch", "excluded", "none"]
 Family = Literal["fundamentals", "behavior", "text", "structural", "capex", "cycle"]
 SignalId = Literal["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12"]
 

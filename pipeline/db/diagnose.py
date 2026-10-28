@@ -83,7 +83,7 @@ def why_not(r: Row, universe: Mapping[str, Mapping[str, Any]], buckets: Mapping[
     if not market_cap_ok(r.market, r.market_cap, universe):
         return "market cap below the floor"
     if len(r.families) < int(early["min_families"]):
-        return "one signal family (Evidence capped at 55; early needs 2)"
+        return "one signal family (Evidence capped at 55; early needs 2; not on Watch)"
     if r.gap < Decimal(str(early["min_gap"])):
         return "Gap below 50 with Evidence under 60"
     return "other"

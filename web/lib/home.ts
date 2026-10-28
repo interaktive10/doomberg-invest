@@ -388,7 +388,7 @@ export function changeItems(section: string): ChangeItem[] {
   return out;
 }
 
-const BUCKET_LABEL = { candidate: "Candidate", early: "Early", priced_in: "Priced-in" } as const;
+const BUCKET_LABEL = { candidate: "Candidate", early: "Early", watch: "Watch", priced_in: "Priced-in" } as const;
 
 /** The lines that say a company left `bucket` (Candidates' "Left the board this week"): "left Candidate: ..." and
  * "moved from Candidate to ...". */

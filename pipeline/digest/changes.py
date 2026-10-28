@@ -2,11 +2,12 @@
 from the same digests.body_md. A pure function (`lines`) over stored weekly rows; `gather` reads them.
 
 Two kinds of line, at most MAX_LINES in all, each '- [TICKER](APP_URL/company/<id>) <text>':
-1. One line per company in a bucket (Candidate, Early, Priced-in) this week or in the previous scored week, or with a
-   live thesis or research entry: its biggest change and the reason, e.g. "left Candidate: S4 stopped, Evidence
-   62 → 48" or "now priced in (Gap 48)". The week's shortlist comes first, in rank order. Then a bucket change, then an
-   Evidence move of EVIDENCE_MOVE or more (exactly 10 counts, as for a dismissal's hold), then a signal or red flag
-   that started or stopped; the bigger Evidence move first within each. A week without scores has no such lines.
+1. One line per company in a bucket (Candidate, Early, Watch, Priced-in) this week or in the previous scored week, or
+   with a live thesis or research entry: its biggest change and the reason, e.g. "left Candidate: S4 stopped,
+   Evidence 62 → 48" or "now priced in (Gap 48)". The week's shortlist comes first, in rank order. Then a bucket
+   change, then an Evidence move of EVIDENCE_MOVE or more (exactly 10 counts, as for a dismissal's hold), then a signal
+   or red flag that started or stopped; the bigger Evidence move first within each. A week without scores has no such
+   lines.
 2. The scope's new verified facts of the week (stored in the 7 days to the week's cutoff, from a document published
    before it: the pipeline.db.pit rule; a fact read late still comes once), newest document first, with their diff
    (Appendix F.6): raised, lowered, widened, narrowed, changed or new; a reaffirmed one is left out.
@@ -31,8 +32,9 @@ from pipeline.db import facts_repo, repo, thesis_repo
 from pipeline.db.models import Company
 from pipeline.db.pit import cutoff_for
 
-BUCKETS = ("candidate", "early", "priced_in")
-LABEL = {"candidate": "Candidate", "early": "Early", "priced_in": "Priced-in", "excluded": "Excluded", "none": "none"}
+BUCKETS = ("candidate", "early", "watch", "priced_in")
+LABEL = {"candidate": "Candidate", "early": "Early", "watch": "Watch", "priced_in": "Priced-in", "excluded": "Excluded",
+         "none": "none"}  # fmt: skip
 EVIDENCE_MOVE = Decimal(10)
 MAX_LINES = 20
 NOTHING = "Nothing changed this week."

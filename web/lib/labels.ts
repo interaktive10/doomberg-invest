@@ -13,6 +13,7 @@ export function humanize(id: string | null | undefined): string {
 export const BUCKET_LABEL: Record<string, string> = {
   candidate: "Candidate",
   early: "Early",
+  watch: "Watch",
   priced_in: "Priced-in",
   excluded: "Excluded",
   none: "No bucket",

@@ -58,7 +58,16 @@ from pipeline.prices.splits import Adjusted, SourceSplit, adjust, date_source_sp
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals import context, redflags, registry, reverse_dcf, s01_orderbook
 from pipeline.signals.base import Ctx, Event, Fact, Holding, Insider, SectorView, months_before, num
-from pipeline.signals.buckets import Ranked, bucket, market_cap_ok, shortlist
+from pipeline.signals.buckets import (
+    Bucket,
+    Ranked,
+    WatchName,
+    bucket,
+    market_cap_ok,
+    shortlist,
+    watch_list,
+    watchable,
+)
 from pipeline.signals.context import percentile_rank
 from pipeline.signals.scores import Evidence, Weights, evidence, gap
 from pipeline.signals.series import Series
@@ -117,6 +126,7 @@ class ScoresStats:
     unconfirmed_jumps: list[str] = field(default_factory=list)
     buckets: dict[str, int] = field(default_factory=dict)
     shortlist: list[str] = field(default_factory=list)
+    watch: dict[str, list[str]] = field(default_factory=dict)  # market -> its Watch names, in rank order
     pruned: dict[str, int] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     seconds: float = 0.0
@@ -393,19 +403,22 @@ def price_targets(
     benchmarks: int,
     limit: int = US_PRICE_MAX_SYMBOLS,
     fill: int = US_PRICE_FILL_MAX,
+    watch: Collection[UUID] = (),
 ) -> list[Scored]:
     """The US companies whose prices are downloaded this week, in order (P8, docs/DECISIONS.log). Tier 0: research
     entries, theses and positions, at any Evidence. Tier 1: names that can reach a bucket (Evidence >= min_evidence,
-    min_families or more families, no hard red flag). Tier 2: the rest of §4.4's candidate set (one family, a hard
-    flag, or Evidence >= min_evidence last week only), priced only while the symbols, benchmarks included, stay within
-    `fill`. Each tier by Evidence, then company id; never more than `limit` symbols, benchmarks included (388
-    companies beside the 12 benchmarks of config/context.yaml)."""
+    min_families or more families, no hard red flag), and the one-family names that can reach Watch (`watch`:
+    buckets.watchable; SPEC_ISSUES 56). Tier 2: the rest of §4.4's candidate set (one family, a hard flag, or
+    Evidence >= min_evidence last week only), priced only while the symbols, benchmarks included, stay within `fill`.
+    Each tier by Evidence, then company id; never more than `limit` symbols, benchmarks included (388 companies
+    beside the 12 benchmarks of config/context.yaml)."""
 
     def tier(cid: UUID, sc: Scored) -> int | None:
         if cid in research:
             return 0
         if sc.evidence.score >= min_evidence:
-            return 1 if len(sc.evidence.families) >= min_families and not sc.hard else 2
+            two = len(sc.evidence.families) >= min_families and not sc.hard
+            return 1 if two or cid in watch else 2
         return 2 if cid in last_week else None
 
     ranked: list[tuple[tuple[int, Decimal, str], Scored]] = []
@@ -674,6 +687,12 @@ def run(
     last = repo.scores_for_week(conn, week - timedelta(days=7))
     stage = [sc for cid, sc in scored.items() if sc.evidence.score >= min_ev or cid in research]
     stats.stage = len(stage)
+    wcfg = cfgs.signals["scores"]["buckets"]["watch"]
+    watch_ok = {
+        cid
+        for cid, sc in scored.items()
+        if watchable(sc.evidence.score, len(sc.evidence.families), sc.hard, sc.series.ttm_yoy("revenue", 0), wcfg)
+    }
     progress(stats, t0, f"signals for {len(scored)} companies, stage {stats.stage}")
 
     if http is not None:
@@ -686,7 +705,8 @@ def run(
         stats.errors += errs
         prev = {cid for cid, s in last.items() if s.evidence >= min_ev}
         min_families = int(cfgs.signals["scores"]["min_families"])
-        targets = price_targets(scored, research, prev, min_ev, min_families, len(us_bench), price_limit)
+        targets = price_targets(scored, research, prev, min_ev, min_families, len(us_bench), price_limit,
+                                watch=watch_ok)  # fmt: skip
         ingest_us_prices(
             conn,
             source,
@@ -714,19 +734,29 @@ def run(
     repo.upsert_context_values(conn, ctx_rows)
     gaps = gap_scores(ctx_rows, cfgs)
 
-    score_rows, ranked = [], []
-    metrics: dict[UUID, dict[str, Any]] = {}
+    placed: list[tuple[UUID, Scored, Priced | None, Decimal | None, Bucket]] = []
+    names: list[WatchName] = []
+    families_cfg = cfgs.signals["scores"]["families"]
     for cid, sc in scored.items():
         p = priced.get(cid)
         g = gaps.get(cid)
-        b_ = bucket(
-            sc.evidence.score,
-            g,
-            len(sc.evidence.families),
-            sc.hard,
-            cfgs.signals["scores"]["buckets"],
-            market_cap_ok(sc.company.market, p.market_cap if p else None, cfgs.universe),
-        )
+        cap_ok = market_cap_ok(sc.company.market, p.market_cap if p else None, cfgs.universe)
+        b_ = bucket(sc.evidence.score, g, len(sc.evidence.families), sc.hard, cfgs.signals["scores"]["buckets"], cap_ok)
+        if b_ == "none" and cid in watch_ok and cap_ok and g is not None and g >= Decimal(str(wcfg["min_gap"])):
+            depth = sum(1 for s in families_cfg[sc.evidence.families[0]] if sc.fired.get(s))
+            before = last.get(cid)
+            names.append(WatchName(cid, sc.company.market, depth, before is not None and before.bucket == "watch", g))
+        placed.append((cid, sc, p, g, b_))
+    chosen = watch_list(names, wcfg["per_market"])
+    for n in chosen:
+        stats.watch.setdefault(n.market, []).append(scored[n.company_id].company.name)
+    on_watch = {n.company_id for n in chosen}
+
+    score_rows, ranked = [], []
+    metrics: dict[UUID, dict[str, Any]] = {}
+    for cid, sc, p, g, b_ in placed:
+        if cid in on_watch:
+            b_ = "watch"
         score_rows.append(
             Score(
                 company_id=cid,

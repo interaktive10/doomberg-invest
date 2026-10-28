@@ -20,7 +20,7 @@ describe("chart figures (lib/chart.ts chartValue; PR 6 review design-F4)", () =>
   it("writes money with the page's currency, multiples with ×, percentages in tenths", () => {
     expect(chartValue(818_040_000, "money", "USD")).toBe("$818M");
     expect(chartValue(1_234_000_000, "money", "USD")).toBe("$1.23B");
-    expect(chartValue(75_300_000, "money", "INR")).toBe("₹75.3M");
+    expect(chartValue(75_300_000, "money", "INR")).toBe("₹7.53 cr"); // rupees in crore (docs/SPEC_ISSUES.md 56)
     expect(chartValue(-80_000_000, "money", "USD")).toBe("−$80M");
     expect(chartValue(1_210_000_000, "big")).toBe("1.2B"); // a share count: no currency
     expect(chartValue(3.94, "x")).toBe("3.9×");

@@ -25,8 +25,10 @@ def test_the_e2e_seed_fits_the_schema_and_feeds_every_screen(conn: psycopg.Conne
     seed = seed_module()
     seed.seed(conn)
     buckets = dict(conn.execute("select name, bucket from screen('{}')").fetchall())
+    # Watch has a US and an India name (SPEC_ISSUES 56)
     assert buckets == {"Echo Grid Corp.": "candidate", "Kappa Cables Ltd": "candidate", "Delta Power Inc.": "early",
-                       "Omega Systems Inc.": "priced_in", "Sigma Holdings Inc.": "excluded"}  # fmt: skip
+                       "Omega Systems Inc.": "priced_in", "Sigma Holdings Inc.": "excluded",
+                       "Lumen Water Co.": "watch", "Tara Pumps Ltd": "watch"}  # fmt: skip
     assert conn.execute(
         "select count(*) from fundamentals_display_v where company_id = %s", (seed.ECHO,)
     ).fetchone() == (8,)

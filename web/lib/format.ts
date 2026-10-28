@@ -42,11 +42,32 @@ const TIERS: readonly (readonly [number, string, number])[] = [
   [1, "", 0],
 ];
 
-/** An amount as people say it: $1.83M, $447K, ₹2.5B; another currency's code goes first ("EUR 1.2M"). `digits`
- * rounds to that many significant figures instead ($818M, $1.23B: a chart's headline figure). The unit is chosen after
- * rounding, so $999.7K reads "$1M", not "$1000K" (PR 6 final review C6). */
+const LAKH = 1e5;
+const CRORE = 1e7;
+const LAKH_CRORE = 1e12;
+const EN_IN = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
+
+/** Rupees as Indian investors say them (docs/SPEC_ISSUES.md 56): ₹2.65 lakh cr, ₹26,458 cr, ₹45.3 cr, ₹3.4 lakh, ₹450,
+ * with Indian digit grouping (₹2,64,573 cr never happens: that is ₹2.65 lakh cr). `digits` rounds to that many
+ * significant figures instead, as money() does. */
+function rupees(v: number, digits?: number): string {
+  const a = Math.abs(v);
+  const sign = v < 0 ? "−" : "";
+  const fix = (x: number, dp: number) => (digits === undefined ? Number(x.toFixed(dp)) : Number(x.toPrecision(digits)));
+  const crore = fix(a / CRORE, a / CRORE >= 100 ? 0 : 1);
+  if (a >= LAKH_CRORE || (a >= CRORE && crore >= 1e5)) return `${sign}₹${EN_IN.format(fix(a / LAKH_CRORE, 2))} lakh cr`;
+  if (a >= CRORE) return `${sign}₹${EN_IN.format(crore)} cr`;
+  const lakh = fix(a / LAKH, 1);
+  if (a >= LAKH) return lakh >= 100 ? `${sign}₹${EN_IN.format(fix(a / CRORE, 1))} cr` : `${sign}₹${EN_IN.format(lakh)} lakh`;
+  return `${sign}₹${EN_IN.format(fix(a, 0))}`;
+}
+
+/** An amount as people say it: $1.83M, $447K; rupees in crore (rupees()); another currency's code goes first ("EUR
+ * 1.2M"). `digits` rounds to that many significant figures instead ($818M, $1.23B: a chart's headline figure). The unit
+ * is chosen after rounding, so $999.7K reads "$1M", not "$1000K" (PR 6 final review C6). */
 export function money(v: number | null, currency?: string | null, digits?: number): string {
   if (v === null || !Number.isFinite(v)) return "n/a";
+  if ((currency ?? "").toUpperCase() === "INR") return rupees(v, digits);
   const a = Math.abs(v);
   const round = (k: number) => {
     const [d, , dp] = TIERS[k]!;
@@ -56,6 +77,6 @@ export function money(v: number | null, currency?: string | null, digits?: numbe
   if (i < 0) i = TIERS.length - 1;
   if (i > 0 && round(i) >= 1000) i -= 1;
   const cur = (currency ?? "").toUpperCase();
-  const sym = cur === "USD" ? "$" : cur === "INR" ? "₹" : cur ? `${cur} ` : "";
+  const sym = cur === "USD" ? "$" : cur ? `${cur} ` : "";
   return `${v < 0 ? "−" : ""}${sym}${round(i)}${TIERS[i]![1]}`;
 }

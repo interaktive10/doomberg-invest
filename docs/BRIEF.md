@@ -164,6 +164,7 @@ There is no S11: capex propagation was deleted with the Capex Desk (SPEC_ISSUES 
   | **Candidate** | Evidence ≥ 60, Gap ≥ 50, no hard red flags |
   | **Priced-in** | Evidence ≥ 60, Gap < 50 |
   | **Early** | Evidence 40–59 with ≥ 2 families, Gap ≥ 50 (watch for corroboration) |
+  | **Watch** | One family at full strength (Evidence 50), no red flags, TTM revenue up on a year, Gap ≥ 60: only each market's top 12 (US) and 8 (India), the deeper first (SPEC_ISSUES 56). A name to research, not to act on |
   | **Excluded** | Any hard red flag |
 - **Weekly focus:** at most **10 new candidates** a week (not seen in the last 12 weeks), ranked by Evidence then Gap. Focus beats volume.
 
@@ -360,7 +361,7 @@ create table context_values (company_id uuid references companies on delete casc
   metric_id text not null, value numeric, pct numeric, inputs jsonb not null, primary key (company_id, week_end, metric_id));
 create table scores (company_id uuid references companies on delete cascade, week_end date not null,
   evidence numeric not null, gap numeric, families text[] not null,
-  bucket text not null check (bucket in ('candidate','priced_in','early','excluded','none')),
+  bucket text not null check (bucket in ('candidate','priced_in','early','watch','excluded','none')),
   weights_version text not null, primary key (company_id, week_end));
 create table theses (id uuid primary key default gen_random_uuid(), company_id uuid not null references companies on delete cascade,
   state text not null check (state in ('research','thesis','position','review','closed','dismissed')),
@@ -527,7 +528,7 @@ There is no S11 (SPEC_ISSUES 52).
    - if fewer than 2 families fired → `Evidence = min(Evidence, 55)`
    - each soft red flag subtracts 10, floored at 0
 4. **Gap:** the mean of the available C1–C3 scores (needs ≥ 2, else null → bucket `none`).
-5. **Bucket:** per §1.7.
+5. **Bucket:** per §1.7. Watch comes last: of the names that would be `none`, each market's top `per_market` (config/signals.yaml `scores.buckets.watch`), ranked by how many of the family's signals fired, then last week's Watch names, then Gap. The US prices the names that can reach Watch with those that can reach a bucket (P8 tier 1).
 6. **Weekly shortlist:** top 10 new candidates, both markets combined, ranked by Evidence then Gap, excluding any seen in the last 12 weeks.
 7. **Provenance:** every score row stores the `weights_version`.
 
@@ -643,8 +644,8 @@ Return only JSON.
 ## 6. Web app (`web/`, single user)
 | Screen | Content |
 |---|---|
-| **Home** | The funnel line as one strip (the digest's This week section); To do, live: the Theses screen's Needs you group, or "Nothing needs you this week"; What changed (the digest's section, each line linked to its company); the stale-data banner (the only screen with it: sec, twelvedata, sec_13f). No KPI cards |
-| **Candidates** | Tabs: Candidate · Early · Priced-in. Filters: market, sector, family, show dismissed. One row per company: Evidence with its change since the previous scored week, Gap, why it's here (fired signals), red flags, NEW (first week in that bucket in 12 weeks). Actions: open card, research, dismiss (reason required; it holds until a new signal or family fires or Evidence moves 10 or more) |
+| **Home** | The funnel line as one strip (the digest's This week section); To do, live: the Theses screen's Needs you group, or "Nothing needs you this week"; What changed (the digest's section, each line linked to its company); On the board and Watch, each per market (SPEC_ISSUES 56); the stale-data banner (the only screen with it: sec, twelvedata, sec_13f, nse, bse). No KPI cards |
+| **Candidates** | Tabs: Candidate · Early · Watch · Priced-in, with a market switch (Both · US · India; Both shows a board per market, US first). Filters: sector, family, show dismissed. India's amounts in ₹ crore. One row per company: Evidence with its change since the previous scored week, Gap, why it's here (fired signals), red flags, NEW (first week in that bucket in 12 weeks). Actions: open card, research, dismiss (reason required; it holds until a new signal or family fires or Evidence moves 10 or more) |
 | **Company** | Reached from a list or the nav's search (ticker or name: letters, digits, spaces and . & -, at most 40 characters; an exact ticker opens the page, otherwise up to 20 rows with market, bucket and Evidence; "/" focuses it). The latest scored week's Evidence, Gap, bucket and families under the name, with an Open card or Research button (Research queues a card for Sunday's routine); Why this score at the top: Evidence by family with the one-family cap in words, each fired signal with its strength, inputs, firing since and Lab verdict, hard and soft red flags with their inputs, and Gap split into C1–C3 with missing parts marked and the reverse DCF folded into C2; fundamentals charts (revenue, OPM, ROIC and incremental ROIC, CCR, shares, ND/EBITDA, RPO/backlog); verified facts with quotes and links; insiders; events; thesis link. Tables with no rows are left out |
 | **Theses** | Needs you (cards to accept or dismiss, reviews to decide), Watching (theses, positions, and research entries whose card is queued), Closed (closed and dismissed, folded); each row: Evidence at the card's week and now, kill criteria n of m triggered, next review. Thesis page: the card, kill criteria in words with their status, review history, journal entries; each form opens from its button and is left out when it can't be used |
 | **Journal** | Private entries and post-mortems (never sent to any LLM) |

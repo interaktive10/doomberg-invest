@@ -166,6 +166,41 @@ test("candidates: dismiss one with a reason, start research on another", async (
   await expect(page.getByRole("button", { name: "Accept as thesis" })).toHaveCount(0);
 });
 
+test("a board per market and the Watch tab (docs/SPEC_ISSUES.md 56)", async ({ page }) => {
+  // with dismissed names shown, so the test above dismissing KAPPA changes nothing here
+  await page.goto("/candidates?dismissed=1");
+  // Both: the US's board, then India's, each with its own count; the switch counts each market
+  const markets = page.getByRole("group", { name: "Markets" });
+  await expect(markets.getByRole("link", { name: /^Both/ })).toHaveAttribute("aria-current", "page");
+  // a card's own lists (its signal chips) aren't cards: count the list's own items
+  await expect(page.getByRole("list", { name: "Candidates in the US" }).locator(":scope > li")).toHaveCount(1);
+  await expect(page.getByRole("list", { name: "Candidates in India" }).locator(":scope > li")).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 2, name: /^US/ })).toBeVisible();
+  await markets.getByRole("link", { name: /^India/ }).click();
+  await expect(page).toHaveURL(/market=in/);
+  await expect(card(page, "Kappa Cables Ltd")).toHaveCount(1);
+  await expect(card(page, "Echo Grid Corp.")).toHaveCount(0);
+  // Watch: each market's one-family names at full strength, the market kept
+  await page.getByRole("group", { name: "Buckets" }).getByRole("link", { name: /^Watch/ }).click();
+  await expect(page).toHaveURL(/bucket=watch/);
+  await expect(page).toHaveURL(/market=in/);
+  await expect(page.getByRole("main")).toContainText("One kind of evidence at full strength");
+  const tara = card(page, "Tara Pumps Ltd");
+  await expect(tara).toHaveCount(1);
+  await expect(tara.getByRole("img", { name: "Gap 69 of 100" })).toBeVisible();
+  await expect(card(page, "Lumen Water Co.")).toHaveCount(0);
+  await page.getByRole("group", { name: "Markets" }).getByRole("link", { name: /^Both/ }).click();
+  await expect(page.getByRole("list", { name: "Candidates in the US" }).getByRole("listitem").filter({ hasText: "Lumen Water Co." })).toHaveCount(1);
+  // Home: On the board and Watch, each per market
+  await page.goto("/");
+  const watch = page.getByRole("region", { name: "Watch" });
+  await expect(watch.getByRole("list", { name: "US" }).getByRole("link", { name: /LMNW Lumen Water Co\./ })).toBeVisible();
+  await expect(watch.getByRole("list", { name: "India" }).getByRole("link", { name: /TARAPUMP Tara Pumps Ltd/ })).toBeVisible();
+  await expect(watch.getByRole("link", { name: "All 2 on Watch" })).toHaveAttribute("href", "/candidates?bucket=watch");
+  const board = page.getByRole("region", { name: "On the board" });
+  await expect(board.getByRole("list", { name: "US" }).getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toBeVisible();
+});
+
 test("search → company → Research → 'Card queued' (overhaul PR 5)", async ({ page }) => {
   await page.goto("/candidates");
   await page.waitForLoadState("networkidle"); // the "/" shortcut listens once the page is hydrated

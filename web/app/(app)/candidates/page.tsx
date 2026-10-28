@@ -16,15 +16,22 @@ import {
   BUCKET_LINE,
   BUCKET_RANGE,
   BUCKET_TABS,
+  byMarket,
   evidenceChange,
   evidenceMove,
   EVIDENCE_MOVE,
   flagLine,
   isNew,
+  MARKET_LABEL,
+  marketOf,
+  MARKETS,
   stillDismissed,
   windowStart,
+  type Market,
+  type ScorePoint,
   type ShownBucket,
 } from "@/lib/candidates";
+import { BOARD_LABEL } from "@/lib/explain";
 import { dismissals, latestDigest, latestThesisByCompany, scoreHistory, screen, type ScreenerRow, type Thesis } from "@/lib/data";
 import { weekEyebrow } from "@/lib/dates";
 import { code } from "@/lib/format";
@@ -46,15 +53,21 @@ export const metadata = { title: "Candidates" };
 // dismissal holds until the evidence changes (lib/candidates.ts). Under the cards, the names that left this bucket
 // this week (the digest's What changed lines, when the digest is of the week shown) and a legend. Before the first
 // weekly run (no digest, no scores) it says so, with no filters and no button to an Early tab as empty (PR 6 final
-// review).
+// review). A market switch (Both, US, India) sits over the cards; Both shows a board per market, side by side from lg up
+// at 60/40 (Manzoor's allocation: a layout, not a quota to fill), each with its own count, and says so when a market
+// has nothing (docs/SPEC_ISSUES.md 56).
 
 const FAMILIES = Object.keys(FAMILY_LABEL);
 
 const LEFT_TITLE: Record<ShownBucket, string> = {
   candidate: "Left the board this week",
   early: "Left Early this week",
+  watch: "Left Watch this week",
   priced_in: "No longer priced in this week",
 };
+
+/** The list's accessible name: "Candidates" for one market, "Candidates in the US" / "in India" under Both. */
+const IN_MARKET: Record<Market, string> = { us: "in the US", in: "in India" };
 
 function href(q: Record<string, string | undefined>): string {
   const p = new URLSearchParams();
@@ -72,12 +85,11 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
   const bucket: ShownBucket = BUCKET_TABS.find(([b]) => b === one(q, "bucket"))?.[0] ?? "candidate";
-  const market = one(q, "market") === "us" || one(q, "market") === "in" ? (one(q, "market") as "us" | "in") : undefined;
+  const market = marketOf(one(q, "market"));
   const family = FAMILIES.find((f) => f === one(q, "family"));
   const sector = one(q, "sector") || undefined;
   const showDismissed = one(q, "dismissed") === "1";
-  const spec: ScreenSpec = { buckets: [bucket], limit: 2000 };
-  if (market) spec.market = market;
+  const spec: ScreenSpec = { buckets: [bucket], limit: 2000 }; // both markets: the switch counts each
   if (family) spec.families_all = [family];
   const all = await screen(spec);
   const sectors = [...new Set(all.map((r) => r.sector).filter((s): s is string => !!s))].sort();
@@ -93,11 +105,14 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   // still dismissed: no week since the dismissal (this one included) had a new signal or family or moved Evidence 10
   // (Home's On the board leaves out the same names)
   const dismissed = stillDismissed(inSector, held);
-  const shown = inSector.filter((r) => showDismissed || !dismissed.has(r.company_id));
+  const everywhere = inSector.filter((r) => showDismissed || !dismissed.has(r.company_id));
+  const counts = Object.fromEntries(byMarket(everywhere).map(([m, rows]) => [m, rows.length])) as Record<Market, number>;
+  const inMarket = inSector.filter((r) => !market || r.market === market);
+  const shown = everywhere.filter((r) => !market || r.market === market);
   const filters = { bucket, market, family, sector, dismissed: showDismissed ? "1" : undefined };
   const back = href(filters);
-  const filtered = market !== undefined || family !== undefined || sector !== undefined;
-  const hidden = showDismissed ? 0 : inSector.length - shown.length;
+  const filtered = family !== undefined || sector !== undefined; // the market is the switch, not a filter
+  const hidden = showDismissed ? 0 : inMarket.length - shown.length;
   const firstRun = digest === null && week === undefined && !filtered;
   // the digest's lines about names that left this bucket, only when it is the digest of the week shown
   const left = digest && week && digest.week_end === week ? leftBucket(changeItems(homeSections(digest.body_md).changed), bucket) : [];
@@ -122,19 +137,24 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
       {firstRun ? null : (
         <div className="flex flex-wrap items-center gap-3">
-          {shown.length > 0 || hidden > 0 ? (
+          <Segmented
+            label="Markets"
+            items={[
+              { href: href({ ...filters, market: undefined }), label: "Both", count: everywhere.length, current: market === undefined },
+              ...MARKETS.map((m) => ({ href: href({ ...filters, market: m }), label: MARKET_LABEL[m], count: counts[m], current: market === m })),
+            ]}
+          />
+          {hidden > 0 || showDismissed ? (
             <p className="text-[14px] text-muted">
-              {shown.length} {shown.length === 1 ? "name" : "names"}
               {hidden > 0 ? (
                 <>
-                  {" "}
-                  · {hidden} dismissed until the evidence changes ·{" "}
+                  {hidden} dismissed until the evidence changes ·{" "}
                   <Link href={href({ ...filters, dismissed: "1" })} className="inline-flex min-h-11 items-center md:min-h-0">
                     show
                   </Link>
                 </>
               ) : null}
-              {showDismissed ? " · dismissed ones shown" : ""}
+              {showDismissed ? "Dismissed ones shown" : ""}
             </p>
           ) : null}
           <Filters bucket={bucket} market={market} family={family} sector={sector} sectors={sectors} showDismissed={showDismissed} filtered={filtered} />
@@ -145,12 +165,12 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         <Empty
           action={
             filtered ? (
-              <Link href={href({ bucket, dismissed: filters.dismissed })} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <Link href={href({ bucket, market, dismissed: filters.dismissed })} className={buttonVariants({ variant: "outline", size: "sm" })}>
                 Clear filters
               </Link>
             ) : bucket === "candidate" && !firstRun ? (
-              <Link href={href({ ...filters, bucket: "early" })} className={buttonVariants({ variant: "outline", size: "sm" })}>
-                See Early
+              <Link href={href({ ...filters, bucket: "watch" })} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                See Watch
               </Link>
             ) : undefined
           }
@@ -159,25 +179,34 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
             ? "Nothing here with these filters."
             : firstRun
               ? "No scores yet: the weekly run writes the first on Saturday."
-              : inSector.length > 0
+              : inMarket.length > 0
                 ? "Every name here is dismissed until the evidence changes."
-                : BUCKET_EMPTY[bucket]}
+                : market
+                  ? `${MARKET_LABEL[market]}: ${BUCKET_EMPTY[bucket].toLowerCase()}`
+                  : BUCKET_EMPTY[bucket]}
         </Empty>
+      ) : market ? (
+        <Cards label="Candidates" rows={shown} cards={cards} dismissed={dismissed} history={history} back={back} />
       ) : (
-        <ul aria-label="Candidates" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-5">
-          {shown.map((r, i) => (
-            <CandidateCard
-              key={r.company_id}
-              r={r}
-              i={i}
-              card={cards.get(r.company_id)}
-              gone={dismissed.has(r.company_id)}
-              fresh={isNew(r.bucket, r.week_end, history.get(r.company_id) ?? [])}
-              change={evidenceChange(r.evidence, r.week_end, history.get(r.company_id) ?? [])}
-              back={back}
-            />
+        <div className="grid items-start gap-x-6 gap-y-8 lg:grid-cols-[3fr_2fr]">
+          {byMarket(shown).map(([m, rows]) => (
+          <section key={m} aria-labelledby={`market-${m}`} className="flex min-w-0 flex-col gap-3">
+            <h2 id={`market-${m}`} className="flex items-center gap-2 text-[18px] font-bold tracking-[-0.01em] text-fg">
+              {MARKET_LABEL[m]}
+              <span className="text-[14px] font-medium text-muted">
+                {rows.length} {rows.length === 1 ? "name" : "names"}
+              </span>
+            </h2>
+            {rows.length === 0 ? (
+              <p className="text-[14px] text-muted">
+                Nothing from {MARKET_LABEL[m]} {bucket === "candidate" ? "on the board" : `in ${BOARD_LABEL[bucket]}`} this week.
+              </p>
+            ) : (
+              <Cards label={`Candidates ${IN_MARKET[m]}`} rows={rows} cards={cards} dismissed={dismissed} history={history} back={back} />
+            )}
+          </section>
           ))}
-        </ul>
+        </div>
       )}
       {left.length > 0 ? <Left title={LEFT_TITLE[bucket]} items={left} /> : null}
       {/* before the first weekly run there are no rings or dots to explain (PR 6 re-review FR-2) */}
@@ -205,6 +234,40 @@ const MOVE: Record<"up" | "down" | "flat", { icon: "arrow-up" | "arrow-down" | "
 };
 
 const FLAG: Record<"good" | "warn" | "bad", string> = { good: "text-muted", warn: "text-warn", bad: "text-down" };
+
+/** One market's cards (or one market's view): the list a screen reader names `label`. */
+function Cards({
+  label,
+  rows,
+  cards,
+  dismissed,
+  history,
+  back,
+}: {
+  label: string;
+  rows: ScreenerRow[];
+  cards: Map<string, Pick<Thesis, "id">>;
+  dismissed: Set<string>;
+  history: Map<string, ScorePoint[]>;
+  back: string;
+}) {
+  return (
+    <ul aria-label={label} className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-5">
+      {rows.map((r, i) => (
+        <CandidateCard
+          key={r.company_id}
+          r={r}
+          i={i}
+          card={cards.get(r.company_id)}
+          gone={dismissed.has(r.company_id)}
+          fresh={isNew(r.bucket, r.week_end, history.get(r.company_id) ?? [])}
+          change={evidenceChange(r.evidence, r.week_end, history.get(r.company_id) ?? [])}
+          back={back}
+        />
+      ))}
+    </ul>
+  );
+}
 
 /** One company: who it is, the two rings, the Evidence change, why it's here, its red flags, and what to do. */
 function CandidateCard({
@@ -325,8 +388,8 @@ function Dismiss({ r, back }: { r: ScreenerRow; back: string }) {
   );
 }
 
-/** Market, sector, family and show dismissed, folded behind one pill; the form opens under it (and closes on a click
- * outside or on Escape). */
+/** Sector, family and show dismissed, folded behind one pill (the market has its own switch, kept here as a hidden
+ * field); the form opens under it (and closes on a click outside or on Escape). */
 function Filters({
   bucket,
   market,
@@ -352,15 +415,8 @@ function Filters({
       </summary>
       <form method="get" action="/candidates" className="pop absolute top-full right-0 z-30 mt-2 grid w-[min(22rem,calc(100vw-2rem))] grid-cols-2 gap-3 rounded-tile p-4">
         <input type="hidden" name="bucket" value={bucket} />
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor="f-market">Market</Label>
-          <Select id="f-market" name="market" defaultValue={market ?? ""} className="w-full">
-            <option value="">All</option>
-            <option value="us">US</option>
-            <option value="in">India</option>
-          </Select>
-        </div>
-        <div className="flex min-w-0 flex-col gap-1.5">
+        {market ? <input type="hidden" name="market" value={market} /> : null}
+        <div className="col-span-2 flex min-w-0 flex-col gap-1.5">
           <Label htmlFor="f-family">Family</Label>
           <Select id="f-family" name="family" defaultValue={family ?? ""} className="w-full">
             <option value="">All</option>
@@ -393,7 +449,7 @@ function Filters({
             Filter
           </Button>
           {filtered ? (
-            <Link href={href({ bucket, dismissed: showDismissed ? "1" : undefined })} className="inline-flex min-h-11 items-center text-[13px] md:min-h-0">
+            <Link href={href({ bucket, market, dismissed: showDismissed ? "1" : undefined })} className="inline-flex min-h-11 items-center text-[13px] md:min-h-0">
               Clear filters
             </Link>
           ) : null}

@@ -34,7 +34,7 @@ describe("display labels (lib/labels.ts)", () => {
   });
 
   it("names every bucket, family, signal and context metric the app uses (no S11, no capex family, no C4)", () => {
-    expect(Object.keys(BUCKET_LABEL)).toEqual(["candidate", "early", "priced_in", "excluded", "none"]);
+    expect(Object.keys(BUCKET_LABEL)).toEqual(["candidate", "early", "watch", "priced_in", "excluded", "none"]);
     expect(Object.keys(FAMILY_LABEL)).toEqual(["fundamentals", "behavior", "text", "structural", "cycle"]);
     const signals = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S12"];
     expect(Object.keys(SIGNAL_NAME)).toEqual(signals);
