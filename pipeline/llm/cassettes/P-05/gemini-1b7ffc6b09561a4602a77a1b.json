@@ -1,0 +1,19 @@
+{
+ "key": "1b7ffc6b09561a4602a77a1bf983008960ba38eb8a6f8b717828b9ce200c2d66",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Nimbus Compute Corp. generated revenue of $980,000,000 for the period ending June 30, 2025.\nQUOTES: []\nCOMPUTED: [\"m:revenue:2025-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2025-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"980000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value for revenue on 2025-06-30 is 980000000, which corresponds to $980,000,000.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 257,
+  "tokens_out": 70
+ }
+}

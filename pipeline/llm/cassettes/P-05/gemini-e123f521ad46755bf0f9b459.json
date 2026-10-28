@@ -1,0 +1,19 @@
+{
+ "key": "e123f521ad46755bf0f9b45970ef0bd06e12cb60a7889383edbe41878b584651",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The market appears to underestimate future growth because implied growth of 0.12 sits below evidence-based growth of 0.18.\nQUOTES: []\nCOMPUTED: [\"c:C2: {\\\"inputs\\\": {\\\"discount_rate\\\": 0.09, \\\"g_evidence\\\": 0.18, \\\"g_implied\\\": 0.12, \\\"terminal_growth\\\": 0.025}, \\\"value\\\": \\\"0.06\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value provides g_evidence as 0.18 and g_implied as 0.12, and the sentence states that implied growth of 0.12 sits below evidence-based growth of 0.18, meaning the market underestimates future growth. All parts are supported by the computed data.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 258,
+  "tokens_out": 92
+ }
+}

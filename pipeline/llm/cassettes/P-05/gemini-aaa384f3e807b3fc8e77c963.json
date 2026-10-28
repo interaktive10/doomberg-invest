@@ -1,0 +1,19 @@
+{
+ "key": "aaa384f3e807b3fc8e77c9632483e1e3e6b63d0226b29297fe5f88f3237b40e9",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Nimbus received a $600 million multi-year order from a hyperscale cloud provider.\nQUOTES: [\"Nimbus received a $600 million multi-year order from a hyperscale cloud provider.\"]\nCOMPUTED: [\"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002: {\\\"as_of\\\": \\\"2026-08-06\\\", \\\"counterparty\\\": \\\"a hyperscale cloud provider\\\", \\\"currency\\\": \\\"USD\\\", \\\"fact_type\\\": \\\"order_win\\\", \\\"subject\\\": \\\"Multi-year hyperscaler order\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"600000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence matches the quoted source text and is fully supported by both the quote and the computed fact.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 317,
+  "tokens_out": 45
+ }
+}

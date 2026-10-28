@@ -1,0 +1,19 @@
+{
+ "key": "8463afed77b5a12976573188cfd85318a80b2f47a21c4177173e082dcee01ec5",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Remaining performance obligations (RPO) increased to $4,200,000,000 as of June 30, 2026.\nQUOTES: []\nCOMPUTED: [\"m:rpo:2026-06-30: {\\\"name\\\": \\\"rpo\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"4200000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence states that remaining performance obligations (RPO) increased to $4,200,000,000 as of June 30, 2026, which matches the computed value for RPO on that date ($4,200,000,000).",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 262,
+  "tokens_out": 91
+ }
+}

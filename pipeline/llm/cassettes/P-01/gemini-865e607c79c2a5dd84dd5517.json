@@ -1,0 +1,54 @@
+{
+ "key": "865e607c79c2a5dd84dd5517b2e4a320358bc3294e5d5c166d98c80e5b93f293",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-01",
+ "provider": "gemini",
+ "request": {
+  "system": "You extract facts a company states about its business from one excerpt of a company document: orders and contract\nwins, new named customers or programs, price increases and pricing actions, capacity additions and commitments, lead\ntimes, new segments or business lines, governance events (auditor changes, material weaknesses, going-concern doubts,\nrestatements), export exposure, customer concentration, and capital spending, financing, backlog and obligations.\nExtract only facts the excerpt states explicitly. Never calculate, infer, combine, annualize or convert numbers.\nFor every fact, copy the exact supporting text into \"quote\": verbatim, at most 60 words, and it must appear exactly\nin the excerpt. If a number's meaning depends on nearby words (a unit, a period, \"approximately\"), include them in\nthe quote.\nSet \"as_of\" to the date the excerpt says the fact was true or was announced (an award date, a quarter end): never a\nfuture or effective date, and never later than the document's publication. If the excerpt states none, leave it null.\nSet \"period_label\" only to the fiscal or calendar period a number covers, as written (\"fiscal 2027\", \"the second\nquarter of 2026\"); leave it null for anything else, such as a date, a term or a duration.\nFor a range, set \"value_low\" and \"value_high\" and leave \"value\" null. Keep every number in the unit the excerpt\nwrites it in.\nAn event needs no number: a named new customer, a new segment or business line, a governance event. A measure (a lead\ntime, a backlog, capital spending, a share of revenue) is a fact only with its number.\nA governance event is \"added\" when the excerpt reports it, and \"removed\" only when the excerpt says one reported\nearlier was remediated or resolved; controls the excerpt calls effective are neither.\nAllowed fact types: capex_guidance (A company's stated expectation for capital expenditures); capex_reported (Reported capital expenditures (XBRL PaymentsToAcquirePropertyPlantAndEquipment and text)); backlog (Stated backlog/orders (industrial, contractors)); rpo (Remaining performance obligations (XBRL RevenueRemainingPerformanceObligation and text)); lead_time (A stated lead time for equipment or capacity); capacity_addition (New or expanded capacity: MW/GW, factories, square feet, sites, with timing); commitment_lease (Leases not yet commenced, data-center leases, lease commitments); commitment_purchase (Purchase obligations, capacity/compute purchase commitments, take-or-pay); commitment_ppa (Power purchase and energy supply agreements (counterparty, MW, term)); financing (Debt, JV or SPV financing tied to AI/data-center infrastructure); customer_concentration (Stated share of revenue from the largest customers); supply_link (A named customer/supplier/partner relationship tied to AI infrastructure); utility_load (Utility large-load or data-center pipeline (GW, requests, contracts)); risk_factor_change (Added, removed or modified risk-factor paragraphs on AI, data centers, power or supply chain); order_win (A stated order or contract win with value, customer or segment); customer_win (A new named customer or program); price_increase (A stated price increase or pricing action); new_segment (A new reportable segment or business line); governance_flag (Auditor change, material weakness, going concern, restatement (added or removed)); export_exposure (A stated export share or overseas order book (India: US/data-center exports)).\nUse a subject_key from this vocabulary: capex_guidance:<period>, capex_reported:<period>, backlog:total, backlog:<segment>, rpo:total, rpo:next_12m_pct, lead_time:<equipment>, capacity:mw:site_<slug>, capacity:<unit>:<slug>, lease_not_commenced:total, purchase_obligations:total, ppa:<counterparty>:<site>, financing:<instrument>:<date>, customer_concentration:top1, customer_concentration:<topn>, link:<counterparty>, large_load:pipeline_gw, risk:<paragraph_hash>, order_win:<slug>, customer_win:<slug>, price_increase:<slug>, new_segment:<slug>, governance:auditor_change:added, governance:material_weakness:added, governance:material_weakness:removed, governance:going_concern:added, governance:going_concern:removed, governance:restatement:added, governance:restatement:removed, export_exposure:share_pct, export_exposure:overseas_order_book. If none fits, use \"other:<short-slug>\".\nDo not extract anything about share prices, stock performance, valuation, analyst views, ratings, share repurchases,\ndividends or trading. If the excerpt states that previous guidance is withdrawn, set \"withdrawn\": true.\nReturn only the tool call.",
+  "user": "COMPANY: Nimbus Compute Corp. (NMBS), fiscal year ends 0630\nDOCUMENT: EX-99.1 · Fiscal 2028 outlook · published 2027-07-29\nSECTION: whole document · excerpt chars 0–643\n<<<\nNimbus Compute Reports Results and Issues Fiscal 2028 Outlook\n\nSEATTLE — Nimbus Compute Corp. today announced the following.\n\nRevenue growth reflected higher demand for AI infrastructure and data center capacity across our markets.\n\nFor fiscal 2028, Nimbus expects capital expenditures of $71 billion to $76 billion.\n\nBeginning next quarter, Nimbus will report AI Infrastructure Services as a new reportable segment.\n\nDiluted earnings per share were $1.87, up 14% from a year ago.\n\nOur stock price rose 23% during the quarter, and two analysts upgraded their ratings to buy.\n\nAbout the company: this is a fictional company created for testing.\n>>>"
+ },
+ "response": {
+  "content": {
+   "facts": [
+    {
+     "as_of": "2027-07-29",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": "USD",
+     "fact_type": "capex_guidance",
+     "location": "SEATTLE",
+     "period_label": "fiscal 2028",
+     "quote": "For fiscal 2028, Nimbus expects capital expenditures of $71 billion to $76 billion.",
+     "scale_word": "billion",
+     "subject": "Nimbus expects capital expenditures for fiscal 2028",
+     "subject_key": "capex_guidance:fiscal_2028",
+     "unit": "usd",
+     "value": null,
+     "value_high": 76,
+     "value_low": 71,
+     "withdrawn": false
+    },
+    {
+     "as_of": "2027-07-29",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "new_segment",
+     "location": "SEATTLE",
+     "period_label": null,
+     "quote": "Beginning next quarter, Nimbus will report AI Infrastructure Services as a new reportable segment.",
+     "scale_word": null,
+     "subject": "AI Infrastructure Services new reportable segment",
+     "subject_key": "new_segment:ai_infrastructure_services",
+     "unit": "other",
+     "value": null,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
+    }
+   ]
+  },
+  "tokens_in": 1799,
+  "tokens_out": 313
+ }
+}

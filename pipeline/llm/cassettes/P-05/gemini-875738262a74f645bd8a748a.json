@@ -1,0 +1,19 @@
+{
+ "key": "875738262a74f645bd8a748a913451481b5684d46dc1dcdde5d410d5cb80fe12",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Nimbus expects fiscal 2027 capital expenditures of approximately $1.8 billion.\nQUOTES: [\"We expect fiscal 2027 capital expenditures of approximately $1.8 billion.\"]\nCOMPUTED: [\"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001: {\\\"as_of\\\": \\\"2026-08-06\\\", \\\"currency\\\": \\\"USD\\\", \\\"fact_type\\\": \\\"capex_guidance\\\", \\\"period_end\\\": \\\"2027-06-30\\\", \\\"period_label\\\": \\\"FY2027\\\", \\\"subject\\\": \\\"Fiscal 2027 capital expenditures\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"1800000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence directly matches the quote 'We expect fiscal 2027 capital expenditures of approximately $1.8 billion.' and the computed value of $1.8 billion for fiscal 2027 capital expenditures.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 338,
+  "tokens_out": 70
+ }
+}
