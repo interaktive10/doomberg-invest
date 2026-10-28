@@ -1,0 +1,20 @@
+{
+ "key": "4a63b276182ac9c7e6ab62c7a35129544eea2c602e63b43de6ce4d878f8e5a90",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-07",
+ "provider": "gemini",
+ "request": {
+  "system": "Classify one Indian exchange announcement title and summary. Return the categories that apply and whether the full\nPDF should be read for facts. Categories: order_win, capacity_expansion, customer_win, fund_raise, rights_issue,\ndemerger, acquisition, pledge_change, auditor_change, management_change, results, credit_rating, other.\nReturn only JSON.",
+  "user": "TITLE: Export order announcement\nSUMMARY: Aravalli Cables Bags Export Order for US Data Center\n\nJAIPUR — Aravalli Cables Limited today announced the following.\n\nAravalli Cables has received an export order worth Rs 371 crore for high-voltage cables for a data center project in the United States.\n\nExports accounted for 32% of revenue in the first half of fiscal 2027.\n\nWe continue to monitor supply chain conditions, including lead time trends for transformers and switchgear.\n\nAbout the company: this is a fictional company created for testing."
+ },
+ "response": {
+  "content": {
+   "categories": [
+    "order_win"
+   ],
+   "read_pdf": false
+  },
+  "tokens_in": 203,
+  "tokens_out": 27
+ }
+}

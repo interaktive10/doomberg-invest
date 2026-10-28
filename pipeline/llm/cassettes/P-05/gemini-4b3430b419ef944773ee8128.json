@@ -1,0 +1,19 @@
+{
+ "key": "4b3430b419ef944773ee8128a65e5e202d7901f3745258f190ee853afcdc205f",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Remaining performance obligations (RPO) were $2,900,000,000 as of June 30, 2025, and increased to $4,200,000,000 as of June 30, 2026.\nQUOTES: []\nCOMPUTED: [\"m:rpo:2025-06-30: {\\\"name\\\": \\\"rpo\\\", \\\"period_end\\\": \\\"2025-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"2900000000\\\"}\", \"m:rpo:2026-06-30: {\\\"name\\\": \\\"rpo\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"4200000000\\\"}\", \"rpo from 2025-06-30 to 2026-06-30: difference 1300000000, change 0.4483, ratio 1.4483\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence states that RPO was $2,900,000,000 as of June 30, 2025, and increased to $4,200,000,000 as of June 30, 2026. This is directly supported by the computed values for RPO on those dates ($2,900,000,000 and $4,200,000,000) and the fact that it increased.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 414,
+  "tokens_out": 140
+ }
+}

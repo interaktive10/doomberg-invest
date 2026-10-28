@@ -1,0 +1,19 @@
+{
+ "key": "bb64e7b3921bd3c630673a3f47bb200431e8b369653947ce74d2d01641ad422f",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Operating income for the fiscal year ending June 30, 2026 was $206,250,000.\nQUOTES: []\nCOMPUTED: [\"m:op_income:2026-06-30: {\\\"name\\\": \\\"op_income\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"206250000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence is fully supported by the computed value for operating income for the period ending June 30, 2026, which is $206,250,000.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 258,
+  "tokens_out": 67
+ }
+}

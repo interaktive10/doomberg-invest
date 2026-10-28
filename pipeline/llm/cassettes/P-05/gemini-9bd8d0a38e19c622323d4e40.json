@@ -1,0 +1,19 @@
+{
+ "key": "9bd8d0a38e19c622323d4e4084b3b2d91154024b955cb1ed00a1d2a1b4062b5b",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Revenue grew to $1,250,000,000 for the fiscal year ending June 30, 2026.\nQUOTES: []\nCOMPUTED: [\"m:revenue:2026-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"1250000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The revenue value $1,250,000,000 for the fiscal year ending June 30, 2026 is directly supported by the computed value m:revenue:2026-06-30 (1250000000 usd).",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 257,
+  "tokens_out": 91
+ }
+}

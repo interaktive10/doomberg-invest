@@ -1,0 +1,24 @@
+{
+ "key": "1e1ba285f611f1cdfac0154d8dd0e31f8daada9a84e27f66a07942d8e0bf1fa6",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-02",
+ "provider": "gemini",
+ "request": {
+  "system": "Match each counterparty name to at most one candidate from the list, or to none. Use only the names given; never\ninvent an entity. Treat subsidiaries as the parent only if the name makes that explicit. Return only the tool call.",
+  "user": "NAMES: [\"Nimbus Compute\"]\nCANDIDATES: [{\"id\": \"c:NMBS\", \"name\": \"Nimbus Compute Corp.\"}]"
+ },
+ "response": {
+  "content": {
+   "matches": [
+    {
+     "candidate_id": "c:NMBS",
+     "confidence": 1,
+     "kind": "company",
+     "name": "Nimbus Compute"
+    }
+   ]
+  },
+  "tokens_in": 215,
+  "tokens_out": 41
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "key": "ec39fc58cde453a8e0cf9da9ffb90b46b5cd789623140799569b5b587ff6388e",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The market implies a lower growth rate of 0.06 compared to the evidence-supported growth rate of 0.18, resulting in a growth gap of 0.1728.\nQUOTES: []\nCOMPUTED: [\"c:C2: {\\\"inputs\\\": {\\\"discount_rate\\\": 0.09, \\\"g_evidence\\\": 0.18, \\\"g_implied\\\": 0.12, \\\"terminal_growth\\\": 0.025}, \\\"value\\\": \\\"0.06\\\"}\", \"s:S1: {\\\"fired\\\": true, \\\"inputs\\\": {\\\"consecutive\\\": 2, \\\"g_ob\\\": 0.4483, \\\"g_rev\\\": 0.2755, \\\"gap\\\": 0.1728}, \\\"kind\\\": \\\"signal\\\", \\\"strength\\\": \\\"0.82\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value for the growth rate difference (implied vs evidence) is 0.06 (implied is 0.12, evidence is 0.18, and 0.18 - 0.12 = 0.06), but the sentence states the market-implied growth rate is 0.06 (which is actually the difference, not the rate itself). Furthermore, the gap of 0.1728 comes from `g_ob` and `g_rev` signals, not the growth rate difference.",
+   "supported": false,
+   "unsupported_parts": [
+    "The market implies a lower growth rate of 0.06",
+    "resulting in a growth gap of 0.1728"
+   ]
+  },
+  "tokens_in": 347,
+  "tokens_out": 175
+ }
+}

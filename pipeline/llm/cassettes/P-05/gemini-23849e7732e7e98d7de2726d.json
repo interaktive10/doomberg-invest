@@ -1,0 +1,21 @@
+{
+ "key": "23849e7732e7e98d7de2726d9d36df6e4a1fa01081e4c8754aaeb21087ab9b18",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: RPO grew by 44.83 percent year-over-year while revenue grew by 27.55 percent, indicating expanding forward visibility that is underappreciated by the market.\nQUOTES: []\nCOMPUTED: [\"s:S1: {\\\"fired\\\": true, \\\"inputs\\\": {\\\"consecutive\\\": 2, \\\"g_ob\\\": 0.4483, \\\"g_rev\\\": 0.2755, \\\"gap\\\": 0.1728}, \\\"kind\\\": \\\"signal\\\", \\\"strength\\\": \\\"0.82\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence claims that RPO grew by 44.83% and revenue by 27.55% (which are supported by the computed values g_ob=0.4483 and g_rev=0.2755), but it also contains interpretive claims ('indicating expanding forward visibility that is underappreciated by the market') which are not present in the quotes or computed values.",
+   "supported": false,
+   "unsupported_parts": [
+    "indicating expanding forward visibility that is underappreciated by the market"
+   ]
+  },
+  "tokens_in": 278,
+  "tokens_out": 123
+ }
+}
