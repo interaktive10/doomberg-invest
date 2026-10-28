@@ -505,4 +505,3 @@ def test_a_garbled_vocabulary_key_is_repaired(fact_type: str, proposed: str, rep
     top10 = "customer_concentration:top10"
     assert keys.check("customer_concentration", top10, "x") == (top10, True)  # a valid slot key: never "repaired"
     assert keys.check("commitment_purchase", "purchase_obligation:total", "x") == ("other:total", False)
-
