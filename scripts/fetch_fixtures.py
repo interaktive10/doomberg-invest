@@ -327,6 +327,19 @@ F_IN_FILES: list[tuple[str, str]] = [
     ("results/KEI_FY2027Q1_standalone_revision.xml",
      f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1707294_03082026102024_WEB.xml"),
     ("results/legacy_VSTTILLERS_FY2025Q3.xml", f"{F_IN_ARCH}/INDAS_121277_1705282_30072026051753.xml"),
+    # the history loader (pipeline/india/history.py; docs/SPEC_ISSUES.md 55): KEI's legacy listing (trimmed to its
+    # quarters from 2022 plus its oldest row), a legacy quarter whose file never defines the contexts its facts use
+    # (December 2022), two legacy half years and a legacy year (their year-to-date column is stamped with the
+    # quarter's dates), the integrated FY2025 Q4 whose H2 needs the legacy H1, and KEI's own shareholding listing
+    ("results/legacy_index_KEI.json",
+     "https://www.nseindia.com/api/corporates-financial-results?index=equities&period=Quarterly&symbol=KEI"),
+    ("results/legacy_KEI_FY2023Q3_consolidated.xml", f"{F_IN_ARCH}/INDAS_87681_777741_23012023063403_WEB.xml"),
+    ("results/legacy_KEI_FY2024Q2_consolidated.xml", f"{F_IN_ARCH}/INDAS_98422_973421_01112023043110.xml"),
+    ("results/legacy_KEI_FY2024Q4_consolidated.xml", f"{F_IN_ARCH}/INDAS_105215_1114525_03052024032358.xml"),
+    ("results/legacy_KEI_FY2025Q2_consolidated.xml", f"{F_IN_ARCH}/INDAS_112803_1272446_16102024040014.xml"),
+    ("results/KEI_FY2025Q4_consolidated.xml", f"{F_IN_ARCH}/INTEGRATED_FILING_INDAS_1432738_06052025093549_WEB.xml"),
+    ("shareholding/index_KEI.json",
+     "https://www.nseindia.com/api/corporate-share-holdings-master?index=equities&symbol=KEI"),
     ("shareholding/index.json", "https://www.nseindia.com/api/corporate-share-holdings-master?index=equities"),
     ("shareholding/SHP_KEI_2026-06-30.xml", f"{F_IN_ARCH}/SHP_1696739_20072026031837_WEB.xml"),
     ("shareholding/SHP_JSWSTEEL_2026-06-30.xml", f"{F_IN_ARCH}/SHP_1698632_21072026062045_WEB.xml"),
@@ -373,6 +386,14 @@ def trim_shareholding_csv(body: bytes) -> bytes:
     return ("\ufeff" + lines[0] + "".join(keep)).encode()
 
 
+def trim_legacy_listing(body: bytes) -> bytes:
+    """NSE's legacy results listing for one company, every quarter back to 2005: its quarters from 2022 on and its
+    oldest row (no XBRL, no dissemination time)."""
+    rows = json.loads(body)
+    keep = [r for r in rows if str(r.get("toDate") or "")[-4:] >= "2022"] + rows[-1:]
+    return (json.dumps(keep, indent=1) + "\n").encode()
+
+
 def fetch_f_in(client: HttpClient, cooldown_s: float = 600.0, rounds: int = 4) -> list[str]:
     import time
 
@@ -396,6 +417,8 @@ def fetch_f_in(client: HttpClient, cooldown_s: float = 600.0, rounds: int = 4) -
                 body = (json.dumps(rows, indent=1) + "\n").encode()
             if dest.name == "shareholding_page.csv":
                 body = trim_shareholding_csv(body)
+            if dest.name == "legacy_index_KEI.json":
+                body = trim_legacy_listing(body)
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(body)
             print(f"F-IN {dest.relative_to(ROOT)}: {len(body):,} bytes")

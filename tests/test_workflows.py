@@ -51,6 +51,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("lab-prices.yml", ("prices",)),
         ("weights.yml", ("weights",)),
         ("backfill.yml", ("us",)),
+        ("india-backfill.yml", ("history",)),
     ):
         for job in jobs:  # the Actions minutes gate reads no table, so it may come first
             runs = [r for r in steps(name, job) if "python -m pipeline" in r and "pipeline.digest.minutes" not in r]
@@ -419,6 +420,49 @@ def test_india_runs_again_one_nse_job_at_a_time_with_its_state_in_the_database()
         assert not any("actions/cache" in str(s.get("uses", "")) for s in job["steps"]), name
     assert "--minutes 75" in step("weekly.yml", "india", "python -m pipeline.india.weekly")[1]["run"]
     assert load("weekly.yml")["jobs"]["india"]["timeout-minutes"] >= 90
+
+
+def test_india_backfill_loads_the_history_one_nse_job_at_a_time() -> None:
+    """India restart part 2 (docs/SPEC_ISSUES.md 55): three runs a day, Sunday to Friday (Saturday is the weekly
+    run's), each gated for its whole 345 minutes (the loader stops itself at 320). Its own workflow group, so a second
+    run waits there and not in `nse`, which keeps one waiting job and replaces it with a newer one (a waiting daily
+    job would be cancelled); the job itself in `nse` with every other NSE job. The state comes from the database and
+    goes back, also after a failure; the first run (catch_up) reads the announcements and insider trades missed in the
+    pause; once the history is complete the workflow switches itself off."""
+    doc = load("india-backfill.yml")
+    on = doc[True]
+    assert on["schedule"] == [{"cron": "41 2,8,14 * * 0-5"}] and "catch_up" in on["workflow_dispatch"]["inputs"]
+    assert doc["concurrency"] == {"group": "india-backfill", "cancel-in-progress": False}
+    assert doc["permissions"] == {"contents": "read", "actions": "write"}
+    assert doc["jobs"]["history"]["concurrency"] == {"group": "nse", "cancel-in-progress": False}
+    rest = gated("india-backfill.yml", "history", 345)
+    g, get = step("india-backfill.yml", "history", "python -m pipeline.db.state get")
+    c, catch = step("india-backfill.yml", "history", "python -m pipeline.india.daily")
+    h, run = step("india-backfill.yml", "history", "python -m pipeline.india.history")
+    p, put = step("india-backfill.yml", "history", "python -m pipeline.db.state put in_weekly")
+    assert g < c < h < p
+    assert "in_weekly=.cache/in/weekly_state.json" in get["run"] and "in_daily=.cache/in/daily_state.json" in get["run"]
+    assert "inputs.catch_up" in catch["if"] and "--announcements-from 2026-10-17" in catch["run"]
+    assert "minutes=320" in run["run"] and '--minutes "$minutes"' in run["run"] and run["id"] == "history"
+    assert put["if"] == "always() && steps.secrets.outputs.ok == 'true'"
+    off, chain = rest[-2:]
+    assert "steps.history.outputs.complete == 'true'" in off["if"]
+    assert "gh workflow disable india-backfill.yml" in off["run"]
+    # not done and NSE answering: the next run at once, never on Saturday or from Friday 18:00 UTC
+    assert "steps.history.outputs.complete == 'false'" in chain["if"] and "outputs.stale == 'false'" in chain["if"]
+    assert "gh workflow run india-backfill.yml" in chain["run"] and '[ "$dow" = 6 ]' in chain["run"]
+    assert '[ "$dow" = 5 ] && [ "$hour" -ge 18 ]' in chain["run"]
+
+
+def test_every_nse_job_is_in_the_nse_group() -> None:
+    """NSE allows one request every 3 s per client: any job that runs an India step waits for the others."""
+    found = []
+    for path in sorted(WF.glob("*.yml")):
+        for name, job in load(path.name)["jobs"].items():
+            if any("python -m pipeline.india." in str(s.get("run", "")) for s in job["steps"]):
+                found.append((path.name, name))
+                assert job.get("concurrency") == {"group": "nse", "cancel-in-progress": False}, (path.name, name)
+    assert found == [("daily.yml", "india"), ("india-backfill.yml", "history"), ("weekly.yml", "india")]
 
 
 def test_every_job_runs_on_a_pinned_runner() -> None:

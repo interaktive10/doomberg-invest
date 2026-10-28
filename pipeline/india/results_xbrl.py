@@ -20,7 +20,7 @@ the exchange's submission time of the XBRL (IST in the listing, converted to UTC
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -28,7 +28,7 @@ from urllib.parse import quote
 
 import yaml
 
-from pipeline.india.xbrl import Instance, XbrlError, parse_instance
+from pipeline.india.xbrl import Context, Instance, XbrlError, parse_instance
 from pipeline.settings import REPO_ROOT
 
 Basis = Literal["consolidated", "standalone"]
@@ -90,13 +90,55 @@ def _basis(text: str | None) -> Basis:
     raise ResultsError(f"unknown NatureOfReportStandaloneConsolidated {text!r}")
 
 
+def _undefined_contexts(inst: Instance) -> None:
+    """Some legacy results files (NSE, January 2023: the December 2022 quarter of RELIANCE, KEI and others) use the
+    contexts OneD (the quarter), FourD (the year to date) and OneI (the period end) without defining them, so every
+    fact would be dropped. OneD and FourD are rebuilt from the file's own reporting-period dates under each, and OneI
+    as the instant at OneD's end (India restart part 2, docs/SPEC_ISSUES.md 55)."""
+
+    def day(ctx_id: str, name: str) -> date | None:
+        v = next((v for n, v, _ in inst.orphans.get(ctx_id, []) if n == name and v.strip()), None)
+        return None if v is None else date.fromisoformat(v.strip()[:10])
+
+    for cid in ("OneD", "FourD"):
+        if cid in inst.contexts or cid not in inst.orphans:
+            continue
+        start, end = day(cid, "DateOfStartOfReportingPeriod"), day(cid, "DateOfEndOfReportingPeriod")
+        if start is not None and end is not None and start <= end:
+            inst.adopt(Context(cid, start, end, ()))
+    one = inst.contexts.get("OneD")
+    if "OneI" not in inst.contexts and "OneI" in inst.orphans and one is not None:
+        inst.adopt(Context("OneI", None, one.end, ()))
+
+
+def _legacy_year_to_date(inst: Instance, fy_start: date, period_end: date) -> None:
+    """NSE's legacy results XBRL (taxonomy in-bse-fin, to FY2025 Q3) stamps its year-to-date column, context `FourD`,
+    with the quarter's dates: in RELIANCE's FY2025 Q2 filing FourD's revenue is the half year's (Apr-Sep) under
+    "2024-07-01 to 2024-09-30", and its FY2024 Q4 filing gives the full year the same way. In a Q2-Q4 filing whose
+    FourD repeats OneD's (the quarter's) dates, FourD is read from the financial year's start (India restart part 2,
+    docs/SPEC_ISSUES.md 55); a FourD already dated from the year's start, and every integrated filing, are untouched."""
+    one, four = inst.contexts.get("OneD"), inst.contexts.get("FourD")
+    if one is None or four is None or four.start is None or four.dims or one.dims:
+        return
+    if (four.start, four.end) != (one.start, one.end) or four.end != period_end or four.start <= fy_start:
+        return
+    fixed: Context = replace(four, start=fy_start)
+    inst.contexts["FourD"] = fixed
+    for facts in inst.facts.values():
+        for i, f in enumerate(facts):
+            if f.context.id == "FourD":
+                facts[i] = replace(f, context=fixed)
+
+
 def parse_results(raw: bytes | str, ind_as_map: Mapping[str, Sequence[str]]) -> Results:
     inst = parse_instance(raw)
+    _undefined_contexts(inst)
     end_s = inst.text("DateOfEndOfReportingPeriod")
     fy_start_s, fy_end_s = inst.text("DateOfStartOfFinancialYear"), inst.text("DateOfEndOfFinancialYear")
     if not end_s or not fy_start_s or not fy_end_s:
         raise ResultsError("results XBRL without reporting-period / financial-year dates")
     period_end, fy_start, fy_end = (date.fromisoformat(s[:10]) for s in (end_s, fy_start_s, fy_end_s))
+    _legacy_year_to_date(inst, fy_start, period_end)
     quarters = sorted(
         {
             c.start
@@ -223,6 +265,11 @@ def build_rows(filings: Sequence[Filed]) -> Build:
 
 LISTING_API = "integrated-filing-results?index=equities&type=Integrated%20Filing-%20Financials"
 PAGE_SIZE = 50
+# NSE's legacy results listing (taxonomy in-bse-fin): one request per company lists every quarterly filing back to the
+# 2000s with its XBRL link and dissemination time (checked 2026-10-28 on RELIANCE: 130 rows, 2005-2025). SEBI Integrated
+# Filing replaced it from FY2025 Q4 (the quarter ending March 2025), so the history loader reads quarters before that.
+LEGACY_API = "corporates-financial-results?index=equities&period=Quarterly"
+LEGACY_BEFORE = date(2025, 3, 31)
 
 
 @dataclass(frozen=True)
@@ -247,6 +294,47 @@ def company_listing_path(symbol: str, page: int = 1) -> str:
     """One company's filing history, newest first (unpaged, NSE returns only the first 20 rows; review R2-F2 on M3).
     The symbol is URL-encoded: M&M or GVT&D would otherwise end the query parameter at the `&` (review R3-F1)."""
     return f"{LISTING_API}&symbol={quote(symbol, safe='')}&page={page}&size={PAGE_SIZE}"
+
+
+def legacy_listing_path(symbol: str) -> str:
+    """One company's legacy quarterly results (every filing in one answer); the symbol URL-encoded (M&M, GVT&D)."""
+    return f"{LEGACY_API}&symbol={quote(symbol, safe='')}"
+
+
+def parse_legacy_listing(raw: bytes | str) -> list[ResultsListing]:
+    """The legacy listing's rows with an XBRL file. filed_at is the exchange's dissemination time (IST -> UTC), never
+    a date read from the file name: a file named for 30-07-2026 can hold a December 2024 quarter. seq ids are prefixed
+    "L" so they never collide with the integrated listing's."""
+    import json
+
+    from pipeline.india.announcements import ist_to_utc
+
+    doc = json.loads(raw)
+    rows = doc if isinstance(doc, list) else doc.get("data", [])
+    out: list[ResultsListing] = []
+    for r in rows:
+        url = str(r.get("xbrl") or "")
+        when = str(r.get("exchdisstime") or r.get("broadCastDate") or "").strip()
+        if not url.startswith("https://") or not url.lower().endswith(".xml") or not r.get("symbol") or not when:
+            continue
+        try:
+            filed_at = ist_to_utc(when.title(), "%d-%b-%Y %H:%M:%S")
+            period_end = datetime.strptime(str(r["toDate"]).title(), "%d-%b-%Y").date()
+            basis = _basis(str(r.get("consolidated") or ""))
+        except (KeyError, ValueError):  # an odd row is skipped, not the company's whole history
+            continue
+        out.append(
+            ResultsListing(
+                seq_id=f"L{r.get('seqNumber') or url}",
+                symbol=str(r["symbol"]).upper(),
+                period_end=period_end,
+                basis=basis,
+                revision=str(r.get("reInd") or "N").strip().upper() not in ("", "N"),
+                filed_at=filed_at,
+                xbrl_url=url,
+            )
+        )
+    return out
 
 
 def parse_listing(raw: bytes | str) -> tuple[list[ResultsListing], int, int]:

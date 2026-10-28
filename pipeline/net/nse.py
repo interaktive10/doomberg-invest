@@ -16,6 +16,8 @@
 - NSE also answers 403 for an archive file that doesn't exist (a holiday's bhavcopy), so callers ask NSE only for
   files that exist (the bhavcopy run checks the trading day with BSE first).
 - Immutable archive files (bhavcopy, XBRL) are cached on disk (use_cache).
+- `answered` counts the run's successful requests: a caller can tell NSE refusing one file after answering others
+  from NSE refusing everything (pipeline/india/history.py).
 """
 
 from __future__ import annotations
@@ -58,6 +60,7 @@ class NseClient:
     consecutive_failures: int = 0
     stale: bool = False
     blocks: list[str] = field(default_factory=list)  # "status url", for source_health.last_error
+    answered: int = 0  # successful requests this run
     deadline: float | None = None  # clock() value after which no request is made
     _warmed_at: float | None = None
 
@@ -135,6 +138,7 @@ class NseClient:
                 self.sleep(wait)
                 continue
             self.consecutive_blocks = self.consecutive_failures = 0
+            self.answered += 1
             return body
 
     def api(self, path: str, referer: str = NSE_HOME) -> bytes:

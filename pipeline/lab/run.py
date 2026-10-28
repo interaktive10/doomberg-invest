@@ -1,9 +1,9 @@
 """Run the Signal Lab (BRIEF §4.10; lab.yml). `python -m pipeline.lab.run --market us --prices FILE --state FILE`.
 
 Reads everything through pipeline.db.pit.as_of (every version of every quarter, with its filing time; the panel then
-applies each month-end's cutoff), month-end prices from the Twelve Data download (pipeline/lab/price_history.py, the
-`lab-data-v1` release), and writes:
-- the panel as Parquet as soon as it is built (--panel-out; lab.yml keeps it as a release asset, §2.8);
+applies each month-end's cutoff), month-end prices from the Twelve Data download (pipeline/lab/price_history.py, kept
+in the database: pipeline.db.state), and writes:
+- the panel as Parquet as soon as it is built (--panel-out; lab.yml keeps it in the Actions cache, §2.8);
 - lab_results rows (signals and legacy rules x horizon x period, Evidence and Gap deciles);
 - docs/LAB_REPORT.md (--report), with the §7 caveats at the top;
 - with --propose, config/weights.yaml with the §4.10.5 proposals and the weights PR's body with each signal's verdict
@@ -204,7 +204,7 @@ def run(conn: psycopg.Connection[Any], market: str, prices: Path, today: date, r
     weights = yaml.safe_load((root / "config" / "weights.yaml").read_text(encoding="utf-8"))
     props = proposals.propose(ev_stats, weights, int(cfg["proposal_horizon_months"]), cfg.get("not_testable") or ())
     info = report.RunInfo(market, months[0], months[-1], len({r.company_id for r in rows}), len(rows), len(evts),
-                          periods, f"Twelve Data month-end closes ({prices.name}, the lab-data-v1 release)",
+                          periods, f"Twelve Data month-end closes ({prices.name}, kept in the database)",
                           describe(market, pop, data.left_out))  # fmt: skip
     return report.render(info, ev_stats, evid, gp, props), props, rows, ev_stats
 
