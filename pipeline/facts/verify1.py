@@ -5,7 +5,7 @@
 | V1-NUM    | every numeric field is a number in the quote (numbers.match)                 | failed                  |
 | V1-UNIT   | the unit agrees with the quote's tokens ("MW" <-> mw, "$" <-> usd, ...)      | failed                  |
 | V1-TYPE   | allowed type; no share-price facts (labels or quote); subject_key valid      | failed / needs_review   |
-| V1-PERIOD | period resolvable and plausible                                              | needs_review            |
+| V1-PERIOD | period resolvable and plausible (where the type needs one: below)            | needs_review            |
 | V1-XBRL   | |value - XBRL| <= 0.5% for the same concept and period                       | needs_review (mismatch) |
 | V1-CONF   | confidence >= 0.70                                                           | needs_review            |
 | V1-DUP    | the document already has the same subject_key and value                      | dropped                 |
@@ -14,6 +14,10 @@ a company's amounts compare within one currency (diffs, S1's backlog against rev
 needs_review. Money keeps the unit `usd` (facts.unit has no other money unit) and `currency` says which. An unknown
 subject_key becomes other:<slug> and needs_review (F.4 step 7). Stored values come from the quote (the parsed, scaled
 amount), not from the model.
+What the model adds around a grounded number doesn't send a fact to review (docs/SPEC_ISSUES.md 59, the first runs on
+the real model): an as_of after publication (a delivery or effective date) is the publication date; a period label
+that names no fiscal or calendar period ("15 years", "total", a date) is kept as written with no period, except on
+capex guidance/reported, which need one; and the model's own midpoint of a quoted range gives way to code's.
 """
 
 from __future__ import annotations
@@ -229,11 +233,13 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
 
     parsed = numbers.parse(quote)
     matched: dict[str, numbers.Parsed] = {}
-    for name in ("value", "value_low", "value_high"):
+    for name in ("value_low", "value_high", "value"):
         v = getattr(p, name)
         if v is None:
             continue
         m = numbers.match(v, p.scale_word, parsed)
+        if m is None and name == "value" and {"value_low", "value_high"} <= matched.keys():
+            continue  # the model's midpoint of a quoted range (P-01 may not calculate): code computes it below
         if m is None:
             return Rejected("V1-NUM", f"{name}={v} is not a number in the quote")
         matched[name] = m
@@ -268,10 +274,10 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
     scale_word = scale_word or next((m.scale_word for m in matched.values() if m.scale_word), None)
 
     as_of = p.as_of or doc.published
-    if as_of > doc.published + timedelta(days=1):
-        review["as_of"] = f"as_of {as_of} is after the document's publication ({doc.published})"
+    if as_of > doc.published + timedelta(days=1):  # a delivery or effective date: the fact is as of publication
+        as_of = doc.published
     period: Period | None = resolve(p.period_label, doc.fye, as_of)
-    if p.period_label and period is None:
+    if p.period_label and period is None and p.fact_type in PERIOD_REQUIRED:
         review["period"] = f"period {p.period_label!r} not resolvable"
     elif period is not None and abs((period.end - as_of).days) > PLAUSIBLE_DAYS:
         review["period"] = f"period {p.period_label!r} ends {period.end}, more than 10 years from {as_of}"

@@ -115,3 +115,40 @@ def test_p04_routes_through_its_fallback_key_with_the_card_model(clock: FakeCloc
     assert sent.startswith("EVIDENCE PACK:\n{") and json.loads(sent.split("\n", 1)[1]) == to_json(pack)
     assert ps["gemini"].requests[0].temperature == 0.3 and not r.exhausted("P-04")
     assert Router(ps, quotas(), clock).exhausted("P-04")  # no P-04-fallback route: nothing to call
+
+
+def test_a_transient_failure_is_tried_once_more_when_nobody_else_answers(clock: FakeClock) -> None:
+    """docs/SPEC_ISSUES.md 59: Gemini's HTTP 503 bursts deferred whole documents. With no other provider to ask, a
+    transient failure gets one more try after TRANSIENT_WAIT_S; a second one defers (no loop)."""
+    log: list[CallRecord] = []
+    ps = providers([ProviderError("gemini: HTTP 503"), ANSWER])
+    r = Router(ps, quotas(["gemini"]), clock, log.append)
+    out = r.call(ITEM)
+    assert isinstance(out, Done) and clock.slept == 15.0 and [c.ok for c in log] == [False, True]
+    twice = providers([ProviderError("gemini: HTTP 503"), ProviderError("gemini: ReadTimeout"), ANSWER])
+    out = Router(twice, quotas(["gemini"]), clock).call(ITEM)
+    assert isinstance(out, Deferred) and "ReadTimeout" in out.reason and len(twice["gemini"].requests) == 2
+
+
+def test_a_client_error_is_not_tried_again_and_a_fallback_comes_first(clock: FakeClock) -> None:
+    bad = providers([ProviderError("gemini: HTTP 400", transient=False), ANSWER])
+    assert isinstance(Router(bad, quotas(["gemini"]), clock).call(ITEM), Deferred) and len(bad["gemini"].requests) == 1
+    ps = providers([ProviderError("gemini: HTTP 503")], [ANSWER])
+    out = Router(ps, quotas(["gemini", "groq"]), clock).call(ITEM)
+    assert isinstance(out, Done) and out.provider == "groq" and clock.slept == 0.0  # no wait while another answers
+
+
+def test_a_short_429_is_waited_out_and_never_ends_the_run(clock: FakeClock) -> None:
+    """docs/SPEC_ISSUES.md 59: one 429 stopped the text run of 2026-10-17 after two documents, since `exhausted`
+    counted a 30-second block as out for the day. A block of at most SHORT_WAIT_S is waited out; a longer one or the
+    day's quota still defers."""
+    ps = providers([RateLimited("gemini: 429", retry_after=30), ANSWER, RateLimited("gemini: 429", retry_after=600)])
+    r = Router(ps, quotas(["gemini"]), clock)
+    out = r.call(ITEM)
+    assert isinstance(out, Done) and clock.slept == 30.0
+    assert isinstance(r.call(ITEM), Deferred) and r.exhausted("P-07")  # ten minutes: out until then
+    again = providers([RateLimited("gemini: 429", retry_after=20), RateLimited("gemini: 429", retry_after=20), ANSWER])
+    s = Router(again, quotas(["gemini"]), clock)
+    assert isinstance(s.call(ITEM), Deferred)  # 429, 20 s, 429 again: this item waits for tomorrow
+    assert not s.exhausted("P-07")  # but the run goes on: the next item waits the 20 s out
+    assert isinstance(s.call(ITEM), Done) and len(again["gemini"].requests) == 3

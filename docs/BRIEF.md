@@ -293,8 +293,8 @@ doomberg-invest/
 
 **Router rules:**
 - **Quotas:** per-provider daily request and token budgets in `config/quotas.yaml`, with values set from each provider's console in M0 (limits are per project and change; never hard-code "known" numbers).
-- **On 429 or quota exhaustion:** fall back to the next provider. When all are exhausted, the item stays `deferred` and the next day's run picks it up.
-- **Work order:** text work is prioritized: theses, research entries and positions, then the stage names (§4.5).
+- **On 429 or quota exhaustion:** fall back to the next provider. When all are exhausted, the item stays `deferred` and the next day's run picks it up. When no provider answered but one could soon (a 429 asking for at most 90 s, or a transient failure: an HTTP 5xx, a timeout, a malformed answer), the router waits and tries once more; a short wait never ends a run (SPEC_ISSUES 59).
+- **Work order:** text work is prioritized: theses, research entries and positions, then the stage names in §4.5's order.
 - **No paid endpoints:** `api.anthropic.com` and `api.openai.com` are banned in runtime code (guard). There is no credit card on any provider, so nothing can bill by accident.
 - **Privacy (`llm/privacy.py`):** the router accepts only `EvidencePack`/`DocumentChunk` types built from public data. Journal, positions and notes can't be passed (a typed API plus a unit test). Free tiers may use inputs to improve their services, and that's acceptable only for public filings.
 - **Grounding:** every text fact passes Appendix F grounding. Thesis cards pass `thesis/validate.py` (§4.9). Free-model errors are caught there, not trusted.
@@ -1159,12 +1159,12 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 | V1-NUM | Every numeric field appears in the quote after normalization | failed |
 | V1-UNIT | Unit consistent with quote tokens (e.g. "MW" ↔ mw, "$" ↔ usd) | failed |
 | V1-TYPE | fact_type allowed; no price fields in facts (prices live in `prices_w`); subject_key valid | failed |
-| V1-PERIOD | Period resolvable and plausible | needs_review |
+| V1-PERIOD | Period resolvable and plausible (capex guidance and reported need one; on other types a label that names no fiscal or calendar period is kept as written, with no period: SPEC_ISSUES 59) | needs_review |
 | V1-XBRL | If an XBRL concept maps to the same period: \|value − xbrl\| ≤ 0.5% → `match`; else `mismatch` | needs_review on mismatch |
 | V1-CONF | confidence ≥ 0.70 | needs_review below |
 | V1-DUP | The same document already has an identical `subject_key` + value | dropped as a duplicate |
 
-`needs_review` facts appear in the web app's review queue (Company page). Manzoor verifies or rejects them (a reason is required). Only verified facts feed diffs, signals, packs and briefs.
+An `as_of` after the document's publication (a delivery or effective date) is stored as the publication date, and a model `value` that isn't in the quote gives way to code's midpoint when both ends of a quoted range are (SPEC_ISSUES 59). `needs_review` facts appear in the web app's review queue (Company page). Manzoor verifies or rejects them (a reason is required). Only verified facts feed diffs, signals, packs and briefs.
 
 ### F.6 Diff (`diff/facts_diff.py`)
 **Fact diffs:**
@@ -1190,8 +1190,12 @@ Extract only facts the excerpt states explicitly. Never calculate, infer, combin
 For every fact, copy the exact supporting text into "quote": verbatim, at most 60 words, and it must appear exactly
 in the excerpt. If a number's meaning depends on nearby words (a unit, a period, "approximately"), include them in
 the quote.
-Set "as_of" to the date the excerpt states the fact as of (an award date, a quarter end), never later than the
-document's publication; if the excerpt states none, leave it null.
+Set "as_of" to the date the excerpt says the fact was true or was announced (an award date, a quarter end): never a
+future or effective date, and never later than the document's publication. If the excerpt states none, leave it null.
+Set "period_label" only to the fiscal or calendar period a number covers, as written ("fiscal 2027", "the second
+quarter of 2026"); leave it null for anything else, such as a date, a term or a duration.
+For a range, set "value_low" and "value_high" and leave "value" null. Keep every number in the unit the excerpt
+writes it in.
 A governance event is "added" when the excerpt reports it, and "removed" only when the excerpt says one reported
 earlier was remediated or resolved; controls the excerpt calls effective are neither.
 Allowed fact types: {{fact_types_with_definitions}}.
