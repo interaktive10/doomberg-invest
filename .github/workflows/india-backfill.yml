@@ -1,0 +1,103 @@
+name: india-backfill
+# docs/SPEC_ISSUES.md 55 (India restart, part 2): India's history, loaded once by pipeline/india/history.py: 104 weeks
+# of bhavcopy prices, then company by company (research names, then the most traded) every results filing from FY2023
+# Q1 (NSE's legacy listing before FY2025 Q4, integrated filing after) and the shareholding patterns from March 2026.
+# NSE allows one request every 3 s, so that is about two days of requests: runs of up to 320 minutes, each resuming
+# from the state in the database and starting the next at once (the schedule, Sunday to Friday, is the fallback;
+# Saturday is the weekly run's). Once every week and company is done the run switches this workflow off. Dispatch it once with catch_up to read the announcements and
+# insider trades India missed while it was paused (from 2026-10-17; the daily job reads 14 days at most).
+on:
+  schedule:
+    - cron: "41 2,8,14 * * 0-5"   # off the hour; 02:41, 08:41 and 14:41 UTC, so a run ends before the next starts
+  workflow_dispatch:
+    inputs:
+      catch_up:
+        description: "First run: also read the announcements and insider trades missed in the pause (120 minutes)"
+        type: boolean
+        default: false
+
+# Its own group for the workflow, so a second run waits here and never queues behind the job's `nse` group (that group
+# keeps one waiting job and replaces it with a newer one: a second backfill there would cancel a waiting daily job).
+concurrency:
+  group: india-backfill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # the minutes gate reads this repository's runs; disabling this workflow once the history is loaded
+
+jobs:
+  history:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 345
+    # Every NSE job (this one, daily.yml's and weekly.yml's india jobs) runs one at a time: NSE's limit is per client.
+    concurrency:
+      group: nse
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Actions minutes gate (this run may take its whole limit; a refusal is a notice)
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --frozen python -m pipeline.digest.minutes gate --need 345
+      - name: Secrets (BRIEF §2.4; without them the steps below are skipped, with a notice)
+        id: secrets
+        if: steps.gate.outputs.allowed == 'true'
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      # A failed read fails this step (nothing after it runs), so a run can never start from an empty state and store
+      # it over the real one.
+      - name: India state (from the database)
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          uv run --frozen python -m pipeline.db.state get in_weekly=.cache/in/weekly_state.json \
+            in_daily=.cache/in/daily_state.json
+      - name: Catch up the announcements and insider trades missed in the pause (catch_up only)
+        id: catchup
+        if: steps.secrets.outputs.ok == 'true' && inputs.catch_up
+        run: |
+          uv run --frozen python -m pipeline.india.daily --announcements-from 2026-10-17 --pit-days 95 \
+            --max-fetch 3000 --minutes 110
+      - name: Keep the India daily state (also after a failure)
+        if: always() && steps.secrets.outputs.ok == 'true' && inputs.catch_up
+        run: uv run --frozen python -m pipeline.db.state put in_daily=.cache/in/daily_state.json
+      - name: History (prices, then each company's results and shareholding)
+        id: history
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          CATCH_UP: ${{ inputs.catch_up }}
+        run: |
+          minutes=320
+          if [ "$CATCH_UP" = "true" ]; then minutes=200; fi
+          uv run --frozen python -m pipeline.india.history --minutes "$minutes"
+      - name: Keep the India state (also after a failure)
+        if: always() && steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.state put in_weekly=.cache/in/weekly_state.json
+      - name: Done - this workflow off
+        if: steps.secrets.outputs.ok == 'true' && steps.history.outputs.complete == 'true'
+        run: gh workflow disable india-backfill.yml --repo "$GITHUB_REPOSITORY"
+      # Not done and NSE still answering: the next run at once (it waits for this one in the workflow's group), since
+      # GitHub delays scheduled runs by hours under load. Never into Saturday, the weekly run's day: a run takes up to
+      # 345 minutes, so none is started on Friday from 18:00 UTC or on Saturday (Sunday's schedule resumes it).
+      - name: Not done - the next run at once
+        if: steps.secrets.outputs.ok == 'true' && steps.history.outputs.complete == 'false' && steps.history.outputs.stale == 'false'
+        run: |
+          dow="$(date -u +%u)"; hour="$(date -u +%H)"
+          if [ "$dow" = 6 ] || { [ "$dow" = 5 ] && [ "$hour" -ge 18 ]; }; then
+            echo "the weekly run's day: the schedule resumes on Sunday"
+          else
+            gh workflow run india-backfill.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"
+          fi

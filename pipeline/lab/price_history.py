@@ -1,8 +1,8 @@
 """The Signal Lab's price history from Twelve Data (BRIEF §4.10.1, docs/SPEC_ISSUES.md 51; lab-prices.yml).
 
 `python -m pipeline.lab.price_history --dir .cache/lab` resumes a download of month-end prices for every company the
-Lab reads (run.lab_companies), with the files lab-prices.yml keeps in the private `lab-data-v1` release
-(config/lab.yaml `prices`): the price asset (prices.write_month_csv) and the download's state (prices.DownloadState).
+Lab reads (run.lab_companies), with the files lab-prices.yml keeps in the database (pipeline.db.state; config/lab.yaml
+`prices`): the price asset (prices.write_month_csv) and the download's state (prices.DownloadState).
 
 - Probe, once: the probe symbol's (AAPL's) daily series must reach config/lab.yaml `start`; if it doesn't, its monthly
   series must; if neither does, the download is blocked, with the reason, and asks nothing more.

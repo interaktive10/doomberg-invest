@@ -1,8 +1,9 @@
 """Month-end prices for the Signal Lab (BRIEF §4.10.1, docs/SPEC_ISSUES.md 51).
 
 pipeline/lab/price_history.py downloads every company's daily closes from Twelve Data (monthly closes if the free plan's
-daily history doesn't reach config/lab.yaml `start`) and keeps them as month bars in a private GitHub release asset
-(`lab-data-v1`, §2.7), one row per ticker and month:
+daily history doesn't reach config/lab.yaml `start`) and keeps them as month bars, kept in the database between runs
+(pipeline.db.state; never a release asset of the public repository: docs/SPEC_ISSUES.md 55), one row per ticker and
+month:
 
     ticker,month_end,close,high,low
     AAPL,2024-01-31,184.40,195.18,181.18

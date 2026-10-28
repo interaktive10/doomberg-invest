@@ -56,6 +56,15 @@ class Fact:
 class Instance:
     contexts: dict[str, Context]
     facts: dict[str, list[Fact]] = field(default_factory=lambda: defaultdict(list))
+    # Facts whose contextRef names a context the file never defines (some of NSE's legacy results files of January
+    # 2023): context id -> (local name, text, unit), for a caller that knows what the context was (results_xbrl).
+    orphans: dict[str, list[tuple[str, str, str | None]]] = field(default_factory=lambda: defaultdict(list))
+
+    def adopt(self, ctx: Context) -> None:
+        """Define a context the file left out: its orphan facts become facts."""
+        self.contexts[ctx.id] = ctx
+        for name, value, unit in self.orphans.pop(ctx.id, []):
+            self.facts[name].append(Fact(name, ctx, value, unit))
 
     def text(self, name: str) -> str | None:
         """First non-empty text value of a non-numeric fact (metadata such as Symbol, NatureOf…)."""
@@ -124,8 +133,11 @@ def parse_instance(raw: bytes | str) -> Instance:
         ns = tag[1:].split("}", 1)[0] if tag.startswith("{") else ""
         if ns in _SKIP_NS or not isinstance(tag, str):
             continue
-        ctx = contexts.get(el.get("contextRef", ""))
+        ref = el.get("contextRef", "")
+        ctx = contexts.get(ref)
         if ctx is None:
+            if ref:
+                inst.orphans[ref].append((_local(tag), el.text or "", el.get("unitRef")))
             continue
         inst.facts[_local(tag)].append(Fact(_local(tag), ctx, el.text or "", el.get("unitRef")))
     return inst

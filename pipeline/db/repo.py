@@ -383,6 +383,31 @@ def mark_price_split(conn: Conn, company_id: UUID, week_end: date, ratio: Decima
     )
 
 
+def price_week_counts(conn: Conn, market: str, start: date, end: date) -> dict[date, int]:
+    """How many of a market's companies have a price for each week from `start` to `end` (the India history loader's
+    weeks still to read)."""
+    rows = conn.execute(
+        _q("select p.week_end, count(*) from prices_w p join companies c on c.id = p.company_id "
+           "where c.market = %s and p.week_end between %s and %s group by p.week_end"),
+        (market, start, end),
+    ).fetchall()  # fmt: skip
+    return {r[0]: int(r[1]) for r in rows}
+
+
+def latest_turnover(conn: Conn, market: str, weeks: int = 4) -> dict[UUID, Decimal]:
+    """Each company's mean traded value (close x the bhavcopy day's volume) over its market's last `weeks` stored
+    price weeks: the India history loader's order, the most traded first."""
+    rows = conn.execute(
+        _q("with m as (select max(p.week_end) as last from prices_w p join companies c on c.id = p.company_id "
+           "where c.market = %(m)s) "
+           "select p.company_id, avg(p.close * coalesce(p.volume, 0)) from prices_w p "
+           "join companies c on c.id = p.company_id, m "
+           "where c.market = %(m)s and p.week_end > m.last - %(days)s::int group by p.company_id"),
+        {"m": market, "days": 7 * weeks},
+    ).fetchall()  # fmt: skip
+    return {r[0]: Decimal(r[1]) for r in rows if r[1] is not None}
+
+
 def priced_at(conn: Conn, company_ids: Sequence[UUID], week: date) -> set[UUID]:
     """Companies that already have a price for `week` (a re-run of the week doesn't download them again)."""
     rows = conn.execute(

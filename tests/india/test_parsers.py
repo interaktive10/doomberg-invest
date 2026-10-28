@@ -15,7 +15,16 @@ from pathlib import Path
 import pytest
 
 from pipeline.india import announcements, bhavcopy, manual_import
-from pipeline.india.results_xbrl import Filed, build_rows, load_ind_as_map, parse_results
+from pipeline.india.results_xbrl import (
+    LEGACY_BEFORE,
+    Filed,
+    build_rows,
+    legacy_listing_path,
+    load_ind_as_map,
+    parse_legacy_listing,
+    parse_results,
+    preferred,
+)
 from pipeline.india.securities import parse_asm, parse_equity_list, parse_gsm
 from pipeline.india.shareholding import parse_listing, parse_shareholding
 from pipeline.india.xbrl import XbrlError, parse_instance
@@ -151,6 +160,73 @@ def test_legacy_taxonomy_and_metadata() -> None:
     assert r.pl["revenue"] == D("2191000000.00") and r.shares_outstanding == D(8640000)
     kei = parse_results((FIN / "results" / "KEI_FY2026Q4_consolidated.xml").read_bytes(), IND_AS)
     assert (kei.isin, kei.audited, kei.shares_outstanding) == ("INE878B01027", True, D(95600000))
+
+
+def legacy(name: str) -> Filed:
+    """A KEI legacy filing at its listing's dissemination time (results/legacy_index_KEI.json)."""
+    when = {"legacy_KEI_FY2024Q2_consolidated.xml": datetime(2023, 11, 1, 11, 20, 2, tzinfo=UTC),
+            "legacy_KEI_FY2024Q4_consolidated.xml": datetime(2024, 5, 3, 9, 54, 5, tzinfo=UTC),
+            "legacy_KEI_FY2025Q2_consolidated.xml": datetime(2024, 10, 16, 10, 30, 56, tzinfo=UTC),
+            "KEI_FY2025Q4_consolidated.xml": datetime(2025, 5, 6, 16, 5, 49, tzinfo=UTC)}[name]  # fmt: skip
+    return Filed(parse_results((FIN / "results" / name).read_bytes(), IND_AS), when, name)
+
+
+def test_legacy_year_to_date_is_read_from_the_financial_year_start() -> None:
+    """India restart part 2 (docs/SPEC_ISSUES.md 55): a legacy (in-bse-fin) filing dates its year-to-date column
+    (context FourD) with the quarter's dates. In KEI's FY2024 Q2 filing FourD's revenue is the half year's (37.29bn,
+    against the quarter's 19.47bn) and its cash flow is H1's, both dated 2023-07-01..2023-09-30. The quarter stays the
+    quarter, the cash flow is the half year (Q2) or the year (Q4), and H2 = FY - H1, also across the switch to
+    integrated filing (FY2025: the legacy H1, the integrated year)."""
+    q2 = legacy("legacy_KEI_FY2024Q2_consolidated.xml").results
+    assert (q2.fiscal_label, q2.period_start, q2.basis) == ("FY2024Q2", date(2023, 7, 1), "consolidated")
+    assert q2.pl["revenue"] == D("19465750000.00")  # the quarter (OneD), never FourD's half year
+    assert q2.ytd_flows == {"cfo": D("1149610000.00"), "capex": D("2205970000.00")}
+    q4 = legacy("legacy_KEI_FY2024Q4_consolidated.xml").results
+    assert q4.pl["revenue"] == D("23192750000.00") and q4.ytd_flows["cfo"] == D("6105030000.00")
+    q3 = parse_results((FIN / "results" / "legacy_VSTTILLERS_FY2025Q3.xml").read_bytes(), IND_AS)
+    assert q3.ytd_flows == {"cfo": None, "capex": None}  # Q1/Q3 carry no cash flow
+    names = ("legacy_KEI_FY2024Q2_consolidated.xml", "legacy_KEI_FY2024Q4_consolidated.xml",
+             "legacy_KEI_FY2025Q2_consolidated.xml", "KEI_FY2025Q4_consolidated.xml")  # fmt: skip
+    rows = build_rows([legacy(n) for n in names])
+    by = {r.fiscal_label: r.values for r in rows.rows}
+    assert (by["FY2024Q2"]["cfo"], by["FY2024Q4"]["cfo"], by["FY2024Q4"]["capex"]) == (
+        D("1149610000.00"), D("4955420000.00"), D("347870000.00"))  # fmt: skip
+    assert by["FY2025Q2"]["cfo"] == D("-3075560000.00")
+    assert (by["FY2025Q4"]["cfo"], by["FY2025Q4"]["capex"]) == (D("2753430000.00"), D("3802460000.00"))
+    assert rows.issues == []
+
+
+def test_a_legacy_file_without_its_contexts_is_read_from_its_own_dates() -> None:
+    """KEI's December 2022 legacy filing (as RELIANCE's and others of January 2023) uses the contexts OneD, FourD and
+    OneI without defining them: their facts are kept aside, and the quarter and the year to date are rebuilt from the
+    file's own reporting-period dates."""
+    raw = (FIN / "results" / "legacy_KEI_FY2023Q3_consolidated.xml").read_bytes()
+    inst = parse_instance(raw)
+    assert {"OneD", "FourD", "OneI"} <= set(inst.orphans) and "OneD" not in inst.contexts
+    r = parse_results(raw, IND_AS)
+    assert (r.symbol, r.fiscal_label, r.basis, r.audited) == ("KEI", "FY2023Q3", "consolidated", False)
+    assert (r.period_start, r.period_end, r.fy_start) == (date(2022, 10, 1), date(2022, 12, 31), date(2022, 4, 1))
+    assert r.pl["revenue"] == D("17843150000.00") and r.pl["pretax_income"] == D("1737490000.00")  # the quarter
+    assert r.shares_outstanding == D(90190000)  # paid-up 180.38m / face value 2
+
+
+def test_legacy_listing() -> None:
+    """NSE's legacy results listing (one request per company, every quarter back to 2005): filed_at is the
+    dissemination time (IST -> UTC); rows without an XBRL or a time are skipped; seq ids can't collide with the
+    integrated listing's; the consolidated filing is preferred."""
+    assert legacy_listing_path("M&M") == (
+        "corporates-financial-results?index=equities&period=Quarterly&symbol=M%26M")  # fmt: skip
+    rows = parse_legacy_listing((FIN / "results" / "legacy_index_KEI.json").read_bytes())
+    doc = json.loads((FIN / "results" / "legacy_index_KEI.json").read_text(encoding="utf-8"))
+    assert len(rows) == len(doc) - 1  # the oldest row (2005) has neither: its link is ".../xbrl/-", no time
+    assert doc[-1]["xbrl"].endswith("/-") and doc[-1]["exchdisstime"] is None
+    q2 = [x for x in rows if x.period_end == date(2024, 9, 30)]
+    assert {x.basis for x in q2} == {"consolidated", "standalone"} and all(x.seq_id.startswith("L") for x in q2)
+    (kept,) = [x for x in preferred(rows) if x.period_end == date(2024, 9, 30)]
+    assert (kept.basis, kept.revision, kept.filed_at, kept.symbol) == (
+        "consolidated", False, datetime(2024, 10, 16, 10, 30, 56, tzinfo=UTC), "KEI")  # fmt: skip
+    assert kept.xbrl_url.endswith("INDAS_112803_1272446_16102024040014.xml")
+    assert max(x.period_end for x in rows) < LEGACY_BEFORE  # integrated filing from FY2025 Q4 on
 
 
 def test_unsafe_or_foreign_xml_is_refused() -> None:

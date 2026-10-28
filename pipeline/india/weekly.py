@@ -14,10 +14,11 @@
    imports/ gives the promoter % meanwhile (manual_import.py; review F4).
 NSE allows ~1 request per 3 s, so XBRL downloads are capped per run (`--max-fetch`) and split between new results,
 shareholding and the history backfill (SHARES; review F2), and a deadline stops NSE requests in time for the job's
-timeout (review F9). The rest waits in the state file (Actions cache) for the next run. The state also keeps each
-company's parsed results of its last KEEP_YEARS financial years, whole: a Q4 row's H2 cash flow is FY - H1, so a
-year's filings are kept or dropped together, and a run writes only the rows of the years its new filings touched,
-never a stored version with fewer values (review F1).
+timeout (review F9). The rest waits in the state file (kept in the database between runs: pipeline.db.state
+`in_weekly`) for the next run. The state also keeps each company's parsed results of its last KEEP_YEARS financial
+years, whole: a Q4 row's H2 cash flow is FY - H1, so a year's filings are kept or dropped together, and a run writes
+only the rows of the years its new filings touched, never a stored version with fewer values (review F1). The history
+loader (pipeline/india/history.py) shares this state: a company it has finished is in `backfilled` too.
 """
 
 from __future__ import annotations
@@ -117,6 +118,9 @@ class State:
     shp_seen: set[str] = field(default_factory=set)  # pattern XBRL URLs fetched (or unreadable)
     shp_last: dict[str, dict[str, Any]] = field(default_factory=dict)  # symbol -> last pattern (pledge changes)
     backfilled: set[str] = field(default_factory=set)  # symbols whose filing history was queued
+    history_done: set[str] = field(default_factory=set)  # symbols the history loader finished (history.py)
+    history_tries: dict[str, int] = field(default_factory=dict)  # its attempts that didn't finish, per symbol
+    history_prices: set[str] = field(default_factory=set)  # Fridays (ISO) it read a bhavcopy for, or found none
 
     @classmethod
     def load(cls, path: Path | None) -> State:
@@ -330,10 +334,11 @@ def keep_years(filings: Iterable[dict[str, Any]], years: int | None = None) -> l
 
 def fetch_results(
     nse: NseClient, state: State, items: Sequence[dict[str, Any]], limit: int, stats: IndiaWeeklyStats,
-    ind_as: Mapping[str, Sequence[str]],
+    ind_as: Mapping[str, Sequence[str]], years: int | None = None,
 ) -> dict[str, set[date]]:  # fmt: skip
-    """Download up to `limit` queued filings (oldest first) into the store. Returns symbol -> the financial years
-    that got a new filing. Downloaded and unreadable filings leave the queue; the rest stay."""
+    """Download up to `limit` queued filings (oldest first) into the store, which keeps `years` (KEEP_YEARS) financial
+    years per company. Returns symbol -> the financial years that got a new filing. Downloaded and unreadable filings
+    leave the queue; the rest stay."""
     touched: dict[str, set[date]] = defaultdict(set)
     done: set[str] = set()
     used = 0
@@ -357,7 +362,7 @@ def fetch_results(
         done.add(seq)
         filed = Filed(parsed, datetime.fromisoformat(str(q["filed_at"])), url)
         store = [s for s in state.results_store.get(symbol, []) if s.get("url") != url]
-        state.results_store[symbol] = keep_years([*store, to_json(filed)])
+        state.results_store[symbol] = keep_years([*store, to_json(filed)], years)
         if any(s.get("url") == url for s in state.results_store[symbol]):  # not older than the kept years
             touched[symbol].add(parsed.fy_start)
     state.results_queue = [q for q in state.results_queue if str(q["seq_id"]) not in done]
@@ -465,14 +470,17 @@ def shareholding_from_imports(
 
 
 def fetch_shareholding(
-    nse: NseClient, state: State, limit: int, ids: Mapping[str, UUID], stats: IndiaWeeklyStats
-) -> tuple[list[OwnershipRow], list[InsiderEvent]]:
-    """Download up to `limit` queued patterns (oldest first): ownership rows and pledge events."""
+    nse: NseClient, state: State, limit: int, ids: Mapping[str, UUID], stats: IndiaWeeklyStats,
+    items: Sequence[dict[str, Any]] | None = None,
+) -> tuple[list[OwnershipRow], list[InsiderEvent]]:  # fmt: skip
+    """Download up to `limit` queued patterns (`items`, else the queue; oldest first): ownership rows and pledge events.
+    A pledge event compares a pattern with the company's previous quarter only (pledges.pledge_event), so a history
+    read after a newer pattern adds its rows but no events out of order."""
     rows: list[OwnershipRow] = []
     pledges: list[InsiderEvent] = []
     done: set[str] = set()
     used = 0
-    for q in sorted(state.shp_queue, key=lambda q: str(q["filed_at"])):
+    for q in sorted(state.shp_queue if items is None else items, key=lambda q: str(q["filed_at"])):
         if used >= limit or nse.unavailable:
             break
         symbol, url, filed_at = str(q["symbol"]), str(q["xbrl_url"]), datetime.fromisoformat(str(q["filed_at"]))
