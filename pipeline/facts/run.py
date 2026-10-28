@@ -65,7 +65,8 @@ TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
 RETRY_DAYS = 14  # a filing whose documents can't be fetched is tried daily this long after it was queued, then
 # `failed` (M5 review R2-F4)
-TIME_BUDGET_MIN = 15.0  # document starts: about 150 documents at Gemini's 15 a minute (SPEC_ISSUES 29, 50, 58)
+TIME_BUDGET_MIN = 30.0  # document starts: 150 documents take about 15 at Gemini's 15 a minute; 30 for slow days
+# (2026-10-28: 22 s a call, 27 documents in 15 minutes; SPEC_ISSUES 58)
 LINK_BATCH = 20
 RANK = {"thesis": 0, "stage": 1}  # whose filings a company's SEC submissions queue (fetch.scope_filings): a thesis's
 # FILING_DAYS or a stage name's STAGE_DAYS, wherever it stands in ORDER; TextStats.checked keeps this rank

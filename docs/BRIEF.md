@@ -268,7 +268,7 @@ doomberg-invest/
 ### 2.5 Schedules and the minutes budget (GitHub Actions, UTC)
 | Workflow | Schedule | Target runtime |
 |---|---|---|
-| `daily.yml` | `13 1 * * 2-6` | ≤ 25 min (the text step's 15: SPEC_ISSUES 58) |
+| `daily.yml` | `13 1 * * 2-6` | ≤ 40 min (the text step: about 15, at most 30 on a slow day; SPEC_ISSUES 58) |
 | `weekly.yml` | `7 2 * * 6` (Saturday) | ≤ 45 min |
 | `thesis-fallback.yml` | `0 6 * * 1` | ≤ 10 min, only if no cards |
 | `thesis-ingest.yml` | on push touching `data/thesis_cards/**` | ≤ 3 min |
@@ -474,7 +474,7 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
   1. theses, research entries and positions: their 10-K, 10-Q and 8-K filings of the last 400 days
   2. the stage names (Evidence ≥ 40 in their market's latest scored week) with filings still queued or nothing read in 100 days: their latest 10-Q or 10-K and their 8-Ks with item 2.02, 7.01 or 8.01, of the last 120 days. In this order: the names on a board (Candidate, Watch, Early); those one verified S9 fact would make a Candidate (Gap ≥ 50); the rest; Excluded names last
 - **Queue:** queued filings that no company in scope reads are marked `skipped`; a new thesis's come back within its 400 days. SEC submissions are read only for names new to the scope and names in the daily EDGAR index the SEC step reads.
-- **Daily limits:** set by `config/quotas.yaml` (150 documents a day, inside Gemini's free 500 requests); daily.yml starts no document after 15 minutes.
+- **Daily limits:** set by `config/quotas.yaml` (150 documents a day, inside Gemini's free 500 requests); daily.yml starts no document after 30 minutes (150 documents take about 15).
 
 ### 4.6 Signals (`pipeline/signals/*`; each returns fired, strength and inputs, stored in `signal_values`)
 **Shared definitions:**
