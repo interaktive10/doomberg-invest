@@ -1,10 +1,11 @@
 name: weekly
 # BRIEF §2.1 "weekly", §2.5 (Saturday): SEC bulk companyfacts + submissions -> fundamentals_q and the US universe
 # rules. M4 adds signals -> red flags -> prices -> context -> scores; M6 kill criteria, evidence packs, the thesis queue
-# (committed to main) and the digest issue. India is paused (docs/SPEC_ISSUES.md 46): it has no job and scores run on
-# the US alone. The Capex Desk and S11 are deleted (docs/SPEC_ISSUES.md 52).
-# Jobs: us -> scores (only when us ran and succeeded) -> publish (every week; the queue only after this week's scores).
-# The bulk zips (a few GB) stay on the runner; only the per-company sha256 state is cached between weeks.
+# (committed to main) and the digest issue. India runs again (docs/SPEC_ISSUES.md 55; paused Oct 20-28, 46) and is
+# scored with the US in one run. The Capex Desk and S11 are deleted (docs/SPEC_ISSUES.md 52).
+# Jobs: us, india -> scores (only when us ran and succeeded; India's rows are scored with whatever its job stored) ->
+# publish (every week; the queue only after this week's scores). The bulk zips (a few GB) stay on the runner; only the
+# per-company sha256 state is cached between weeks. India's state lives in the database (pipeline.db.state).
 on:
   schedule:
     - cron: "7 2 * * 6"   # off the hour: GitHub delays or drops scheduled runs at :00 under load
@@ -72,12 +73,56 @@ jobs:
           path: .cache/us/issues.csv
           if-no-files-found: ignore
 
+  india:
+    # BRIEF §4.3: the NSE securities and surveillance lists, the week's bhavcopy prices (BSE, then a manual CSV, when
+    # NSE fails), new results XBRL and shareholding patterns. NSE allows one request every 3 s, so downloads are capped
+    # per run and the rest waits in the state (listing cursors, queues, each company's parsed results history), kept
+    # in the database: the Actions cache lost it in the pause (docs/SPEC_ISSUES.md 55). The `nse` group keeps every NSE
+    # job (this one, daily's and india-backfill.yml) one at a time.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    concurrency:
+      group: nse
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+    steps:
+      - name: Secrets (BRIEF §2.4; without them the steps below are skipped, with a notice)
+        id: secrets
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
+      - uses: astral-sh/setup-uv@v6
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          enable-cache: true
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv python install 3.12
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv sync --frozen --no-dev
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      - name: India state (from the database)
+        if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.state get in_weekly=.cache/in/weekly_state.json
+      - name: India universe, prices, results and shareholding
+        if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.india.weekly --minutes 75 --max-fetch 1400
+      - name: Keep the India state (also after a failure)
+        if: always() && steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.state put in_weekly=.cache/in/weekly_state.json
+
   scores:
     # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Twelve Data) -> context C1-C3 -> Gap ->
-    # buckets -> shortlist, for the US alone while India is paused. Only on this week's US data: when `us` failed or
-    # skipped its steps there are no scores this week, and the digest says so.
-    needs: us
-    if: needs.us.result == 'success' && needs.us.outputs.ran == 'true'
+    # buckets -> shortlist, both markets in one run (a run replaces the week's rows of the markets it scores). Only on
+    # this week's US data: when `us` failed or skipped its steps there are no scores this week, and the digest says so.
+    # India is scored on what its job stored, also when that job failed (stale fundamentals don't count:
+    # signals.weekly.fresh).
+    needs: [us, india]
+    if: ${{ !cancelled() && needs.us.result == 'success' && needs.us.outputs.ran == 'true' }}
     runs-on: ubuntu-24.04
     # One transaction: a run cut off by the limit keeps nothing. Prices are up to 400 downloads 8 s apart (Twelve
     # Data's free 8 a minute: under an hour); the first live run (2026-09-29) spent 40 minutes without finishing.
@@ -94,8 +139,8 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
       - run: uv run --frozen python -m pipeline.db.migrate
-      - name: Signals, red flags, candidate prices, context, scores and the shortlist (US)
-        run: uv run --frozen python -m pipeline.signals.weekly --markets us
+      - name: Signals, red flags, candidate prices, context, scores and the shortlist (US and India)
+        run: uv run --frozen python -m pipeline.signals.weekly
 
   publish:
     # Every week, whatever us and scores did, in one job (one runner start instead of three):
@@ -111,7 +156,7 @@ jobs:
     #   prune (signal_values past 3 years, NSE announcements past 120 days) and fail the run above 400 MB.
     # Each work step has its own limit: a hung step fails alone and the digest and the guard still run (a job timeout
     # cancels the job, and !cancelled() steps with it). Env is set per step, only where a step reads it.
-    needs: [us, scores]
+    needs: [us, india, scores]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30

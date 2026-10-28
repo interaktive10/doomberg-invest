@@ -227,6 +227,40 @@ def test_a_us_only_run_skips_india_entirely(conn: psycopg.Connection[Any]) -> No
     both = weekly.run(conn, week, http=None)
     assert (both.markets, both.companies) == (["us", "in"], 2)
     assert written() == {"signal_values": {us, ind}, "scores": {us, ind}, "company_series": {us, ind}}
+    # India restart (docs/SPEC_ISSUES.md 55): a one-market re-run replaces that market's rows and keeps the other's
+    weekly.run(conn, week, http=None, markets=("us",))
+    assert written() == {"signal_values": {us, ind}, "scores": {us, ind}, "company_series": {us, ind}}
+    weekly.run(conn, week, http=None, markets=("in",))
+    assert written() == {"signal_values": {us, ind}, "scores": {us, ind}, "company_series": {us, ind}}
+
+
+def test_stale_fundamentals_are_not_scored_as_current(conn: psycopg.Connection[Any]) -> None:
+    """India restart (docs/SPEC_ISSUES.md 55): a company whose newest quarter ended more than 210 days before the
+    week (it stopped filing, or its history is half-loaded) is scored without fundamentals: no fundamentals signal or
+    red flag fires on an old quarter as if it were current."""
+    cid = add(conn, "0000018230")
+    fundamentals(conn, "0000018230", cid)
+    newest = conn.execute("select max(period_end) from fundamentals_q where company_id = %s", (cid,)).fetchone()
+    assert newest is not None
+    current = newest[0] + timedelta(days=60)
+    current += timedelta(days=(4 - current.weekday()) % 7)  # a Friday
+    stale = current + timedelta(days=weekly.FUNDAMENTALS_MAX_AGE_DAYS)
+
+    def fundamentals_signals(week: date) -> dict[str, tuple[bool, Any]]:
+        weekly.run(conn, week, http=None, markets=("us",))
+        rows = conn.execute(
+            "select signal_id, fired, inputs from signal_values where company_id = %s and week_end = %s "
+            "and signal_id in ('S2', 'S3', 'S4', 'S5', 'S6')",
+            (cid, week),
+        ).fetchall()
+        return {r[0]: (r[1], r[2]) for r in rows}
+
+    now = fundamentals_signals(current)
+    assert len(now) == 5 and any("missing" not in inputs for _, inputs in now.values())  # read on real quarters
+    old = fundamentals_signals(stale)
+    assert len(old) == 5 and not any(fired for fired, _ in old.values())
+    assert all(old[s][1] != now[s][1] for s in now if "missing" not in now[s][1])  # not the old quarter's reading
+    assert weekly.fresh(weekly.Series([], "us"), current).quarters == []
 
 
 def test_manual_price_import_when_the_price_source_fails(conn: psycopg.Connection[Any], tmp_path: Path) -> None:

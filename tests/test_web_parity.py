@@ -28,11 +28,11 @@ def test_next_filing_fixture_is_the_pipelines_answer() -> None:
         assert got == c["expected"], c
 
 
-def test_staleness_rows_are_the_digests_and_india_is_paused() -> None:
+def test_staleness_rows_are_the_digests_with_india_back() -> None:
     """web/lib/staleness.ts lists config/staleness.yaml's SLAs and fallbacks (the digest's; web/tests/staleness.test.ts
-    checks the same from the web side), and neither has India's nse/bse rows while India is paused (overhaul PR 1,
-    docs/SPEC_ISSUES.md 46). They are the US sources the pipeline still reads: the dead ones (yahoo, stooq, fred, eia,
-    gdelt) are gone, so Home's banner and Settings never name them (overhaul PR 4)."""
+    checks the same from the web side), India's nse and bse rows included again (docs/SPEC_ISSUES.md 55; paused in
+    overhaul PR 1, 46). They are the sources the pipeline still reads: the dead ones (yahoo, stooq, fred, eia, gdelt)
+    are gone, so Home's banner and Settings never name them (overhaul PR 4)."""
     doc = yaml.safe_load((ROOT / "config" / "staleness.yaml").read_text(encoding="utf-8"))
     ts = (WEB / "lib" / "staleness.ts").read_text(encoding="utf-8")
     sla = re.search(r"SLA_DAYS: Record<string, number> = \{(.*?)\};", ts, re.S)
@@ -41,15 +41,13 @@ def test_staleness_rows_are_the_digests_and_india_is_paused() -> None:
     fallbacks = doc["fallback_of"] or {}
     assert {k: int(v) for k, v in re.findall(r"(\w+): (\d+),", sla.group(1))} == doc["sla_days"]
     assert dict(re.findall(r'(\w+): "(\w+)"', fallback.group(1))) == fallbacks
-    assert not {"nse", "bse"} & (set(doc["sla_days"]) | set(fallbacks) | set(fallbacks.values()))
-    assert set(doc["sla_days"]) == {"sec", "twelvedata", "sec_13f"}
+    assert set(doc["sla_days"]) == {"sec", "twelvedata", "sec_13f", "nse", "bse"} and fallbacks == {"bse": "nse"}
 
 
-def test_a_paused_indias_rows_read_alike_in_the_digest_and_raise_no_banner() -> None:
-    """Overhaul PR 1 review (pipeline-F2): production's bse row has never succeeded (BSE records a success only in a
-    week it stood in for NSE), so without its fallback row the digest's table reads "never succeeded", as
-    web/tests/staleness.test.ts does for Settings, and nse keeps its last success with no SLA; the stale banner names
-    neither (docs/SPEC_ISSUES.md 46)."""
+def test_indias_rows_read_alike_in_the_digest_and_the_web() -> None:
+    """Production's bse row has never succeeded (BSE records a success only in a week it stood in for NSE): with its
+    fallback row it rests while NSE is on time and raises no banner; a late NSE is named (docs/SPEC_ISSUES.md 55; the
+    web side is web/tests/staleness.test.ts)."""
     from pipeline.db.models import SourceHealth
     from pipeline.digest import weekly as digest
 
@@ -57,8 +55,8 @@ def test_a_paused_indias_rows_read_alike_in_the_digest_and_raise_no_banner() -> 
     rows = [SourceHealth(source="bse"), SourceHealth(source="nse", last_success=datetime(2026, 9, 12, 6, tzinfo=UTC))]
     sla, fallbacks = digest.sla_days(), digest.fallbacks()
     assert digest.banner(rows, now, sla, fallbacks) == []
-    assert digest.health(rows, now, sla, fallbacks)[2:] == ["| bse | never | never succeeded |",
-                                                            "| nse | 2026-09-12 06:00Z | ok |"]  # fmt: skip
+    late = [SourceHealth(source="bse"), SourceHealth(source="nse", last_success=datetime(2026, 9, 1, 6, tzinfo=UTC))]
+    assert digest.banner(late, now, sla, fallbacks) != []
 
 
 def _ts_keys(text: str, name: str) -> list[str]:

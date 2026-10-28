@@ -2,8 +2,8 @@ name: daily
 # BRIEF §2.1 "daily", §2.5: SEC events for the previous business day (Form 4 purchases, 8-K items 4.01 / 1.01 /
 # 2.03, NT filings, spin-offs); then (M5) the text facts of live theses and the stage names through the free-tier LLM
 # router (no document starts after 6 minutes, so the run takes about 9-10 minutes: docs/SPEC_ISSUES.md 29, 50).
-# One job, SEC then text: one runner start (and one setup) instead of a job each. India is paused
-# (docs/SPEC_ISSUES.md 46): no NSE step.
+# SEC then text in one job (one runner start and setup instead of a job each), and India's NSE announcements and
+# insider-trading disclosures in a job of its own (docs/SPEC_ISSUES.md 55; paused Oct 20-28, 46).
 # Also the Supabase keep-alive (§2.9): a free project pauses without activity.
 on:
   schedule:
@@ -85,3 +85,44 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: uv run --frozen python -m pipeline.facts.run --minutes 6 ${DAY:+--day "$DAY"}
+
+  india:
+    # BRIEF §4.3: NSE corporate announcements (corp_events; P-07's triage reads them the next morning) and promoter
+    # trades from the insider-trading (PIT) disclosures. The state (cursors, disclosures read) lives in the database;
+    # the `nse` group keeps every NSE job one at a time (india-backfill.yml's long runs avoid this hour).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: nse
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DOOM_CACHE_DIR: ${{ github.workspace }}/.cache
+      DAY: ${{ github.event.inputs.date }}
+    steps:
+      - name: Secrets (BRIEF §2.4; without them the steps below are skipped, with a notice)
+        id: secrets
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
+      - uses: astral-sh/setup-uv@v6
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          enable-cache: true
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv python install 3.12
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv sync --frozen --no-dev
+      - if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      - name: India daily state (from the database)
+        if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.state get in_daily=.cache/in/daily_state.json
+      - name: NSE announcements and insider trading
+        if: steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.india.daily ${DAY:+--date "$DAY"}
+      - name: Keep the India daily state (also after a failure)
+        if: always() && steps.secrets.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.state put in_daily=.cache/in/daily_state.json

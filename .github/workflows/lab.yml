@@ -1,9 +1,10 @@
 name: lab
-# BRIEF §4.10 Signal Lab (US first): the month-end prices lab-prices.yml downloaded from Twelve Data (the `lab-data-v1`
-# release; docs/SPEC_ISSUES.md 51) -> the point-in-time monthly panel -> events and statistics -> lab_results,
+# BRIEF §4.10 Signal Lab (US first): the month-end prices lab-prices.yml downloaded from Twelve Data (kept in the
+# database: docs/SPEC_ISSUES.md 51, 55) -> the point-in-time monthly panel -> events and statistics -> lab_results,
 # docs/LAB_REPORT.md and the §4.10.5 weight proposals. lab-prices.yml dispatches the first run once its download is
 # complete; later runs are manual (there is no quarterly re-run). The Actions minutes gate goes first. The panel is kept
-# as a release asset (§2.8) as soon as it is built, also when a later step fails. Two PRs: the report, and
+# in the Actions cache (§2.8; private to the repository's workflows, unlike a release asset of a public repository) as
+# soon as it is built, also when a later step fails. Two PRs: the report, and
 # config/weights.yaml alone (a protected path: it passes the `protected` check only with the human-approved label),
 # whose body gives each signal's verdict. PRs opened with the workflow token start no CI run: close and reopen them to
 # run the checks.
@@ -45,27 +46,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: uv run --frozen python -m pipeline.digest.minutes gate --need 180
-      - name: The Lab's prices and the download's state (the lab-data-v1 release)
+      - name: The Lab's prices and the download's state (the database)
         id: prices
         if: steps.gate.outputs.allowed == 'true'
         run: |
           mkdir -p .cache/lab
           if [ -z "$DATABASE_URL" ]; then
             echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"
-          elif gh release download lab-data-v1 --pattern 'us_month_prices.csv.gz' --pattern 'us_prices_state.json' --dir .cache/lab --clobber; then
+            exit 0
+          fi
+          uv run --frozen python -m pipeline.db.migrate
+          uv run --frozen python -m pipeline.db.state get lab_us_month_prices=.cache/lab/us_month_prices.csv.gz \
+            lab_us_prices_state=.cache/lab/us_prices_state.json
+          if [ -f .cache/lab/us_prices_state.json ]; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::no Lab prices in the lab-data-v1 release yet: lab-prices.yml downloads them from Twelve Data"
+            echo "::notice::no Lab prices stored yet: lab-prices.yml downloads them from Twelve Data"
           fi
-      - name: Migrations
-        if: steps.prices.outputs.ok == 'true'
-        run: uv run --frozen python -m pipeline.db.migrate
       - name: Lab run (blocked, exit 3, until the download is complete)
         if: steps.prices.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.lab.run --market "$MARKET" --workers 2 --propose --pr-body "$RUNNER_TEMP/weights_pr.md"
-      - name: Keep the panel (release asset; written as soon as it is built)
+      - name: Keep the panel (Actions cache; written as soon as it is built)
         if: always() && steps.prices.outputs.ok == 'true' && hashFiles('.cache/lab/panel.parquet') != ''
-        run: gh release upload lab-data-v1 .cache/lab/panel.parquet --clobber
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/lab/panel.parquet
+          key: lab-panel-${{ inputs.market }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Open the report PR and the weights PR
         if: steps.prices.outputs.ok == 'true'
         run: |

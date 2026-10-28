@@ -481,7 +481,13 @@ export interface HealthRow {
   when: string;
 }
 
-const HEALTH_NAME: Record<string, string> = { sec: "SEC filings", twelvedata: "Weekly prices", sec_13f: "Fund holdings (13F)" };
+const HEALTH_NAME: Record<string, string> = {
+  sec: "SEC filings",
+  twelvedata: "Weekly prices",
+  sec_13f: "Fund holdings (13F)",
+  nse: "NSE data",
+  bse: "BSE prices",
+};
 
 /** A source's name after the first in a sentence: "Weekly prices" -> "weekly prices"; one that starts with an acronym
  * ("SEC filings", "NSE") stays as it is. Home's late line and Settings' line both say names this way. */

@@ -58,8 +58,8 @@ def blocked_reason(prices: Path, state: DownloadState | None, cfg: dict[str, Any
         return (f"the Twelve Data download has {state.settled():,} of {len(state.tickers):,} tickers; lab-prices.yml "
                 "resumes it Sunday to Thursday and starts the Lab once every ticker is done")  # fmt: skip
     if not prices.is_file():
-        return (f"no Lab prices yet: lab-prices.yml downloads them from Twelve Data into the `{p['release_tag']}` "
-                f"release ({p['asset']}) with no human step")  # fmt: skip
+        return (f"no Lab prices yet: lab-prices.yml downloads them from Twelve Data into the database "
+                f"({p['stored_as']['asset']}) with no human step")  # fmt: skip
     return None
 
 

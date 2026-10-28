@@ -18,7 +18,9 @@ india_min_quarters: 8
 # testable yet" and the Lab keeps their weights. S9's text facts have no history at all: it never earns weight.
 not_testable: [S7, S8, S9, S10, S11, S12]
 prices:                           # month-end prices from Twelve Data (lab-prices.yml; pipeline/lab/price_history.py)
-  release_tag: lab-data-v1        # a private GitHub release of this repository holds them (§2.7, §2.8)
+  stored_as:                      # pipeline_state names (python -m pipeline.db.state; SPEC_ISSUES 55): never a release
+    asset: lab_us_month_prices    # asset -> the database row that keeps it between runs
+    state: lab_us_prices_state
   asset: us_month_prices.csv.gz   # ticker,month_end,close,high,low (pipeline/lab/prices.py)
   state: us_prices_state.json     # the download's progress: each run resumes from it
   probe: AAPL                     # its series must reach `start`: daily, else monthly, else the download is blocked
