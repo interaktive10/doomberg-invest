@@ -29,7 +29,8 @@ export function Page({
           <h1 className="text-[32px] leading-[1.1] font-bold tracking-[-0.03em] text-fg md:text-[40px]">{title}</h1>
           {description ? <div className="text-[15px] text-muted md:text-[17px]">{description}</div> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {/* min-w-0 and max-w-full: a switch wider than a phone (Candidates' four buckets) scrolls inside it */}
+        {actions ? <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       {children}
     </main>

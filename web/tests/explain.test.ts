@@ -35,7 +35,7 @@ import { repoFile } from "./repo";
 describe("numbers in plain words (lib/explain.ts)", () => {
   it("writes money and percentages the way people say them", () => {
     expect([money(1_830_000, "usd"), money(447_000, "USD"), money(1_050_000, "USD"), money(13_200_000_000, "USD")]).toEqual(["$1.83M", "$447K", "$1.05M", "$13.2B"]);
-    expect([money(2_500_000_000, "INR"), money(1_200_000, "eur"), money(-5_000_000, "USD"), money(950, null), money(null)]).toEqual(["₹2.5B", "EUR 1.2M", "−$5M", "950", "n/a"]);
+    expect([money(2_500_000_000, "INR"), money(1_200_000, "eur"), money(-5_000_000, "USD"), money(950, null), money(null)]).toEqual(["₹250 cr", "EUR 1.2M", "−$5M", "950", "n/a"]);
     expect([pc(0.106), pc(0.05), pc(-0.2)]).toEqual(["10.6%", "5%", "-20%"]);
   });
 });
@@ -90,7 +90,7 @@ describe("Why this score in plain words", () => {
     expect(signalShort("S99")).toBe("S99");
     expect(signalLine("S4", { ccr: 3.94, ccr_year_ago: 1.8 })).toBe("Cash from operations is 3.9× net income, up from 1.8× a year ago.");
     expect(signalLine("S7", { insiders: 3, total_usd: "1830000", buyers: ["a", "b", "c"] })).toBe("3 insiders bought $1.83M of stock.");
-    expect(signalLine("S7", { promoter_buyers: 1, total_inr: 25_000_000 })).toBe("One promoter bought ₹25M of stock.");
+    expect(signalLine("S7", { promoter_buyers: 1, total_inr: 25_000_000 })).toBe("One promoter bought ₹2.5 cr of stock.");
     expect(signalLine("S1", { gaps: [0.12, 0.08], coverage: 2.4, coverage_year_ago: 1.9 })).toBe("The order book is 2.4× a year's sales, up from 1.9× a year ago.");
     expect(signalLine("S1", { gaps: [0.12, 0.08] })).toBe("Orders grew 12 points faster than sales last quarter.");
     expect(signalLine("S3", { opm: 0.153, opm_year_ago: 0.11 })).toBe("Operating margin 15.3%, up from 11% a year ago.");

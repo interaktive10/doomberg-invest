@@ -77,6 +77,7 @@ function score100(v: number | string | null | undefined): number | null {
 const BUCKET_BADGE: Record<Bucket, "default" | "secondary" | "destructive" | "outline"> = {
   candidate: "default",
   early: "secondary",
+  watch: "secondary",
   priced_in: "secondary",
   excluded: "destructive",
   none: "outline",

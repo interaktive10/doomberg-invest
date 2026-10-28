@@ -215,7 +215,7 @@ class Score(Row):
     evidence: Decimal
     gap: Decimal | None = None
     families: list[str]
-    bucket: Literal["candidate", "priced_in", "early", "excluded", "none"]
+    bucket: Literal["candidate", "priced_in", "early", "watch", "excluded", "none"]
     weights_version: str
 
 

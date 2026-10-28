@@ -86,29 +86,52 @@ export function signed(d: number): string {
 
 // ---------------------------------------------------------------- the cards' words (overhaul PR 6)
 
-export type ShownBucket = "candidate" | "early" | "priced_in";
+export type ShownBucket = "candidate" | "early" | "watch" | "priced_in";
 
-const SHOWN: readonly ShownBucket[] = ["candidate", "early", "priced_in"];
+const SHOWN: readonly ShownBucket[] = ["candidate", "early", "watch", "priced_in"];
 
-/** The three views, named as every screen names the buckets (lib/explain.ts BOARD_LABEL): Candidate is "On the board". */
+/** The four views, named as every screen names the buckets (lib/explain.ts BOARD_LABEL): Candidate is "On the board".
+ * Watch (docs/SPEC_ISSUES.md 56) holds each market's few one-family names at full strength. */
 export const BUCKET_TABS: readonly [ShownBucket, string][] = SHOWN.map((b) => [b, BOARD_LABEL[b] ?? b]);
 
 /** Each view's one line under the title: what the bucket means, as the Company header says it. */
 export const BUCKET_LINE = Object.fromEntries(SHOWN.map((b) => [b, bucketLine(b)])) as Record<ShownBucket, string>;
 
 /** What the legend says each score needs in this view (the bucket rules: Evidence 60+ with Gap 50+ on the board,
- * Evidence 40-59 in Early, Gap under 50 once priced in). */
+ * Evidence 40-59 in Early, one kind at full strength with Gap 60+ on Watch, Gap under 50 once priced in). */
 export const BUCKET_RANGE: Record<ShownBucket, { evidence: string; gap: string }> = {
   candidate: { evidence: "60+", gap: "50+" },
   early: { evidence: "40–59", gap: "50+" },
+  watch: { evidence: "50: one kind, at full strength", gap: "60+" },
   priced_in: { evidence: "60+", gap: "under 50" },
 };
 
 export const BUCKET_EMPTY: Record<ShownBucket, string> = {
   candidate: "Nothing on the board this week.",
   early: "Nothing in Early this week.",
+  watch: "Nothing on Watch this week.",
   priced_in: "Nothing priced in this week.",
 };
+
+// ---------------------------------------------------------------- markets (docs/SPEC_ISSUES.md 56)
+
+export type Market = "us" | "in";
+
+/** The markets in the order the screens show them: the US first, then India. */
+export const MARKETS: readonly Market[] = ["us", "in"];
+
+export const MARKET_LABEL: Record<Market, string> = { us: "US", in: "India" };
+
+/** "us" or "in" from a query value; anything else is both markets (undefined). */
+export function marketOf(v: string | undefined): Market | undefined {
+  return v === "us" || v === "in" ? v : undefined;
+}
+
+/** Rows grouped by market, the US first, every market present even when it has no rows (each market has its own
+ * board: the 60/40 split is Manzoor's allocation, not a quota to fill). */
+export function byMarket<T extends { market: string }>(rows: readonly T[]): [Market, T[]][] {
+  return MARKETS.map((m) => [m, rows.filter((r) => r.market === m)]);
+}
 
 /** The Evidence change as a card says it, after the word "Evidence": "+4.1 since Sep 11" (up), "−3.4 since Sep 11"
  * (down), "unchanged since Sep 11", or "has no earlier score" (none in the 12 weeks before). */

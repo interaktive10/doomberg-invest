@@ -55,6 +55,23 @@ def test_a_line_names_the_biggest_change_and_its_reason() -> None:
     assert out == [f"- [MTDR]({APP}/company/{cid(1)}) left Candidate: S4 stopped, Evidence 62 → 48"]
 
 
+def test_watch_moves_are_bucket_changes() -> None:
+    """SPEC_ISSUES 56: Watch is a bucket like the others: entering it, leaving it, and moving on to Early or the board
+    each make a line; a Watch name that changed nothing makes none."""
+    one = ("fundamentals",)
+    joined = name(1, "WTCH", row("50", "watch", gap="72", fired="S4", families=one),
+                  row("40", "none", gap="72", fired="S4", families=one, soft="R2"))  # fmt: skip
+    assert text(joined) == "entered Watch: R2 cleared, Evidence 40 → 50"
+    left = name(2, "LEFT", row("50", "none", gap="58", fired="S4", families=one), row("50", "watch", gap="64",
+                fired="S4", families=one))  # fmt: skip
+    assert text(left) == "left Watch: Gap 58"
+    up = name(3, "UPGR", row("72", fired="S4 S7", families=("fundamentals", "behavior")),
+              row("50", "watch", fired="S4", families=one))  # fmt: skip
+    assert text(up) == "moved from Watch to Candidate: S7 fired, Evidence 50 → 72"
+    still = row("50", "watch", fired="S4", families=one)
+    assert change(name(4, "SAME", still, still)) is None
+
+
 def test_one_line_per_company_with_its_biggest_change() -> None:
     """A bucket change beats an Evidence move, which beats a signal or flag that started or stopped; a company gets one
     line, with every reason in it."""

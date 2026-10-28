@@ -11,7 +11,7 @@ import yaml
 
 from pipeline.settings import REPO_ROOT
 from pipeline.signals.base import SignalResult
-from pipeline.signals.buckets import Ranked, bucket, market_cap_ok, shortlist
+from pipeline.signals.buckets import Ranked, WatchName, bucket, market_cap_ok, shortlist, watch_list, watchable
 from pipeline.signals.scores import Weights, evidence, gap
 
 CFG = yaml.safe_load((REPO_ROOT / "config" / "signals.yaml").read_text(encoding="utf-8"))["scores"]
@@ -105,3 +105,40 @@ def test_shortlist_takes_ten_new_candidates_by_evidence_then_gap() -> None:
     assert len(got) == 10 and ids[0] not in {r.company_id for r in got} and ids[12] not in {r.company_id for r in got}
     assert [r.company_id for r in got[:3]] == [ids[2], ids[3], ids[4]]
     assert (got[8].company_id, got[9].company_id) == (ids[13], ids[10])  # Evidence 80 each: the higher Gap first
+
+
+WATCH = CFG["buckets"]["watch"]
+
+
+def test_watch_config_is_spec_56s() -> None:
+    assert WATCH == {"min_evidence": 50, "max_families": 1, "min_revenue_yoy": 0, "min_gap": 60,
+                     "per_market": {"us": 12, "in": 8}}  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("ev", "fams", "hard", "yoy", "ok"),
+    [
+        ("50", 1, False, "0.10", True),  # one family at full strength, revenue up 10%
+        ("50", 1, False, "0", True),  # flat revenue isn't shrinking
+        ("50", 1, False, "-0.01", False),  # a shrinking business
+        ("50", 1, False, None, False),  # revenue growth unknown
+        ("49.99", 1, False, "0.10", False),  # under full strength (a soft flag takes 10)
+        ("50", 2, False, "0.10", False),  # two families: Candidate's or Early's
+        ("50", 0, False, "0.10", False),
+        ("50", 1, True, "0.10", False),  # a hard flag: Excluded
+    ],
+)
+def test_watchable(ev: str, fams: int, hard: bool, yoy: str | None, ok: bool) -> None:
+    assert watchable(D(ev), fams, hard, None if yoy is None else D(yoy), WATCH) is ok
+
+
+def test_watch_list_takes_each_markets_deepest_then_last_weeks_then_the_larger_gap() -> None:
+    def w(n: int, market: str, depth: int, incumbent: bool, gap: str) -> WatchName:
+        return WatchName(uuid.UUID(int=n), market, depth, incumbent, D(gap))
+
+    us = [w(1, "us", 1, False, "95"), w(2, "us", 2, False, "61"), w(3, "us", 1, True, "62"), w(4, "us", 1, False, "70")]
+    india = [w(10 + n, "in", 1, False, str(60 + n)) for n in range(10)]
+    got = watch_list([*us, *india], {"us": 3, "in": 8})
+    assert [n.company_id.int for n in got if n.market == "us"] == [2, 3, 1]  # 4 (Gap 70) loses to 1 (Gap 95)
+    assert [n.company_id.int for n in got if n.market == "in"] == list(range(19, 11, -1))  # the 8 largest Gaps
+    assert watch_list(us, {"in": 8}) == []  # a market without a cap gets none

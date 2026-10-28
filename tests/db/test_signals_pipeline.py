@@ -194,6 +194,12 @@ def test_weekly_scoring_run_on_f_us(conn: psycopg.Connection[Any], tmp_path: Pat
     score = conn.execute("select gap, bucket, weights_version from scores where company_id = %s and week_end = %s",
                          (pwr, week)).fetchone()  # fmt: skip
     assert score is not None and score[2] == "w0-equal"
+    # Watch (SPEC_ISSUES 56): CAT is one family at full strength (S1: Evidence 50), no red flag, revenue up 18% on a
+    # year, Gap 98.75, market cap $171B: the US's only Watch name this week
+    cat = ids["0000018230"]
+    row = conn.execute("select evidence, gap, bucket from scores where company_id = %s and week_end = %s", (cat, week))
+    assert row.fetchone() == (Decimal("50.00"), Decimal("98.75"), "watch")
+    assert stats.watch == {"us": ["CATERPILLAR INC"]}
     metrics = conn.execute("select metrics from company_metrics where company_id = %s", (pwr,)).fetchone()
     assert metrics is not None and metrics[0]["market_cap"] > 0 and "revenue_ttm" in metrics[0]
     assert {r["company_id"] for r in run_screen(conn, ScreenSpec(market="us"))} == set(ids.values())

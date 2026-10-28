@@ -3,6 +3,8 @@ import { bucketLine } from "@/lib/explain";
 import {
   BUCKET_LINE,
   BUCKET_TABS,
+  byMarket,
+  marketOf,
   dismissalHolds,
   evidenceChange,
   evidenceMove,
@@ -103,7 +105,7 @@ describe("a card's lines in plain words (overhaul PR 6)", () => {
   });
 
   it("names the three views as every screen names the buckets, each with the line the Company header uses", () => {
-    expect(BUCKET_TABS.map(([, text]) => text)).toEqual(["On the board", "Early", "Priced in"]);
+    expect(BUCKET_TABS.map(([, text]) => text)).toEqual(["On the board", "Early", "Watch", "Priced in"]);
     for (const [b] of BUCKET_TABS) expect(BUCKET_LINE[b]).toBe(bucketLine(b));
   });
 
@@ -112,5 +114,16 @@ describe("a card's lines in plain words (overhaul PR 6)", () => {
     expect(flagLine(["R2"], false)).toEqual({ tone: "warn", text: "Watch out: Receivables outgrowing revenue", codes: "R2" });
     expect(flagLine(["R1", "R3"], true).tone).toBe("bad");
     expect(flagLine(["R9"], false).text).toBe("Watch out: R9");
+  });
+});
+
+describe("a board per market (docs/SPEC_ISSUES.md 56)", () => {
+  it("groups rows by market, the US first, every market present", () => {
+    const rows = [{ market: "in", id: "a" }, { market: "us", id: "b" }, { market: "in", id: "c" }];
+    expect(byMarket(rows).map(([m, r]) => [m, r.map((x) => x.id)])).toEqual([["us", ["b"]], ["in", ["a", "c"]]]);
+    expect(byMarket([])).toEqual([["us", []], ["in", []]]);
+  });
+  it("reads the market from the query; anything else is both", () => {
+    expect([marketOf("us"), marketOf("in"), marketOf("IN"), marketOf(undefined)]).toEqual(["us", "in", undefined, undefined]);
   });
 });
