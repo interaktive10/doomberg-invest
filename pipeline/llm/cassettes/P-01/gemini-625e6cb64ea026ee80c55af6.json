@@ -1,0 +1,36 @@
+{
+ "key": "625e6cb64ea026ee80c55af6877f6a6d025c85d1bd53dd4eb668065918106aea",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-01",
+ "provider": "gemini",
+ "request": {
+  "system": "You extract facts a company states about its business from one excerpt of a company document: orders and contract\nwins, new named customers or programs, price increases and pricing actions, capacity additions and commitments, lead\ntimes, new segments or business lines, governance events (auditor changes, material weaknesses, going-concern doubts,\nrestatements), export exposure, customer concentration, and capital spending, financing, backlog and obligations.\nExtract only facts the excerpt states explicitly. Never calculate, infer, combine, annualize or convert numbers.\nFor every fact, copy the exact supporting text into \"quote\": verbatim, at most 60 words, and it must appear exactly\nin the excerpt. If a number's meaning depends on nearby words (a unit, a period, \"approximately\"), include them in\nthe quote.\nSet \"as_of\" to the date the excerpt says the fact was true or was announced (an award date, a quarter end): never a\nfuture or effective date, and never later than the document's publication. If the excerpt states none, leave it null.\nSet \"period_label\" only to the fiscal or calendar period a number covers, as written (\"fiscal 2027\", \"the second\nquarter of 2026\"); leave it null for anything else, such as a date, a term or a duration.\nFor a range, set \"value_low\" and \"value_high\" and leave \"value\" null. Keep every number in the unit the excerpt\nwrites it in.\nA governance event is \"added\" when the excerpt reports it, and \"removed\" only when the excerpt says one reported\nearlier was remediated or resolved; controls the excerpt calls effective are neither.\nAllowed fact types: capex_guidance (A company's stated expectation for capital expenditures); capex_reported (Reported capital expenditures (XBRL PaymentsToAcquirePropertyPlantAndEquipment and text)); backlog (Stated backlog/orders (industrial, contractors)); rpo (Remaining performance obligations (XBRL RevenueRemainingPerformanceObligation and text)); lead_time (A stated lead time for equipment or capacity); capacity_addition (New or expanded capacity: MW/GW, factories, square feet, sites, with timing); commitment_lease (Leases not yet commenced, data-center leases, lease commitments); commitment_purchase (Purchase obligations, capacity/compute purchase commitments, take-or-pay); commitment_ppa (Power purchase and energy supply agreements (counterparty, MW, term)); financing (Debt, JV or SPV financing tied to AI/data-center infrastructure); customer_concentration (Stated share of revenue from the largest customers); supply_link (A named customer/supplier/partner relationship tied to AI infrastructure); utility_load (Utility large-load or data-center pipeline (GW, requests, contracts)); risk_factor_change (Added, removed or modified risk-factor paragraphs on AI, data centers, power or supply chain); order_win (A stated order or contract win with value, customer or segment); customer_win (A new named customer or program); price_increase (A stated price increase or pricing action); new_segment (A new reportable segment or business line); governance_flag (Auditor change, material weakness, going concern, restatement (added or removed)); export_exposure (A stated export share or overseas order book (India: US/data-center exports)).\nUse a subject_key from this vocabulary: capex_guidance:<period>, capex_reported:<period>, backlog:total, backlog:<segment>, rpo:total, rpo:next_12m_pct, lead_time:<equipment>, capacity:mw:site_<slug>, capacity:<unit>:<slug>, lease_not_commenced:total, purchase_obligations:total, ppa:<counterparty>:<site>, financing:<instrument>:<date>, customer_concentration:top1, customer_concentration:<topn>, link:<counterparty>, large_load:pipeline_gw, risk:<paragraph_hash>, order_win:<slug>, customer_win:<slug>, price_increase:<slug>, new_segment:<slug>, governance:auditor_change:added, governance:material_weakness:added, governance:material_weakness:removed, governance:going_concern:added, governance:going_concern:removed, governance:restatement:added, governance:restatement:removed, export_exposure:share_pct, export_exposure:overseas_order_book. If none fits, use \"other:<short-slug>\".\nDo not extract anything about share prices, stock performance, valuation, analyst views, ratings, share repurchases,\ndividends or trading. If the excerpt states that previous guidance is withdrawn, set \"withdrawn\": true.\nReturn only the tool call.",
+  "user": "COMPANY: Nimbus Compute Corp. (NMBS), fiscal year ends 0630\nDOCUMENT: 10-Q · Form 10-Q Q1 FY2027 · published 2026-10-28\nSECTION: note_revenue · excerpt chars 332–575\n<<<\nNote 3 — Revenue\n\nRemaining performance obligations were $186 billion as of September 30, 2026, reflecting multi-year commitments for AI infrastructure and data center services.\n\nDiluted earnings per share were $1.87, up 14% from a year ago.\n\n\n>>>"
+ },
+ "response": {
+  "content": {
+   "facts": [
+    {
+     "as_of": "2026-09-30",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": "USD",
+     "fact_type": "rpo",
+     "location": null,
+     "period_label": null,
+     "quote": "Remaining performance obligations were $186 billion as of September 30, 2026",
+     "scale_word": "billion",
+     "subject": "Remaining performance obligations",
+     "subject_key": "rpo:total",
+     "unit": "usd",
+     "value": 186,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
+    }
+   ]
+  },
+  "tokens_in": 1677,
+  "tokens_out": 146
+ }
+}
