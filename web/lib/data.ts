@@ -392,6 +392,7 @@ export interface FactRow {
   value_low: number | null;
   value_high: number | null;
   unit: string;
+  currency?: string | null; // money's currency (the unit is `usd` for any: docs/SPEC_ISSUES.md 58)
   period_label: string | null;
   as_of: string;
   quote: string;
@@ -402,7 +403,8 @@ export interface FactRow {
 export async function facts(companyIds: string[], limit = 30): Promise<(FactRow & { company_id: string })[]> {
   if (companyIds.length === 0) return [];
   return rows(await db().from("facts").select(
-    "id, company_id, fact_type, subject_key, value_num, value_low, value_high, unit, period_label, as_of, quote, " +
+    "id, company_id, fact_type, subject_key, value_num, value_low, value_high, unit, currency, period_label, as_of, " +
+      "quote, " +
       "documents(url, kind, published_at, title), companies(name, market, ticker, nse_symbol)",
   ).in("company_id", companyIds).eq("verification_status", "verified").order("as_of", { ascending: false })
     .limit(limit));
@@ -560,7 +562,7 @@ async function stateNow(companyId: string, filed: FilingRow[], kills: KillCriter
 async function itemsSince(companyId: string, since: string | null): Promise<NewItems> {
   const from = since === null ? "1900-01-01" : dayAfter(since);
   const [f, o, i] = await Promise.all([
-    db().from("facts").select("id, subject, value_num, unit, as_of, quote, documents!inner(url, published_at)")
+    db().from("facts").select("id, subject, value_num, unit, currency, as_of, quote, documents!inner(url, published_at)")
       .eq("company_id", companyId).eq("verification_status", "verified").gte("documents.published_at", from)
       .order("documents(published_at)", { ascending: false }).order("as_of", { ascending: false }).limit(50),
     db().from("ownership_display_v").select("quarter_end, filed_at, inst_holders, fii_pct, dii_pct, promoter_pct, " +
@@ -568,11 +570,12 @@ async function itemsSince(companyId: string, since: string | null): Promise<NewI
     db().from("insider_events_display_v").select("event_date, filed_at, person, role, kind, shares, value, currency")
       .eq("company_id", companyId).gte("filed_at", from).order("filed_at").limit(50),
   ]);
-  const facts = rows<{ id: string; subject: string; value_num: unknown; unit: string; as_of: string; quote: string;
-    documents: { url: string; published_at: string } | null }>(f); // prettier-ignore
+  const facts = rows<{ id: string; subject: string; value_num: unknown; unit: string; currency: string | null;
+    as_of: string; quote: string; documents: { url: string; published_at: string } | null }>(f); // prettier-ignore
   return {
-    facts: facts.map((x) => ({ id: x.id, subject: x.subject, value: number(x.value_num), unit: x.unit, as_of: x.as_of,
-      published_at: x.documents?.published_at ?? null, quote: x.quote, url: x.documents?.url ?? null })), // prettier-ignore
+    facts: facts.map((x) => ({ id: x.id, subject: x.subject, value: number(x.value_num), unit: x.unit,
+      currency: x.currency, as_of: x.as_of, published_at: x.documents?.published_at ?? null, quote: x.quote,
+      url: x.documents?.url ?? null })), // prettier-ignore
     ownership: rows<Record<string, unknown>>(o),
     insiders: rows<Record<string, unknown>>(i),
   };

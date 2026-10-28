@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline.facts.ground import ground
-from pipeline.facts.process import DocMeta, Outcome, extract_document, normalize
+from pipeline.facts.process import DocMeta, Outcome, extract_document, normalize, reporting_currency
 from pipeline.facts.verify1 import Candidate
 from pipeline.llm.router import Router
 from pipeline.settings import REPO_ROOT
@@ -40,7 +40,8 @@ def load_truth(root: Path = SYN) -> dict[str, Any]:
 
 def meta_of(truth: Mapping[str, Any], d: Mapping[str, Any]) -> DocMeta:
     c = truth["companies"][d["ticker"]]
-    return DocMeta(c["name"], d["ticker"], c["fye"], d["kind"], d["title"], datetime.fromisoformat(d["published_at"]))
+    return DocMeta(c["name"], d["ticker"], c["fye"], d["kind"], d["title"], datetime.fromisoformat(d["published_at"]),
+                   reporting_currency(c["market"]))  # fmt: skip
 
 
 def run_corpus(router: Router, root: Path = SYN, truth: Mapping[str, Any] | None = None) -> dict[str, Outcome]:

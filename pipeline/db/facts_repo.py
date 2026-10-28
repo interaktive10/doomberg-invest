@@ -220,6 +220,7 @@ class StoredFact:
     value_high: Decimal | None
     unit: str
     as_of: date
+    currency: str | None = None
 
 
 def prior_verified(
@@ -228,8 +229,9 @@ def prior_verified(
     """The latest verified fact of the same company and key before (or on) `as_of`, other than `exclude`."""
     rows = _rows(
         conn,
-        "select f.id, f.company_id, f.subject_key, f.value_num, f.value_low, f.value_high, f.unit, f.as_of "
-        "from facts f join documents d on d.id = f.document_id where f.company_id = %s and f.subject_key = %s "
+        "select f.id, f.company_id, f.subject_key, f.value_num, f.value_low, f.value_high, f.unit, f.as_of, "
+        "f.currency from facts f join documents d on d.id = f.document_id "
+        "where f.company_id = %s and f.subject_key = %s "
         "and f.verification_status = 'verified' and f.as_of <= %s and not (f.id = any(%s)) "
         "order by f.as_of desc, d.published_at desc, f.created_at desc limit 1",
         (company_id, subject_key, as_of, list(exclude)),
@@ -315,29 +317,31 @@ def insert_triage(conn: Conn, event_id: UUID, company_id: UUID, categories: Sequ
 # ---------------------------------------------------------------- scope (§4.5)
 
 
-def latest_scored_week(conn: Conn) -> date | None:
-    row = conn.execute(_q("select max(week_end) from scores")).fetchone()
-    return None if row is None else row[0]
-
-
 @dataclass(frozen=True)
 class StageName:
     company_id: UUID
     last_read: datetime | None  # when its latest document was stored
     queued: bool  # it has filings still `new`
+    bucket: str = "none"  # its bucket and Gap that week: where it stands in the reading order (pipeline.facts.run)
+    gap: Decimal | None = None
 
 
-def stage_names(conn: Conn, week: date, min_evidence: Decimal) -> list[StageName]:
-    """§4.5 scope 2 (docs/SPEC_ISSUES.md 50): the companies with Evidence >= min_evidence in `week`, with when the text
-    run last read them and whether filings of theirs are still queued (pipeline.facts.run.due decides)."""
+def stage_names(conn: Conn, min_evidence: Decimal) -> list[StageName]:
+    """§4.5 scope 2 (docs/SPEC_ISSUES.md 50, 58): the companies with Evidence >= min_evidence in their market's latest
+    scored week (a market scored alone, or later, doesn't drop the other's names), with their bucket and Gap, when the
+    text run last read them and whether filings of theirs are still queued (pipeline.facts.run.due decides)."""
     rows = _rows(
         conn,
-        "select s.company_id, (select max(d.created_at) from documents d where d.company_id = s.company_id) "
-        "as last_read, exists (select 1 from filings f where f.company_id = s.company_id and f.status = 'new') "
-        "as queued from scores s where s.week_end = %s and s.evidence >= %s order by s.evidence desc, s.company_id",
-        (week, min_evidence),
+        "with latest as (select c.market, max(s.week_end) as week_end from scores s "
+        "join companies c on c.id = s.company_id group by c.market) "
+        "select s.company_id, s.bucket, s.gap, (select max(d.created_at) from documents d where d.company_id = "
+        "s.company_id) as last_read, exists (select 1 from filings f where f.company_id = s.company_id and "
+        "f.status = 'new') as queued from scores s join companies c on c.id = s.company_id "
+        "join latest l on l.market = c.market and l.week_end = s.week_end where s.evidence >= %s "
+        "order by s.evidence desc, s.company_id",
+        (min_evidence,),
     )
-    return [StageName(r["company_id"], r["last_read"], bool(r["queued"])) for r in rows]
+    return [StageName(r["company_id"], r["last_read"], bool(r["queued"]), r["bucket"], r["gap"]) for r in rows]
 
 
 def last_checked(conn: Conn) -> tuple[datetime, dict[str, int]] | None:

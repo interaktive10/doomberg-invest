@@ -297,8 +297,9 @@ test("company → thesis → journal → review → close with a post-mortem", a
   // (M7 review R2-F1); only what changed is listed (PR 6 final review V4-9)
   await expect(page.getByText("No signal or red flag changes.")).toBeVisible();
   await expect(page.getByText(/New red flags:/)).toHaveCount(0);
-  // a fact about the June quarter published after the card's week (M7 review R2-F2)
-  await expect(page.getByText(/New fact \(as of Jun 30, 2026, published Sep 21, 2026\): backlog 14\.00B/)).toBeVisible();
+  // a fact about the June quarter published after the card's week (M7 review R2-F2), its money in its currency
+  // (docs/SPEC_ISSUES.md 58)
+  await expect(page.getByText(/New fact \(as of Jun 30, 2026, published Sep 21, 2026\): backlog \$14B/)).toBeVisible();
 
   await journalEntry(page, "start_position", "Backlog converts; the price implies 5% growth.");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("week(s) old; the rule is 4");

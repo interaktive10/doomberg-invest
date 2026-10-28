@@ -303,7 +303,7 @@ def facts_for(rnd: random.Random) -> dict[str, list[Planted]]:
                 value=str(inr_cr * 10**7),
                 written={"value": str(inr_cr), "scale_word": None},
                 currency="INR",
-                status="needs_review",
+                status="verified",  # an Indian company's own currency (docs/SPEC_ISSUES.md 31 option b, 58)
             ),
             Planted(
                 "export_exposure",

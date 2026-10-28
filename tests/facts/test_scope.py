@@ -1,6 +1,7 @@
-"""The text reader's scope on stage names (docs/SPEC_ISSUES.md 50; analysis audit P2), the parts without a database:
-when a stage name is read (again), which of its filings it reads against a thesis's, whose SEC submissions are read,
-the work order, and that P-03 is gone. tests/db/test_facts_pipeline.py runs the same rules through the database."""
+"""The text reader's scope on stage names (docs/SPEC_ISSUES.md 50, 58; analysis audit P2), the parts without a
+database: when a stage name is read (again), which of its filings it reads against a thesis's, whose SEC submissions
+are read, the work order, and that P-03 is gone. tests/db/test_facts_pipeline.py runs the same rules through the
+database."""
 
 from __future__ import annotations
 
@@ -8,13 +9,18 @@ import importlib.util
 import json
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
+import yaml
+
+from pipeline.db import facts_repo
 from pipeline.db.models import Company
 from pipeline.facts import run
 from pipeline.facts.fetch import FILING_DAYS, STAGE_DAYS, FilingRef, scope_filings
 from pipeline.llm.prompt import PROMPT_DIR, PROMPTS
 from pipeline.llm.quotas import Quotas
+from pipeline.settings import REPO_ROOT
 from pipeline.us.submissions import Submissions, parse_submissions
 
 DAY = date(2026, 9, 25)
@@ -106,11 +112,40 @@ def job(rank: int, days_ago: int, name: str) -> run.Job:
 
 
 def test_theses_come_before_stage_names_each_newest_first() -> None:
-    t, s = run.RANK["thesis"], run.RANK["stage"]
+    t, s = run.ORDER.index("thesis"), run.ORDER.index("stage")
     jobs = [job(s, 1, "stage-new"), job(t, 90, "thesis-old"), job(s, 30, "stage-old"), job(t, 2, "thesis-new")]
     assert [j[2].company.name for j in run.work_order(jobs)] == ["thesis-new", "thesis-old", "stage-new", "stage-old"]
-    # config/quotas.yaml work_order names the same ranks in the same order (PR 3 review TXT-4)
-    assert Quotas.load().work_order == tuple(sorted(run.RANK, key=run.RANK.__getitem__)) == ("thesis", "stage")
+    # config/quotas.yaml work_order names the same places in the same order (PR 3 review TXT-4)
+    assert Quotas.load().work_order == run.ORDER == ("thesis", "board", "one_fact", "stage", "excluded")
+    assert run.ORDER.index("thesis") == run.RANK["thesis"] == 0  # a thesis is first in both
+
+
+def stage(bucket: str, gap: str | None) -> facts_repo.StageName:
+    return facts_repo.StageName(uuid4(), None, False, bucket, None if gap is None else Decimal(gap))
+
+
+def test_the_stage_reads_the_boards_then_one_fact_from_a_candidate_then_the_rest_excluded_last() -> None:
+    """docs/SPEC_ISSUES.md 58: a board's names first, then those one verified S9 fact (0.4, 20 Evidence points) would
+    make a Candidate: Evidence >= 40 (the stage) with Gap >= the Candidate's 50. Priced-in and unpriced names wait;
+    Excluded names come last, since a hard flag stays whatever the text says."""
+    place = {name: k for k, name in enumerate(run.ORDER)}
+    assert [run.stage_order(stage(b, "40")) for b in ("candidate", "watch", "early")] == [place["board"]] * 3
+    assert run.stage_order(stage("none", "50")) == run.stage_order(stage("none", "88.5")) == place["one_fact"]
+    assert run.stage_order(stage("none", "49.9")) == run.stage_order(stage("none", None)) == place["stage"]
+    assert run.stage_order(stage("priced_in", "20")) == place["stage"]
+    assert run.stage_order(stage("excluded", "95")) == place["excluded"]
+    buckets = yaml.safe_load((REPO_ROOT / "config" / "signals.yaml").read_text(encoding="utf-8"))["scores"]["buckets"]
+    assert run.ONE_FACT_MIN_GAP == Decimal(str(buckets["candidate"]["min_gap"]))
+    assert run.BOARDS == {"candidate", "watch", "early"} <= set(buckets)
+
+
+def test_a_stage_name_moving_up_the_order_keeps_its_filing_window() -> None:
+    """Submissions are read again only when a stage name becomes a thesis (its 400 days), not when it moves between
+    the stage's places: queue_us compares RANK (a thesis's window or a stage name's), not the place in ORDER."""
+    s = run.RANK["stage"]
+    checked = {"A": s, "B": s}
+    coarse = {cik: min(r, s) for cik, r in {"A": run.ORDER.index("board"), "B": run.ORDER.index("excluded")}.items()}
+    assert run.to_fetch(coarse, checked, indexed=set()) == {}
 
 
 def test_p03_is_no_longer_called() -> None:

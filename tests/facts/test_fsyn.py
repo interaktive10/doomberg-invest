@@ -55,10 +55,11 @@ def test_oracle_answers_are_all_found_and_nothing_else_is_stored(truth: dict[str
     assert rejected["V1-TYPE"] >= 4 and rejected["V1-QUOTE"] >= 1 and rejected["V1-NUM"] >= 1
     assert rejected["V1-UNIT"] >= 1 and sum(o.duplicates for o in outcomes.values()) >= 1
     # risk factors aren't sent to P-01 (Appendix F.4; nothing reads them since P-03 went, docs/SPEC_ISSUES.md 50),
-    # and the non-USD order waits for review
+    # and the Indian company's rupee order is in its own currency: verified, stored as rupees (SPEC_ISSUES 31 option b)
     assert outcomes["kyst_10k_2025_risk.htm"].sent == 0
     arvl = [c for c, _ in outcomes["arvl_pr_order.htm"].facts if c.fact_type == "order_win"]
-    assert [c.verification_status for c in arvl] == ["needs_review"] and "currency" in arvl[0].verification_notes
+    assert [(c.verification_status, c.currency, c.unit) for c in arvl] == [("verified", "INR", "usd")]
+    assert arvl[0].verification_notes == {}
 
 
 def test_every_stored_quote_is_the_canonical_text_at_its_offsets(truth: dict[str, object]) -> None:

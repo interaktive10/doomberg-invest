@@ -41,6 +41,7 @@ export interface NewFact {
   subject: string;
   value: number | null;
   unit: string;
+  currency?: string | null; // money's currency (components/fact.tsx isMoney)
   as_of: string; // the date the quote states, else the document's
   published_at: string | null; // when its document was published: what makes it new (M7 review R2-F2)
   quote: string;

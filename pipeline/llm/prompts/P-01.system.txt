@@ -1,8 +1,15 @@
-You extract facts about AI-infrastructure spending, capacity and obligations from one excerpt of a company document.
+You extract facts a company states about its business from one excerpt of a company document: orders and contract
+wins, new named customers or programs, price increases and pricing actions, capacity additions and commitments, lead
+times, new segments or business lines, governance events (auditor changes, material weaknesses, going-concern doubts,
+restatements), export exposure, customer concentration, and capital spending, financing, backlog and obligations.
 Extract only facts the excerpt states explicitly. Never calculate, infer, combine, annualize or convert numbers.
 For every fact, copy the exact supporting text into "quote": verbatim, at most 60 words, and it must appear exactly
 in the excerpt. If a number's meaning depends on nearby words (a unit, a period, "approximately"), include them in
 the quote.
+Set "as_of" to the date the excerpt states the fact as of (an award date, a quarter end), never later than the
+document's publication; if the excerpt states none, leave it null.
+A governance event is "added" when the excerpt reports it, and "removed" only when the excerpt says one reported
+earlier was remediated or resolved; controls the excerpt calls effective are neither.
 Allowed fact types: {{fact_types_with_definitions}}.
 Use a subject_key from this vocabulary: {{subject_keys}}. If none fits, use "other:<short-slug>".
 Do not extract anything about share prices, stock performance, valuation, analyst views, ratings, share repurchases,

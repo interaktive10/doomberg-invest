@@ -22,8 +22,15 @@ keys:
   - "customer_win:<slug>"
   - "price_increase:<slug>"
   - "new_segment:<slug>"
-  - "governance:<kind>:added"      # BRIEF §1.9 governance_flag: an auditor change, material weakness, going concern
-  - "governance:<kind>:removed"    # or restatement added or removed (S9 counts removals)
+  # BRIEF §1.9 governance_flag, one key per topic (pipeline/signals/redflags.py): R3 reads going_concern and
+  # material_weakness `:added`, S9 counts the `:removed` ones (SPEC_ISSUES 58)
+  - "governance:auditor_change:added"
+  - "governance:material_weakness:added"
+  - "governance:material_weakness:removed"
+  - "governance:going_concern:added"
+  - "governance:going_concern:removed"
+  - "governance:restatement:added"
+  - "governance:restatement:removed"
   - "export_exposure:share_pct"
   - "export_exposure:overseas_order_book"
 other_prefix: "other:"

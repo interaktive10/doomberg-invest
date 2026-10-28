@@ -2,17 +2,7 @@ import Link from "next/link";
 import { Dot } from "@/components/chip";
 import type { FactRow } from "@/lib/data";
 import { shortDate } from "@/lib/dates";
-import { big, num } from "@/lib/format";
-import { humanize, unitLabel } from "@/lib/labels";
-
-/** A verified fact's value with its unit: "13.20B USD", "18.0%", "2–3 years". */
-export function factValue(f: Pick<FactRow, "value_num" | "value_low" | "value_high" | "unit">): string {
-  const pct = f.unit === "percent";
-  const v = (x: number | null) => (x === null ? "n/a" : pct ? `${num(x)}%` : big(x));
-  const base =
-    f.value_num !== null ? v(f.value_num) : f.value_low !== null || f.value_high !== null ? `${v(f.value_low)}–${v(f.value_high)}` : "";
-  return pct || base === "" ? base : `${base} ${unitLabel(f.unit)}`;
-}
+import { factValue, humanize } from "@/lib/labels";
 
 /** A verified text fact as a compact quote (BRIEF §2.5): the exact words it was checked against, then what it says, when,
  * and the document. The anchor #fact-<id> is where a card's [f:<id>] citation points (components/open-target.tsx opens

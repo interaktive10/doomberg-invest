@@ -27,6 +27,11 @@ class DocMeta:
     kind: str  # documents.kind
     title: str
     published_at: datetime
+    currency: str = "usd"  # the company's reporting currency: Verify-1 stores only its amounts verified
+
+
+def reporting_currency(market: str) -> str:
+    return "inr" if market == "in" else "usd"
 
 
 @dataclass
@@ -63,7 +68,7 @@ def extract_document(meta: DocMeta, norm: Normalized, router: Router, xbrl: Xbrl
     chunks = select(meta.kind, norm.text, norm.section_map, norm.page_map)
     kept = prefilter(chunks)
     out = Outcome("extracted", chunks=len(chunks))
-    ctx = DocContext(meta.kind, meta.published_at.date(), meta.fye, norm.text)
+    ctx = DocContext(meta.kind, meta.published_at.date(), meta.fye, norm.text, meta.currency)
     seen: set[tuple[object, ...]] = set()
     for ch in kept:
         inp = extract.ExtractInput(

@@ -1,7 +1,8 @@
 """Chunk selection and the keyword prefilter (Appendix F.4 steps 1-2).
 
-- 10-K/10-Q: the MD&A and the notes named in F.3 (Commitments, Contingencies, Leases, Revenue, Debt, Subsequent
-  Events); when no MD&A heading is found, the whole document. EX-99.x, press releases, transcripts and other
+- 10-K/10-Q: the MD&A, Controls and Procedures (Item 4 / Item 9A, where a material weakness is reported) and the
+  notes named in F.3 (Commitments, Contingencies, Leases, Revenue, Debt, Subsequent Events, Going Concern); when no
+  MD&A heading is found, the whole document. EX-99.x, press releases, transcripts and other
   documents: the whole document. Presentations: page by page. Risk factors aren't extracted (F.4 left them to the
   risk diff, which no longer runs: docs/SPEC_ISSUES.md 50).
 - Chunks are at most MAX_TOKENS tokens (4 characters a token) with OVERLAP_TOKENS of overlap, cut at a paragraph,
@@ -28,8 +29,8 @@ CHARS_PER_TOKEN = 4
 MAX_TOKENS, OVERLAP_TOKENS = 10_000, 400
 MAX_CHARS, OVERLAP_CHARS = MAX_TOKENS * CHARS_PER_TOKEN, OVERLAP_TOKENS * CHARS_PER_TOKEN
 FILING_KINDS = frozenset({"10-K", "10-Q"})
-EXTRACT_SECTIONS = ("mdna", "note_commitments", "note_contingencies", "note_leases", "note_revenue", "note_debt",
-                    "note_subsequent_events")  # fmt: skip
+EXTRACT_SECTIONS = ("mdna", "controls", "note_commitments", "note_contingencies", "note_leases", "note_revenue",
+                    "note_debt", "note_subsequent_events", "note_going_concern")  # fmt: skip
 
 
 @dataclass(frozen=True)

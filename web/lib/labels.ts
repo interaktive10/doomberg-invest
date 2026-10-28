@@ -1,4 +1,5 @@
-import { big, measure } from "@/lib/format";
+import type { FactRow } from "@/lib/data";
+import { big, isMoney, measure, money, num } from "@/lib/format";
 
 // Display names for the ids the pipeline stores (BRIEF §1.4 signals, §1.5 red flags, §1.6 context, §4.7 reverse DCF,
 // the kill-criteria metrics). Display only: forms, URLs and the database keep the ids.
@@ -238,6 +239,20 @@ export function unitLabel(unit: string): string {
   if (unit === "percent") return "%";
   if (CURRENCIES.has(unit)) return unit.toUpperCase();
   return unit.replace(/_/g, " ");
+}
+
+/** A verified fact's value with its unit: "$13.2B", "₹371 cr" (an Indian company's money is rupees: the unit is
+ * `usd` for any currency, docs/SPEC_ISSUES.md 58), "$2B a year", "18.0%", "2–3 years". */
+export function factValue(f: Pick<FactRow, "value_num" | "value_low" | "value_high" | "unit" | "currency">): string {
+  const pct = f.unit === "percent";
+  const cash = isMoney(f.unit);
+  const v = (x: number | null) =>
+    x === null ? "n/a" : pct ? `${num(x)}%` : cash ? money(Number(x), f.currency ?? "USD") : big(x);
+  const base =
+    f.value_num !== null ? v(f.value_num) : f.value_low !== null || f.value_high !== null ? `${v(f.value_low)}–${v(f.value_high)}` : "";
+  if (pct || base === "") return base;
+  if (cash) return f.unit === "usd_per_year" ? `${base} a year` : base;
+  return `${base} ${unitLabel(f.unit)}`;
 }
 
 /** A corporate event's detail object as short text: {"index": "S&P MidCap 400"} -> "Index: S&P MidCap 400". */

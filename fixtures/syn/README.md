@@ -10,7 +10,7 @@ all, together with `ground_truth.json`. Same seed, same bytes.
 | `kyst_10k_2025_risk.htm`, `kyst_10k_2026_risk.htm` | two versions of Item 1A for the risk-factor diff (`risk_changes` in the ground truth) |
 | `*.pdf` (2) | investor presentations, read page by page |
 
-`ground_truth.json` gives, for each document, its company, kind, title and publication time. Each of the 24 planted facts is listed with its type, subject key, value (scaled), unit, quote and expected Verify-1 status. The non-USD one expects `needs_review`.
+`ground_truth.json` gives, for each document, its company, kind, title and publication time. Each of the 24 planted facts is listed with its type, subject key, value (scaled), unit, quote and expected Verify-1 status. The rupee order of the Indian company is in its own currency, so it expects `verified` (docs/SPEC_ISSUES.md 31 option b, 58).
 
 Every document also carries distractors that P-01 must not return: share repurchases, dividends, EPS, stock price and analyst ratings.
 

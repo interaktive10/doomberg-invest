@@ -4,8 +4,9 @@
 - block elements end a paragraph; <br> is a line break inside one; headings are paragraphs of their own;
 - a table becomes one paragraph whose lines are its rows, `cell | cell | cell` in row order (empty cells dropped);
 - section_map: 10-K/10-Q items by heading regexes (Item 1A Risk Factors, Item 7 / Part I Item 2 MD&A, Item 8 /
-  Item 1 financial statements) and notes by title keywords (Commitments, Contingencies, Leases, Revenue, Debt,
-  Subsequent Events). A table of contents repeats the headings, so each section keeps its longest span.
+  Item 1 financial statements, Item 9A / Part I Item 4 Controls and Procedures) and notes by title keywords
+  (Commitments, Contingencies, Leases, Revenue, Debt, Subsequent Events, Going Concern). A table of contents repeats
+  the headings, so each section keeps its longest span.
 Standard library only (html.parser), so the result is deterministic across environments.
 """
 
@@ -178,9 +179,11 @@ ITEM_HEADINGS: list[tuple[str, re.Pattern[str]]] = [
         "financial_statements",
         re.compile(rf"^item\s*[81]{_SEP}(?:consolidated\s+|condensed\s+)*financial\s+statements\b", re.I),
     ),  # fmt: skip
+    # a 10-Q's Part I Item 4 and a 10-K's Item 9A: where a material weakness is reported (R3, S9; SPEC_ISSUES 58)
+    ("controls", re.compile(rf"^item\s*(?:4|9a){_SEP}controls\s+and\s+procedures\b", re.I)),
     ("other_item", re.compile(rf"^item\s*\d{{1,2}}[a-c]?{_SEP}\S", re.I)),
 ]
-NOTE_TOPICS = ("commitments", "contingencies", "leases", "revenue", "debt", "subsequent events")
+NOTE_TOPICS = ("commitments", "contingencies", "leases", "revenue", "debt", "subsequent events", "going concern")
 _NOTE = re.compile(rf"^(?:note\s+\d{{1,2}}{_SEP}|\d{{1,2}}\.\s+)(?P<title>[a-z][a-z ,&\-–—()]*)$", re.I)
 MAX_HEADING_CHARS = 120
 
