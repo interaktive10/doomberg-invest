@@ -25,7 +25,7 @@ from typing import Any
 from pipeline.facts.ground import ground
 from pipeline.facts.process import DocMeta, Outcome, extract_document, normalize, reporting_currency
 from pipeline.facts.verify1 import Candidate
-from pipeline.llm.router import Router
+from pipeline.llm.router import CallRecord, Router
 from pipeline.settings import REPO_ROOT
 
 SYN = REPO_ROOT / "fixtures" / "syn"
@@ -154,7 +154,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         settings = Settings.from_env()
         live = providers(HttpClient(settings), settings, quotas)
-        router = Router({n: cassettes.Recorder(p) for n, p in live.items()}, quotas)
+
+        def failed(r: CallRecord) -> None:  # why a document is deferred: the providers' short messages
+            if not r.ok:
+                print(f"  {r.prompt_id} {r.provider} failed: {r.error}")
+
+        router = Router({n: cassettes.Recorder(p) for n, p in live.items()}, quotas, log=failed)
     truth = load_truth()
     report = score(run_corpus(router, truth=truth), truth)
     from pipeline.facts.samples import run_samples  # P-02, P-07 (M5 review R1-F7)

@@ -71,6 +71,14 @@ def test_gemini_errors(tmp_path: Path) -> None:
     with pytest.raises(ProviderError):
         Gemini(h, "k").complete(TOOL)  # no function call
     assert not Gemini(h, None).available()
+    # the log says why an answer had nothing usable (docs/SPEC_ISSUES.md 59)
+    h.register_mock(gemini.url("m"), b'{"candidates": [{"finishReason": "MALFORMED_FUNCTION_CALL"}]}')
+    with pytest.raises(ProviderError, match=r"unexpected response \(KeyError\) \(MALFORMED_FUNCTION_CALL\)"):
+        Gemini(h, "k").complete(TOOL)
+    stop = b'{"candidates": [{"content": {"parts": [{"text": "x"}]}, "finishReason": "STOP"}]}'
+    h.register_mock(gemini.url("m"), stop)
+    with pytest.raises(ProviderError, match=r"no call to the requested tool \(STOP\)"):
+        Gemini(h, "k").complete(TOOL)
 
 
 def test_openai_compatible_tool_call_json_and_429(tmp_path: Path) -> None:
