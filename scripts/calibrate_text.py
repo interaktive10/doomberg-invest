@@ -47,6 +47,29 @@ def main() -> None:
             select f.fact_type, left(f.period_label, 40) as period_label, count(*) as facts
             from facts f where f.verification_status = 'needs_review' and f.verification_notes ? 'period'
               and f.created_at >= '2026-09-20' group by 1, 2 order by 3 desc limit 30""")
+        show(cur, "the 2026-10-28 15:29Z run: P-01 calls and documents", """
+            select (select count(*) from llm_calls where prompt_id = 'P-01' and created_at >= '2026-10-28 15:28+00')
+                     as p01_calls,
+                   (select count(*) from llm_calls where prompt_id = 'P-07' and created_at >= '2026-10-28 15:28+00')
+                     as p07_calls,
+                   (select count(*) from llm_calls where not ok and created_at >= '2026-10-28 15:28+00') as failed,
+                   (select round(avg(latency_ms)) from llm_calls where created_at >= '2026-10-28 15:28+00') as avg_ms""")
+        show(cur, "documents stored since 2026-10-28 15:28Z by kind and market", """
+            select c.market, d.kind, count(*) as documents, round(avg(d.text_chars)) as avg_chars,
+                   sum((select count(*) from facts f where f.document_id = d.id and f.verification_status = 'verified'))
+                     as verified,
+                   sum((select count(*) from facts f where f.document_id = d.id and f.verification_status = 'needs_review'))
+                     as review
+            from documents d join companies c on c.id = d.company_id
+            where d.created_at >= '2026-10-28 15:28+00' group by 1, 2 order by 1, 2""")
+        show(cur, "facts stored since 2026-10-28 15:28Z by type and status (S9 types first)", """
+            select f.fact_type, f.verification_status, count(*) as facts, count(distinct f.company_id) as companies,
+                   count(*) filter (where f.counterparty is not null) as with_counterparty,
+                   string_agg(distinct k, ',') as review_reasons
+            from facts f left join lateral jsonb_object_keys(f.verification_notes) k on true
+            where f.created_at >= '2026-10-28 15:28+00'
+            group by 1, 2 order by (f.fact_type in ('order_win','customer_win','price_increase','new_segment',
+              'governance_flag','capacity_addition','lead_time')) desc, 3 desc""")
         show(cur, "documents still deferred, by kind", """
             select kind, count(*) as documents, min(published_at)::date as oldest, max(published_at)::date as newest
             from documents where status = 'deferred' group by 1 order by 2 desc""")
