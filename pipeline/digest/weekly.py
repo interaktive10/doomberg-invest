@@ -15,13 +15,17 @@ positions, notes and reasons never reach the issue.
 
 `python -m pipeline.digest.weekly [--week D]` (weekly.yml `publish` job: every week, whatever the other jobs did).
 The issue is published with GITHUB_TOKEN / GITHUB_REPOSITORY from Actions; without them (or with MOCK_EXTERNALS=true)
-it is only stored.
+it is only stored. While the repository is public, anyone can read its issues, so the issue gets `public_body`: the
+same week with counts and no company (To do's names, What changed's lines), and a link to the app, where Home shows the
+full digest from the `digests` table (docs/SPEC_ISSUES.md 57). A repository whose visibility can't be read counts as
+public.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
@@ -205,6 +209,49 @@ def build(conn: psycopg.Connection[Any], week: date, app_url: str = "", now: dat
     return f"Doomberg weekly — {week_label(week)}", body
 
 
+PUBLIC_NOTE = "This repository is public, so this issue names no company: the full digest is on the app's Home"
+_NAMES = re.compile(r"^(- [^:]+: \d+) \(.*\)$")  # To do's "- Cards to accept or dismiss: 4 (A (X), B (Y))"
+
+
+def public_body(body: str, app_url: str = "") -> str:
+    """The issue of a public repository (docs/SPEC_ISSUES.md 57): the digest as `render` wrote it, To do with its
+    counts only and What changed as its number of lines; This week and Health name no company, so they stay. The app
+    and the digests table keep the full body."""
+    out: list[str] = []
+    section = ""
+    changed = 0
+
+    def close() -> None:  # What changed's count, in place of its lines
+        if section == "What changed" and changed:
+            while out and out[-1] == "":
+                out.pop()
+            out.extend(["", f"{changed} {'change' if changed == 1 else 'changes'}: see the app.", ""])
+
+    for line in body.splitlines():
+        if line.startswith("## "):
+            close()
+            section = line[3:]
+        elif section == "What changed" and line.startswith("- ["):
+            changed += 1
+            continue
+        elif section == "To do":
+            line = _NAMES.sub(r"\1", line)
+        out.append(line)
+        if len(out) == 1:
+            out += ["", f"{PUBLIC_NOTE}{f' ({app_url})' if app_url else ''}."]
+    close()
+    return "\n".join(out).rstrip() + "\n"
+
+
+def repository_public(api: Issues) -> bool:
+    """Whether the issue is public; True when the visibility can't be read (the safe side)."""
+    try:
+        return api.public()
+    except Exception as e:  # noqa: BLE001 — httpx errors and the like: the digest still goes out, without names
+        print(f"digest: repository visibility not read ({type(e).__name__}: {e}); the issue names no company")
+        return True
+
+
 def issues_client(settings: Settings, http: HttpClient) -> Issues | None:
     token, repo_name = os.environ.get("GITHUB_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
     if settings.mock_externals:
@@ -224,9 +271,11 @@ def main(argv: list[str] | None = None) -> int:
     with psycopg.connect(settings.database_url) as conn, repo.tracked_run(conn, "digest") as tracked:
         actions = minutes.digest_lines(settings, http, download_pending=price_history.pending_tickers(conn),
                                        tickers_per_run=int(lab_config()["prices"]["max_credits"]))  # fmt: skip
-        title, body = build(conn, a.week, os.environ.get("APP_URL", ""), why_unscored=unscored_why(os.environ),
-                            actions=actions)  # fmt: skip
-        number = publish(api, title, body) if api is not None else None
+        app_url = os.environ.get("APP_URL", "")
+        title, body = build(conn, a.week, app_url, why_unscored=unscored_why(os.environ), actions=actions)
+        number = None
+        if api is not None:
+            number = publish(api, title, public_body(body, app_url) if repository_public(api) else body)
         thesis_repo.upsert_digest(conn, a.week, title, body, number)
         tracked.update({"week": a.week.isoformat(), "issue": number})
     print(f"{title}: {'issue #' + str(number) if number is not None else 'stored (no GitHub token)'}")
