@@ -80,6 +80,20 @@ def test_tier_2_stops_at_the_fill() -> None:
     assert len(got) == FILL and got[:100] == list(range(1001, 1101))  # 100 that can reach a bucket, then 138 filler
 
 
+def test_watch_names_are_priced_with_the_names_that_can_reach_a_bucket() -> None:
+    """SPEC_ISSUES 56: a one-family name that can reach Watch (buckets.watchable) needs a Gap, so it is priced in tier
+    1, beyond the filler's cap; the other one-family names of the same Evidence wait for what's left of the fill."""
+    filler = [name(n, 50, families=1) for n in range(1, 501)]
+    watch = [name(n, 50, families=1) for n in range(1001, 1301)]
+    got = weekly.price_targets(pool(filler, watch), set(), set(), MIN_EV, MIN_FAMILIES, BENCHMARKS,
+                               watch={UUID(int=n) for n in range(1001, 1301)})  # fmt: skip
+    assert [sc.company.id.int for sc in got if sc.company.id is not None] == list(range(1001, 1301))  # 300 > FILL
+    few = weekly.price_targets(pool(filler, watch[:10]), set(), set(), MIN_EV, MIN_FAMILIES, BENCHMARKS,
+                               watch={UUID(int=n) for n in range(1001, 1011)})  # fmt: skip
+    ids = [sc.company.id.int for sc in few if sc.company.id is not None]
+    assert ids[:10] == list(range(1001, 1011)) and len(ids) == FILL  # then filler up to the fill
+
+
 def test_last_weeks_names_come_after_this_weeks_filler() -> None:
     """§4.4's candidate set is Evidence >= 40 this week or last; a name only last week's can't reach a bucket now."""
     got = targets(pool([name(1, 39), name(2, 40, families=1), name(3, 12)]), last_week=[1, 3, 4])

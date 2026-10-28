@@ -1,9 +1,10 @@
 """Seed data for the web app's end-to-end tests (BRIEF §8 M7; CI job `web`, after the migrations on the local Supabase
-stack). Five companies scored for the week ending 2026-09-18, one per bucket or so, and everything the screens show:
-fundamentals, signals, red flags, context, verified facts with their documents, a counterparty link, a thesis card in
-research with kill criteria and its company's chart series (company_series), a thesis a kill criterion moved to
-Review, a closed thesis with journal entries and a post-mortem, ownership, insider and event rows, capex memberships
-waiting for a decision, the demand index, a brief, a digest, source health, LLM use, Lab results and weights versions.
+stack). Seven companies scored for the week ending 2026-09-18, one per bucket or so (Watch has a US and an India name),
+and everything the screens show: fundamentals, signals, red flags, context, verified facts with their documents, a
+counterparty link, a thesis card in research with kill criteria and its company's chart series (company_series), a
+thesis a kill criterion moved to Review, a closed thesis with journal entries and a post-mortem, ownership, insider and
+event rows, capex memberships waiting for a decision, the demand index, a brief, a digest, source health, LLM use, Lab
+results and weights versions.
 Fixed ids (web/e2e/seed.ts has the same ones).
 
 `python scripts/seed_e2e.py --database-url postgresql://...` (a fresh database: it inserts, it doesn't upsert).
@@ -33,6 +34,8 @@ KAPPA = "00000000-0000-4000-8000-0000000000e2"
 DELTA = "00000000-0000-4000-8000-0000000000e3"
 OMEGA = "00000000-0000-4000-8000-0000000000e4"
 SIGMA = "00000000-0000-4000-8000-0000000000e5"
+LUMEN = "00000000-0000-4000-8000-0000000000e6"  # Watch, US (docs/SPEC_ISSUES.md 56)
+TARA = "00000000-0000-4000-8000-0000000000e7"  # Watch, India
 ECHO_THESIS = "00000000-0000-4000-8000-0000000000a1"
 OMEGA_THESIS = "00000000-0000-4000-8000-0000000000a2"  # in Review: a kill criterion triggered, no new quarter
 SIGMA_THESIS = "00000000-0000-4000-8000-0000000000a3"  # closed, with journal entries and a post-mortem
@@ -51,6 +54,8 @@ COMPANIES = [
     (OMEGA, "us", "Omega Systems Inc.", "0000999104", "OMGA", None, None, "Technology", "Servers", "1231", False),
     (SIGMA, "us", "Sigma Holdings Inc.", "0000999105", "SGMA", None, None, "Financials", "Holding Companies", "1231",
      False),
+    (LUMEN, "us", "Lumen Water Co.", "0000999106", "LMNW", None, None, "Utilities", "Water Utilities", "1231", False),
+    (TARA, "in", "Tara Pumps Ltd", None, None, "TARAPUMP", "INE999T01015", "Industrials", "Pumps", "0331", False),
 ]  # fmt: skip
 
 SCORES = [  # company, evidence, gap, families, bucket
@@ -59,6 +64,8 @@ SCORES = [  # company, evidence, gap, families, bucket
     (DELTA, 58.0, 30.0, ["fundamentals", "behavior"], "early"),
     (OMEGA, 66.0, 12.0, ["fundamentals", "structural"], "priced_in"),
     (SIGMA, 40.0, None, ["fundamentals"], "excluded"),
+    (LUMEN, 50.0, 74.0, ["fundamentals"], "watch"),
+    (TARA, 50.0, 68.5, ["fundamentals"], "watch"),
 ]
 
 CARD_MD = """# Echo Grid Corp. (ECHO) — 2026-W38
@@ -166,7 +173,8 @@ def seed(conn: psycopg.Connection[Any]) -> None:
           "(%s, %s, %s, %s, %s, %s, 'v1')", (cid, W, ev, gap, fam, bucket))  # fmt: skip
         x("insert into company_metrics (company_id, week_end, metrics) values (%s, %s, %s)",
           (cid, W, json.dumps({"revenue_yoy": 0.276 if cid == ECHO else 0.08, "roic": 0.18, "opm": 0.2})))  # fmt: skip
-    for cid, sid, strength in [(ECHO, "S1", 0.82), (ECHO, "S9", 0.4), (KAPPA, "S9", 0.4), (DELTA, "S3", 0.6)]:
+    for cid, sid, strength in [(ECHO, "S1", 0.82), (ECHO, "S9", 0.4), (KAPPA, "S9", 0.4), (DELTA, "S3", 0.6),
+                               (LUMEN, "S4", 1.0), (LUMEN, "S5", 0.9), (TARA, "S3", 1.0)]:  # fmt: skip
         x("insert into signal_values (company_id, week_end, signal_id, fired, strength, inputs) values "
           "(%s, %s, %s, true, %s, '{}')", (cid, W, sid, strength))  # fmt: skip
         x("insert into signal_values (company_id, week_end, signal_id, fired, strength, inputs) values "

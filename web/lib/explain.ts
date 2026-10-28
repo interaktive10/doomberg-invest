@@ -32,10 +32,11 @@ function times(x: number): string {
 
 // ------------------------------------------------------------------------------------------------ scores and buckets
 
-/** Bucket names as the screens say them (the Candidates tabs: On the board, Early, Priced in). */
+/** Bucket names as the screens say them (the Candidates tabs: On the board, Early, Watch, Priced in). */
 export const BOARD_LABEL: Record<string, string> = {
   candidate: "On the board",
   early: "Early",
+  watch: "Watch",
   priced_in: "Priced in",
   excluded: "Excluded",
   none: "Not on the board",
@@ -49,6 +50,8 @@ export function bucketLine(bucket: string | null | undefined): string {
       return "Two kinds of evidence agree, and the price hasn't caught up yet.";
     case "early":
       return "Two kinds of evidence are starting to agree. Worth watching for more.";
+    case "watch":
+      return "One kind of evidence at full strength, nothing against it, and the price hasn't followed. A name to research, not yet to act on.";
     case "priced_in":
       return "Strong evidence, but the price has already caught up.";
     case "excluded":

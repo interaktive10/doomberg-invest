@@ -119,6 +119,10 @@ scores:                         # BRIEF §4.8 and §1.7
     candidate: {min_evidence: 60, min_gap: 50}
     priced_in: {min_evidence: 60, max_gap_exclusive: 50}
     early: {min_evidence: 40, max_evidence: 59, min_families: 2, min_gap: 50}
+    # Watch (docs/SPEC_ISSUES.md 56): one family at full strength (Evidence 50, a single family's maximum with no soft
+    # flag), no hard flag, TTM revenue up on a year, Gap >= 60, above the market-cap floor; only each market's top
+    # per_market names (the deeper first, then last week's Watch names, then the larger Gap).
+    watch: {min_evidence: 50, max_families: 1, min_revenue_yoy: 0, min_gap: 60, per_market: {us: 12, in: 8}}
   weekly_new_candidates: 10
   novelty_weeks: 12
   us_price_candidate_min_evidence: 40   # BRIEF §4.4 candidate set for US prices

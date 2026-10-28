@@ -232,6 +232,7 @@ describe("What changed as rows in plain words (overhaul PR 6)", () => {
     expect(leftBucket(week, "candidate").map((c) => c.code)).toEqual(["MTDR", "EARL"]);
     expect(leftBucket(week, "early").map((c) => c.code)).toEqual(["GONE"]);
     expect(leftBucket(week, "priced_in")).toEqual([]);
+    expect(leftBucket(week, "watch")).toEqual([]); // Watch is a bucket like the others (docs/SPEC_ISSUES.md 56)
   });
 });
 

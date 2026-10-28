@@ -27,7 +27,7 @@ import {
 // Server-side reads for the screens (BRIEF §6). Point-in-time tables are read only through the *_display_v views
 // (db/migrations/0003; the guard's pit_rule); everything else through service_role.
 
-export type Bucket = "candidate" | "priced_in" | "early" | "excluded" | "none";
+export type Bucket = "candidate" | "priced_in" | "early" | "watch" | "excluded" | "none";
 export type ThesisState = "research" | "thesis" | "position" | "review" | "closed" | "dismissed";
 
 export interface ScreenerRow {

@@ -3,7 +3,7 @@
 // CSV export went with the Screener UI (overhaul PR 4); the SQL function and pipeline/screener.py stay.
 export interface ScreenSpec {
   market?: "us" | "in";
-  buckets?: ("candidate" | "priced_in" | "early" | "excluded" | "none")[];
+  buckets?: ("candidate" | "priced_in" | "early" | "watch" | "excluded" | "none")[];
   families_all?: string[];
   limit?: number;
 }

@@ -9,7 +9,7 @@ import { ScoreRing } from "@/components/score-ring";
 import { TickerTile } from "@/components/ticker-tile";
 import { buttonVariants } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
-import { stillDismissed } from "@/lib/candidates";
+import { byMarket, MARKET_LABEL, stillDismissed } from "@/lib/candidates";
 import { dismissals, ensureReviews, latestDigest, screen, sourceHealth, theses, thesisFigures, type ScreenerRow, type Thesis } from "@/lib/data";
 import { dayDate, weekEyebrow } from "@/lib/dates";
 import { code } from "@/lib/format";
@@ -49,17 +49,19 @@ export const metadata = { title: "This week" };
 // screen's Needs you group, read live) as rows with the decision each needs; What changed (the digest's section) as a
 // feed with a direction and the Evidence move per line, then Coming up (the live cards' next filings); On the board
 // (the Candidate bucket of the latest scored week, less the names a dismissal still hides, as Candidates counts them)
-// with Evidence rings, and a line counting the names a dismissal hides; Data health with a dot per source the pipeline
+// with Evidence rings, per market, and a line counting the names a dismissal hides; Watch (each market's few
+// one-family names at full strength, docs/SPEC_ISSUES.md 56) the same way; Data health with a dot per source the pipeline
 // reads, and the stale-data line when one is late (Home alone has it). The digest's own words, codes and all, stay in
 // each row's tooltip and the funnel's Details, so Home and the issue still read the same. Before the first weekly run
 // (no digest) the headline says so once: no funnel, and no buttons to screens that are empty too (PR 6 final review).
 export default async function Home() {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
-  const [digest, sources, first, ranked] = await Promise.all([
+  const [digest, sources, first, ranked, watching] = await Promise.all([
     latestDigest(),
     sourceHealth(),
     theses(),
     screen({ buckets: ["candidate"], limit: 500 }),
+    screen({ buckets: ["watch"], limit: 100 }),
   ]);
   const week = ranked[0]?.week_end;
   const held = week ? await dismissals(ranked.map((r) => r.company_id), week) : new Map<string, never>();
@@ -145,6 +147,21 @@ export default async function Home() {
           >
             <Board rows={board} hidden={hidden.size} waiting={digest === null} />
           </Section>
+          {watching.length > 0 ? (
+            <Section
+              id="watch"
+              title="Watch"
+              description="To research, not to act on."
+              actions={
+                <Link href="/candidates?bucket=watch" className="inline-flex min-h-11 items-center text-[14px] font-medium no-underline md:min-h-0">
+                  All {watching.length}
+                  <span className="sr-only"> on Watch</span>
+                </Link>
+              }
+            >
+              <ByMarket rows={watching} empty="nothing on Watch" />
+            </Section>
+          ) : null}
           <Section
             id="health"
             title="Data health"
@@ -402,28 +419,7 @@ function Board({ rows, hidden, waiting }: { rows: ScreenerRow[]; hidden: number;
   }
   return (
     <div className="flex flex-col gap-3">
-      <ul className="flex flex-col gap-2">
-        {rows.slice(0, BOARD_SHOWN).map((r) => (
-          <li key={r.company_id}>
-            <Link
-              href={`/company/${r.company_id}`}
-              title={`${code(r)} ${r.name}: ${boardWhyAll(r.fired_signals)}`}
-              className="tile flex items-center gap-3 p-2.5 text-fg no-underline transition-colors duration-150 hover:bg-hover hover:text-fg"
-            >
-              <ScoreRing value={Number(r.evidence)} kind="evidence" />
-              <span className="flex min-w-0 flex-col gap-1">
-                <span className="line-clamp-2 text-[15px] leading-snug font-bold">
-                  {code(r)} <span className="font-medium text-muted">{r.name}</span>
-                </span>
-                <span className="flex min-w-0 items-start gap-2 text-[13px] leading-snug text-muted">
-                  <DotRow tones={r.families.map(familyTone)} className="mt-[3px] shrink-0" />
-                  <span className="line-clamp-2">{boardWhy(r.fired_signals)}</span>
-                </span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <ByMarket rows={rows} empty="nothing on the board" />
       {hidden > 0 ? (
         <p className="text-[13px] text-muted">
           {hidden} dismissed until the evidence changes ·{" "}
@@ -432,6 +428,48 @@ function Board({ rows, hidden, waiting }: { rows: ScreenerRow[]; hidden: number;
           </Link>
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/** A list of names per market, the US first, at most BOARD_SHOWN each; a market with none says so in one line (each
+ * market has its own board: docs/SPEC_ISSUES.md 56). */
+function ByMarket({ rows, empty }: { rows: ScreenerRow[]; empty: string }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {byMarket(rows).map(([m, list]) =>
+        list.length === 0 ? (
+          <p key={m} className="text-[13px] text-muted">
+            {MARKET_LABEL[m]}: {empty} this week.
+          </p>
+        ) : (
+          <div key={m} className="flex flex-col gap-2">
+            <p className="eyebrow">{MARKET_LABEL[m]}</p>
+            <ul aria-label={MARKET_LABEL[m]} className="flex flex-col gap-2">
+              {list.slice(0, BOARD_SHOWN).map((r) => (
+                <li key={r.company_id}>
+                  <Link
+                    href={`/company/${r.company_id}`}
+                    title={`${code(r)} ${r.name}: ${boardWhyAll(r.fired_signals)}`}
+                    className="tile flex items-center gap-3 p-2.5 text-fg no-underline transition-colors duration-150 hover:bg-hover hover:text-fg"
+                  >
+                    <ScoreRing value={Number(r.evidence)} kind="evidence" />
+                    <span className="flex min-w-0 flex-col gap-1">
+                      <span className="line-clamp-2 text-[15px] leading-snug font-bold">
+                        {code(r)} <span className="font-medium text-muted">{r.name}</span>
+                      </span>
+                      <span className="flex min-w-0 items-start gap-2 text-[13px] leading-snug text-muted">
+                        <DotRow tones={r.families.map(familyTone)} className="mt-[3px] shrink-0" />
+                        <span className="line-clamp-2">{boardWhy(r.fired_signals)}</span>
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ),
+      )}
     </div>
   );
 }

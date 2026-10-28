@@ -54,7 +54,7 @@ def test_the_stage_and_why_priced_companies_are_not_candidates(conn: psycopg.Con
     assert "families contributing: {'fundamentals': 4, 'behavior': 2}" in text
     assert "context known {'C1': 3, 'C2': 0, 'C3': 3}, Gap 3, market cap 3, above the floor 2" in text
     assert ("priced but 'none': {'market cap below the floor': 1, "
-            "'one signal family (Evidence capped at 55; early needs 2)': 1}") in text  # fmt: skip
+            "'one signal family (Evidence capped at 55; early needs 2; not on Watch)': 1}") in text  # fmt: skip
     assert "Two          E=70.0 fam=fundamentals+behavior Gap=61.0 C1=61 C2=- C3=61 mcap=9,000 candidate" in text
 
 
