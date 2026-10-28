@@ -1,6 +1,7 @@
-"""The digest's GitHub issue (BRIEF §4.12): "Doomberg weekly — {week}" in the private repo, created by weekly.yml
-with the workflow's GITHUB_TOKEN (issues: write); GitHub e-mails Manzoor for free. A re-run of the week edits the
-same issue (found by its title among the `digest`-labelled issues) instead of opening another.
+"""The digest's GitHub issue (BRIEF §4.12): "Doomberg weekly — {week}", created by weekly.yml with the workflow's
+GITHUB_TOKEN (issues: write); GitHub e-mails Manzoor for free. A re-run of the week edits the same issue (found by its
+title among the `digest`-labelled issues) instead of opening another. While the repository is public (`public`), the
+issue names no company (pipeline/digest/weekly.py public_body; docs/SPEC_ISSUES.md 57).
 
 `MockIssues` is the mock (MOCK_EXTERNALS=true, tests): it keeps issues in memory and records every request."""
 
@@ -17,6 +18,7 @@ LABEL = "digest"
 
 
 class Issues(Protocol):
+    def public(self) -> bool: ...
     def find(self, title: str) -> int | None: ...
     def create(self, title: str, body: str) -> int: ...
     def update(self, number: int, body: str) -> None: ...
@@ -31,6 +33,10 @@ class GitHubIssues:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}", "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28"}  # fmt: skip
+
+    def public(self) -> bool:
+        body = json.loads(self.http.get_bytes(f"{API}/repos/{self.repo}", headers=self._headers()))
+        return body["private"] is False
 
     def find(self, title: str) -> int | None:
         url = f"{API}/repos/{self.repo}/issues?state=all&labels={LABEL}&per_page=100"
@@ -53,6 +59,10 @@ class GitHubIssues:
 class MockIssues:
     issues: dict[int, dict[str, Any]] = field(default_factory=dict)
     requests: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
+    is_public: bool = False
+
+    def public(self) -> bool:
+        return self.is_public
 
     def find(self, title: str) -> int | None:
         self.requests.append(("GET", f"/issues?labels={LABEL}", {}))

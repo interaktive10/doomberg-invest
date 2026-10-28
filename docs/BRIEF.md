@@ -590,7 +590,8 @@ Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:
 Deleted in the overhaul with S11, P-06, `config/categories.yaml` and the Capex brief (§1.10, SPEC_ISSUES 52).
 
 ### 4.12 Weekly digest (`pipeline/digest/*`)
-- **Where:** a GitHub issue in the private repo, "Doomberg weekly — {week}", created by `weekly.yml` (GitHub notifies Manzoor by email for free). The web Home screen shows its This week and What changed from the same text (`digests.body_md`), with To do read live.
+- **Where:** a GitHub issue in this repo, "Doomberg weekly — {week}", created by `weekly.yml` (GitHub notifies Manzoor by email for free). The web Home screen shows its This week and What changed from the same text (`digests.body_md`), with To do read live.
+- **A public repo's issue names no company** (SPEC_ISSUES 57): anyone can read a public repository's issues, and the names in To do and What changed are Manzoor's research cards, theses and positions. While the repo is public (or its visibility can't be read) the issue keeps This week and Health, To do as counts, What changed as its number of lines, and a link to the app; `digests.body_md` and Home keep everything.
 - **Sections** (each under a level-2 heading, in this order; SPEC_ISSUES 53):
   - **This week:** the funnel line per market from the week's stored rows, e.g. "US 4,659 → stage 456 → candidates 4 → new 0 · 440 of 456 fire one family, capped at 55" (scored, Evidence ≥ 40, the Candidate bucket, the shortlist of new candidates, and the stage names with fewer than 2 families). A week without scores still goes out and says why.
   - **To do:** cards to accept or dismiss, and theses in review (a kill criterion triggered, or the review date has come): counts and company names only

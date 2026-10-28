@@ -733,3 +733,6 @@ def test_the_digest_never_carries_private_fields(conn: psycopg.Connection[Any]) 
     for secret in (SECRET, "2026-08-27", "7.25", "start_position"):
         assert secret not in stored[0], secret
     assert "position" not in stored[0].lower() and "journal" not in stored[0].lower()
+    # a public repository's issue (SPEC_ISSUES 57): not even the position's name or ticker
+    pub = digest.public_body(body, "https://doomberg.example")
+    assert "Private Test" not in pub and "PRIV" not in pub and "DISM" not in pub and "- Theses in review: 1" in pub
