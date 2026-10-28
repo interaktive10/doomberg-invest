@@ -5,6 +5,10 @@
   its quota isn't filled in, today's requests or tokens are used up, or a 429 blocked it.
 - On a 429 the provider is blocked (for its Retry-After, else until the next UTC day: the daily quota) and the next
   one is tried; any other failure (HTTP error, bad JSON) also moves to the next. Each attempt is logged (llm_calls).
+- When no provider answered, one more round follows, after a wait, if one could answer soon: a 429 that asked for at
+  most SHORT_WAIT_S, or a transient failure (an HTTP 5xx, a timeout, a malformed answer; TRANSIENT_WAIT_S). Such a
+  provider doesn't make the router `exhausted`, so one short 429 no longer ends a day's run (docs/SPEC_ISSUES.md 59:
+  Gemini's 503 bursts and one 429 stopped the text run of 2026-10-17 after two documents).
 - When every provider is out, the result is Deferred: the caller keeps the item `deferred` and the next day's run
   picks it up. A new UTC day resets the counters and the daily blocks (the clock is injectable: M5-03).
 - Requests per minute are paced by sleeping on the clock.
@@ -14,7 +18,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
@@ -25,6 +29,8 @@ from pipeline.llm.providers.base import Provider, ProviderError, RateLimited, Re
 from pipeline.llm.quotas import Quotas
 
 CHARS_PER_TOKEN = 4  # the request-size estimate used before a call (the response's usage replaces it after)
+SHORT_WAIT_S = 90.0  # a 429 asking for this long or less is waited out when no other provider answers
+TRANSIENT_WAIT_S = 15.0  # the pause before the one more try after a transient failure
 
 
 class Clock(Protocol):
@@ -111,8 +117,9 @@ class Router:
             self._day = today
             self._usage = {n: _Usage() for n in self.quotas.providers}
 
-    def unavailable(self, name: str, tokens: int = 0) -> str | None:
-        """Why `name` can't take a request of `tokens` now (None when it can)."""
+    def unavailable(self, name: str, tokens: int = 0, *, wait: bool = False) -> str | None:
+        """Why `name` can't take a request of `tokens` now (None when it can); with `wait`, a block that ends within
+        SHORT_WAIT_S doesn't count (the router waits it out)."""
         q = self.quotas.providers.get(name)
         p = self.providers.get(name)
         if q is None or p is None:
@@ -122,7 +129,9 @@ class Router:
         if not q.configured:
             return "quota not set in config/quotas.yaml"
         u = self._usage[name]
-        if u.blocked_until is not None and self.clock.now() < u.blocked_until:
+        left = self._blocked_for(name)
+        if left > 0 and not (wait and left <= SHORT_WAIT_S):
+            assert u.blocked_until is not None
             return f"rate limited until {u.blocked_until:%Y-%m-%d %H:%M:%S}Z"
         if q.requests_per_day is not None and u.requests >= q.requests_per_day:
             return "daily requests used"
@@ -130,10 +139,16 @@ class Router:
             return "daily tokens used"
         return None
 
+    def _blocked_for(self, name: str) -> float:
+        """Seconds until `name`'s 429 block ends (0 when it isn't blocked)."""
+        until = self._usage[name].blocked_until
+        return 0.0 if until is None else max(0.0, (until - self.clock.now()).total_seconds())
+
     def exhausted(self, prompt_id: str) -> bool:
-        """True when no provider routed for `prompt_id` can take a request now (callers stop early)."""
+        """True when no provider routed for `prompt_id` can take a request now or after a short wait (callers stop
+        early)."""
         self._roll_day()
-        return all(self.unavailable(n) for n in self.quotas.routing.get(route(prompt_id), ()))
+        return all(self.unavailable(n, wait=True) for n in self.quotas.routing.get(route(prompt_id), ()))
 
     def _pace(self, name: str) -> None:
         rpm = self.quotas.providers[name].requests_per_minute
@@ -166,35 +181,52 @@ class Router:
         user = render(template(spec.id, "user"), variables)
         schema = data.schema()
         estimate = (len(system) + len(user)) // CHARS_PER_TOKEN
-        self._roll_day()
+        names = self.quotas.routing.get(route(spec.id), ())
         reasons: list[str] = []
-        for name in self.quotas.routing.get(route(spec.id), ()):
-            why = self.unavailable(name, estimate)
-            if why:
-                reasons.append(f"{name}: {why}")
-                continue
-            q, u = self.quotas.providers[name], self._usage[name]
-            model = q.model(spec.task)
-            self._pace(name)
-            req = Request(spec.id, model, system, user, schema, spec.mode, spec.tool_name, spec.temperature)
-            t0 = time.monotonic()
-            u.requests += 1
-            u.minute.append(self.clock.now())
-            try:
-                c = self.providers[name].complete(req)
-            except RateLimited as e:
-                now = self.clock.now()
-                u.blocked_until = now + timedelta(seconds=e.retry_after) if e.retry_after else _next_day(now)
-                self._record(spec.id, name, model, False, t0, error=str(e)[:500])
-                reasons.append(f"{name}: rate limited")
-                continue
-            except ProviderError as e:
-                u.tokens += estimate
-                self._record(spec.id, name, model, False, t0, error=str(e)[:500])
-                reasons.append(f"{name}: {e}")
-                continue
-            used = (c.tokens_in or 0) + (c.tokens_out or 0)
-            u.tokens += used or estimate
-            self._record(spec.id, name, model, True, t0, tokens_in=c.tokens_in, tokens_out=c.tokens_out)
-            return Done(c.content, name, model)
+        for round_ in (1, 2):
+            self._roll_day()
+            reasons, transient = [], False
+            for name in names:
+                why = self.unavailable(name, estimate)
+                if why:
+                    reasons.append(f"{name}: {why}")
+                    continue
+                q, u = self.quotas.providers[name], self._usage[name]
+                model = q.model(spec.task)
+                self._pace(name)
+                req = Request(spec.id, model, system, user, schema, spec.mode, spec.tool_name, spec.temperature)
+                t0 = time.monotonic()
+                u.requests += 1
+                u.minute.append(self.clock.now())
+                try:
+                    c = self.providers[name].complete(req)
+                except RateLimited as e:
+                    now = self.clock.now()
+                    u.blocked_until = now + timedelta(seconds=e.retry_after) if e.retry_after else _next_day(now)
+                    self._record(spec.id, name, model, False, t0, error=str(e)[:500])
+                    reasons.append(f"{name}: rate limited")
+                    continue
+                except ProviderError as e:
+                    u.tokens += estimate
+                    self._record(spec.id, name, model, False, t0, error=str(e)[:500])
+                    reasons.append(f"{name}: {e}")
+                    transient = transient or e.transient
+                    continue
+                used = (c.tokens_in or 0) + (c.tokens_out or 0)
+                u.tokens += used or estimate
+                self._record(spec.id, name, model, True, t0, tokens_in=c.tokens_in, tokens_out=c.tokens_out)
+                return Done(c.content, name, model)
+            wait = self._wait_for_another_round(names, estimate, transient)
+            if round_ == 2 or wait is None:
+                break
+            self.clock.sleep(wait)
         return Deferred("; ".join(reasons) or f"no provider routed for {spec.id}")
+
+    def _wait_for_another_round(self, names: Sequence[str], tokens: int, transient: bool) -> float | None:
+        """How long to wait before one more round when no provider answered: until the first short 429 block ends,
+        or TRANSIENT_WAIT_S after a transient failure; None when no provider could answer soon."""
+        waits = [self._blocked_for(n) for n in names
+                 if self.unavailable(n, tokens) and not self.unavailable(n, tokens, wait=True)]  # fmt: skip
+        if transient:
+            waits.append(TRANSIENT_WAIT_S)
+        return min(waits) if waits else None

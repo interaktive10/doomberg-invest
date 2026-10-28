@@ -429,3 +429,46 @@ def test_another_currency_at_an_indian_company_waits_for_review(quote: str, valu
                        unit="usd", currency=currency, scale_word=scale, period_label=None, quote=quote),
                   Chunk(INDIA_TEXT, 0, "body"), INDIA_DOC))  # fmt: skip
     assert r.verification_status == "needs_review" and "(INR)" in r.verification_notes["currency"]
+
+
+FIELDS = ("Effective January 1, the company will raise list prices on data center cooling units by 11%.\n\n"
+          "We signed a 15-year power purchase agreement with Nimbus Compute for 400 MW.\n\n"
+          "Customers now face lead times of 30 to 36 months for large gas turbines.")  # fmt: skip
+FIELDS_DOC = DocContext("press_release", date(2026, 9, 15), "1231", FIELDS)
+
+
+def fields(**kw: Any) -> Candidate:
+    return ok(verify(prop(**kw), Chunk(FIELDS, 0, "body"), FIELDS_DOC))
+
+
+def test_an_as_of_after_publication_is_the_publication_date() -> None:
+    """docs/SPEC_ISSUES.md 59 (the first real-model run): "Effective January 1" came back as as_of 2027-01-01, which
+    sent the price increase to review and would have put it outside S9's window; the fact is as of its publication."""
+    quote = "the company will raise list prices on data center cooling units by 11%"
+    c = fields(fact_type="price_increase", subject="list prices", subject_key="price_increase:cooling_units",
+               value=D(11), unit="percent", currency=None, scale_word=None, period_label=None,
+               as_of=date(2027, 1, 1), quote=quote)  # fmt: skip
+    assert c.verification_status == "verified" and c.as_of == date(2026, 9, 15)
+
+
+@pytest.mark.parametrize("label", ["15 years", "2026-09-15", "total", "multi-year", "September 30, 2025"])
+def test_a_label_that_names_no_period_is_kept_without_one(label: str) -> None:
+    """The top reason facts went to review in production (2026-10-28: dates, "total", "current" ...). A type that
+    needs no period keeps the label as written and no period; capex guidance/reported still go to review."""
+    c = fields(fact_type="commitment_ppa", subject="PPA", subject_key="ppa:nimbus_compute:ohio", value=D(400),
+               unit="mw", currency=None, scale_word=None, period_label=label,
+               quote="We signed a 15-year power purchase agreement with Nimbus Compute for 400 MW.")  # fmt: skip
+    assert c.verification_status == "verified" and c.period_label == label and c.period_end is None
+
+
+def test_the_models_midpoint_of_a_quoted_range_gives_way_to_codes() -> None:
+    quote = "Customers now face lead times of 30 to 36 months for large gas turbines."
+    for value in (D(33), D(34)):  # its midpoint, or any other number not in the quote: code's midpoint is stored
+        c = fields(fact_type="lead_time", subject="gas turbines", subject_key="lead_time:gas_turbines", value=value,
+                   value_low=D(30), value_high=D(36), unit="months", currency=None, scale_word=None,
+                   period_label=None, quote=quote)  # fmt: skip
+        assert (c.verification_status, c.value_num, c.value_low, c.value_high) == ("verified", D(33), D(30), D(36))
+    one_end = verify(prop(fact_type="lead_time", subject="gas turbines", subject_key="lead_time:gas_turbines",
+                          value=D(33), value_low=D(30), unit="months", currency=None, scale_word=None,
+                          period_label=None, quote=quote), Chunk(FIELDS, 0, "body"), FIELDS_DOC)  # fmt: skip
+    assert isinstance(one_end, Rejected) and one_end.check == "V1-NUM"  # not a range: the model's number must be quoted
