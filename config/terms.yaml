@@ -1,6 +1,7 @@
 # Appendix F.4 prefilter keywords (score >= 3 goes to P-01) and BRIEF §4.9 hype words (card rejected).
-# The last two lines are for the stage names (docs/SPEC_ISSUES.md 50): the pricing, order and governance facts S9
-# counts (R3 reads a material weakness), besides the capex words above.
+# The last lines are for the stage names (docs/SPEC_ISSUES.md 50, 58): the pricing, order and governance facts S9
+# counts and R3 reads (a material weakness or a going-concern doubt in Controls and Procedures or a note; an Indian
+# order disclosure's own words), besides the capex words above.
 prefilter:
   min_score: 3
   keywords: ["data center", "data centre", "AI", "artificial intelligence", "capacity", "backlog", "order book",
@@ -9,5 +10,6 @@ prefilter:
     "accelerator", "GPU", "networking", "optical", "large load", "remaining performance obligation",
     "order win", "order inflow", "switchgear", "cable", "substation", "export",
     "price increase", "pricing action", "awarded", "contract award", "new customer", "orders", "new segment",
-    "material weakness", "remediated"]
+    "material weakness", "remediated", "not effective", "ineffective", "going concern", "substantial doubt",
+    "restatement", "new order", "order worth", "work order", "purchase order", "letter of award", "bagged"]
 hype: ["multibagger", "can't lose", "guaranteed", "sure shot", "rocket", "to the moon"]

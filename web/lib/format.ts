@@ -80,3 +80,9 @@ export function money(v: number | null, currency?: string | null, digits?: numbe
   const sym = cur === "USD" ? "$" : cur ? `${cur} ` : "";
   return `${v < 0 ? "−" : ""}${sym}${round(i)}${TIERS[i]![1]}`;
 }
+
+/** A text fact's money unit: facts store any amount as `usd` (or `usd_per_year`) with its currency beside it, so an
+ * Indian company's are rupees (docs/SPEC_ISSUES.md 31, 58). */
+export function isMoney(unit: string): boolean {
+  return unit === "usd" || unit === "usd_per_year";
+}

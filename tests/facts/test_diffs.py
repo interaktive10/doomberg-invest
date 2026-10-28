@@ -6,7 +6,7 @@ from __future__ import annotations
 from decimal import Decimal as D
 
 from pipeline.facts import entities
-from pipeline.facts.diff import Value, compute
+from pipeline.facts.diff import Value, compute, fmt
 
 B = D(10) ** 9
 
@@ -52,3 +52,20 @@ def test_entity_candidates_and_p02_parse() -> None:
                          ["Nimbus Compute", "Unknown Utility"], {"c:1", "e:3"})  # fmt: skip
     assert got["Unknown Utility"].kind == "utility" and got["Unknown Utility"].candidate_id is None
     assert got["Nimbus Compute"].candidate_id is None  # the later answer names a candidate never offered
+
+
+def test_rupees_read_in_crore_and_never_compare_with_dollars() -> None:
+    """docs/SPEC_ISSUES.md 31 option b (58): an Indian company's verified amounts are rupees, shown in crore as the web
+    shows them; a change compares like with like only (an unstated currency is v1's USD)."""
+    cr = D(10) ** 7
+
+    def r(x: str) -> Value:
+        return Value(D(x) * cr, None, None, "usd", "INR")
+
+    d = compute(r("371"), r("450"))
+    assert (d.change_kind, d.delta_pct, d.computed_note) == ("raised", D("21.3"), "₹371 cr → ₹450 cr (+21.3%)")
+    assert [fmt(D(x), "usd", "INR") for x in ("2650000000000", "264580000000", "453000000", "340000", "450")] == [
+        "₹2.65 lakh cr", "₹26,458 cr", "₹45.3 cr", "₹3.4 lakh", "₹450"]  # fmt: skip
+    assert fmt(D("99999.6") * cr, "usd", "INR") == "₹1.00 lakh cr"  # rounds up out of crore
+    assert compute(Value(D(5) * B, None, None, "usd", "USD"), r("450")).change_kind == "changed"
+    assert compute(v("38"), Value(D(45) * B, None, None, "usd", "USD")).change_kind == "raised"

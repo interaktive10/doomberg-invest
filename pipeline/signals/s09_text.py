@@ -1,6 +1,7 @@
 """S9 verified text facts (BRIEF §4.6): >= 1 verified fact in the last 2 quarters of the types order_win,
-customer_win, capacity_addition (with a named counterparty or a commitment), price_increase, lead_time (longer than
-the previous statement), new_segment, or governance_flag (a removal). Strength min(1, 0.4 x count).
+customer_win (with its customer named: §1.9 "a new named customer or program", docs/SPEC_ISSUES.md 58),
+capacity_addition (with a named counterparty or a commitment), price_increase, lead_time (longer than the previous
+statement), new_segment, or governance_flag (a removal). Strength min(1, 0.4 x count).
 
 Facts reach the signal already point-in-time (document published by the week) and verified (Appendix F.5).
 governance_flag subject keys end in ":added" or ":removed" (pipeline/facts, M5)."""
@@ -12,7 +13,8 @@ from decimal import Decimal
 from pipeline.signals.base import Ctx, Fact, SignalResult, cfg_dec, fired, months_before, quiet
 
 ID, FAMILY = "S9", "text"
-PLAIN = frozenset({"order_win", "customer_win", "price_increase", "new_segment"})
+PLAIN = frozenset({"order_win", "price_increase", "new_segment"})
+NAMED = frozenset({"customer_win", "capacity_addition"})  # count with a named counterparty (capacity: or a commitment)
 
 
 def longer_lead_time(f: Fact, facts: list[Fact]) -> bool:
@@ -29,8 +31,10 @@ def qualifies(f: Fact, facts: list[Fact], types: frozenset[str]) -> bool:
         return False
     if f.fact_type in PLAIN:
         return True
+    if f.fact_type in NAMED and f.counterparty:
+        return True
     if f.fact_type == "capacity_addition":
-        return bool(f.counterparty) or "commit" in f"{f.subject} {f.subject_key}".lower()
+        return "commit" in f"{f.subject} {f.subject_key}".lower()
     if f.fact_type == "lead_time":
         return longer_lead_time(f, facts)
     if f.fact_type == "governance_flag":

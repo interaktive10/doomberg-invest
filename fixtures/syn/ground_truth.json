@@ -43,7 +43,7 @@
      "low": null,
      "period_label": null,
      "quote": "Aravalli Cables has received an export order worth Rs 371 crore for high-voltage cables for a data center project in the United States.",
-     "status": "needs_review",
+     "status": "verified",
      "subject_key": "order_win:us_data_center_cables",
      "unit": "usd",
      "value": "3710000000",

@@ -26,9 +26,13 @@ routing:
   P-05: [gemini, groq]
   P-07: [gemini, groq, openrouter]
   P-04-fallback: [gemini]
-work_order: [thesis, stage]   # the text run's order (pipeline/facts/run.py RANK, which the code reads)
+# the text run's order, for the record (the code's is pipeline/facts/run.py ORDER; a test keeps the two the same;
+# docs/SPEC_ISSUES.md 58): theses and research entries, the stage names on a board, those one verified fact would make
+# a Candidate, the rest, Excluded names last
+work_order: [thesis, board, one_fact, stage, excluded]
 text_daily_limits:
-  documents_per_day: null
+  # about 230 P-01 calls at 1.5 a document: Gemini's 500 a day leave about 270 for P-02, P-07 and Monday's cards
+  documents_per_day: 150
 # GitHub Actions minutes (overhaul PR 3, pipeline/digest/minutes.py): the account's private repos share the free 2,000
 # a billing cycle, and going over stops every workflow until the reset. Read from github.com/settings/billing: Manzoor
 # updates cycle_day (the day the cycle resets) and other_repos (this cycle's minutes in his other private repos; 0 while
@@ -44,7 +48,7 @@ actions:
   reserve: 180       # minutes no schedule shows: CI, thesis-ingest, a re-run
   warn_above: 1600   # the digest's warning
   typical:           # billed minutes of one scheduled run (each job rounded up), for the projection
-    daily.yml: 22            # SEC then text, about 9-10 (docs/SPEC_ISSUES.md 50); India about 12 (SPEC_ISSUES 55)
+    daily.yml: 32            # SEC then text, about 18-20 (docs/SPEC_ISSUES.md 58); India about 12 (SPEC_ISSUES 55)
     weekly.yml: 140          # us about 5, India up to 80, scores about 50 (400 prices 8 s apart), publish about 5
     quarterly.yml: 60        # §2.5's target
     thesis-fallback.yml: 2   # stops at once when the routine wrote the week's cards

@@ -1,8 +1,10 @@
 """The daily text-facts run (BRIEF §4.5, §2.6 router; daily.yml, the step after SEC events;
 docs/SPEC_ISSUES.md 50). `python -m pipeline.facts.run [--day D]`.
 
-1. Scope, in work order: companies with a live thesis or research entry, then the stage names (Evidence >=
-   STAGE_MIN_EVIDENCE in the latest scored week) with filings still queued or nothing read in READ_AGAIN_DAYS.
+1. Scope, in work order (ORDER): companies with a live thesis or research entry, then the stage names (Evidence >=
+   STAGE_MIN_EVIDENCE in their market's latest scored week) with filings still queued or nothing read in
+   READ_AGAIN_DAYS: those on a board (Candidate, Watch, Early), then those one verified text fact would make a
+   Candidate (Gap >= ONE_FACT_MIN_GAP), the rest, Excluded names last (docs/SPEC_ISSUES.md 58).
 2. Queue: queued filings that no company in scope reads are marked `skipped` (a thesis's come back within
    FILING_DAYS). SEC submissions are read only for the US companies new to the scope (or a stage name that became a
    thesis) and those listed in the daily EDGAR indexes the SEC step read since the last run; each queues the filings
@@ -10,8 +12,8 @@ docs/SPEC_ISSUES.md 50). `python -m pipeline.facts.run [--day D]`.
    STAGE_DAYS) -> `filings` (new accessions only).
 3. India: P-07 triage of the scope companies' announcements of the last TRIAGE_DAYS (point-in-time reader);
    `read_pdf` ones join the document queue.
-4. Documents, in work order (theses' before stage names', each newest first; a deferred document or an India PDF in
-   its company's place, a stage name's only within its STAGE_DAYS and not of a skipped filing): fetch, normalize,
+4. Documents, in work order (by the scope's order, each newest first; a deferred document or an India PDF in its
+   company's place, a stage name's only within its STAGE_DAYS and not of a skipped filing): fetch, normalize,
    P-01 per chunk, Verify-1, store facts and diffs (code, F.6). Risk factors aren't read: P-03 isn't called
    (docs/SPEC_ISSUES.md 50).
 5. Links: verified facts with a counterparty -> P-02 -> entities and links.
@@ -44,7 +46,7 @@ from pipeline.db.pit import as_of
 from pipeline.facts import entities
 from pipeline.facts.diff import Value, compute
 from pipeline.facts.fetch import AGREEMENT_ITEMS, PERIODIC, STAGE_DAYS, exhibit_urls, scope_filings, since, store_raw
-from pipeline.facts.process import DocMeta, extract_document, normalize
+from pipeline.facts.process import DocMeta, extract_document, normalize, reporting_currency
 from pipeline.facts.types import RELATION
 from pipeline.facts.verify1 import Candidate, XbrlLookup
 from pipeline.india import triage
@@ -63,9 +65,14 @@ TRIAGE_DAYS = 3
 DEFAULT_DOCUMENTS_PER_DAY = 40  # used while config/quotas.yaml text_daily_limits.documents_per_day is null
 RETRY_DAYS = 14  # a filing whose documents can't be fetched is tried daily this long after it was queued, then
 # `failed` (M5 review R2-F4)
-TIME_BUDGET_MIN = 6.0  # document starts: daily.yml takes about 9-10 min with the SEC step (SPEC_ISSUES 29, 50)
+TIME_BUDGET_MIN = 15.0  # document starts: about 150 documents at Gemini's 15 a minute (SPEC_ISSUES 29, 50, 58)
 LINK_BATCH = 20
-RANK = {"thesis": 0, "stage": 1}  # work order: a lower rank is read first
+RANK = {"thesis": 0, "stage": 1}  # whose filings a company's SEC submissions queue (fetch.scope_filings): a thesis's
+# FILING_DAYS or a stage name's STAGE_DAYS, wherever it stands in ORDER; TextStats.checked keeps this rank
+ORDER = ("thesis", "board", "one_fact", "stage", "excluded")  # the work order: a lower index is read first
+BOARDS = frozenset({"candidate", "watch", "early"})  # the buckets the Candidates screen lists (Priced-in aside)
+ONE_FACT_MIN_GAP = Decimal(50)  # config/signals.yaml scores.buckets.candidate.min_gap: one verified S9 fact (0.4,
+# 20 Evidence points) lifts a stage name (Evidence >= 40) with this Gap to a Candidate
 SKIP_TRIAGE = (
     "trading window",
     "newspaper publication",
@@ -105,6 +112,8 @@ class TextStats:
     errors: list[str] = field(default_factory=list)
     checked: dict[str, int] = field(default_factory=dict)  # CIK -> rank of the US companies in scope whose filings
     # are queued (their submissions read today or earlier): the next run's "new to the scope" is one not in here
+    scope_by_order: dict[str, int] = field(default_factory=dict)  # companies in scope by their place in ORDER
+    read_by_order: dict[str, int] = field(default_factory=dict)  # documents read (sent to P-01 or found read) by it
 
 
 # ---------------------------------------------------------------- scope and queue
@@ -120,14 +129,25 @@ def due(last_read: datetime | None, queued: bool, day: date) -> bool:
     return queued or last_read is None or last_read < _start(day - timedelta(days=READ_AGAIN_DAYS))
 
 
+def stage_order(s: facts_repo.StageName) -> int:
+    """A stage name's place in ORDER (docs/SPEC_ISSUES.md 58): a board's names first (a fact adds to them, or R3's
+    material weakness takes one off), then those one verified text fact would make a Candidate, then the rest;
+    Excluded names last (a hard flag stays, whatever the text says)."""
+    if s.bucket == "excluded":
+        return ORDER.index("excluded")
+    if s.bucket in BOARDS:
+        return ORDER.index("board")
+    if s.gap is not None and s.gap >= ONE_FACT_MIN_GAP:
+        return ORDER.index("one_fact")
+    return ORDER.index("stage")
+
+
 def scope(conn: psycopg.Connection[Any], day: date, theses: Iterable[UUID]) -> dict[UUID, int]:
-    """company -> work rank: theses and research entries, then the stage names due for reading."""
-    ranks = dict.fromkeys(theses, RANK["thesis"])
-    week = facts_repo.latest_scored_week(conn)
-    if week is not None:
-        for s in facts_repo.stage_names(conn, week, STAGE_MIN_EVIDENCE):
-            if due(s.last_read, s.queued, day):
-                ranks.setdefault(s.company_id, RANK["stage"])
+    """company -> its place in ORDER: theses and research entries, then the stage names due for reading."""
+    ranks = dict.fromkeys(theses, ORDER.index("thesis"))
+    for s in facts_repo.stage_names(conn, STAGE_MIN_EVIDENCE):
+        if due(s.last_read, s.queued, day):
+            ranks.setdefault(s.company_id, stage_order(s))
     return ranks
 
 
@@ -162,8 +182,10 @@ def indexed_ciks(conn: psycopg.Connection[Any], http: HttpClient, after: datetim
 def queue_us(conn: psycopg.Connection[Any], http: HttpClient, companies: Mapping[UUID, Company],
              ranks: Mapping[UUID, int], day: date, stats: TextStats) -> None:  # fmt: skip
     """Queue the filings of the US companies in scope whose submissions to_fetch picks; stats.checked records the
-    scope's companies (less those whose submissions couldn't be read: they count as new tomorrow)."""
-    us = {c.cik: (c, ranks[cid]) for cid, c in companies.items() if c.market == "us" and c.cik}
+    scope's companies (less those whose submissions couldn't be read: they count as new tomorrow). `ranks` are places
+    in ORDER; what counts here is RANK, a thesis's window or a stage name's, so a stage name moving up the order
+    isn't fetched again."""
+    us = {c.cik: (c, min(ranks[cid], RANK["stage"])) for cid, c in companies.items() if c.market == "us" and c.cik}
     checked: Mapping[str, int] | None = None
     indexed: set[str] = set()
     last = facts_repo.last_checked(conn)
@@ -228,7 +250,7 @@ def xbrl_lookup(conn: psycopg.Connection[Any], company_id: UUID, published: date
 
 
 def _value(c: Candidate) -> Value:
-    return Value(c.value_num, c.value_low, c.value_high, c.unit)
+    return Value(c.value_num, c.value_low, c.value_high, c.unit, c.currency)
 
 
 def store_facts(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, facts: Sequence[tuple[Candidate, str]],
@@ -241,8 +263,8 @@ def store_facts(conn: psycopg.Connection[Any], job: DocJob, doc_id: UUID, facts:
             continue
         stats.facts_verified += 1
         prev = facts_repo.prior_verified(conn, job.company.id, c.subject_key, c.as_of, ids)
-        d = compute(None if prev is None else Value(prev.value_num, prev.value_low, prev.value_high, prev.unit),
-                    _value(c), c.withdrawn)  # fmt: skip
+        d = compute(None if prev is None else Value(prev.value_num, prev.value_low, prev.value_high, prev.unit,
+                                                    prev.currency), _value(c), c.withdrawn)  # fmt: skip
         facts_repo.insert_diff(conn, job.company.id, c.subject_key, None if prev is None else prev.id, fid, d)
         stats.diffs += 1
     return ids
@@ -276,7 +298,7 @@ def process(conn: psycopg.Connection[Any], job: DocJob, fetch: Callable[[DocJob]
     # 50) has nothing left to read.
     if not facts_repo.document_has_facts(conn, doc_id):
         meta = DocMeta(c.name, c.ticker or c.nse_symbol or "", c.fiscal_year_end, job.kind, job.title,
-                       job.published_at)  # fmt: skip
+                       job.published_at, reporting_currency(c.market))  # fmt: skip
         out = extract_document(meta, norm, router, xbrl_lookup(conn, c.id, job.published_at))
         for k, n in out.rejected.items():
             stats.rejected[k] = stats.rejected.get(k, 0) + n
@@ -418,12 +440,18 @@ def _llm_log(conn: psycopg.Connection[Any]) -> Callable[[CallRecord], None]:
     return log
 
 
-Job = tuple[int, datetime, DocJob, UUID | None]  # (rank, filed or published, the document, its filing)
+Job = tuple[int, datetime, DocJob, UUID | None]  # (place in ORDER, filed or published, the document, its filing)
 
 
 def work_order(jobs: Iterable[Job]) -> list[Job]:
-    """Theses' documents before stage names', each rank newest first (docs/SPEC_ISSUES.md 50)."""
+    """In the scope's ORDER (theses, a board's names, one fact from the board, the rest, Excluded), each place newest
+    first (docs/SPEC_ISSUES.md 50, 58)."""
     return sorted(jobs, key=lambda j: (j[0], -j[1].timestamp()))
+
+
+def _tally(counts: dict[str, int], rank: int, n: int = 1) -> None:
+    name = ORDER[rank] if 0 <= rank < len(ORDER) else "other"
+    counts[name] = counts.get(name, 0) + n
 
 
 def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClient, nse: NseClient | None,
@@ -444,6 +472,8 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
     stats.scope = len(in_scope)
     stats.theses = sum(1 for cid in in_scope if ranks[cid] == RANK["thesis"])
     stats.stage = stats.scope - stats.theses
+    for cid in in_scope:
+        _tally(stats.scope_by_order, ranks[cid])
     with conn.transaction():
         queue_us(conn, http, in_scope, ranks, day, stats)
 
@@ -459,10 +489,10 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
         pdf_jobs = triage_announcements(conn, router, in_scope, day, stats)
 
     jobs: list[Job] = []
-    # one query a rank: the stage names' filings never crowd the theses' out of the window
+    # one query a place in ORDER: the later places' filings never crowd the earlier ones' out of the window
     new_filings = [
         f
-        for rank in sorted(set(RANK.values()))
+        for rank in sorted({ranks[i] for i in in_scope})
         for f in facts_repo.filings_by_status(conn, ["new"], [i for i in in_scope if ranks[i] == rank])
     ]
     queued = {f["id"] for f in new_filings}
@@ -479,10 +509,10 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
     seen_urls = set(facts_repo.document_status(conn, [j.url for j in pdf_jobs]))
     for j in pdf_jobs:
         if j.url not in seen_urls:
-            jobs.append((ranks.get(j.company.id or UUID(int=0), len(RANK)), j.published_at, j, None))
+            jobs.append((ranks.get(j.company.id or UUID(int=0), len(ORDER)), j.published_at, j, None))
 
     done = 0
-    for _, _, job, filing_id in work_order(jobs):
+    for rank, _, job, filing_id in work_order(jobs):
         if done >= limit:
             stats.stopped = f"daily document limit ({limit})"
             break
@@ -511,10 +541,12 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
                 results = [process(conn, j, fetch, router, raw_root, stats) for j in todo]
                 results += ["extracted"] * (len(parts) - len(todo))
                 done += len(todo)
+                _tally(stats.read_by_order, rank, len(todo))
                 facts_repo.set_filing_status(conn, filing_id, filing_status(results, expired))
             else:
                 process(conn, job, fetch, router, raw_root, stats)
                 done += 1
+                _tally(stats.read_by_order, rank)
     with conn.transaction():
         link_pending(conn, router, stats)
     stats.errors = stats.errors[:50]

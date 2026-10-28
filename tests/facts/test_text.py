@@ -84,3 +84,43 @@ def test_grounding_exact_then_insensitive_never_fuzzy() -> None:
     assert ground("we expect capital expenditures", text) is None  # case matters
     assert ground("We expect capital", text, lo=20) is None  # outside the chunk
     assert grounded_quote("End", text) is None  # shorter than a storable quote
+
+
+WEAK_10Q = """<html><body>
+<p>Item 2. Management&#8217;s Discussion and Analysis of Financial Condition</p><p>Revenue grew.</p>
+<p>Item 3. Quantitative and Qualitative Disclosures About Market Risk</p><p>None.</p>
+<p>ITEM 4. CONTROLS AND PROCEDURES</p>
+<p>Our Chief Executive Officer and Chief Financial Officer concluded that our disclosure controls and procedures were
+not effective as of June 30, 2026, because of the material weakness in internal control over financial reporting
+described in our Annual Report. The material weakness has not been remediated.</p>
+<p>PART II. OTHER INFORMATION</p><p>Item 1. Legal Proceedings</p><p>None.</p></body></html>"""
+
+DOUBT_10K = """<html><body>
+<p>Item 7. Management&#8217;s Discussion and Analysis</p><p>Sales fell.</p>
+<p>Item 8. Financial Statements and Supplementary Data</p>
+<p>Note 2 — Liquidity and Going Concern</p><p>These conditions raise substantial doubt about the Company&#8217;s
+ability to continue as a going concern. Our plans to alleviate the substantial doubt about our ability to continue as a
+going concern are described below.</p>
+<p>Note 3 — Revenue</p><p>Revenue by product.</p>
+<p>Item 9A. Controls and Procedures</p><p>Our disclosure controls and procedures were effective. There were no
+changes in our internal control over financial reporting.</p>
+<p>Item 9B. Other Information</p><p>None.</p></body></html>"""
+
+
+def test_controls_and_procedures_are_read_and_a_material_weakness_passes_the_prefilter() -> None:
+    """docs/SPEC_ISSUES.md 58: a 10-Q's Part I Item 4 (a 10-K's Item 9A) is where a material weakness is reported, which
+    R3's hard flag and S9's removal read; before, it ran into `other_item` and P-01 never saw it."""
+    n = normalize_html(WEAK_10Q)
+    names = {s["name"]: n.text[int(s["char_start"]) : int(s["char_end"])] for s in n.section_map}
+    assert names["controls"].startswith("ITEM 4. CONTROLS AND PROCEDURES")
+    assert "Legal Proceedings" not in names["controls"]
+    chunks = select("10-Q", n.text, n.section_map, n.page_map)
+    assert [c.section for c in chunks] == ["mdna", "controls"]
+    assert [c.section for c in prefilter(chunks)] == ["controls"]  # MD&A's one line scores 0
+
+
+def test_a_going_concern_note_is_read_and_clean_controls_cost_no_call() -> None:
+    n = normalize_html(DOUBT_10K)
+    chunks = select("10-K", n.text, n.section_map, n.page_map)
+    assert [c.section for c in chunks] == ["mdna", "note_going_concern", "note_revenue", "controls"]
+    assert [c.section for c in prefilter(chunks)] == ["note_going_concern"]  # effective controls score below 3

@@ -268,7 +268,7 @@ doomberg-invest/
 ### 2.5 Schedules and the minutes budget (GitHub Actions, UTC)
 | Workflow | Schedule | Target runtime |
 |---|---|---|
-| `daily.yml` | `13 1 * * 2-6` | ≤ 8 min |
+| `daily.yml` | `13 1 * * 2-6` | ≤ 25 min (the text step's 15: SPEC_ISSUES 58) |
 | `weekly.yml` | `7 2 * * 6` (Saturday) | ≤ 45 min |
 | `thesis-fallback.yml` | `0 6 * * 1` | ≤ 10 min, only if no cards |
 | `thesis-ingest.yml` | on push touching `data/thesis_cards/**` | ≤ 3 min |
@@ -470,11 +470,11 @@ Running again since 2026-10-28 (SPEC_ISSUES 55; paused Oct 20-28, SPEC_ISSUES 46
 
 ### 4.5 Text facts
 Appendix F (carried over from the Capex Ledger brief): fetch → canonical text → P-01 extraction → exact-quote grounding → number, unit and period checks → verify-1 → diffs.
-- **Scope, in priority order** (each newest first; SPEC_ISSUES 50):
+- **Scope, in priority order** (each newest first; SPEC_ISSUES 50, 58):
   1. theses, research entries and positions: their 10-K, 10-Q and 8-K filings of the last 400 days
-  2. the stage names (Evidence ≥ 40 in the latest scored week) with filings still queued or nothing read in 100 days: their latest 10-Q or 10-K and their 8-Ks with item 2.02, 7.01 or 8.01, of the last 120 days
+  2. the stage names (Evidence ≥ 40 in their market's latest scored week) with filings still queued or nothing read in 100 days: their latest 10-Q or 10-K and their 8-Ks with item 2.02, 7.01 or 8.01, of the last 120 days. In this order: the names on a board (Candidate, Watch, Early); those one verified S9 fact would make a Candidate (Gap ≥ 50); the rest; Excluded names last
 - **Queue:** queued filings that no company in scope reads are marked `skipped`; a new thesis's come back within its 400 days. SEC submissions are read only for names new to the scope and names in the daily EDGAR index the SEC step reads.
-- **Daily limits:** set by `config/quotas.yaml`; daily.yml starts no document after 6 minutes.
+- **Daily limits:** set by `config/quotas.yaml` (150 documents a day, inside Gemini's free 500 requests); daily.yml starts no document after 15 minutes.
 
 ### 4.6 Signals (`pipeline/signals/*`; each returns fired, strength and inputs, stored in `signal_values`)
 **Shared definitions:**
@@ -493,7 +493,7 @@ Appendix F (carried over from the Capex Ledger brief): fetch → canonical text 
 | S6 | Max of `ND / TTM(op_income + da)` over quarters q−8…q−4 ≥ 3.0; current ≤ 1.5; `TTM(op_income)/TTM(interest)` ≥ 5 | 0.8 |
 | S7 | **US:** ≥ 2 distinct insiders with unplanned code-P buys of ≥ $25k each within 60 days, total ≥ $250k; a filer whose only role is 10% owner is not counted, a joint "director; 10% owner" filing is (SPEC_ISSUES 49). **IN:** promoter-group market purchases ≥ ₹2 crore within 90 days, **or** promoter pledged % down ≥ 5 pp QoQ | `min(1, 0.5 + 0.1 × (n − 2) + 0.1 × log2(total/threshold))` (IN pledge path: 0.6) |
 | S8 | **US:** 13F holder count ≤ 40th percentile within its revenue-size decile, **and** holders up ≥ 15% QoQ in each of the last 2 quarters. **IN:** FII + DII ≤ 15% and up ≥ 2 pp over 2 quarters | `clip(growth/0.5, 0, 1)` (IN: `clip(Δpp/6, 0, 1)`) |
-| S9 | ≥ 1 verified fact in the last 2 quarters of types `order_win`, `customer_win`, `capacity_addition` (with a named counterparty or commitment), `price_increase`, `lead_time` (longer than before), `new_segment`, or `governance_flag` (removal) | `min(1, 0.4 × count)` |
+| S9 | ≥ 1 verified fact in the last 2 quarters of types `order_win`, `customer_win` (with its customer named), `capacity_addition` (with a named counterparty or commitment), `price_increase`, `lead_time` (longer than before), `new_segment`, or `governance_flag` (removal) | `min(1, 0.4 × count)` |
 | S10 | Spin-off/demerger ≤ 18 months ago; reorganization ≤ 24 months; listed in `config/holdcos.yaml`; rights issue ≤ 6 months | 0.6 (config) |
 | S12 | The company's sector (`config/sectors.yaml`) is flagged: median capex/da ≤ 1.0 in each of the last 3 fiscal years; median revenue YoY growth > 0 in the last 2 quarters after ≤ 0 before; ≥ 2 verified `price_increase` or longer-`lead_time` facts in the sector in 2 quarters; **and** the company fires S2 or S6 | 0.6 |
 
@@ -1128,18 +1128,18 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
   - drop script, style and hidden elements
   - keep headings
   - tables become text rows (`cell | cell | cell`) with row order preserved
-  - `section_map`: detect 10-K/10-Q items by heading regexes (Item 1A Risk Factors, Item 7 / Part I Item 2 MD&A, Item 8 notes) and notes by title keywords (Commitments, Contingencies, Leases, Revenue, Debt, Subsequent Events)
+  - `section_map`: detect 10-K/10-Q items by heading regexes (Item 1A Risk Factors, Item 7 / Part I Item 2 MD&A, Item 8 notes, Item 9A / Part I Item 4 Controls and Procedures) and notes by title keywords (Commitments, Contingencies, Leases, Revenue, Debt, Subsequent Events, Going Concern)
 - **PDF:** `pypdfium2` text per page; `page_map` = `[{page, char_start, char_end}]`.
 - **Press releases and transcripts:** the whole body. Transcripts are split into prepared remarks vs Q&A when headings exist.
 
 ### F.4 Extract (`facts/extract.py`, P-01)
 1. **Chunk selection:**
-   - 10-K/10-Q: MD&A plus the notes named above
+   - 10-K/10-Q: MD&A, Controls and Procedures (where a material weakness is reported: R3, S9; SPEC_ISSUES 58) plus the notes named above
    - EX-99.1, press releases and transcripts: the whole document
    - presentations: pages
    - risk factors: not extracted (F.6)
    - chunks ≤ 10k tokens with 400-token overlap; each carries its absolute `char_start`
-2. **Prefilter:** a keyword score from `config/terms.yaml` (data center, AI, capacity, backlog, capital expenditures, capex, lead time, MW, GW, megawatt, gigawatt, lease, purchase obligation, power purchase, interconnection, transformer, turbine, cooling, accelerator, GPU, networking, optical, large load, …). Only chunks with a score ≥ 3 go to P-01.
+2. **Prefilter:** a keyword score from `config/terms.yaml` (data center, AI, capacity, backlog, capital expenditures, capex, lead time, MW, GW, megawatt, gigawatt, lease, purchase obligation, power purchase, interconnection, transformer, turbine, cooling, accelerator, GPU, networking, optical, large load, …; and for S9 and R3: price increase, pricing action, awarded, orders, new segment, material weakness, not effective, going concern, substantial doubt, restatement, …). Only chunks with a score ≥ 3 go to P-01.
 3. **P-01** returns facts, each with a verbatim `quote`.
 4. **Grounding** (`facts/ground.py`):
    - find the quote in the chunk text: exact match on canonical text first; else a whitespace/punctuation-insensitive match
@@ -1148,7 +1148,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 5. **Numbers** (`facts/numbers.py`):
    - parse from the quote: `$X.Y billion/million/thousand`, bare numbers with a scale word, ranges (`X to Y`, `X–Y`), `approximately`, percents, MW/GW/MWh, months/weeks/years, square feet
    - the model's `value_*` must equal a number parsed from the quote after scaling (tolerance: rounding of the last reported digit), else rejected
-   - currency: USD only in v1; anything else → `needs_review`
+   - currency: the filer's own only (USD for a US company, INR for an Indian one; SPEC_ISSUES 31 option b), so a company's amounts compare within one currency; anything else → `needs_review`. Money keeps the unit `usd` and `currency` says which
 6. **Periods** (`facts/periods.py`): resolve fiscal periods with the company's `fiscal_year_end` (from submissions JSON). Guidance for periods that already ended at the filing date → `needs_review`.
 7. **subject_key:** P-01 proposes one from `config/subject_keys.yaml`, and code validates it. Unknown → `other:<slug>` plus `needs_review`.
 
@@ -1182,11 +1182,18 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 ### P-01 EXTRACT_FACTS · free-tier router (§2.6) · temp 0
 **System:**
 ```
-You extract facts about AI-infrastructure spending, capacity and obligations from one excerpt of a company document.
+You extract facts a company states about its business from one excerpt of a company document: orders and contract
+wins, new named customers or programs, price increases and pricing actions, capacity additions and commitments, lead
+times, new segments or business lines, governance events (auditor changes, material weaknesses, going-concern doubts,
+restatements), export exposure, customer concentration, and capital spending, financing, backlog and obligations.
 Extract only facts the excerpt states explicitly. Never calculate, infer, combine, annualize or convert numbers.
 For every fact, copy the exact supporting text into "quote": verbatim, at most 60 words, and it must appear exactly
 in the excerpt. If a number's meaning depends on nearby words (a unit, a period, "approximately"), include them in
 the quote.
+Set "as_of" to the date the excerpt states the fact as of (an award date, a quarter end), never later than the
+document's publication; if the excerpt states none, leave it null.
+A governance event is "added" when the excerpt reports it, and "removed" only when the excerpt says one reported
+earlier was remediated or resolved; controls the excerpt calls effective are neither.
 Allowed fact types: {{fact_types_with_definitions}}.
 Use a subject_key from this vocabulary: {{subject_keys}}. If none fits, use "other:<short-slug>".
 Do not extract anything about share prices, stock performance, valuation, analyst views, ratings, share repurchases,

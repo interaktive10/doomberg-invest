@@ -5,6 +5,7 @@ import {
   CONTEXT_NAME,
   dcfRows,
   detailText,
+  factValue,
   FAMILY_LABEL,
   humanize,
   killMetric,
@@ -119,5 +120,28 @@ describe("display labels (lib/labels.ts)", () => {
     expect(k("m:signal:S1", "<", 0.3)).toBe("Kill if S1's strength (Order-book acceleration) falls below 0.30.");
     expect(killMetric("m:something_new")).toEqual({ label: "Something new", unit: null });
     expect(metricValue(null, "ratio")).toBe("n/a");
+  });
+});
+
+describe("a fact's value (lib/labels.ts factValue)", () => {
+  const fact = (value_num: number | null, unit: string, currency: string | null = null, low: number | null = null, high: number | null = null) => ({
+    value_num,
+    value_low: low,
+    value_high: high,
+    unit,
+    currency,
+  });
+  it("shows money in the fact's currency: an Indian company's in crore (docs/SPEC_ISSUES.md 58)", () => {
+    expect(factValue(fact(13_200_000_000, "usd", "USD"))).toBe("$13.2B");
+    expect(factValue(fact(3_710_000_000, "usd", "INR"))).toBe("₹371 cr");
+    expect(factValue(fact(13_200_000_000, "usd"))).toBe("$13.2B"); // an unstated currency is v1's dollars
+    expect(factValue(fact(2_000_000_000, "usd_per_year", "USD"))).toBe("$2B a year");
+    expect(factValue(fact(null, "usd", "INR", 4_000_000_000, 4_500_000_000))).toBe("₹400 cr–₹450 cr");
+  });
+  it("keeps other units as before", () => {
+    expect(factValue(fact(18, "percent"))).toBe("18.0%");
+    expect(factValue(fact(null, "years", null, 2, 3))).toBe("2.00–3.00 years");
+    expect(factValue(fact(500, "mw"))).toBe("500.00 mw");
+    expect(factValue(fact(null, "other"))).toBe("");
   });
 });

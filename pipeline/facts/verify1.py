@@ -9,8 +9,11 @@
 | V1-XBRL   | |value - XBRL| <= 0.5% for the same concept and period                       | needs_review (mismatch) |
 | V1-CONF   | confidence >= 0.70                                                           | needs_review            |
 | V1-DUP    | the document already has the same subject_key and value                      | dropped                 |
-Currency: USD only in v1; any other currency is needs_review. An unknown subject_key becomes other:<slug> and
-needs_review (F.4 step 7). Stored values come from the quote (the parsed, scaled amount), not from the model.
+Currency: the filer's own only (USD for a US company, INR for an Indian one: docs/SPEC_ISSUES.md 31 option b), so
+a company's amounts compare within one currency (diffs, S1's backlog against revenue); any other currency is
+needs_review. Money keeps the unit `usd` (facts.unit has no other money unit) and `currency` says which. An unknown
+subject_key becomes other:<slug> and needs_review (F.4 step 7). Stored values come from the quote (the parsed, scaled
+amount), not from the model.
 """
 
 from __future__ import annotations
@@ -143,6 +146,15 @@ class DocContext:
     published: date
     fye: str | None
     text: str  # the document's canonical text
+    currency: str = "usd"  # the filer's reporting currency (numbers.CURRENCY codes): inr for an Indian company
+
+
+# how a model may name each filer currency (P-01's `currency` field)
+CURRENCY_NAMES = {"usd": frozenset({"USD", "US$", "$"}), "inr": frozenset({"INR", "RS", "RS.", "₹", "RUPEES"})}
+
+
+def own_currency_note(found: str, doc: DocContext) -> str:
+    return f"{found} amount: only the filer's own currency ({doc.currency.upper()}) is stored verified"
 
 
 @dataclass(frozen=True)
@@ -194,6 +206,14 @@ def _unit_ok(unit: str, p: numbers.Parsed, quote: str) -> bool:
     return True  # other
 
 
+def stored_unit(unit: str, matched: dict[str, numbers.Parsed]) -> str:
+    """A unit with no number in the quote says nothing (M5 review R1-F9); an amount whose quote names a currency is
+    money (`usd`, the money unit; `currency` says which), whatever unit "other" the model gave it."""
+    if not matched:
+        return "other"
+    return "usd" if unit == "other" and any(m.currency for m in matched.values()) else unit
+
+
 def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None = None,
            seen: set[tuple[Any, ...]] | None = None) -> Candidate | Rejected | None:  # fmt: skip
     """A Candidate (verified or needs_review), a Rejected (failed; not stored), or None (a duplicate, dropped)."""
@@ -226,14 +246,14 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
             return Rejected("V1-TYPE", "a per-share amount is a price field")
         if price_context(sentence, pos):
             return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
-        if m.currency is not None and m.currency != "usd":  # whatever the model said (M5 review R3-F1)
-            review["currency"] = f"{m.currency.upper()} amount: v1 stores USD only"
+        if m.currency is not None and m.currency != doc.currency:  # whatever the model said (M5 review R3-F1)
+            review["currency"] = own_currency_note(m.currency.upper(), doc)
     if not matched and price_context(sentence, start - s0):
         return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
     if p.fact_type == "price_increase" and not pricing_word(sentence):
         return Rejected("V1-TYPE", "a price increase names a price of the business, not only a share price")
-    if p.currency and p.currency.strip().upper() not in {"USD", "US$", "$"}:
-        review["currency"] = f"{p.currency} amount: v1 stores USD only"
+    if p.currency and p.currency.strip().upper() not in CURRENCY_NAMES.get(doc.currency, frozenset()):
+        review["currency"] = own_currency_note(p.currency, doc)
 
     low = matched["value_low"].value if "value_low" in matched else None
     high = matched["value_high"].value if "value_high" in matched else None
@@ -279,8 +299,8 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
 
     c = Candidate(
         fact_type=p.fact_type, subject=p.subject, subject_key=key, value_num=value, value_low=low, value_high=high,
-        unit=p.unit if matched else "other",  # a unit with no number in the quote says nothing (M5 review R1-F9)
-        currency="USD" if any(m.currency == "usd" for m in matched.values()) else p.currency,
+        unit=stored_unit(p.unit, matched),
+        currency=next((m.currency.upper() for m in matched.values() if m.currency), None) or p.currency,
         scale_word=scale_word, period_label=p.period_label, period_start=period.start if period else None,
         period_end=period.end if period else None, as_of=as_of, counterparty=p.counterparty, location=p.location,
         quote=quote, char_start=start, char_end=end, section=chunk.section, page=chunk.page,

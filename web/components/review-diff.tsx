@@ -3,7 +3,7 @@ import { Chip, type ChipVariant } from "@/components/chip";
 import { Badge } from "@/components/ui/badge";
 import { shortDate } from "@/lib/dates";
 import { GAP_SHORT, killRule, KILL_WORD, pc, signalShort } from "@/lib/explain";
-import { big, num } from "@/lib/format";
+import { big, isMoney, money, num } from "@/lib/format";
 import { RED_FLAG_NAME } from "@/lib/labels";
 import { changeLines, contextValue, killValue, type KillSnapshot, type PackDiff, type StateDiff } from "@/lib/reviews";
 
@@ -144,7 +144,7 @@ function Changes({ id, state }: { id: string; state: StateDiff }) {
                   </>
                 ) : null}
                 ): {f.subject}{" "}
-                {f.value === null ? "" : f.unit === "usd" ? big(f.value) : `${num(f.value)} ${f.unit}`}
+                {f.value === null ? "" : isMoney(f.unit) ? money(f.value, f.currency ?? "USD") : `${num(f.value)} ${f.unit}`}
               </p>
               <blockquote className="mt-1 text-fg">
                 “{f.quote}”

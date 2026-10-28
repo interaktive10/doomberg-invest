@@ -1,19 +1,21 @@
 """pipeline/db/diagnose.py against the database: the candidate stage's rows with their families, context scores and
 market caps, and why the priced ones that aren't candidates aren't (the first live runs, 2026-10-07, scored 391
-priced companies into no bucket at all); and the last text run's line with its stop reason (docs/SPEC_ISSUES.md 50)."""
+priced companies into no bucket at all); the last text run's line with its stop reason (docs/SPEC_ISSUES.md 50); and
+S9's fires with the quote behind each (docs/SPEC_ISSUES.md 58)."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 import psycopg
 from psycopg.types.json import Jsonb
 
 from pipeline.db import repo
-from pipeline.db.diagnose import last_run, last_text_run, report, stage_rows, text_run
-from pipeline.db.models import ContextValue, Score
+from pipeline.db.diagnose import last_run, last_text_run, report, s9_audit, stage_rows, text_run
+from pipeline.db.models import ContextValue, Score, SignalValue
 from pipeline.signals.weekly import Configs
 from tests.db.conftest import new_company
 
@@ -95,6 +97,11 @@ def test_the_text_runs_line_says_what_it_read_and_why_it_stopped() -> None:
         "facts; stopped: daily document limit (40)"
     )
     assert text_run(started, "ok", {"scope": 1}).endswith("stopped: queue empty")  # an older row: missing keys are 0
+    by_place = {**stats, "scope_by_order": {"board": 20, "one_fact": 90}, "read_by_order": {"board": 41}}
+    assert (
+        "25 verified facts; in scope by place {'board': 20, 'one_fact': 90}, read {'board': 41}; stopped: "
+        "daily document limit (40)"
+    ) in text_run(started, "ok", by_place)  # the reading order (SPEC_ISSUES 58)
     assert text_run(started, "ok", {"skipped": "quotas not set"}) == (
         "last text run 2026-11-03 01:20Z: ok, skipped (quotas not set)"
     )
@@ -113,3 +120,49 @@ def test_the_last_finished_text_run(conn: psycopg.Connection[Any]) -> None:
     (line,) = last_text_run(conn)
     assert line.startswith("last text run 2026-11-03 01:20Z: partial, scope 2 (theses 1, stage names 1)")
     assert "3 documents extracted" in line and line.endswith("stopped: time budget (6 min)")
+
+
+def test_s9_fires_are_listed_with_the_quote_behind_each_never_a_research_entrys(conn: psycopg.Connection[Any]) -> None:
+    """docs/SPEC_ISSUES.md 58: one S9 fact is 20 Evidence points, so the audit lists each fire with its newest verified
+    fact the week could read (point in time; a later document isn't it), by market; a name with a thesis or research
+    entry is counted, not named (diagnose.yml's log is public)."""
+    from pipeline.db.pit import cutoff_for
+
+    acme, delta = new_company(conn, name="Acme"), new_company(conn, name="Delta")
+    aravalli, private = new_company(conn, "in", "Aravalli"), new_company(conn, name="Secret")
+    conn.execute("insert into theses (company_id, state, card_md, card_json, evidence_pack, author, validation, "
+                 "created_week) values (%s, 'research', '', '{}', '{}', 'manual', '{}', %s)",
+                 (private, WEEK))  # fmt: skip
+    repo.upsert_scores(conn, [score(acme, "70", "61", ["fundamentals", "text"], "candidate"),
+                              score(delta, "45", None, ["text"], "none"),
+                              score(aravalli, "60", "55", ["fundamentals", "text"], "candidate"),
+                              score(private, "70", "70", ["fundamentals", "text"], "candidate")])  # fmt: skip
+    repo.upsert_signal_values(conn, [SignalValue(company_id=c, week_end=WEEK, signal_id="S9", fired=True,
+                                                 strength=Decimal("0.4"), inputs={"count": 1, "facts": ["x"]})
+                                     for c in (acme, delta, aravalli, private)])  # fmt: skip
+
+    def fact(cid: UUID, url: str, published: datetime, fact_type: str, quote: str) -> None:
+        row = conn.execute("insert into documents (company_id, kind, url, published_at, sha256, raw_path) values "
+                           "(%s, 'EX-99.1', %s, %s, 'x', 'x') returning id",
+                           (cid, url, published)).fetchone()  # fmt: skip
+        assert row is not None
+        conn.execute("insert into facts (company_id, document_id, fact_type, subject, subject_key, unit, as_of, quote, "
+                     "char_start, char_end, extraction_model, confidence, verification_status) values (%s, %s, %s, "
+                     "'x', 'x:y', 'other', %s, %s, 0, %s, 'm', 0.9, 'verified')",
+                     (cid, row[0], fact_type, published.date(), quote, len(quote)))  # fmt: skip
+
+    long = "We booked $5 billion of contract awards in the quarter, " + "a record for the business " * 8
+    fact(acme, "https://e.org/a1", datetime(2026, 9, 29, tzinfo=UTC), "order_win", long)
+    fact(acme, "https://e.org/a2", datetime(2026, 10, 9, tzinfo=UTC), "price_increase", "Prices rise 5% on May 1.")
+    fact(aravalli, "https://e.org/i", datetime(2026, 9, 21, tzinfo=UTC), "order_win", "An order of Rs 371 crore.")
+    fact(private, "https://e.org/p", datetime(2026, 9, 21, tzinfo=UTC), "order_win", "A private name's order.")
+    s9 = Configs.load().signals["s9_text"]
+    lines = s9_audit(conn, WEEK, s9)
+    assert lines[0] == ("S9 (verified text facts) fired: us 3 (candidate 2, none 1), in 1 (candidate 1); 1 of them a "
+                        "thesis or research entry's, not named here")  # fmt: skip
+    assert lines[1].startswith("  us Acme         candidate E=70.0 facts=1: order_win · EX-99.1 2026-09-29 · “We")
+    assert lines[1].endswith("…”") and len(lines[1].split("“")[1]) == 161  # the price increase came after the week
+    assert lines[2] == "  us Delta        none      E=45.0 facts=1: no fact found"
+    assert lines[3].startswith("  in ") and lines[3].endswith("2026-09-21 · “An order of Rs 371 crore.”")
+    assert len(lines) == 4 and all("Secret" not in x and "private" not in x for x in lines[1:])
+    assert cutoff_for(WEEK) < datetime(2026, 10, 9, tzinfo=UTC)

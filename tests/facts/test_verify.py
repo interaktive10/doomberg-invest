@@ -398,3 +398,34 @@ def test_multi_year_and_indian_labels(label: str, fye: str, expected: tuple[date
     calendar-year company's fiscal year doesn't span two years."""
     p = resolve(label, fye)
     assert (None if p is None else (p.start, p.end)) == expected
+
+
+INDIA_TEXT = RUPEES + "\n\nArvl also won a US$12 million order from a US utility."
+INDIA_DOC = DocContext("press_release", date(2026, 9, 21), "0331", INDIA_TEXT, "inr")
+
+
+@pytest.mark.parametrize("currency", [None, "INR", "Rs", "₹"])
+@pytest.mark.parametrize("unit", ["usd", "other"])
+def test_an_indian_companys_rupee_amount_is_verified_as_rupees(unit: str, currency: str | None) -> None:
+    """docs/SPEC_ISSUES.md 31 option b (58): an Indian company's amounts in its own currency are verified, stored as
+    money (the unit `usd`, whatever "other" the model said) with currency INR, so S9 and S1 read them unattended."""
+    r = ok(verify(prop(fact_type="order_win", subject="order", subject_key="order_win:india_order", value=D(450),
+                       unit=unit, currency=currency, scale_word=None, period_label=None,
+                       quote="The company received an order worth Rs 450 crore"),
+                  Chunk(INDIA_TEXT, 0, "body"), INDIA_DOC))  # fmt: skip
+    assert (r.verification_status, r.currency, r.unit, r.value_num) == ("verified", "INR", "usd", D(450) * 10**7)
+
+
+@pytest.mark.parametrize(
+    ("quote", "value", "scale", "currency"),
+    [("Arvl also won a US$12 million order from a US utility", D(12), "million", "USD"),  # a dollar amount
+     ("The company received an order worth Rs 450 crore", D(450), None, "USD")],  # rupees the model calls dollars
+)  # fmt: skip
+def test_another_currency_at_an_indian_company_waits_for_review(quote: str, value: D, scale: str | None,
+                                                                 currency: str) -> None:  # fmt: skip
+    """Only the filer's own currency is verified: a company's amounts then compare within one currency (diffs, S1's
+    backlog against revenue); a dollar order of an Indian company waits in the review queue, as rupees at a US one."""
+    r = ok(verify(prop(fact_type="order_win", subject="order", subject_key="order_win:us_order", value=value,
+                       unit="usd", currency=currency, scale_word=scale, period_label=None, quote=quote),
+                  Chunk(INDIA_TEXT, 0, "body"), INDIA_DOC))  # fmt: skip
+    assert r.verification_status == "needs_review" and "(INR)" in r.verification_notes["currency"]

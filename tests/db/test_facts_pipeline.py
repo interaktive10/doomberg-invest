@@ -75,7 +75,7 @@ def test_f_syn_in_the_database_keeps_every_quote_grounded(conn: psycopg.Connecti
     # M5-02: 100% grounding on the stored verified facts
     rows = conn.execute("select f.quote, f.char_start, f.char_end, d.url from facts f join documents d "
                         "on d.id = f.document_id where f.verification_status = 'verified'").fetchall()  # fmt: skip
-    assert len(rows) == 23  # 24 planted; Aravalli's rupee order waits for review
+    assert len(rows) == 24  # all 24 planted: Aravalli's rupee order is in its own currency (SPEC_ISSUES 58)
     texts: dict[str, str] = {}
     for quote, s, e, url in rows:
         if url not in texts:
@@ -250,10 +250,11 @@ def us_company(conn: psycopg.Connection[Any], name: str, ticker: str, cik: str |
     return cid
 
 
-def stage_name(conn: psycopg.Connection[Any], cid: UUID, evidence: int = 45) -> None:
+def stage_name(conn: psycopg.Connection[Any], cid: UUID, evidence: int = 45, bucket: str = "none",
+               gap: int | None = None, week: date = WEEK) -> None:  # fmt: skip
     """Evidence >= 40 in the latest scored week: the candidate stage."""
-    conn.execute("insert into scores (company_id, week_end, evidence, families, bucket, weights_version) values "
-                 "(%s, %s, %s, '{fundamentals}', 'none', 'w0-equal')", (cid, WEEK, evidence))  # fmt: skip
+    conn.execute("insert into scores (company_id, week_end, evidence, gap, families, bucket, weights_version) values "
+                 "(%s, %s, %s, %s, '{fundamentals}', %s, 'w0-equal')", (cid, week, evidence, gap, bucket))  # fmt: skip
 
 
 def research_entry(conn: psycopg.Connection[Any], cid: UUID) -> None:
@@ -523,6 +524,48 @@ def test_theses_are_read_before_stage_names_each_newest_first(conn: psycopg.Conn
     assert read == ["nmbs_10q_q2.htm", "nmbs_10q_q1.htm", "volt_10q.htm"]
 
 
+def test_the_stage_reads_its_boards_first_then_one_fact_from_a_candidate_excluded_last(
+    conn: psycopg.Connection[Any], tmp_path: Path
+) -> None:
+    """docs/SPEC_ISSUES.md 58: with one document a day, a Watch name's report first, then the name one verified S9
+    fact would make a Candidate (Gap >= 50), then the rest, the Excluded name last: each place before the next,
+    although the later places' filings are newer. The run records the scope and the reading by place."""
+    names = {"watch": ("watch", 70, "nmbs_10q_q1.htm", 90), "one_fact": ("none", 60, "nmbs_10q_q2.htm", 60),
+             "stage": ("none", 30, "volt_10q.htm", 30), "excluded": ("excluded", 95, "kyst_10q.htm", 1)}  # fmt: skip
+    http = mock_http(tmp_path)
+    for k, (key, (bucket, gap, f, ago)) in enumerate(names.items()):
+        cid = us_company(conn, f"{key} Co", key.upper()[:4])
+        stage_name(conn, cid, bucket=bucket, gap=gap)
+        http.register_mock(f"{ARCH}/{k}/{f}", (SYN / f).read_bytes())
+        repo.insert_filings(conn, [filing(cid, f"0000999051-26-{k:06d}", "10-Q", at(ago), url=f"{ARCH}/{k}/{f}")])
+    read: list[str] = []
+    stats = None
+    for _ in names:
+        before = {r[0] for r in conn.execute("select url from documents").fetchall()}
+        stats = run.run(conn, DAY, router(), http, None, tmp_path, documents_per_day=1)
+        assert stats.extracted == 1, stats
+        read += [u.rsplit("/", 1)[1] for u in {r[0] for r in conn.execute("select url from documents")} - before]
+    assert read == ["nmbs_10q_q1.htm", "nmbs_10q_q2.htm", "volt_10q.htm", "kyst_10q.htm"]
+    assert stats is not None and stats.read_by_order == {"excluded": 1}
+
+
+def test_each_market_reads_its_own_latest_scored_week(conn: psycopg.Connection[Any]) -> None:
+    """docs/SPEC_ISSUES.md 58: a market scored alone (the US re-scored on Monday) doesn't drop the other's stage
+    names, as the single latest week did; an older week of the same market isn't read."""
+    us = us_company(conn, "Nimbus Compute Corp.", "NMBS")
+    row = conn.execute("insert into companies (market, name, nse_symbol, isin, fiscal_year_end) values ('in', "
+                       "'Aravalli Cables Limited', 'ARVL', 'INE000A01010', '0331') returning id"
+                       ).fetchone()  # fmt: skip
+    assert row is not None
+    india = row[0]
+    stage_name(conn, us, week=WEEK - timedelta(days=7), bucket="watch", gap=70)  # last week's: not read
+    stage_name(conn, us, evidence=30, week=WEEK)  # this week the US name is out of the stage
+    stage_name(conn, india, week=WEEK - timedelta(days=7), bucket="watch", gap=80)  # India's latest week
+    got = facts_repo.stage_names(conn, run.STAGE_MIN_EVIDENCE)
+    assert [(s.company_id, s.bucket, s.gap) for s in got] == [(india, "watch", 80)]
+    assert run.scope(conn, DAY, []) == {india: run.ORDER.index("board")}
+
+
 def empty_submissions(cik: str) -> bytes:
     return json.dumps({"cik": cik, "name": "X", "filings": {"recent": {"accessionNumber": []}, "files": []}}).encode()
 
@@ -617,23 +660,28 @@ class RupeesWithoutCurrency:
         return Completion({**c.content, "facts": facts}, c.tokens_in, c.tokens_out)
 
 
-def test_a_rupee_order_without_a_currency_goes_to_review(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """M5 review R3-F1: ARVL's Rs 371 crore order, answered with no currency, is needs_review (never $3.7B verified):
-    no diff, and ARVL's S9 stays quiet."""
+def test_an_indian_rupee_order_without_a_currency_is_verified_as_rupees(conn: psycopg.Connection[Any],
+                                                                       tmp_path: Path) -> None:  # fmt: skip
+    """M5 review R3-F1 and docs/SPEC_ISSUES.md 31 option b (58): ARVL's Rs 371 crore order, answered with no currency,
+    is stored as rupees, never as $3.7B: the quote's currency decides, and an Indian company's own currency is
+    verified. Its diff reads in crore and ARVL's S9 fires (the same order at a US filer waits for review:
+    tests/facts/test_verify.py)."""
     from pipeline.signals import weekly
 
     cos = add_companies(conn)
     job = next(j for j in jobs(cos) if j.url.endswith("arvl_pr_order.htm"))
     r = Router({"gemini": RupeesWithoutCurrency()}, quotas(["gemini"], rpd=10_000), FakeClock())
     assert run.process(conn, job, fetch, r, tmp_path, run.TextStats("2026-09-18")) == "extracted"
-    status, notes = conn.execute("select verification_status, verification_notes from facts where fact_type = "
-                                 "'order_win'").fetchone()  # fmt: skip
-    assert status == "needs_review" and "currency" in notes
-    assert conn.execute("select count(*) from diffs where subject_key like 'order_win:%'").fetchone() == (0,)
-    weekly.run(conn, date(2026, 9, 18), http=None)
-    s9 = conn.execute("select v.fired from signal_values v join companies c on c.id = v.company_id where c.nse_symbol "
-                      "= 'ARVL' and v.week_end = '2026-09-18' and v.signal_id = 'S9'").fetchone()  # fmt: skip
-    assert s9 is None or s9[0] is False
+    row = conn.execute("select verification_status, currency, unit, value_num from facts where fact_type = "
+                       "'order_win'").fetchone()  # fmt: skip
+    assert row == ("verified", "INR", "usd", 3710000000)
+    notes = conn.execute("select computed_note from diffs where subject_key like 'order_win:%'").fetchall()
+    assert notes == [("new: ₹371 cr",)]
+    weekly.run(conn, date(2026, 9, 25), http=None)
+    s9 = conn.execute("select v.fired, v.inputs from signal_values v join companies c on c.id = v.company_id where "
+                      "c.nse_symbol = 'ARVL' and v.week_end = '2026-09-25' and v.signal_id = 'S9'"
+                      ).fetchone()  # fmt: skip
+    assert s9 is not None and s9[0] is True and s9[1]["count"] == 1
 
 
 DATED_EPS_OLD = "Diluted earnings per share were $1.87, up 14% from a year ago."
