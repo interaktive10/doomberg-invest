@@ -1150,13 +1150,13 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
    - the model's `value_*` must equal a number parsed from the quote after scaling (tolerance: rounding of the last reported digit), else rejected
    - currency: the filer's own only (USD for a US company, INR for an Indian one; SPEC_ISSUES 31 option b), so a company's amounts compare within one currency; anything else → `needs_review`. Money keeps the unit `usd` and `currency` says which
 6. **Periods** (`facts/periods.py`): resolve fiscal periods with the company's `fiscal_year_end` (from submissions JSON). Guidance for periods that already ended at the filing date → `needs_review`.
-7. **subject_key:** P-01 proposes one from `config/subject_keys.yaml`, and code validates it. Unknown → `other:<slug>` plus `needs_review`.
+7. **subject_key:** P-01 proposes one from `config/subject_keys.yaml`, and code validates it; a vocabulary key with junk at its end is repaired (SPEC_ISSUES 59). Unknown → `other:<slug>` plus `needs_review`.
 
 ### F.5 Verify-1 (`facts/verify1.py`; the fact enters the ledger only if `verified`)
 | Check | Rule | On failure |
 |---|---|---|
 | V1-QUOTE | `canonical_text[char_start:char_end] == quote` (canonical form) | failed (not stored as a ledger fact; logged) |
-| V1-NUM | Every numeric field appears in the quote after normalization | failed |
+| V1-NUM | Every numeric field appears in the quote after normalization; a measure (capex, backlog, RPO, a lead time, a commitment, a customer or export share, a utility's load) states one (SPEC_ISSUES 59) | failed |
 | V1-UNIT | Unit consistent with quote tokens (e.g. "MW" ↔ mw, "$" ↔ usd) | failed |
 | V1-TYPE | fact_type allowed; no price fields in facts (prices live in `prices_w`); subject_key valid | failed |
 | V1-PERIOD | Period resolvable and plausible (capex guidance and reported need one; on other types a label that names no fiscal or calendar period is kept as written, with no period: SPEC_ISSUES 59) | needs_review |
@@ -1196,6 +1196,8 @@ Set "period_label" only to the fiscal or calendar period a number covers, as wri
 quarter of 2026"); leave it null for anything else, such as a date, a term or a duration.
 For a range, set "value_low" and "value_high" and leave "value" null. Keep every number in the unit the excerpt
 writes it in.
+An event needs no number: a named new customer, a new segment or business line, a governance event. A measure (a lead
+time, a backlog, capital spending, a share of revenue) is a fact only with its number.
 A governance event is "added" when the excerpt reports it, and "removed" only when the excerpt says one reported
 earlier was remediated or resolved; controls the excerpt calls effective are neither.
 Allowed fact types: {{fact_types_with_definitions}}.

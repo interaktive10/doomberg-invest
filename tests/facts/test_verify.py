@@ -198,12 +198,12 @@ def test_period_labels_india_halves_and_dates(label: str, fye: str, expected: tu
 
 def test_a_unit_without_a_number_and_an_implausible_period() -> None:
     """M5 review R1-F9: a fact with no value in the quote keeps no unit ("other"), and a period ending more than
-    10 years from the document goes to review."""
-    text = "Backlog reached a record.\n\nWe expect capital expenditures of about $2 billion in fiscal 2090."
+    10 years from the document goes to review. A measure with no number is no fact (docs/SPEC_ISSUES.md 59)."""
+    text = "We broke ground on a new plant.\n\nWe expect capital expenditures of about $2 billion in fiscal 2090."
     doc = DocContext("10-Q", date(2026, 10, 28), "0630", text)
-    none = ok(verify(prop(fact_type="backlog", subject="backlog", subject_key="backlog:total", value=None,
-                          unit="mw", currency=None, scale_word=None, period_label=None,
-                          quote="Backlog reached a record."), Chunk(text, 0, None), doc))  # fmt: skip
+    none = ok(verify(prop(fact_type="capacity_addition", subject="plant", subject_key="capacity:mw:new_plant",
+                          value=None, unit="mw", currency=None, scale_word=None, period_label=None,
+                          quote="We broke ground on a new plant."), Chunk(text, 0, None), doc))  # fmt: skip
     assert none.unit == "other" and none.value_num is None
     far = ok(verify(prop(value=D(2), period_label="fiscal 2090", subject_key="capex_guidance:fy2090",
                          quote="We expect capital expenditures of about $2 billion in fiscal 2090."),
@@ -472,3 +472,36 @@ def test_the_models_midpoint_of_a_quoted_range_gives_way_to_codes() -> None:
                           value=D(33), value_low=D(30), unit="months", currency=None, scale_word=None,
                           period_label=None, quote=quote), Chunk(FIELDS, 0, "body"), FIELDS_DOC)  # fmt: skip
     assert isinstance(one_end, Rejected) and one_end.check == "V1-NUM"  # not a range: the model's number must be quoted
+
+
+@pytest.mark.parametrize(("fact_type", "key"), [("lead_time", "lead_time:transformers"), ("backlog", "backlog:total"),
+                                                ("customer_concentration", "customer_concentration:top1")])  # fmt: skip
+def test_a_measure_without_its_number_is_no_fact(fact_type: str, key: str) -> None:
+    """docs/SPEC_ISSUES.md 59: "We continue to monitor ... lead time trends" came back as a lead_time fact with no
+    value and verified. A measure states a number; an event (a named customer, a new segment) needs none."""
+    text = "We continue to monitor supply chain conditions, including lead time trends for transformers."
+    doc = DocContext("10-Q", date(2026, 10, 28), "1231", text)
+    r = verify(prop(fact_type=fact_type, subject="x", subject_key=key, value=None, unit="other", currency=None,
+                    scale_word=None, period_label=None, quote=text), Chunk(text, 0, None), doc)  # fmt: skip
+    assert isinstance(r, Rejected) and r.check == "V1-NUM" and "states none" in r.reason
+    event = "Beginning next quarter, Nimbus will report AI Infrastructure Services as a new reportable segment."
+    seg = ok(verify(prop(fact_type="new_segment", subject="AI Infrastructure Services",
+                         subject_key="new_segment:ai_infrastructure", value=None, unit="other", currency=None,
+                         scale_word=None, period_label=None, quote=event), Chunk(event, 0, None),
+                    DocContext("EX-99.1", date(2026, 10, 28), "0630", event)))  # fmt: skip
+    assert seg.verification_status == "verified"
+
+
+@pytest.mark.parametrize(
+    ("fact_type", "proposed", "repaired"),
+    [("commitment_lease", "lease_not_commenced:total,unit:", "lease_not_commenced:total"),  # the next field leaked
+     ("commitment_purchase", "purchase_obligations:totalkoh", "purchase_obligations:total"),  # junk after a fixed key
+     ("order_win", "order_win:nimbus,unit:", "order_win:nimbus"),
+     ("governance_flag", "governance:material_weakness:added,unit:", "governance:material_weakness:added")],
+)  # fmt: skip
+def test_a_garbled_vocabulary_key_is_repaired(fact_type: str, proposed: str, repaired: str) -> None:
+    """docs/SPEC_ISSUES.md 59: the real model glitches a key's end; the key it meant is still the vocabulary's."""
+    assert keys.check(fact_type, proposed, "x") == (repaired, True)
+    top10 = "customer_concentration:top10"
+    assert keys.check("customer_concentration", top10, "x") == (top10, True)  # a valid slot key: never "repaired"
+    assert keys.check("commitment_purchase", "purchase_obligation:total", "x") == ("other:total", False)

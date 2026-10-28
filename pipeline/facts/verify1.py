@@ -17,7 +17,8 @@ amount), not from the model.
 What the model adds around a grounded number doesn't send a fact to review (docs/SPEC_ISSUES.md 59, the first runs on
 the real model): an as_of after publication (a delivery or effective date) is the publication date; a period label
 that names no fiscal or calendar period ("15 years", "total", a date) is kept as written with no period, except on
-capex guidance/reported, which need one; and the model's own midpoint of a quoted range gives way to code's.
+capex guidance/reported, which need one; and the model's own midpoint of a quoted range gives way to code's. A fact of
+a type that is a measure (MEASURES) needs a number in its quote.
 """
 
 from __future__ import annotations
@@ -137,6 +138,10 @@ PER_SHARE_BEFORE = re.compile(r"(?:\bper\s+(?:diluted\s+)?share|\bEPS)\b(?:[^.;]
 UNIT_OF = {"mw": "mw", "gw": "gw", "mwh": "mwh", "percent": "percent", "months": "months", "weeks": "weeks",
            "years": "years", "sq_ft": "sq_ft"}  # fmt: skip
 PERIOD_REQUIRED = frozenset({"capex_guidance", "capex_reported"})
+# types that are a measure: without a number in the quote ("we monitor lead time trends") there is no fact
+# (docs/SPEC_ISSUES.md 59); an event (an order, a customer, a segment, a governance event) needs none
+MEASURES = frozenset({"capex_guidance", "capex_reported", "backlog", "rpo", "lead_time", "commitment_lease",
+                      "commitment_purchase", "customer_concentration", "utility_load", "export_exposure"})  # fmt: skip
 GUIDANCE = frozenset({"capex_guidance"})
 
 # (concept, period_end, months) -> the XBRL value known when the document was published, or None
@@ -254,6 +259,8 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
             return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
         if m.currency is not None and m.currency != doc.currency:  # whatever the model said (M5 review R3-F1)
             review["currency"] = own_currency_note(m.currency.upper(), doc)
+    if not matched and p.fact_type in MEASURES:
+        return Rejected("V1-NUM", f"a {p.fact_type} fact is a number, and the quote states none")
     if not matched and price_context(sentence, start - s0):
         return Rejected("V1-TYPE", "share-price, valuation or capital-return facts are not stored (prices_w)")
     if p.fact_type == "price_increase" and not pricing_word(sentence):
