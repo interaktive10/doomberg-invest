@@ -1,0 +1,54 @@
+{
+ "key": "504d6023f0517a37005d689901eb8679d616c7a23158bcfbabe6900e581a9f56",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-01",
+ "provider": "gemini",
+ "request": {
+  "system": "You extract facts a company states about its business from one excerpt of a company document: orders and contract\nwins, new named customers or programs, price increases and pricing actions, capacity additions and commitments, lead\ntimes, new segments or business lines, governance events (auditor changes, material weaknesses, going-concern doubts,\nrestatements), export exposure, customer concentration, and capital spending, financing, backlog and obligations.\nExtract only facts the excerpt states explicitly. Never calculate, infer, combine, annualize or convert numbers.\nFor every fact, copy the exact supporting text into \"quote\": verbatim, at most 60 words, and it must appear exactly\nin the excerpt. If a number's meaning depends on nearby words (a unit, a period, \"approximately\"), include them in\nthe quote.\nSet \"as_of\" to the date the excerpt states the fact as of (an award date, a quarter end), never later than the\ndocument's publication; if the excerpt states none, leave it null.\nA governance event is \"added\" when the excerpt reports it, and \"removed\" only when the excerpt says one reported\nearlier was remediated or resolved; controls the excerpt calls effective are neither.\nAllowed fact types: capex_guidance (A company's stated expectation for capital expenditures); capex_reported (Reported capital expenditures (XBRL PaymentsToAcquirePropertyPlantAndEquipment and text)); backlog (Stated backlog/orders (industrial, contractors)); rpo (Remaining performance obligations (XBRL RevenueRemainingPerformanceObligation and text)); lead_time (A stated lead time for equipment or capacity); capacity_addition (New or expanded capacity: MW/GW, factories, square feet, sites, with timing); commitment_lease (Leases not yet commenced, data-center leases, lease commitments); commitment_purchase (Purchase obligations, capacity/compute purchase commitments, take-or-pay); commitment_ppa (Power purchase and energy supply agreements (counterparty, MW, term)); financing (Debt, JV or SPV financing tied to AI/data-center infrastructure); customer_concentration (Stated share of revenue from the largest customers); supply_link (A named customer/supplier/partner relationship tied to AI infrastructure); utility_load (Utility large-load or data-center pipeline (GW, requests, contracts)); risk_factor_change (Added, removed or modified risk-factor paragraphs on AI, data centers, power or supply chain); order_win (A stated order or contract win with value, customer or segment); customer_win (A new named customer or program); price_increase (A stated price increase or pricing action); new_segment (A new reportable segment or business line); governance_flag (Auditor change, material weakness, going concern, restatement (added or removed)); export_exposure (A stated export share or overseas order book (India: US/data-center exports)).\nUse a subject_key from this vocabulary: capex_guidance:<period>, capex_reported:<period>, backlog:total, backlog:<segment>, rpo:total, rpo:next_12m_pct, lead_time:<equipment>, capacity:mw:site_<slug>, capacity:<unit>:<slug>, lease_not_commenced:total, purchase_obligations:total, ppa:<counterparty>:<site>, financing:<instrument>:<date>, customer_concentration:top1, customer_concentration:<topn>, link:<counterparty>, large_load:pipeline_gw, risk:<paragraph_hash>, order_win:<slug>, customer_win:<slug>, price_increase:<slug>, new_segment:<slug>, governance:auditor_change:added, governance:material_weakness:added, governance:material_weakness:removed, governance:going_concern:added, governance:going_concern:removed, governance:restatement:added, governance:restatement:removed, export_exposure:share_pct, export_exposure:overseas_order_book. If none fits, use \"other:<short-slug>\".\nDo not extract anything about share prices, stock performance, valuation, analyst views, ratings, share repurchases,\ndividends or trading. If the excerpt states that previous guidance is withdrawn, set \"withdrawn\": true.\nReturn only the tool call.",
+  "user": "COMPANY: Voltara Grid Systems, Inc. (VOLT), fiscal year ends 1231\nDOCUMENT: presentation · Investor presentation · published 2026-09-22\nSECTION: whole document · excerpt chars 245–552\n<<<\nSupply and demand for power equipment\nCustomers now face lead times of 30 to 36 months for large gas turbines.\nTransformer, turbine and switchgear capacity is sold out through 2027 across the industry.\nRevenue growth reflected higher demand for AI infrastructure and data center capacity across our\nmarkets.\n>>>"
+ },
+ "response": {
+  "content": {
+   "facts": [
+    {
+     "as_of": "2026-09-22",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "lead_time",
+     "location": null,
+     "period_label": null,
+     "quote": "Customers now face lead times of 30 to 36 months for large gas turbines.",
+     "scale_word": null,
+     "subject": "large gas turbines lead time",
+     "subject_key": "lead_time:large_gas_turbines",
+     "unit": "months",
+     "value": 33,
+     "value_high": 36,
+     "value_low": 30,
+     "withdrawn": false
+    },
+    {
+     "as_of": "2026-09-22",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capacity_addition",
+     "location": null,
+     "period_label": "through 2027",
+     "quote": "Transformer, turbine and switchgear capacity is sold out through 2027 across the industry.",
+     "scale_word": null,
+     "subject": "Transformer, turbine and switchgear capacity",
+     "subject_key": "capacity:other:transformer_turbine_switchgear",
+     "unit": "other",
+     "value": null,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
+    }
+   ]
+  },
+  "tokens_in": 1559,
+  "tokens_out": 294
+ }
+}

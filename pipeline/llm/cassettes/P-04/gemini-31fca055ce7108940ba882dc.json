@@ -1,0 +1,114 @@
+{
+ "key": "31fca055ce7108940ba882dcf6a8144f45e076bf46694ec18374421a61f9eec2",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-04",
+ "provider": "gemini",
+ "request": {
+  "system": "You write a long-term investment research card from an evidence pack. The pack is the only source of facts.\nSeparate what is known from what is assumed. Every sentence in \"facts\" and \"why_mispriced\" must cite pack ids like\n[f:…], [m:…], [s:…], [c:…], and every number must match the pack exactly. Put your reasoning in \"inferences\"\n(each starting with \"Inference:\") and the things that must hold for the thesis in \"assumptions\" (each starting\nwith \"Assumption:\"; mark any number you choose with \"(assumed)\"). Kill criteria must be observable: a metric id from\nthe pack, an operator, a threshold, and a check-after date after the next filing window. Write plainly. No hype,\nno certainty words, no price targets.",
+  "user": "EVIDENCE PACK:\n{\n \"version\": 1,\n \"week\": \"2026-W38\",\n \"week_end\": \"2026-09-18\",\n \"company\": {\n  \"company_id\": \"00000000-0000-4000-8000-00000000c0de\",\n  \"key\": \"us-nmbs\",\n  \"name\": \"Nimbus Compute Corp.\",\n  \"market\": \"us\",\n  \"ticker\": \"NMBS\",\n  \"nse_symbol\": null,\n  \"cik\": \"0000999001\",\n  \"isin\": null,\n  \"sector\": \"Information Technology\",\n  \"industry\": \"Computer hardware\",\n  \"capex_desk\": true,\n  \"fiscal_year_end\": \"0630\"\n },\n \"bucket\": \"candidate\",\n \"families\": [\n  \"fundamentals\",\n  \"text\"\n ],\n \"metrics\": [\n  {\n   \"id\": \"m:revenue:2025-06-30\",\n   \"name\": \"revenue\",\n   \"period_end\": \"2025-06-30\",\n   \"value\": \"980000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:revenue:2026-06-30\",\n   \"name\": \"revenue\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"1250000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:op_income:2026-06-30\",\n   \"name\": \"op_income\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"206250000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:rpo:2025-06-30\",\n   \"name\": \"rpo\",\n   \"period_end\": \"2025-06-30\",\n   \"value\": \"2900000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:rpo:2026-06-30\",\n   \"name\": \"rpo\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"4200000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:diluted_shares:2026-06-30\",\n   \"name\": \"diluted_shares\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"212000000\",\n   \"unit\": \"shares\",\n   \"source\": \"fundamentals\"\n  }\n ],\n \"signals\": [\n  {\n   \"id\": \"s:S1\",\n   \"kind\": \"signal\",\n   \"fired\": true,\n   \"strength\": \"0.82\",\n   \"hard\": null,\n   \"status\": null,\n   \"inputs\": {\n    \"g_ob\": 0.4483,\n    \"g_rev\": 0.2755,\n    \"gap\": 0.1728,\n    \"consecutive\": 2\n   }\n  },\n  {\n   \"id\": \"s:R2\",\n   \"kind\": \"red_flag\",\n   \"fired\": false,\n   \"strength\": null,\n   \"hard\": false,\n   \"status\": \"unknown\",\n   \"inputs\": {\n    \"missing\": [\n     \"receivables_growth\"\n    ]\n   }\n  }\n ],\n \"context\": [\n  {\n   \"id\": \"c:C2\",\n   \"value\": \"0.06\",\n   \"pct\": null,\n   \"inputs\": {\n    \"g_implied\": 0.12,\n    \"g_evidence\": 0.18,\n    \"discount_rate\": 0.09,\n    \"terminal_growth\": 0.025\n   }\n  },\n  {\n   \"id\": \"c:evidence\",\n   \"value\": \"62.5\",\n   \"pct\": null,\n   \"inputs\": {\n    \"families\": [\n     \"fundamentals\",\n     \"text\"\n    ]\n   }\n  },\n  {\n   \"id\": \"c:gap\",\n   \"value\": \"58.3\",\n   \"pct\": null,\n   \"inputs\": {}\n  }\n ],\n \"facts\": [\n  {\n   \"id\": \"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001\",\n   \"fact_type\": \"capex_guidance\",\n   \"subject\": \"Fiscal 2027 capital expenditures\",\n   \"subject_key\": \"capex_guidance:FY2027\",\n   \"value\": \"1800000000\",\n   \"value_low\": null,\n   \"value_high\": null,\n   \"unit\": \"usd\",\n   \"currency\": \"USD\",\n   \"period_label\": \"FY2027\",\n   \"period_end\": \"2027-06-30\",\n   \"as_of\": \"2026-08-06\",\n   \"counterparty\": null,\n   \"quote\": \"We expect fiscal 2027 capital expenditures of approximately $1.8 billion.\",\n   \"url\": \"https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm\",\n   \"document_kind\": \"EX-99.1\",\n   \"published_at\": \"2026-08-06T20:05:00Z\"\n  },\n  {\n   \"id\": \"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002\",\n   \"fact_type\": \"order_win\",\n   \"subject\": \"Multi-year hyperscaler order\",\n   \"subject_key\": \"order_win:hyperscaler\",\n   \"value\": \"600000000\",\n   \"value_low\": null,\n   \"value_high\": null,\n   \"unit\": \"usd\",\n   \"currency\": \"USD\",\n   \"period_label\": null,\n   \"period_end\": null,\n   \"as_of\": \"2026-08-06\",\n   \"counterparty\": \"a hyperscale cloud provider\",\n   \"quote\": \"Nimbus received a $600 million multi-year order from a hyperscale cloud provider.\",\n   \"url\": \"https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm\",\n   \"document_kind\": \"EX-99.1\",\n   \"published_at\": \"2026-08-06T20:05:00Z\"\n  }\n ],\n \"ownership\": [\n  {\n   \"id\": \"m:inst_holders:2026-06-30\",\n   \"name\": \"inst_holders\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"412\",\n   \"unit\": \"count\",\n   \"source\": \"sec_13f\"\n  }\n ],\n \"insiders\": [],\n \"capex_categories\": [\n  \"compute\"\n ],\n \"capex_links\": [\n  {\n   \"entity\": \"a hyperscale cloud provider\",\n   \"entity_kind\": \"company\",\n   \"relation\": \"customer\",\n   \"fact_id\": \"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002\"\n  }\n ],\n \"kill_metrics\": [\n  {\n   \"id\": \"m:revenue_ttm_yoy\",\n   \"description\": \"TTM revenue vs the TTM a year earlier\",\n   \"value\": \"0.2410\",\n   \"unit\": \"ratio\"\n  },\n  {\n   \"id\": \"m:rpo_yoy\",\n   \"description\": \"RPO vs a year earlier\",\n   \"value\": \"0.4483\",\n   \"unit\": \"ratio\"\n  },\n  {\n   \"id\": \"m:op_margin_ttm\",\n   \"description\": \"TTM operating income / TTM revenue\",\n   \"value\": \"0.1650\",\n   \"unit\": \"ratio\"\n  },\n  {\n   \"id\": \"m:evidence\",\n   \"description\": \"Evidence score, latest scored week (0-100)\",\n   \"value\": \"62.5\",\n   \"unit\": \"score\"\n  },\n  {\n   \"id\": \"m:signal:S1\",\n   \"description\": \"S1 strength, latest scored week (0-1)\",\n   \"value\": \"0.82\",\n   \"unit\": \"score\"\n  }\n ],\n \"next_filing\": {\n  \"period_end\": \"2026-09-30\",\n  \"form\": \"10-Q\",\n  \"opens\": \"2026-10-01\",\n  \"closes\": \"2026-11-14\"\n }\n}"
+ },
+ "response": {
+  "content": {
+   "assumptions": [
+    "Assumption: Operating margins will remain stable at or above (assumed) 0.1650 as scale benefits offset supply chain costs.",
+    "Assumption: Future order renewals will sustain top-line growth above (assumed) 0.1500 annually over the next three years."
+   ],
+   "facts": [
+    {
+     "cites": [
+      "m:revenue:2025-06-30"
+     ],
+     "text": "Nimbus reported revenue of $980000000 for the period ending 2025-06-30 [m:revenue:2025-06-30]."
+    },
+    {
+     "cites": [
+      "m:revenue:2026-06-30"
+     ],
+     "text": "Nimbus reported revenue of $1250000000 for the period ending 2026-06-30 [m:revenue:2026-06-30]."
+    },
+    {
+     "cites": [
+      "m:op_income:2026-06-30"
+     ],
+     "text": "Operating income was $206250000 for the period ending 2026-06-30 [m:op_income:2026-06-30]."
+    },
+    {
+     "cites": [
+      "m:rpo:2025-06-30",
+      "m:rpo:2026-06-30"
+     ],
+     "text": "Remaining performance obligations (RPO) stood at $2900000000 on 2025-06-30 and grew to $4200000000 on 2026-06-30 [m:rpo:2025-06-30, m:rpo:2026-06-30]."
+    },
+    {
+     "cites": [
+      "m:diluted_shares:2026-06-30"
+     ],
+     "text": "Diluted shares were 212000000 for the period ending 2026-06-30 [m:diluted_shares:2026-06-30]."
+    },
+    {
+     "cites": [
+      "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001"
+     ],
+     "text": "Nimbus expects fiscal 2027 capital expenditures of approximately $1.8 billion [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001]."
+    },
+    {
+     "cites": [
+      "f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002"
+     ],
+     "text": "Nimbus received a $600 million multi-year order from a hyperscale cloud provider [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002]."
+    }
+   ],
+   "inferences": [
+    "Inference: The higher capital expenditure guidance for fiscal 2027 indicates management's confidence in fulfilling the growing RPO backlog.",
+    "Inference: The large order win from a hyperscale customer demonstrates strong product demand and validation in the computer hardware market."
+   ],
+   "kill_criteria": [
+    {
+     "check_after": "2026-11-14",
+     "metric_id": "m:rpo_yoy",
+     "operator": "<",
+     "threshold": 0.2,
+     "why": "A significant drop in year-over-year RPO growth would invalidate the thesis that backlog expansion supports future revenue acceleration."
+    },
+    {
+     "check_after": "2026-11-14",
+     "metric_id": "m:signal:S1",
+     "operator": "<",
+     "threshold": 0.5,
+     "why": "A weakening S1 signal strength indicates narrowing divergence between order growth and revenue growth."
+    }
+   ],
+   "read_next": [
+    {
+     "title": "SEC Form EX-99.1 Filing",
+     "url": "https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm"
+    }
+   ],
+   "risks": [
+    {
+     "cites": [
+      "s:R2"
+     ],
+     "text": "Receivables growth data is currently missing, which creates visibility risks regarding cash collection on expanding revenues [s:R2]."
+    }
+   ],
+   "summary": "Nimbus Compute Corp. is experiencing accelerating revenue and remaining performance obligations growth, backed by expanding orders from hyperscale cloud providers, while the market underestimates future expansion capacity.",
+   "why_mispriced": [
+    {
+     "cites": [
+      "c:C2"
+     ],
+     "text": "The market prices in a growth rate of 0.12 while evidence points to 0.18, creating a valuation gap [c:C2]."
+    },
+    {
+     "cites": [
+      "s:S1"
+     ],
+     "text": "RPO growth of 0.4483 outpaces revenue growth of 0.2755 by a gap of 0.1728, which is not fully reflected in current expectations [s:S1]."
+    }
+   ]
+  },
+  "tokens_in": 2594,
+  "tokens_out": 1430
+ }
+}

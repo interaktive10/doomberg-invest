@@ -1,0 +1,108 @@
+{
+ "key": "d087fd404940c76da48e5a5d4bcc064051b7e1e594e6cff1e418561b56aa0e17",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-01",
+ "provider": "gemini",
+ "request": {
+  "system": "You extract facts a company states about its business from one excerpt of a company document: orders and contract\nwins, new named customers or programs, price increases and pricing actions, capacity additions and commitments, lead\ntimes, new segments or business lines, governance events (auditor changes, material weaknesses, going-concern doubts,\nrestatements), export exposure, customer concentration, and capital spending, financing, backlog and obligations.\nExtract only facts the excerpt states explicitly. Never calculate, infer, combine, annualize or convert numbers.\nFor every fact, copy the exact supporting text into \"quote\": verbatim, at most 60 words, and it must appear exactly\nin the excerpt. If a number's meaning depends on nearby words (a unit, a period, \"approximately\"), include them in\nthe quote.\nSet \"as_of\" to the date the excerpt states the fact as of (an award date, a quarter end), never later than the\ndocument's publication; if the excerpt states none, leave it null.\nA governance event is \"added\" when the excerpt reports it, and \"removed\" only when the excerpt says one reported\nearlier was remediated or resolved; controls the excerpt calls effective are neither.\nAllowed fact types: capex_guidance (A company's stated expectation for capital expenditures); capex_reported (Reported capital expenditures (XBRL PaymentsToAcquirePropertyPlantAndEquipment and text)); backlog (Stated backlog/orders (industrial, contractors)); rpo (Remaining performance obligations (XBRL RevenueRemainingPerformanceObligation and text)); lead_time (A stated lead time for equipment or capacity); capacity_addition (New or expanded capacity: MW/GW, factories, square feet, sites, with timing); commitment_lease (Leases not yet commenced, data-center leases, lease commitments); commitment_purchase (Purchase obligations, capacity/compute purchase commitments, take-or-pay); commitment_ppa (Power purchase and energy supply agreements (counterparty, MW, term)); financing (Debt, JV or SPV financing tied to AI/data-center infrastructure); customer_concentration (Stated share of revenue from the largest customers); supply_link (A named customer/supplier/partner relationship tied to AI infrastructure); utility_load (Utility large-load or data-center pipeline (GW, requests, contracts)); risk_factor_change (Added, removed or modified risk-factor paragraphs on AI, data centers, power or supply chain); order_win (A stated order or contract win with value, customer or segment); customer_win (A new named customer or program); price_increase (A stated price increase or pricing action); new_segment (A new reportable segment or business line); governance_flag (Auditor change, material weakness, going concern, restatement (added or removed)); export_exposure (A stated export share or overseas order book (India: US/data-center exports)).\nUse a subject_key from this vocabulary: capex_guidance:<period>, capex_reported:<period>, backlog:total, backlog:<segment>, rpo:total, rpo:next_12m_pct, lead_time:<equipment>, capacity:mw:site_<slug>, capacity:<unit>:<slug>, lease_not_commenced:total, purchase_obligations:total, ppa:<counterparty>:<site>, financing:<instrument>:<date>, customer_concentration:top1, customer_concentration:<topn>, link:<counterparty>, large_load:pipeline_gw, risk:<paragraph_hash>, order_win:<slug>, customer_win:<slug>, price_increase:<slug>, new_segment:<slug>, governance:auditor_change:added, governance:material_weakness:added, governance:material_weakness:removed, governance:going_concern:added, governance:going_concern:removed, governance:restatement:added, governance:restatement:removed, export_exposure:share_pct, export_exposure:overseas_order_book. If none fits, use \"other:<short-slug>\".\nDo not extract anything about share prices, stock performance, valuation, analyst views, ratings, share repurchases,\ndividends or trading. If the excerpt states that previous guidance is withdrawn, set \"withdrawn\": true.\nReturn only the tool call.",
+  "user": "COMPANY: Voltara Grid Systems, Inc. (VOLT), fiscal year ends 1231\nDOCUMENT: 10-Q · Form 10-Q Q2 2026 · published 2026-07-30\nSECTION: mdna · excerpt chars 459–1235\n<<<\nItem 2. Management's Discussion and Analysis of Financial Condition and Results of Operations\n\nWe continue to monitor supply chain conditions, including lead time trends for transformers and switchgear.\n\nTotal backlog reached $13.2 billion at quarter end, a record for the company.\n\nBacklog from data center customers was $4.1 billion, up from the prior year.\n\nLead times for large power transformers extended to 147 weeks during the quarter.\n\nOur stock price rose 23% during the quarter, and two analysts upgraded their ratings to buy.\n\nOur largest customer, a hyperscale data center operator, accounted for 26% of revenue in the quarter.\n\nWe entered into a multi-year agreement to supply power transformers and switchgear to Nimbus Compute for its AI data center campuses.\n\n\n>>>"
+ },
+ "response": {
+  "content": {
+   "facts": [
+    {
+     "as_of": "2026-06-30",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": "USD",
+     "fact_type": "backlog",
+     "location": null,
+     "period_label": "Q2 2026",
+     "quote": "Total backlog reached $13.2 billion at quarter end, a record for the company.",
+     "scale_word": "billion",
+     "subject": "Total backlog",
+     "subject_key": "backlog:total",
+     "unit": "usd",
+     "value": 13.2,
+     "value_high": 13.2,
+     "value_low": 13.2,
+     "withdrawn": false
+    },
+    {
+     "as_of": "2026-06-30",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": "USD",
+     "fact_type": "backlog",
+     "location": null,
+     "period_label": "Q2 2026",
+     "quote": "Backlog from data center customers was $4.1 billion, up from the prior year.",
+     "scale_word": "billion",
+     "subject": "Data center customers backlog",
+     "subject_key": "backlog:data_center",
+     "unit": "usd",
+     "value": 4.1,
+     "value_high": 4.1,
+     "value_low": 4.1,
+     "withdrawn": false
+    },
+    {
+     "as_of": "2026-06-30",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "lead_time",
+     "location": null,
+     "period_label": "Q2 2026",
+     "quote": "Lead times for large power transformers extended to 147 weeks during the quarter.",
+     "scale_word": null,
+     "subject": "Large power transformers lead time",
+     "subject_key": "lead_time:large_power_transformers",
+     "unit": "weeks",
+     "value": 147,
+     "value_high": 147,
+     "value_low": 147,
+     "withdrawn": false
+    },
+    {
+     "as_of": "2026-06-30",
+     "confidence": 1,
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "customer_concentration",
+     "location": null,
+     "period_label": "Q2 2026",
+     "quote": "Our largest customer, a hyperscale data center operator, accounted for 26% of revenue in the quarter.",
+     "scale_word": null,
+     "subject": "Largest customer revenue share",
+     "subject_key": "customer_concentration:top1",
+     "unit": "percent",
+     "value": 26,
+     "value_high": 26,
+     "value_low": 26,
+     "withdrawn": false
+    },
+    {
+     "as_of": "2026-07-30",
+     "confidence": 1,
+     "counterparty": "Nimbus Compute",
+     "currency": null,
+     "fact_type": "supply_link",
+     "location": null,
+     "period_label": "multi-year",
+     "quote": "We entered into a multi-year agreement to supply power transformers and switchgear to Nimbus Compute for its AI data center campuses.",
+     "scale_word": null,
+     "subject": "Supply agreement with Nimbus Compute",
+     "subject_key": "link:nimbus_compute",
+     "unit": "other",
+     "value": null,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
+    }
+   ]
+  },
+  "tokens_in": 1676,
+  "tokens_out": 736
+ }
+}
