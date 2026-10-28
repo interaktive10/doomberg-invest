@@ -99,3 +99,13 @@ def test_retry_after_from_header_or_gemini_retry_info() -> None:
     body = '{"error": {"details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "31s"}]}}'
     e2 = httpx.HTTPStatusError("429", request=req, response=httpx.Response(429, text=body, request=req))
     assert retry_after(e2) == 31.0
+    # a per-day quota is the day's, whatever retryDelay says: the router would otherwise wait it out every item
+    # (docs/SPEC_ISSUES.md 59)
+    daily = ('{"error": {"details": [{"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": '
+             '[{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}, '
+             '{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "19s"}]}}')  # fmt: skip
+    e3 = httpx.HTTPStatusError("429", request=req, response=httpx.Response(429, text=daily, request=req))
+    assert retry_after(e3) is None
+    minute = daily.replace("PerDayPerProject", "PerMinutePerProject")
+    e4 = httpx.HTTPStatusError("429", request=req, response=httpx.Response(429, text=minute, request=req))
+    assert retry_after(e4) == 19.0

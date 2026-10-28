@@ -118,7 +118,9 @@ def parse_json_object(text: str) -> dict[str, Any]:
 
 
 def retry_after(e: httpx.HTTPStatusError) -> float | None:
-    """Seconds to wait from a 429: the Retry-After header, or Gemini's RetryInfo ("retryDelay": "31s")."""
+    """Seconds to wait from a 429: the Retry-After header, or Gemini's RetryInfo ("retryDelay": "31s"). None (the
+    day's quota) when Gemini names a per-day quota, whatever its retryDelay says: waiting a minute wouldn't help, and
+    the router waits out short blocks (docs/SPEC_ISSUES.md 59)."""
     h = e.response.headers.get("retry-after")
     if h:
         try:
@@ -128,6 +130,8 @@ def retry_after(e: httpx.HTTPStatusError) -> float | None:
     try:
         text = e.response.text
     except httpx.ResponseNotRead:
+        return None
+    if re.search(r'"quotaId"\s*:\s*"[^"]*PerDay', text):
         return None
     m = re.search(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"', text)
     return float(m.group(1)) if m else None
