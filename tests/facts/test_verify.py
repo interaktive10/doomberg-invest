@@ -198,12 +198,12 @@ def test_period_labels_india_halves_and_dates(label: str, fye: str, expected: tu
 
 def test_a_unit_without_a_number_and_an_implausible_period() -> None:
     """M5 review R1-F9: a fact with no value in the quote keeps no unit ("other"), and a period ending more than
-    10 years from the document goes to review."""
-    text = "Backlog reached a record.\n\nWe expect capital expenditures of about $2 billion in fiscal 2090."
+    10 years from the document goes to review. A measure with no number is no fact (docs/SPEC_ISSUES.md 59)."""
+    text = "We broke ground on a new plant.\n\nWe expect capital expenditures of about $2 billion in fiscal 2090."
     doc = DocContext("10-Q", date(2026, 10, 28), "0630", text)
-    none = ok(verify(prop(fact_type="backlog", subject="backlog", subject_key="backlog:total", value=None,
-                          unit="mw", currency=None, scale_word=None, period_label=None,
-                          quote="Backlog reached a record."), Chunk(text, 0, None), doc))  # fmt: skip
+    none = ok(verify(prop(fact_type="capacity_addition", subject="plant", subject_key="capacity:mw:new_plant",
+                          value=None, unit="mw", currency=None, scale_word=None, period_label=None,
+                          quote="We broke ground on a new plant."), Chunk(text, 0, None), doc))  # fmt: skip
     assert none.unit == "other" and none.value_num is None
     far = ok(verify(prop(value=D(2), period_label="fiscal 2090", subject_key="capex_guidance:fy2090",
                          quote="We expect capital expenditures of about $2 billion in fiscal 2090."),
@@ -429,3 +429,79 @@ def test_another_currency_at_an_indian_company_waits_for_review(quote: str, valu
                        unit="usd", currency=currency, scale_word=scale, period_label=None, quote=quote),
                   Chunk(INDIA_TEXT, 0, "body"), INDIA_DOC))  # fmt: skip
     assert r.verification_status == "needs_review" and "(INR)" in r.verification_notes["currency"]
+
+
+FIELDS = ("Effective January 1, the company will raise list prices on data center cooling units by 11%.\n\n"
+          "We signed a 15-year power purchase agreement with Nimbus Compute for 400 MW.\n\n"
+          "Customers now face lead times of 30 to 36 months for large gas turbines.")  # fmt: skip
+FIELDS_DOC = DocContext("press_release", date(2026, 9, 15), "1231", FIELDS)
+
+
+def fields(**kw: Any) -> Candidate:
+    return ok(verify(prop(**kw), Chunk(FIELDS, 0, "body"), FIELDS_DOC))
+
+
+def test_an_as_of_after_publication_is_the_publication_date() -> None:
+    """docs/SPEC_ISSUES.md 59 (the first real-model run): "Effective January 1" came back as as_of 2027-01-01, which
+    sent the price increase to review and would have put it outside S9's window; the fact is as of its publication."""
+    quote = "the company will raise list prices on data center cooling units by 11%"
+    c = fields(fact_type="price_increase", subject="list prices", subject_key="price_increase:cooling_units",
+               value=D(11), unit="percent", currency=None, scale_word=None, period_label=None,
+               as_of=date(2027, 1, 1), quote=quote)  # fmt: skip
+    assert c.verification_status == "verified" and c.as_of == date(2026, 9, 15)
+
+
+@pytest.mark.parametrize("label", ["15 years", "2026-09-15", "total", "multi-year", "September 30, 2025"])
+def test_a_label_that_names_no_period_is_kept_without_one(label: str) -> None:
+    """The top reason facts went to review in production (2026-10-28: dates, "total", "current" ...). A type that
+    needs no period keeps the label as written and no period; capex guidance/reported still go to review."""
+    c = fields(fact_type="commitment_ppa", subject="PPA", subject_key="ppa:nimbus_compute:ohio", value=D(400),
+               unit="mw", currency=None, scale_word=None, period_label=label,
+               quote="We signed a 15-year power purchase agreement with Nimbus Compute for 400 MW.")  # fmt: skip
+    assert c.verification_status == "verified" and c.period_label == label and c.period_end is None
+
+
+def test_the_models_midpoint_of_a_quoted_range_gives_way_to_codes() -> None:
+    quote = "Customers now face lead times of 30 to 36 months for large gas turbines."
+    for value in (D(33), D(34)):  # its midpoint, or any other number not in the quote: code's midpoint is stored
+        c = fields(fact_type="lead_time", subject="gas turbines", subject_key="lead_time:gas_turbines", value=value,
+                   value_low=D(30), value_high=D(36), unit="months", currency=None, scale_word=None,
+                   period_label=None, quote=quote)  # fmt: skip
+        assert (c.verification_status, c.value_num, c.value_low, c.value_high) == ("verified", D(33), D(30), D(36))
+    one_end = verify(prop(fact_type="lead_time", subject="gas turbines", subject_key="lead_time:gas_turbines",
+                          value=D(33), value_low=D(30), unit="months", currency=None, scale_word=None,
+                          period_label=None, quote=quote), Chunk(FIELDS, 0, "body"), FIELDS_DOC)  # fmt: skip
+    assert isinstance(one_end, Rejected) and one_end.check == "V1-NUM"  # not a range: the model's number must be quoted
+
+
+@pytest.mark.parametrize(("fact_type", "key"), [("lead_time", "lead_time:transformers"), ("backlog", "backlog:total"),
+                                                ("customer_concentration", "customer_concentration:top1")])  # fmt: skip
+def test_a_measure_without_its_number_is_no_fact(fact_type: str, key: str) -> None:
+    """docs/SPEC_ISSUES.md 59: "We continue to monitor ... lead time trends" came back as a lead_time fact with no
+    value and verified. A measure states a number; an event (a named customer, a new segment) needs none."""
+    text = "We continue to monitor supply chain conditions, including lead time trends for transformers."
+    doc = DocContext("10-Q", date(2026, 10, 28), "1231", text)
+    r = verify(prop(fact_type=fact_type, subject="x", subject_key=key, value=None, unit="other", currency=None,
+                    scale_word=None, period_label=None, quote=text), Chunk(text, 0, None), doc)  # fmt: skip
+    assert isinstance(r, Rejected) and r.check == "V1-NUM" and "states none" in r.reason
+    event = "Beginning next quarter, Nimbus will report AI Infrastructure Services as a new reportable segment."
+    seg = ok(verify(prop(fact_type="new_segment", subject="AI Infrastructure Services",
+                         subject_key="new_segment:ai_infrastructure", value=None, unit="other", currency=None,
+                         scale_word=None, period_label=None, quote=event), Chunk(event, 0, None),
+                    DocContext("EX-99.1", date(2026, 10, 28), "0630", event)))  # fmt: skip
+    assert seg.verification_status == "verified"
+
+
+@pytest.mark.parametrize(
+    ("fact_type", "proposed", "repaired"),
+    [("commitment_lease", "lease_not_commenced:total,unit:", "lease_not_commenced:total"),  # the next field leaked
+     ("commitment_purchase", "purchase_obligations:totalkoh", "purchase_obligations:total"),  # junk after a fixed key
+     ("order_win", "order_win:nimbus,unit:", "order_win:nimbus"),
+     ("governance_flag", "governance:material_weakness:added,unit:", "governance:material_weakness:added")],
+)  # fmt: skip
+def test_a_garbled_vocabulary_key_is_repaired(fact_type: str, proposed: str, repaired: str) -> None:
+    """docs/SPEC_ISSUES.md 59: the real model glitches a key's end; the key it meant is still the vocabulary's."""
+    assert keys.check(fact_type, proposed, "x") == (repaired, True)
+    top10 = "customer_concentration:top10"
+    assert keys.check("customer_concentration", top10, "x") == (top10, True)  # a valid slot key: never "repaired"
+    assert keys.check("commitment_purchase", "purchase_obligation:total", "x") == ("other:total", False)

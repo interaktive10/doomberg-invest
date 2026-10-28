@@ -49,7 +49,12 @@ class RateLimited(Exception):
 
 
 class ProviderError(Exception):
-    """Any other failure: the router records it and tries the next provider."""
+    """Any other failure: the router records it and tries the next provider. `transient` (an HTTP 5xx, a timeout, a
+    malformed answer) is worth one more try when no other provider answers; an HTTP 4xx (a bad key or request) isn't."""
+
+    def __init__(self, message: str, transient: bool = True) -> None:
+        super().__init__(message)
+        self.transient = transient
 
 
 class Provider(Protocol):
@@ -113,7 +118,9 @@ def parse_json_object(text: str) -> dict[str, Any]:
 
 
 def retry_after(e: httpx.HTTPStatusError) -> float | None:
-    """Seconds to wait from a 429: the Retry-After header, or Gemini's RetryInfo ("retryDelay": "31s")."""
+    """Seconds to wait from a 429: the Retry-After header, or Gemini's RetryInfo ("retryDelay": "31s"). None (the
+    day's quota) when Gemini names a per-day quota, whatever its retryDelay says: waiting a minute wouldn't help, and
+    the router waits out short blocks (docs/SPEC_ISSUES.md 59)."""
     h = e.response.headers.get("retry-after")
     if h:
         try:
@@ -124,6 +131,8 @@ def retry_after(e: httpx.HTTPStatusError) -> float | None:
         text = e.response.text
     except httpx.ResponseNotRead:
         return None
+    if re.search(r'"quotaId"\s*:\s*"[^"]*PerDay', text):
+        return None
     m = re.search(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"', text)
     return float(m.group(1)) if m else None
 
@@ -133,5 +142,6 @@ def raise_for(e: httpx.HTTPError, provider: str) -> None:
     if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
         raise RateLimited(f"{provider}: 429", retry_after(e)) from e
     if isinstance(e, httpx.HTTPStatusError):
-        raise ProviderError(f"{provider}: HTTP {e.response.status_code}") from e
+        code = e.response.status_code
+        raise ProviderError(f"{provider}: HTTP {code}", transient=not 400 <= code < 500) from e
     raise ProviderError(f"{provider}: {type(e).__name__}") from e

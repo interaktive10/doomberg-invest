@@ -6,8 +6,14 @@ Extract only facts the excerpt states explicitly. Never calculate, infer, combin
 For every fact, copy the exact supporting text into "quote": verbatim, at most 60 words, and it must appear exactly
 in the excerpt. If a number's meaning depends on nearby words (a unit, a period, "approximately"), include them in
 the quote.
-Set "as_of" to the date the excerpt states the fact as of (an award date, a quarter end), never later than the
-document's publication; if the excerpt states none, leave it null.
+Set "as_of" to the date the excerpt says the fact was true or was announced (an award date, a quarter end): never a
+future or effective date, and never later than the document's publication. If the excerpt states none, leave it null.
+Set "period_label" only to the fiscal or calendar period a number covers, as written ("fiscal 2027", "the second
+quarter of 2026"); leave it null for anything else, such as a date, a term or a duration.
+For a range, set "value_low" and "value_high" and leave "value" null. Keep every number in the unit the excerpt
+writes it in.
+An event needs no number: a named new customer, a new segment or business line, a governance event. A measure (a lead
+time, a backlog, capital spending, a share of revenue) is a fact only with its number.
 A governance event is "added" when the excerpt reports it, and "removed" only when the excerpt says one reported
 earlier was remediated or resolved; controls the excerpt calls effective are neither.
 Allowed fact types: {{fact_types_with_definitions}}.
