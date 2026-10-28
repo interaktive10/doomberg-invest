@@ -34,8 +34,15 @@ from pipeline.us.submissions import end_of_day_utc
 
 HOLDINGS_REPORTS = {"13F HOLDINGS REPORT", "13F COMBINATION REPORT"}
 FUZZY_MIN = 92.0
-DATASETS = "https://www.sec.gov/files/structureddata/data/form-13f-data-sets"
-PUBLISH_LAG_DAYS = 21  # a window's data set is assumed published three weeks after it closes
+# Where SEC serves the data sets, newest directory first. SEC published the June-August 2026 window (2026-09-14) under
+# datastandardsinnovation/ and left every earlier one (2013q2 .. 01mar2026-31may2026) under structureddata/; each
+# answers 404 in the other (checked 2026-10-28; the index page is
+# https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets).
+DATASET_DIRS = (
+    "https://www.sec.gov/files/datastandardsinnovation/data/form-13f-data-sets",
+    "https://www.sec.gov/files/structureddata/data/form-13f-data-sets",
+)
+PUBLISH_LAG_DAYS = 21  # a window's data set is assumed published three weeks after it closes (SEC: 3-14 days so far)
 
 
 @dataclass(frozen=True)
@@ -240,6 +247,11 @@ def windows_before(today: date, n: int = 1, lag_days: int = PUBLISH_LAG_DAYS) ->
     return out
 
 
-def dataset_url(start: date, end: date) -> str:
-    """e.g. .../01dec2024-28feb2025_form13f.zip"""
-    return f"{DATASETS}/{start:%d%b%Y}-{end:%d%b%Y}".lower() + "_form13f.zip"
+def dataset_name(start: date, end: date) -> str:
+    """e.g. 01dec2024-28feb2025_form13f.zip"""
+    return f"{start:%d%b%Y}-{end:%d%b%Y}".lower() + "_form13f.zip"
+
+
+def dataset_urls(start: date, end: date) -> list[str]:
+    """Every URL SEC may serve a window's data set from, in the order to try them (DATASET_DIRS)."""
+    return [f"{d}/{dataset_name(start, end)}" for d in DATASET_DIRS]

@@ -123,7 +123,7 @@ def workflows(root: Path, crons: dict[str, list[str]]) -> Path:
 REPO_CRONS = {
     "daily.yml": ["13 1 * * 2-6"],
     "weekly.yml": ["7 2 * * 6"],
-    "quarterly.yml": ["0 3 20 1,4,7,10 *"],
+    "quarterly.yml": ["23 3 22 3,6,9,12 *"],
     "thesis-fallback.yml": ["0 6 * * 1"],
     "lab-prices.yml": ["7 10 * 11,12 0-4"],
     "lab.yml": [],
@@ -136,6 +136,7 @@ def test_the_crons_fire_on_their_days_in_a_month() -> None:
     counts = [minutes.fires(c[0], nov, dec) for c in REPO_CRONS.values() if c]
     assert counts == [20, 4, 0, 5, 22]
     assert minutes.fires("0 3 20 1,4,7,10 *", datetime(2026, 10, 1, tzinfo=UTC), nov) == 1
+    assert minutes.fires("23 3 22 3,6,9,12 *", dec, datetime(2027, 1, 1, tzinfo=UTC)) == 1  # quarterly.yml (54)
     assert minutes.fires("7 10 * 11,12 0-4", datetime(2026, 10, 1, tzinfo=UTC), nov) == 0
     assert minutes.fires("0 0 1 * 1", nov, dec) == 1 + 5  # day 1 OR a Monday, as cron reads both
     assert minutes.fires("*/15 0 * * *", nov, datetime(2026, 11, 2, tzinfo=UTC)) == 4

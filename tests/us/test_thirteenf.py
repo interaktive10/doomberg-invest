@@ -6,14 +6,16 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+
+import yaml
 
 from pipeline.us.names import non_common, normalize_name
 from pipeline.us.thirteenf import (
     DataSet,
     company_holder_counts,
-    dataset_url,
+    dataset_urls,
     holders_by_cusip,
     issuer_names,
     main_period,
@@ -130,7 +132,11 @@ def test_data_set_windows_and_urls(tmp_path: Path) -> None:
     assert windows_before(date(2025, 3, 10))[0] == (date(2024, 9, 1), date(2024, 11, 30))  # Dec-Feb not out yet
     assert windows_before(date(2024, 3, 21))[0] == (date(2023, 12, 1), date(2024, 2, 29))  # leap year
     window = json.loads((F13 / "window.json").read_text(encoding="utf-8"))
-    assert dataset_url(date(2024, 12, 1), date(2025, 2, 28)) == window["source"]
+    assert dataset_urls(date(2024, 12, 1), date(2025, 2, 28))[1] == window["source"]  # fetched from structureddata/
+    assert [u.rsplit("/", 1)[1] for u in dataset_urls(date(2026, 6, 1), date(2026, 8, 31))] == [
+        "01jun2026-31aug2026_form13f.zip"] * 2  # fmt: skip
+    assert dataset_urls(date(2026, 6, 1), date(2026, 8, 31))[0].startswith(
+        "https://www.sec.gov/files/datastandardsinnovation/")  # fmt: skip
     import zipfile
 
     z = tmp_path / "ds.zip"
@@ -139,3 +145,15 @@ def test_data_set_windows_and_urls(tmp_path: Path) -> None:
             zf.write(F13 / name, f"01dec2024-28feb2025_form13f/{name}")  # members may sit in a folder
     ds = read_dataset_zip(z, date(2025, 2, 28))
     assert len(ds.filings) == len(fixture().filings) and ds.skipped_rows == fixture().skipped_rows
+
+
+def test_the_quarterly_run_reads_each_window_about_three_weeks_after_it_closes() -> None:
+    """quarterly.yml's cron day (docs/SPEC_ISSUES.md 54): on each run day the newest published window is the one that
+    closed at the end of the month before, so a new quarter reaches S8 within weeks, not 5-7 weeks after SEC."""
+    doc = yaml.safe_load((Path(__file__).resolve().parents[2] / ".github" / "workflows" / "quarterly.yml").read_text())
+    [cron] = [s["cron"] for s in doc[True]["schedule"]]
+    _, _, day, months, _ = cron.split()
+    for year in (2026, 2027, 2028):  # 2028 has Feb 29
+        for month in (int(m) for m in months.split(",")):
+            closed = date(year, month, 1) - timedelta(days=1)
+            assert windows_before(date(year, month, int(day)))[0][1] == closed, (year, month)
