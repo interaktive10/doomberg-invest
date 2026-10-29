@@ -225,15 +225,16 @@ def test_lab_gates_and_keeps_the_panel_as_soon_as_it_is_built() -> None:
 
 def test_text_facts_run_daily_after_the_sec_step_within_the_minutes_budget() -> None:
     """M5 (BRIEF §2.1 daily "capex-desk filings -> text facts", §2.5 budget): the text step follows the SEC events
-    step in the same job, has the free-tier keys, and stops starting documents at 15 minutes (about 150 documents at
-    Gemini's 15 requests a minute), so the job takes about 18-20 minutes against §2.5's 25; its limit leaves room for
+    step in the same job, has the free-tier keys, and stops starting documents at 30 minutes (150 documents take
+    about 15 at Gemini's 15 requests a minute; 30 for the days it answers slowly), against §2.5's 40; its limit leaves
+    room for
     the SEC step's catch-up (M5 review R1-F8; docs/SPEC_ISSUES.md 29, 50, 58: the stage names' reading)."""
     from pipeline.facts.run import TIME_BUDGET_MIN
 
     sec, _ = step("daily.yml", "us", "python -m pipeline.us.daily")
     text, job = step("daily.yml", "us", "python -m pipeline.facts.run")
-    assert sec < text and "--minutes 15" in job["run"] and TIME_BUDGET_MIN == 15
-    assert load("daily.yml")["jobs"]["us"]["timeout-minutes"] >= 15 + 25
+    assert sec < text and "--minutes 30" in job["run"] and TIME_BUDGET_MIN == 30
+    assert load("daily.yml")["jobs"]["us"]["timeout-minutes"] >= 30 + 25
     assert set(job["env"]) == LLM_KEYS
     assert "ANTHROPIC_API_KEY" not in job["env"] and "OPENAI_API_KEY" not in job["env"]
 
