@@ -249,6 +249,7 @@
       - A governance event's quote names its topic (an auditor or accounting firm, a material weakness or ineffective controls, a going-concern doubt, a restatement).
       - A new segment's quote says the segment or business line is new.
       - A price increase's quote names a price.
+      - A customer win's quote names a customer, client, partner or program. This was added after the first re-check (#63), when DXC's incoming president was still verified as a customer win. S9 never counted it (a customer win needs a named counterparty), but the app showed it.
       - Short of these, a fact waits for review, since it may still be one whose words fell outside the quote.
     - **Stored facts:** the text run checks the verified facts of those types again on their stored quotes, by the same rule. A deal leaves the ledger (`failed`) with its counterparty link; the rest go to review. The next run finds none.
     - **P-01's definitions** (§1.9, `pipeline/facts/types.py`) say what each type is not.
