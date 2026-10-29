@@ -139,8 +139,9 @@ def pricing_word(sentence: str) -> bool:
 # - legal settlements, escrow and refunds
 # - recurring revenue and guidance
 # It also stored an officer's resignation as an auditor change, a mortgage default as a material weakness, a margin
-# outlook as a price increase and a company's existing segments as a new one. S9 counts these types, R3's hard flag
-# reads the governance ones, and a fact's quote is its evidence, so the quote has to show its type:
+# outlook as a price increase, a company's existing segments as a new one, and a new president as a customer win.
+# S9 counts these types, R3's hard flag reads the governance ones, and a fact's quote is its evidence, so the quote
+# has to show its type:
 # - an order's quote that names a deal fails it
 # - a quote without its type's words waits for review
 # The text run checks the stored quotes of earlier facts the same way (pipeline/facts/run.py recheck_stored).
@@ -173,7 +174,12 @@ NEW = re.compile(
     r"|\benter(?:ed|ing|s)?\b|\bentry\b|\bexpan(?:d|ded|ding|sion)\s+into\b|\bintroduc\w*|\bbegin(?:s|ning)?\b|\bbegan\b",
     re.I,
 )
-KIND_TYPES = frozenset({"order_win", "governance_flag", "new_segment", "price_increase"})
+CUSTOMER = re.compile(
+    r"\bcustomers?\b|\bclients?\b|\blogos?\b|\brelationships?\b|\bpartner(?:s|ships?)?\b|\baccounts?\b|\bprograms?\b"
+    r"|\bselected\b|\bchose\b|\bawards?\b|\bawarded\b|\bcontracts?\b|\bwins?\b|\bwon\b|\bonboard\w*",
+    re.I,
+)
+KIND_TYPES = frozenset({"order_win", "customer_win", "governance_flag", "new_segment", "price_increase"})
 
 
 def kind_problem(fact_type: str, subject_key: str, quote: str) -> tuple[bool, str] | None:
@@ -194,6 +200,8 @@ def kind_problem(fact_type: str, subject_key: str, quote: str) -> tuple[bool, st
             return False, "the quote doesn't say a segment or business line is new"
     elif fact_type == "price_increase" and not pricing_word(quote):
         return False, "the quote names no price or pricing action"
+    elif fact_type == "customer_win" and not CUSTOMER.search(quote):
+        return False, "the quote names no customer, client, partner or program"
     return None
 
 

@@ -571,12 +571,23 @@ def test_an_order_win_names_its_order_or_waits_for_review(quote: str, status: st
     ("new_segment:power_infrastructure", "As part of the establishment of the Power Infrastructure reportable "
      "segment in the second quarter of 2026.", "verified"),
     ("price_increase:contracting", "Expect 2H26 contracting services margins to be 9 to 10%", "needs_review"),
+    ("customer_win:paul_taylor", "The recent addition of Paul Taylor as incoming President further strengthens our "
+     "leadership team.", "needs_review"),
+    ("customer_win:kpmg", "Workday welcomed new customers including BWX Technologies, Inc., Guess, KPMG LLP, and "
+     "S-E-B.", "verified"),
+    ("customer_win:logos", "We secured eleven new platform logos through the second quarter of 2026.", "verified"),
 ])  # fmt: skip
 def test_governance_segment_and_price_facts_name_their_kind(key: str, quote: str, status: str) -> None:
     """docs/SPEC_ISSUES.md 61: a CAO's resignation came back as an auditor change and a mortgage default as a material
-    weakness (R3's hard flag), a margin outlook as a price increase, a list of segments as a new one."""
-    fact_type = {"governance": "governance_flag", "new_segment": "new_segment"}.get(key.split(":")[0], "price_increase")
-    value, unit = (D("9"), "percent") if fact_type == "price_increase" else (None, "other")
+    weakness (R3's hard flag), a margin outlook as a price increase, a list of segments as a new one, a new president
+    as a customer win."""
+    prefix = key.split(":")[0]
+    fact_type = {"governance": "governance_flag", "new_segment": "new_segment", "customer_win": "customer_win"}.get(
+        prefix, "price_increase"
+    )
+    value, unit = {"price_increase": (D("9"), "percent")}.get(fact_type, (None, "other"))
+    if key == "customer_win:logos":
+        value, unit = D("11"), "count"
     if fact_type == "price_increase":  # its sentence names pricing (V1-TYPE passes); the quote doesn't
         doc_text = quote + " with pricing steady."
         r = verify(prop(fact_type=fact_type, subject="x", subject_key=key, value=None, value_low=D(9),
