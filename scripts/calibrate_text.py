@@ -36,7 +36,8 @@ def main() -> None:
                    (stats ->> 'extracted')::int as extracted, (stats ->> 'deferred')::int as deferred,
                    (stats ->> 'failed')::int as failed, (stats ->> 'facts_verified')::int as verified,
                    (stats ->> 'facts_review')::int as review, stats -> 'rejected' as rejected,
-                   stats ->> 'stopped' as stopped
+                   stats ->> 'stopped' as stopped, stats -> 'scope_by_order' as scope_by_order,
+                   stats -> 'read_by_order' as read_by_order
             from runs where kind = 'text' order by started_at desc limit 12""")
         show(cur, "needs_review reasons by fact type (stored since 2026-09-20)", """
             select f.fact_type, k as reason, count(*) as facts
@@ -70,6 +71,26 @@ def main() -> None:
             where f.created_at >= '2026-10-28 15:28+00'
             group by 1, 2 order by (f.fact_type in ('order_win','customer_win','price_increase','new_segment',
               'governance_flag','capacity_addition','lead_time')) desc, 3 desc""")
+        show(cur, "S9-type facts stored since 2026-10-28 15:00Z by market, type and status (aggregates only)", """
+            select c.market, f.fact_type, f.verification_status, count(*) as facts,
+                   count(distinct f.company_id) as companies,
+                   count(*) filter (where f.counterparty is not null) as with_counterparty,
+                   count(*) filter (where f.subject_key like '%:removed') as removed
+            from facts f join companies c on c.id = f.company_id
+            where f.created_at >= '2026-10-28 15:00+00'
+              and f.fact_type in ('order_win','customer_win','price_increase','new_segment','governance_flag',
+                                  'capacity_addition')
+            group by 1, 2, 3 order by 1, 2, 3""")
+        show(cur, "review reasons of S9-type facts stored since 2026-10-28 15:00Z", """
+            select f.fact_type, k as reason, count(*) as facts
+            from facts f, jsonb_object_keys(f.verification_notes) k
+            where f.created_at >= '2026-10-28 15:00+00' and f.verification_status = 'needs_review'
+              and f.fact_type in ('order_win','customer_win','price_increase','new_segment','governance_flag',
+                                  'capacity_addition')
+            group by 1, 2 order by 3 desc limit 30""")
+        show(cur, "llm calls since 2026-10-28 15:00Z by day, prompt and outcome", """
+            select created_at::date as day, prompt_id, provider, ok, count(*) as calls, round(avg(latency_ms)) as avg_ms
+            from llm_calls where created_at >= '2026-10-28 15:00+00' group by 1, 2, 3, 4 order by 1, 2, 3, 4""")
         show(cur, "documents still deferred, by kind", """
             select kind, count(*) as documents, min(published_at)::date as oldest, max(published_at)::date as newest
             from documents where status = 'deferred' group by 1 order by 2 desc""")
