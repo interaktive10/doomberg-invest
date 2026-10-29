@@ -51,7 +51,7 @@ actions:
     daily.yml: 35            # SEC then text, about 20, 35 on a slow day (docs/SPEC_ISSUES.md 58); India about 12
     weekly.yml: 140          # us about 5, India up to 80, scores about 50 (400 prices 8 s apart), publish about 5
     quarterly.yml: 60        # §2.5's target
-    thesis-fallback.yml: 2   # stops at once when the routine wrote the week's cards
+    thesis-fallback.yml: 12  # writes the week's cards while no routine does (SPEC_ISSUES 60); 2 when the routine did
     lab-prices.yml: 0        # gated: each run asks for its own 120 minutes
     india-backfill.yml: 0    # gated: each run asks for its own 345 minutes (once, about two days: SPEC_ISSUES 55)
   download_run: 95   # one lab-prices.yml run (its 90 minutes + setup): the digest projects only the runs the Lab

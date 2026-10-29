@@ -272,7 +272,7 @@ doomberg-invest/
 |---|---|---|
 | `daily.yml` | `13 1 * * 2-6` | ≤ 40 min (the text step: about 15, at most 30 on a slow day; SPEC_ISSUES 58) |
 | `weekly.yml` | `7 2 * * 6` (Saturday) | ≤ 45 min |
-| `thesis-fallback.yml` | `0 6 * * 1` | ≤ 10 min, only if no cards |
+| `thesis-fallback.yml` | `0 6 * * 1` | ≤ 30 min, only if no cards (ten cards take up to about 140 Gemini calls at 15 a minute; SPEC_ISSUES 60) |
 | `thesis-ingest.yml` | on push touching `data/thesis_cards/**` | ≤ 3 min |
 | `quarterly.yml` | `23 3 22 3,6,9,12 *` | ≤ 60 min |
 | `lab.yml` | manual | ≤ 90 min |
