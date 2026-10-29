@@ -20,12 +20,18 @@ FACT_TYPES: dict[str, str] = {
     "risk_factor_change": (
         "Added, removed or modified risk-factor paragraphs on AI, data centers, power or supply chain"
     ),
-    # BRIEF §1.9 general types
-    "order_win": "A stated order or contract win with value, customer or segment",
-    "customer_win": "A new named customer or program",
-    "price_increase": "A stated price increase or pricing action",
-    "new_segment": "A new reportable segment or business line",
-    "governance_flag": "Auditor change, material weakness, going concern, restatement (added or removed)",
+    # BRIEF §1.9 general types; what each is not: docs/SPEC_ISSUES.md 61 (Verify-1 V1-KIND checks the quote)
+    "order_win": (
+        "An order, contract, award or booking the company won, with its value, customer or program; not an "
+        "acquisition or sale of a business, a settlement, refund or escrow, revenue or guidance"
+    ),
+    "customer_win": "A new named customer or program the company won",
+    "price_increase": "A price increase or pricing action on the company's own products or services; not a margin",
+    "new_segment": "A segment or business line the company newly created or entered; not its existing segments",
+    "governance_flag": (
+        "Auditor change (the independent accounting firm), material weakness, going concern, restatement (added or "
+        "removed); not an officer's departure, a debt default or a lawsuit"
+    ),
     "export_exposure": "A stated export share or overseas order book (India: US/data-center exports)",
 }
 

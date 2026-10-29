@@ -5,6 +5,7 @@
 | V1-NUM    | every numeric field is a number in the quote (numbers.match)                 | failed                  |
 | V1-UNIT   | the unit agrees with the quote's tokens ("MW" <-> mw, "$" <-> usd, ...)      | failed                  |
 | V1-TYPE   | allowed type; no share-price facts (labels or quote); subject_key valid      | failed / needs_review   |
+| V1-KIND   | the quote shows the type S9 or R3 reads (below); a deal is no order          | failed / needs_review   |
 | V1-PERIOD | period resolvable and plausible (where the type needs one: below)            | needs_review            |
 | V1-XBRL   | |value - XBRL| <= 0.5% for the same concept and period                       | needs_review (mismatch) |
 | V1-CONF   | confidence >= 0.70                                                           | needs_review            |
@@ -18,7 +19,8 @@ What the model adds around a grounded number doesn't send a fact to review (docs
 the real model): an as_of after publication (a delivery or effective date) is the publication date; a period label
 that names no fiscal or calendar period ("15 years", "total", a date) is kept as written with no period, except on
 capex guidance/reported, which need one; and the model's own midpoint of a quoted range gives way to code's. A fact of
-a type that is a measure (MEASURES) needs a number in its quote.
+a type that is a measure (MEASURES) needs a number in its quote. A fact of a type S9 counts or R3 reads (KIND_TYPES)
+needs its type's words in its quote (V1-KIND, docs/SPEC_ISSUES.md 61).
 """
 
 from __future__ import annotations
@@ -130,6 +132,69 @@ PRICING = re.compile(r"\bpric(?:e|es|ed|ing)\b|\bsurcharges?\b|\btariffs?\b|\bra
 def pricing_word(sentence: str) -> bool:
     """A price_increase fact's sentence names a price of the business, not only a share price (M5 review R3)."""
     return bool(PRICING.search(PRICE_TOPIC.sub(" ", sentence)))
+
+
+# V1-KIND (docs/SPEC_ISSUES.md 61). The new P-01's first day stored as order wins:
+# - acquisitions, mergers and sales of a business
+# - legal settlements, escrow and refunds
+# - recurring revenue and guidance
+# It also stored an officer's resignation as an auditor change, a mortgage default as a material weakness, a margin
+# outlook as a price increase and a company's existing segments as a new one. S9 counts these types, R3's hard flag
+# reads the governance ones, and a fact's quote is its evidence, so the quote has to show its type:
+# - an order's quote that names a deal fails it
+# - a quote without its type's words waits for review
+# The text run checks the stored quotes of earlier facts the same way (pipeline/facts/run.py recheck_stored).
+DEAL = re.compile(
+    r"\bacquir(?:e|ed|es|ing)\b|\bacquisitions?\b|\bmerg(?:e|er|ers|ed|ing)\b|\bconsideration\b|\bdivest\w*"
+    r"|\bsale\s+of\b|\bsold\b|\bsettlements?\b|\bescrow(?:ed)?\b|\brefunds?\b|\bguidance\b|\boutlook\b"
+    r"|\bproceeds\b|\bliabilit(?:y|ies)\b|\b(?:equity|enterprise)\s+value\b|\brecurring\s+revenue\b|(?-i:\bARR\b)",
+    re.I,
+)
+ORDER = re.compile(
+    r"(?<!\bin\s)\border(?:s|ed)?\b|\bawards?\b|\bawarded\b|\bcontract(?:s|ed)?\b|\bbookings?\b|\bbooked\b"
+    r"|\bwins?\b|\bwon\b|\bselected\b|\bletters?\s+of\s+(?:award|intent)\b|\bauthori[sz]ation\s+to\s+proceed\b"
+    r"|\bdesign-build\b|\bagreements?\b|\btenders?\b|\bsecured\b|\bbagged\b|\bsigned\b",
+    re.I,
+)
+GOVERNANCE_WORDS = {
+    "material_weakness": re.compile(r"\bmaterial\s+weakness(?:es)?\b|\bnot\s+effective\b|\bineffective\b", re.I),
+    "going_concern": re.compile(r"\bgoing\s+concern\b|\bsubstantial\s+doubt\b", re.I),
+    "auditor_change": re.compile(
+        r"\bauditors?\b|\baccounting\s+firm\b|\bregistered\s+public\s+accounting\b|\bindependent\s+accountants?\b", re.I
+    ),
+    "restatement": re.compile(r"\brestat(?:e|ed|es|ing|ement|ements)\b|\bnon-?reliance\b", re.I),
+}
+BUSINESS_LINE = re.compile(
+    r"\bsegments?\b|\blines?\s+of\s+business\b|\bbusiness(?:es|\s+lines?|\s+units?)?\b|\bdivisions?\b|\bverticals?\b",
+    re.I,
+)
+NEW = re.compile(
+    r"\bnew(?:ly)?\b|\bestablish\w*|\blaunch\w*|\bcreat(?:e|ed|es|ing|ion)\b|\bform(?:ed|ing|ation)\b"
+    r"|\benter(?:ed|ing|s)?\b|\bentry\b|\bexpan(?:d|ded|ding|sion)\s+into\b|\bintroduc\w*|\bbegin(?:s|ning)?\b|\bbegan\b",
+    re.I,
+)
+KIND_TYPES = frozenset({"order_win", "governance_flag", "new_segment", "price_increase"})
+
+
+def kind_problem(fact_type: str, subject_key: str, quote: str) -> tuple[bool, str] | None:
+    """(fails, why) when the quote doesn't show the fact's type (V1-KIND), else None. Only a deal fails an order: a
+    quote that lacks its type's words may still be one, so it waits for review."""
+    if fact_type == "order_win":
+        if DEAL.search(quote):
+            return True, "an acquisition, a sale of a business, a settlement, a refund, revenue or guidance is no order"
+        if not ORDER.search(quote):
+            return False, "the quote names no order, award, contract or booking"
+    elif fact_type == "governance_flag":
+        parts = subject_key.split(":")
+        words = GOVERNANCE_WORDS.get(parts[1]) if len(parts) == 3 else None
+        if words is not None and not words.search(quote):
+            return False, f"the quote names no {parts[1].replace('_', ' ')}"
+    elif fact_type == "new_segment":
+        if not (BUSINESS_LINE.search(quote) and NEW.search(quote)):
+            return False, "the quote doesn't say a segment or business line is new"
+    elif fact_type == "price_increase" and not pricing_word(quote):
+        return False, "the quote names no price or pricing action"
+    return None
 
 
 PER_SHARE_AFTER = re.compile(r"^\s*(?:per|a)\s+(?:diluted\s+)?share\b", re.I)
@@ -297,6 +362,12 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
     key, key_ok = keys.check(p.fact_type, p.subject_key, p.subject, slug)
     if not key_ok:
         review["subject_key"] = f"{p.subject_key!r} is not in config/subject_keys.yaml for {p.fact_type}"
+    problem = kind_problem(p.fact_type, key, quote)
+    if problem is not None:
+        fails, why = problem
+        if fails:
+            return Rejected("V1-KIND", why)
+        review["kind"] = why
 
     concept, xcheck = XBRL_CONCEPT.get(p.fact_type), "na"
     if concept and xbrl is not None and value is not None and "currency" not in review:

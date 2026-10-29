@@ -227,3 +227,33 @@
     2. Set it as the GitHub secret `THESIS_VAULT_KEY`.
     3. Set the same value as the variable `THESIS_VAULT_KEY` of the `doomberg-invest` environment.
     4. Create the routine from Appendix G.
+
+61. **The new P-01's first day stored deals, settlements and guidance as order wins** (the 2026-10-29 check-in on 58 and 59, before the first scores to read them). In the text runs of 2026-10-28 and 2026-10-29, 33 order wins at 12 companies were verified.
+    - About 20 of them were no order:
+      - acquisitions and their consideration (ADBE, IESC, SSRM, TRMB)
+      - MDL settlement payments, escrow and a regulatory liability (AWK)
+      - business sales and their proceeds (CMCT, TRMB)
+      - a tariff refund and recurring revenue (TRMB)
+      - revenue guidance (VELO)
+    - Other types were wrong too:
+      - a Chief Accounting Officer's resignation stored as an auditor change (ASAN)
+      - a mortgage default stored as a material weakness (CMCT): R3's hard flag would have excluded the name
+      - a margin outlook stored as a price increase (KNF)
+      - a list of existing segments stored as a new segment (ORCL)
+
+    S9 counts each of these types at +20 Evidence, and one fact makes a `one_fact` name a Candidate (58). Saturday's scores would have put names on the board on facts like these. The real orders (CWCO, LTRX, LUNR, ORN, RTX) and the new segments (IESC, KGS) were right. Grounding was never the problem: every quote was the document's text. The type was the model's guess from a one-line definition.
+
+    Built:
+    - **V1-KIND** (Appendix F.5): the quote has to show the type S9 counts or R3 reads.
+      - An order win's quote names an order, award, contract or booking ("in order to" doesn't count). One that names an acquisition, a sale of a business, a settlement, escrow, a refund, revenue or guidance fails.
+      - A governance event's quote names its topic (an auditor or accounting firm, a material weakness or ineffective controls, a going-concern doubt, a restatement).
+      - A new segment's quote says the segment or business line is new.
+      - A price increase's quote names a price.
+      - Short of these, a fact waits for review, since it may still be one whose words fell outside the quote.
+    - **Stored facts:** the text run checks the verified facts of those types again on their stored quotes, by the same rule. A deal leaves the ledger (`failed`) with its counterparty link; the rest go to review. The next run finds none.
+    - **P-01's definitions** (§1.9, `pipeline/facts/types.py`) say what each type is not.
+
+    On the stored quotes of those two days, the rule keeps every real order's company firing S9. For CWCO and RTX that is through the quotes that name the award; RTX's "Standard Missile 6 ... up to $24.4 billion" lacks the word and goes to review. Every deal fails, and the wrong governance, price and segment facts go to review.
+
+    Not built: materiality. WDAY's named new customers (BWX, Guess, KPMG, S-E-B) are real wins, but small for a company that size. Saturday's check-in reads the fires before proposing a rule (50, 58). **Action (Manzoor):** none.
+

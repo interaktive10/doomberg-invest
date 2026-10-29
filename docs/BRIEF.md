@@ -181,11 +181,11 @@ The Capex Ledger types, plus general types:
 | fact_type | Definition |
 |---|---|
 | `capex_guidance`, `capex_reported`, `backlog`, `rpo`, `lead_time`, `capacity_addition`, `commitment_lease`, `commitment_purchase`, `commitment_ppa`, `financing`, `customer_concentration`, `supply_link`, `utility_load`, `risk_factor_change` | Defined in Appendix F.1 (kept in `pipeline/facts/types.py`) |
-| `order_win` | A stated order or contract win with value, customer or segment |
-| `customer_win` | A new named customer or program |
-| `price_increase` | A stated price increase or pricing action |
-| `new_segment` | A new reportable segment or business line |
-| `governance_flag` | Auditor change, material weakness, going concern, restatement (added or removed) |
+| `order_win` | An order, contract, award or booking the company won, with its value, customer or program; not an acquisition or sale of a business, a settlement, refund or escrow, revenue or guidance (SPEC_ISSUES 61) |
+| `customer_win` | A new named customer or program the company won |
+| `price_increase` | A price increase or pricing action on the company's own products or services; not a margin |
+| `new_segment` | A segment or business line the company newly created or entered; not its existing segments |
+| `governance_flag` | Auditor change (the independent accounting firm), material weakness, going concern, restatement (added or removed); not an officer's departure, a debt default or a lawsuit |
 | `export_exposure` | A stated export share or overseas order book (India: US/data-center exports) |
 
 ### 1.10 Capex Desk (deleted)
@@ -1172,6 +1172,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 | V1-NUM | Every numeric field appears in the quote after normalization; a measure (capex, backlog, RPO, a lead time, a commitment, a customer or export share, a utility's load) states one (SPEC_ISSUES 59) | failed |
 | V1-UNIT | Unit consistent with quote tokens (e.g. "MW" ↔ mw, "$" ↔ usd) | failed |
 | V1-TYPE | fact_type allowed; no price fields in facts (prices live in `prices_w`); subject_key valid | failed |
+| V1-KIND | The quote shows the type S9 counts or R3 reads (SPEC_ISSUES 61): an order's names an order, award, contract or booking, and one that names an acquisition, a sale of a business, a settlement, a refund, revenue or guidance fails; a governance event's names its topic; a new segment's says it is new; a price increase's names a price. The text run checks stored facts again on their quotes. | failed (a deal) / needs_review |
 | V1-PERIOD | Period resolvable and plausible (capex guidance and reported need one; on other types a label that names no fiscal or calendar period is kept as written, with no period: SPEC_ISSUES 59) | needs_review |
 | V1-XBRL | If an XBRL concept maps to the same period: \|value − xbrl\| ≤ 0.5% → `match`; else `mismatch` | needs_review on mismatch |
 | V1-CONF | confidence ≥ 0.70 | needs_review below |
