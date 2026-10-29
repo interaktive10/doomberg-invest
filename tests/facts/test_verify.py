@@ -505,3 +505,86 @@ def test_a_garbled_vocabulary_key_is_repaired(fact_type: str, proposed: str, rep
     top10 = "customer_concentration:top10"
     assert keys.check("customer_concentration", top10, "x") == (top10, True)  # a valid slot key: never "repaired"
     assert keys.check("commitment_purchase", "purchase_obligation:total", "x") == ("other:total", False)
+
+
+def kind(fact_type: str, key: str, quote: str, value: D | None = None, unit: str = "other") -> Candidate | Rejected:
+    """`quote` verified alone in its own document, as fact_type with key (no number unless `value`)."""
+    doc = DocContext("10-Q", date(2026, 10, 28), "1231", quote)
+    r = verify(prop(fact_type=fact_type, subject="x", subject_key=key, value=value, unit=unit,
+                    currency="USD" if unit == "usd" else None, scale_word="million" if unit == "usd" else None,
+                    period_label=None, quote=quote), Chunk(quote, 0, None), doc)  # fmt: skip
+    assert r is not None
+    return r
+
+
+@pytest.mark.parametrize("quote", [
+    "On June 24, 2026, we entered into a definitive agreement to acquire Topaz Labs Inc. for $340 million.",
+    "As of September 30, 2026, the Company has received settlement payments from defendants totaling $235 million.",
+    "Approximately $126 million of the escrowed funds were transferred to the Company.",
+    "On January 21, 2026, we completed the sale of our lending business for approximately $44.9 million.",
+    "Total consideration payable is approximately $685 million, comprised of cash and shares.",
+    "As of July 3, 2026, Trimble was approved for a $17.8 million tariff refund.",
+    "Increases 2026 revenue guidance to $70 million, from $65 million.",
+    "We grew annualized recurring revenue (\"ARR\") to $2,500 million.",
+])  # fmt: skip
+def test_an_order_win_that_names_a_deal_is_not_stored(quote: str) -> None:
+    """docs/SPEC_ISSUES.md 61: the new P-01's first day stored acquisitions, settlements, escrow, a business sale, a
+    refund, guidance and recurring revenue as order wins, each one S9 point (+20 Evidence) for its company."""
+    r = kind("order_win", "order_win:x", quote)
+    assert isinstance(r, Rejected) and r.check == "V1-KIND" and "no order" in r.reason
+
+
+@pytest.mark.parametrize(("quote", "status"), [
+    ("Coolstream Thermal received an order valued at $255 million from Nimbus Compute.", "verified"),
+    ("Booked awards and change orders of $179 million.", "verified"),
+    ("The DoW awarded Raytheon a seven-year contract valued at up to approximately $23 billion.", "verified"),
+    ("We received an Authorization to Proceed from a customer on a multi-satellite program.", "verified"),
+    ("The City will pay PERC a fixed design-build price of approximately $39.8 million.", "verified"),
+    ("Arvl secured its first drone win with Red Cat for the US Army's program.", "verified"),
+    ("Standard Missile 6 with a total value of up to $24.4 billion.", "needs_review"),  # it may be one: no word says so
+    ("Executed 16,176 square feet of leases with terms longer than 12 months.", "needs_review"),
+    ("We expanded the plant in order to meet demand.", "needs_review"),  # "in order to" orders nothing
+])  # fmt: skip
+def test_an_order_win_names_its_order_or_waits_for_review(quote: str, status: str) -> None:
+    c = ok(kind("order_win", "order_win:x", quote))
+    assert c.verification_status == status
+    assert (c.verification_notes.get("kind") == "the quote names no order, award, contract or booking") == (
+        status == "needs_review"
+    )
+
+
+@pytest.mark.parametrize(("key", "quote", "status"), [
+    ("governance:auditor_change:added", "In July 2026, we announced the resignation of our Chief Accounting Officer.",
+     "needs_review"),
+    ("governance:material_weakness:added", "The Company has been in maturity default on the Oakland Office Mortgage.",
+     "needs_review"),
+    ("governance:auditor_change:added", "The Audit Committee dismissed Deloitte & Touche LLP as the Company's "
+     "independent registered public accounting firm.", "verified"),
+    ("governance:material_weakness:added", "Our disclosure controls and procedures were not effective as of June 30, "
+     "2026.", "verified"),
+    ("governance:material_weakness:removed", "Management concluded that the previously identified material weakness "
+     "had been remediated.", "verified"),
+    ("governance:going_concern:added", "These conditions raise substantial doubt about our ability to continue.",
+     "verified"),
+    ("new_segment:cloud", "We have three businesses: cloud and software; hardware; and services; each of which is "
+     "comprised of a single operating segment.", "needs_review"),
+    ("new_segment:power_infrastructure", "As part of the establishment of the Power Infrastructure reportable "
+     "segment in the second quarter of 2026.", "verified"),
+    ("price_increase:contracting", "Expect 2H26 contracting services margins to be 9 to 10%", "needs_review"),
+])  # fmt: skip
+def test_governance_segment_and_price_facts_name_their_kind(key: str, quote: str, status: str) -> None:
+    """docs/SPEC_ISSUES.md 61: a CAO's resignation came back as an auditor change and a mortgage default as a material
+    weakness (R3's hard flag), a margin outlook as a price increase, a list of segments as a new one."""
+    fact_type = {"governance": "governance_flag", "new_segment": "new_segment"}.get(key.split(":")[0], "price_increase")
+    value, unit = (D("9"), "percent") if fact_type == "price_increase" else (None, "other")
+    if fact_type == "price_increase":  # its sentence names pricing (V1-TYPE passes); the quote doesn't
+        doc_text = quote + " with pricing steady."
+        r = verify(prop(fact_type=fact_type, subject="x", subject_key=key, value=None, value_low=D(9),
+                        value_high=D(10), unit=unit, currency=None, scale_word=None, period_label=None, quote=quote),
+                   Chunk(doc_text, 0, None), DocContext("EX-99.1", date(2026, 10, 28), "1231", doc_text))  # fmt: skip
+        assert r is not None
+    else:
+        r = kind(fact_type, key, quote, value, unit)
+    c = ok(r)
+    assert c.verification_status == status, c.verification_notes
+    assert ("kind" in c.verification_notes) == (status == "needs_review")

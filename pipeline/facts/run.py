@@ -17,6 +17,7 @@ docs/SPEC_ISSUES.md 50). `python -m pipeline.facts.run [--day D]`.
    P-01 per chunk, Verify-1, store facts and diffs (code, F.6). Risk factors aren't read: P-03 isn't called
    (docs/SPEC_ISSUES.md 50).
 5. Links: verified facts with a counterparty -> P-02 -> entities and links.
+Before all of it, stored facts are checked again on their quotes with V1-KIND (Appendix F.5; docs/SPEC_ISSUES.md 61).
 The run stops asking providers when every one is out for the day (the rest stays queued or `deferred`), at the daily
 document limit (config/quotas.yaml text_daily_limits) or at the time budget. Private data never enters this module
 (llm/privacy.py).
@@ -48,7 +49,7 @@ from pipeline.facts.diff import Value, compute
 from pipeline.facts.fetch import AGREEMENT_ITEMS, PERIODIC, STAGE_DAYS, exhibit_urls, scope_filings, since, store_raw
 from pipeline.facts.process import DocMeta, extract_document, normalize, reporting_currency
 from pipeline.facts.types import RELATION
-from pipeline.facts.verify1 import Candidate, XbrlLookup
+from pipeline.facts.verify1 import KIND_TYPES, Candidate, XbrlLookup, kind_problem
 from pipeline.india import triage
 from pipeline.llm.quotas import Quotas
 from pipeline.llm.router import CallRecord, Deferred, Router
@@ -115,6 +116,7 @@ class TextStats:
     # are queued (their submissions read today or earlier): the next run's "new to the scope" is one not in here
     scope_by_order: dict[str, int] = field(default_factory=dict)  # companies in scope by their place in ORDER
     read_by_order: dict[str, int] = field(default_factory=dict)  # documents read (sent to P-01 or found read) by it
+    rechecked: dict[str, int] = field(default_factory=dict)  # stored facts V1-KIND took out of the ledger, by type
 
 
 # ---------------------------------------------------------------- scope and queue
@@ -455,6 +457,22 @@ def _tally(counts: dict[str, int], rank: int, n: int = 1) -> None:
     counts[name] = counts.get(name, 0) + n
 
 
+def recheck_stored(conn: psycopg.Connection[Any]) -> dict[str, int]:
+    """Verified facts of the types V1-KIND reads, stored before it (docs/SPEC_ISSUES.md 61), checked on their stored
+    quotes: one that fails leaves the ledger (`failed`) and one whose quote doesn't show its type goes to review, by
+    the same rule a new fact meets, so the next run finds none. Returns how many, by type."""
+    out: dict[str, int] = {}
+    with conn.transaction():
+        for f in facts_repo.verified_of_types(conn, sorted(KIND_TYPES)):
+            problem = kind_problem(f["fact_type"], f["subject_key"], f["quote"])
+            if problem is None:
+                continue
+            fails, why = problem
+            facts_repo.demote_fact(conn, f["id"], "failed" if fails else "needs_review", {"kind": why})
+            out[f["fact_type"]] = out.get(f["fact_type"], 0) + 1
+    return out
+
+
 def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClient, nse: NseClient | None,
         raw_root: Path, documents_per_day: int | None = None, minutes: float | None = None,
         clock: Callable[[], float] = time.monotonic) -> TextStats:  # fmt: skip
@@ -462,6 +480,7 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
     is read whole or not at all, so the rest waits for the next day."""
     stats = TextStats(day.isoformat())
     deadline = None if minutes is None else clock() + 60 * minutes
+    stats.rechecked = recheck_stored(conn)
     all_companies = {c.id: c for c in repo.companies(conn) if c.id is not None}
     with conn.transaction():
         theses = repo.research_company_ids(conn)
@@ -574,10 +593,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         stats = run(conn, a.day, router, http, nse, settings.cache_dir / "raw", quotas.documents_per_day, a.minutes)
         tracked.update(asdict(stats))
+    rechecked = f"{sum(stats.rechecked.values())} stored facts re-checked out of the ledger {stats.rechecked}; "
     print(f"text {a.day}: scope {stats.scope} (theses {stats.theses}, stage names {stats.stage}), "
           f"{stats.extracted} documents extracted, {stats.deferred} deferred, "
           f"{stats.facts_verified} verified facts, {stats.facts_review} for review, {stats.links} links; "
-          f"stopped: {stats.stopped or 'queue empty'}")  # fmt: skip
+          f"{rechecked if stats.rechecked else ''}stopped: {stats.stopped or 'queue empty'}")  # fmt: skip
     return 0
 
 
