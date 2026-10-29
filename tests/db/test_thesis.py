@@ -22,12 +22,13 @@ from pipeline.digest import weekly as digest
 from pipeline.digest.github_issue import MockIssues, publish
 from pipeline.llm.router import Done
 from pipeline.thesis import evidence_pack as ep
-from pipeline.thesis import fallback_writer, ingest, kill_criteria, queue
+from pipeline.thesis import fallback_writer, ingest, kill_criteria, queue, vault
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures"
 SNAPSHOT = Path(__file__).resolve().parents[1] / "digest" / "snapshots" / "digest_2026-W38.md"
 W = date(2026, 9, 18)
 SECRET = "SECRET-JOURNAL-TEXT-7f3a"
+KEY = "test-vault-key-0123456789abcdef"  # THESIS_VAULT_KEY in these tests (tests/thesis/test_vault.py)
 
 
 def company(conn: psycopg.Connection[Any], cid: str, name: str, ticker: str, market: str = "us") -> uuid.UUID:
@@ -160,8 +161,7 @@ def card_tree(tmp_path: Path, cid: uuid.UUID) -> tuple[Path, dict[str, Any]]:
     return cards, pack
 
 
-PUSH = {"ref": "refs/heads/routine-2026-W38", "commits": [{"added": ["data/thesis_cards/2026-W38/us-nmbs.json",
-                                                                    "data/thesis_cards/2026-W38/us-nmbs.md"],
+PUSH = {"ref": "refs/heads/routine-2026-W38", "commits": [{"added": ["data/thesis_cards/2026-W38.sealed"],
                                                          "modified": [], "removed": []}],
         "head_commit": {"added": [], "modified": []}}  # fmt: skip
 
@@ -241,6 +241,34 @@ def test_fallback_skips_a_week_the_routine_covered(conn: psycopg.Connection[Any]
                                       now=lambda: datetime(2026, 9, 21, 7, tzinfo=UTC))  # fmt: skip
     assert not out.ran and router.calls == 0
     assert fallback_writer.due(W) == datetime(2026, 9, 21, 6, 0, tzinfo=UTC)
+
+
+def test_fallback_packs_come_from_the_sealed_queue_else_the_database(conn: psycopg.Connection[Any],
+                                                                    tmp_path: Path) -> None:  # fmt: skip
+    """SPEC_ISSUES 60: the fallback opens main's sealed queue; without the key weekly.yml sealed nothing, so it builds
+    the packs from the database as weekly.yml does, for a week with scores only (weekly.yml queues a week only after
+    its scores)."""
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    card_tree(tmp_path, cid)
+    plain = tmp_path / "data" / "thesis_queue" / "2026-W38.json"
+    vault.seal_queue("2026-W38", KEY, tmp_path)
+    sealed = plain.read_bytes()
+    plain.unlink()
+    assert fallback_writer.prepare(conn, "2026-W38", KEY, tmp_path) == "the sealed queue"
+    assert plain.read_bytes() == sealed
+    assert fallback_writer.prepare(conn, "2026-W38", None, tmp_path) == "the queue file"  # a working copy is read
+    plain.unlink()
+    assert fallback_writer.prepare(conn, "2026-W38", None, tmp_path) == "" and not plain.exists()  # no scores yet
+    a = company(conn, "00000000-0000-4000-8000-0000000000b1", "Alpha Test", "ALPT")
+    repo.insert_fundamentals(conn, quarters(a, [100, 110, 120, 130, 140]))
+    week_rows(conn, a)
+    repo.insert_shortlist(conn, W, [(a, Decimal(70), Decimal(60))])
+    assert fallback_writer.prepare(conn, "2026-W38", "another-vault-key-0123456789abcd", tmp_path) == "the database"
+    doc = json.loads(plain.read_text())
+    assert doc == json.loads(json.dumps(queue.build_queue(conn, W)))
+    assert [p["company"]["key"] for p in doc["packs"]] == ["us-alpt"]
+    assert fallback_writer.week_end_of("2026-W38") == W
+    assert fallback_writer.week_end_of("2026-W01") == date(2026, 1, 2)
 
 
 # ---------------------------------------------------------------- M6-05
@@ -362,27 +390,58 @@ def _mock(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_a_pushed_queue_or_code_change_ingests_nothing(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """R1-F4: a card push may change data/thesis_cards/** only; anything else (the queue, code) ingests nothing.
-    Cards are checked against the queue on disk (main's, in thesis-ingest.yml), and that pack must itself pass the
-    EvidencePack schema: an extra field fails."""
+    """R1-F4: a card push may change data/thesis_cards/** only, and since the repository is public only as a sealed
+    bundle (SPEC_ISSUES 60); anything else (the queue, code, a plaintext card) ingests nothing. Cards are checked
+    against the queue on disk (main's, in thesis-ingest.yml), and that pack must itself pass the EvidencePack schema:
+    an extra field fails."""
     cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
     card_tree(tmp_path, cid)
-    card = "data/thesis_cards/2026-W38/us-nmbs.json"
-    for other in ("data/thesis_queue/2026-W38.json", "pipeline/thesis/validate.py"):
-        stats = ingest.from_changed(conn, [card, other], tmp_path)
-        assert stats.ingested == [] and "outside data/thesis_cards" in stats.rejected["push"][0], other
+    vault.seal_cards("2026-W38", KEY, tmp_path)
+    card = "data/thesis_cards/2026-W38.sealed"
+    for other in ("data/thesis_queue/2026-W38.sealed", "pipeline/thesis/validate.py",
+                  "data/thesis_cards/2026-W38/us-nmbs.json"):  # fmt: skip
+        stats = ingest.from_changed(conn, [card, other], tmp_path, secret=KEY)
+        assert stats.ingested == [], other
+        assert "a card push carries only data/thesis_cards/<week>.sealed" in stats.rejected["push"][0], other
     assert conn.execute("select count(*) from theses").fetchone() == (0,)
     queue = tmp_path / "data" / "thesis_queue" / "2026-W38.json"
     doc = json.loads(queue.read_text())
     doc["packs"][0]["metrics"][1]["pct"] = "1350000000"  # an edited pack
     queue.write_text(json.dumps(doc))
-    stats = ingest.from_changed(conn, [card], tmp_path)
+    stats = ingest.from_changed(conn, [card], tmp_path, secret=KEY)
     assert stats.ingested == [] and any("Extra inputs" in e for e in stats.rejected["2026-W38/us-nmbs.json"])
     del doc["packs"][0]["metrics"][1]["pct"]
     queue.write_text(json.dumps(doc))
-    assert ingest.from_changed(conn, [card, card.replace(".json", ".md")], tmp_path).ingested == [
-        "2026-W38/us-nmbs.json"
-    ]
+    assert ingest.from_changed(conn, [card], tmp_path, secret=KEY).ingested == ["2026-W38/us-nmbs.json"]
+
+
+def test_ingest_opens_the_sealed_cards_and_queue_and_its_log_names_no_card(conn: psycopg.Connection[Any],
+                                                                           tmp_path: Path) -> None:  # fmt: skip
+    """SPEC_ISSUES 60: thesis-ingest.yml has main's sealed queue and the push's sealed cards, never a plaintext file in
+    git. Without THESIS_VAULT_KEY, or with another key, nothing is opened or ingested. The public log counts rejected
+    cards by week and names none: a plaintext card push is refused by count, a failing card by week."""
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    cards, _ = card_tree(tmp_path, cid)
+    vault.seal_queue("2026-W38", KEY, tmp_path)
+    vault.seal_cards("2026-W38", KEY, tmp_path)
+    shutil.rmtree(cards)
+    (tmp_path / "data" / "thesis_queue" / "2026-W38.json").unlink()  # the checkout holds the sealed files alone
+    push = ["data/thesis_cards/2026-W38.sealed"]
+    none = ingest.from_changed(conn, push, tmp_path)
+    assert none.ingested == [] and "THESIS_VAULT_KEY is not set" in none.rejected["2026-W38"][0]
+    wrong = ingest.from_changed(conn, push, tmp_path, secret="another-vault-key-0123456789abcd")
+    assert wrong.ingested == [] and "another key sealed it" in wrong.rejected["2026-W38"][0] and not cards.exists()
+    assert conn.execute("select count(*) from theses").fetchone() == (0,)
+    assert ingest.from_changed(conn, push, tmp_path, secret=KEY).ingested == ["2026-W38/us-nmbs.json"]
+    assert (cards / "us-nmbs.json").exists()  # the working copy validate.py and render.py read
+    plain = ingest.from_changed(conn, [*push, "data/thesis_cards/2026-W38/us-nmbs.md"], tmp_path, secret=KEY)
+    lines = ingest.log_lines(plain)
+    assert len(lines) == 1 and "1 unsealed file(s) under data/thesis_cards/" in lines[0] and "nmbs" not in lines[0]
+    failed = ingest.IngestStats(rejected={"2026-W38/us-nmbs.json": ["facts[0]: Nimbus Compute's 45% ..."],
+                                          "2026-W38/in-m-m.json": ["no pack for in-m-m"],
+                                          "2026-W39": ["no queue"]})  # fmt: skip
+    assert ingest.log_lines(failed) == ["  rejected 2026-W39: no queue", "  rejected 2 card(s) of 2026-W38: the "
+                                        "reasons are in this run's stats (runs, kind thesis_ingest)"]  # fmt: skip
 
 
 def test_card_md_is_the_rendering_of_the_validated_json(conn: psycopg.Connection[Any], tmp_path: Path) -> None:

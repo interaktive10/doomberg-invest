@@ -1,6 +1,7 @@
 name: thesis-fallback
 # BRIEF §4.9 step 4, §2.5 (Monday 06:00 UTC, <= 10 min, only if no cards): when the routine wrote no card for the
-# newest queue week, Gemini (P-04, free tier) writes them; each is validated and upserted with author `fallback`.
+# week of the last Friday, Gemini (P-04, free tier) writes them from main's sealed queue (THESIS_VAULT_KEY), else from
+# packs built from the database; each is validated and upserted with author `fallback` (SPEC_ISSUES 60).
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -22,6 +23,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      THESIS_VAULT_KEY: ${{ secrets.THESIS_VAULT_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

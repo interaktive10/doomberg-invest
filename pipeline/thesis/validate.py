@@ -37,7 +37,8 @@
    R3-F1). Unsupported -> rejected; no provider -> a note (thesis-ingest.yml, which has the keys, checks again).
 
 `python -m pipeline.thesis.validate --week 2026-W38` checks data/thesis_cards/<week>/*.json against the packs in
-data/thesis_queue/<week>.json (exit 1 when a card fails).
+data/thesis_queue/<week>.json (exit 1 when a card fails): the working copies, which `make thesis-open` writes from the
+sealed files (pipeline/thesis/vault.py).
 """
 
 from __future__ import annotations
@@ -832,7 +833,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--week", required=True, help="ISO week, e.g. 2026-W38")
     a = ap.parse_args(argv)
     if not queue_path(a.week).exists():
-        print(f"thesis-validate {a.week}: no queue file {queue_path(a.week)} (the weekly thesis job writes it)")
+        print(f"thesis-validate {a.week}: no queue file {queue_path(a.week)} (`make thesis-open WEEK={a.week}` "
+              "writes it from the sealed queue)")  # fmt: skip
         return 1
     results = validate_week(a.week, router=None)
     if not results:

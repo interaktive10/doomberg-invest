@@ -15,3 +15,6 @@ web/node_modules/
 web/.next/
 *.parquet
 docs/VERIFY_REPORT.md
+# the thesis queue and cards are committed only sealed (pipeline/thesis/vault.py; the repository is public)
+data/thesis_queue/*.json
+data/thesis_cards/*/

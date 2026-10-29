@@ -4,7 +4,7 @@ export DATABASE_URL ?= postgresql://doom:doom@localhost:5432/doom
 UV := uv run --frozen
 MILESTONES := m0 m1 m2 m3 m4 m5 m6 m7 m8 m9
 
-.PHONY: setup test lint type guard protected migrate-dev seed-dev size-guard fixtures universe thesis-validate $(addprefix verify-,$(MILESTONES))
+.PHONY: setup test lint type guard protected migrate-dev seed-dev size-guard fixtures universe thesis-validate thesis-open thesis-seal $(addprefix verify-,$(MILESTONES))
 
 setup:            ## install Python 3.12 + locked deps (and web deps once web/ exists)
 	uv python install 3.12
@@ -46,6 +46,12 @@ fixtures:         ## one-time network fetch of test fixtures (BRIEF §9)
 thesis-validate:
 	@if [ -f pipeline/thesis/validate.py ]; then $(UV) python -m pipeline.thesis.validate --week "$(WEEK)"; \
 	else echo "thesis-validate: pipeline/thesis/validate.py arrives in M6" >&2; exit 1; fi
+
+thesis-open:      ## the sealed queue (and cards) of WEEK, default the newest, as working copies (THESIS_VAULT_KEY)
+	$(UV) python -m pipeline.thesis.vault open $(if $(WEEK),--week "$(WEEK)",)
+
+thesis-seal:      ## seal data/thesis_cards/WEEK/ to data/thesis_cards/WEEK.sealed, the only card file git gets
+	$(UV) python -m pipeline.thesis.vault seal --week "$(WEEK)"
 
 $(addprefix verify-,$(MILESTONES)): verify-%:
 	$(UV) python scripts/verify.py --milestone $*
