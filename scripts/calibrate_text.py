@@ -91,6 +91,16 @@ def main() -> None:
         show(cur, "llm calls since 2026-10-28 15:00Z by day, prompt and outcome", """
             select created_at::date as day, prompt_id, provider, ok, count(*) as calls, round(avg(latency_ms)) as avg_ms
             from llm_calls where created_at >= '2026-10-28 15:00+00' group by 1, 2, 3, 4 order by 1, 2, 3, 4""")
+        show(cur, "facts V1-KIND took out of the ledger (verification_notes.kind), by type and status", """
+            select f.fact_type, f.verification_status, f.verification_notes ->> 'kind' as why, count(*) as facts,
+                   count(distinct f.company_id) as companies
+            from facts f where f.verification_notes ? 'kind' group by 1, 2, 3 order by 1, 2, 4 desc""")
+        show(cur, "verified S9-type facts by type since 2026-10-28 15:00Z, now", """
+            select f.fact_type, count(*) as facts, count(distinct f.company_id) as companies
+            from facts f where f.created_at >= '2026-10-28 15:00+00' and f.verification_status = 'verified'
+              and f.fact_type in ('order_win','customer_win','price_increase','new_segment','governance_flag',
+                                  'capacity_addition')
+            group by 1 order by 1""")
         show(cur, "India history runs: errors by kind (symbols masked)", """
             select left(regexp_replace(regexp_replace(e, '^([a-z ]+?) [A-Z0-9&_.-]+:', '\\1 #:'), '[0-9]{4,}', '#', 'g'), 110)
                      as kind, count(*) as n
