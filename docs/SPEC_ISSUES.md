@@ -220,7 +220,7 @@
     - **thesis-fallback.yml** reads the week of the last Friday and opens main's sealed queue. Without one, it builds the packs from the database as weekly.yml does, for a week with scores, so the week still gets Gemini's cards.
     - W39-W43's plaintext queues are deleted from main. Their history stays, and holds nothing personal.
 
-    The account's scheduled tasks hold no thesis routine (§11.6), so until one exists Monday's fallback writes the cards.
+    The account's scheduled tasks hold no thesis routine (§11.6), so until one exists Monday's fallback writes the cards. Its limit is therefore 30 minutes (§2.5; it was 10). Ten cards take up to about 140 Gemini calls (P-04, then P-05 for each sentence, two attempts) at 15 a minute. A cut-off run would have left the week's other packs without cards, because the fallback runs only for a week that has none.
 
     **Action (Manzoor):** none needed. For the routine's cards instead of the fallback's:
     1. Generate a key of at least 24 characters.

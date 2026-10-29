@@ -375,6 +375,9 @@ def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> No
     assert 'git checkout "$SHA" -- data/thesis_cards' in "\n".join(steps("thesis-ingest.yml", "ingest"))
     fallback = load("thesis-fallback.yml")
     assert fallback[True]["schedule"] == [{"cron": "0 6 * * 1"}]  # BRIEF §2.5
+    # SPEC_ISSUES 60: with no routine the fallback writes every week's cards; ten take up to about 140 Gemini calls
+    # (P-04, then P-05 for each sentence, two attempts) at 15 a minute, so 10 minutes would cut the week short
+    assert fallback["jobs"]["fallback"]["timeout-minutes"] >= 30
     assert steps("thesis-fallback.yml", "fallback")[-1].endswith("python -m pipeline.thesis.fallback_writer")
     # SPEC_ISSUES 60: both open the sealed files, and the public log never lists a path inside a week's folder
     for doc, job in ((ingest_doc, "ingest"), (fallback, "fallback")):

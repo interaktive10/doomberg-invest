@@ -1,5 +1,5 @@
 name: thesis-fallback
-# BRIEF §4.9 step 4, §2.5 (Monday 06:00 UTC, <= 10 min, only if no cards): when the routine wrote no card for the
+# BRIEF §4.9 step 4, §2.5 (Monday 06:00 UTC, <= 30 min, only if no cards): when the routine wrote no card for the
 # week of the last Friday, Gemini (P-04, free tier) writes them from main's sealed queue (THESIS_VAULT_KEY), else from
 # packs built from the database; each is validated and upserted with author `fallback` (SPEC_ISSUES 60).
 on:
@@ -17,7 +17,7 @@ permissions:
 jobs:
   fallback:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30   # ten cards: up to about 140 Gemini calls at 15 a minute (SPEC_ISSUES 60)
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
