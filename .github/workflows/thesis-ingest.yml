@@ -1,9 +1,11 @@
 name: thesis-ingest
 # BRIEF §4.9 step 3, §2.5 (<= 3 min): on a push touching data/thesis_cards/** (the Sunday routine pushes its branch,
-# Appendix G), validate the pushed weeks' cards again and upsert them into `theses` (state research, author routine)
-# with their kill criteria. With the free LLM keys, P-05 re-checks the sentences without numbers.
-# The push supplies cards only (M6 review R1-F4): the job runs main's code against main's queue files, takes only
-# data/thesis_cards/** from the pushed commit, and ingests nothing when the push changed any other path.
+# Appendix G), open the pushed weeks' sealed cards and main's sealed queue with THESIS_VAULT_KEY (the repository is
+# public; pipeline/thesis/vault.py, SPEC_ISSUES 60), validate the cards again and upsert them into `theses` (state
+# research, author routine) with their kill criteria. With the free LLM keys, P-05 re-checks the sentences without
+# numbers. The push supplies cards only (M6 review R1-F4): the job runs main's code against main's queue files, takes
+# only data/thesis_cards/** from the pushed commit, and ingests nothing when the push changed any other path or
+# carries a plaintext card. The log names no card (a card's file name names its company).
 on:
   push:
     paths:
@@ -25,6 +27,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      THESIS_VAULT_KEY: ${{ secrets.THESIS_VAULT_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +46,8 @@ jobs:
             git diff --name-only "origin/$DEFAULT...$SHA" > "$RUNNER_TEMP/changed.txt"
           fi
           git checkout "$SHA" -- data/thesis_cards
-          cat "$RUNNER_TEMP/changed.txt"
+          grep -Ev '^data/thesis_cards/.+/' "$RUNNER_TEMP/changed.txt" || true
+          echo "$(grep -Ec '^data/thesis_cards/.+/' "$RUNNER_TEMP/changed.txt" || true) path(s) inside a week folder (not named here: the log is public)"
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true

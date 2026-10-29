@@ -199,3 +199,31 @@
     - **Recordings 2 and 3** (runs 40708085409 and 40710560388, with the field rules): 18/19 on the documents read, then 21/24 and 23/24 stored correct with no deferral (the error log of #54 showed none). What was left: the model garbles a key's end (`lease_not_commenced:total,unit:`, `purchase_obligations:totalkoh`; production holds about 23 facts in review on `subject_key`), it skipped the one fact without a number in all three runs (F-SYN's new segment: S9's events often have none), and it verified "we monitor lead time trends" as a lead time with no value. Built: a vocabulary key with junk at its end is repaired (cut at the first character no key has, else the type's slot-free key it starts with; a valid slot key is never touched); P-01 says an event needs no number and a measure is a fact only with its number; Verify-1 rejects a measure (capex, backlog, RPO, a lead time, a commitment, a customer or export share, a utility's load) whose quote has no number.
     Not built: S1 reads a backlog fact only with a resolved period end (F-SYN's and most filings' backlog is "as of" a quarter end, which P-01 now puts in `as_of`); matching S1's quarters on `as_of` too is a later change (S1 is §4.6, protected). **Action (Manzoor):** none.
 
+60. **Nothing private may reach git: the thesis queue would publish Manzoor's research entries, and the routine's cards were plaintext** (Manzoor, 2026-10-29: "do what you think is the best"). Since 2026-10-26 the repository is public.
+    - weekly.yml committed `data/thesis_queue/<week>.json` to main. It holds the week's shortlist and, after it, Manzoor's open research entries (the web app's Research button): the companies he chose to research.
+    - The routine pushed its cards as plaintext JSON and Markdown on its branch, and thesis-ingest's log listed the pushed paths, which name the companies.
+
+    So far only the algorithm's output went public:
+    - In main's history, W40's queue holds its shortlist (AMR, PFE, CELH, EMBC, HHH, MTDR, named in 41-43), and W39 and W41-W43 are empty.
+    - `thesis-cards-2026-w40` holds those six cards.
+    - No research entry was ever committed. The first would have gone into W44's queue on 2026-10-31.
+
+    The routine's environment reaches git but not the database, so the files stay in git, sealed. Built:
+    - **The vault** (`pipeline/thesis/vault.py`, §4.9):
+      - Fernet (AES-128-CBC with HMAC-SHA256, `cryptography`) under a key that scrypt derives from `THESIS_VAULT_KEY` (§2.4).
+      - `data/thesis_queue/<week>.sealed` is the queue. `data/thesis_cards/<week>.sealed` is the week's cards as one bundle, because a file per card would name its company.
+      - The JSON and Markdown working copies are gitignored, so validate.py, render.py and `make thesis-validate` are unchanged.
+      - Sealing unchanged content keeps the file as it is. A wrong key or a changed byte opens nothing.
+    - **weekly.yml** seals the queue and commits the sealed file alone. A staged file that isn't sealed fails the step. Without the key it commits nothing and leaves a notice.
+    - **The routine** (Appendix G's new prompt) runs `make thesis-open`, writes the cards as before, runs `make thesis-validate` and `make thesis-seal`, then commits the sealed bundle alone.
+    - **thesis-ingest.yml** opens the pushed bundle and main's sealed queue. A push with anything else, a plaintext card included, ingests nothing. Its log counts rejected cards by week, and lists no path inside a week's folder.
+    - **thesis-fallback.yml** reads the week of the last Friday and opens main's sealed queue. Without one, it builds the packs from the database as weekly.yml does, for a week with scores, so the week still gets Gemini's cards.
+    - W39-W43's plaintext queues are deleted from main. Their history stays, and holds nothing personal.
+
+    The account's scheduled tasks hold no thesis routine (§11.6), so until one exists Monday's fallback writes the cards.
+
+    **Action (Manzoor):** none needed. For the routine's cards instead of the fallback's:
+    1. Generate a key of at least 24 characters.
+    2. Set it as the GitHub secret `THESIS_VAULT_KEY`.
+    3. Set the same value as the variable `THESIS_VAULT_KEY` of the `doomberg-invest` environment.
+    4. Create the routine from Appendix G.

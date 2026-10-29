@@ -26,6 +26,7 @@ class Settings:
     groq_api_key: str | None = field(default=None, repr=False)
     openrouter_api_key: str | None = field(default=None, repr=False)
     twelvedata_api_key: str | None = field(default=None, repr=False)  # US weekly prices (net/twelvedata.py)
+    thesis_vault_key: str | None = field(default=None, repr=False)  # the sealed queue and cards (thesis/vault.py)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -38,4 +39,5 @@ class Settings:
             groq_api_key=os.environ.get("GROQ_API_KEY") or None,
             openrouter_api_key=os.environ.get("OPENROUTER_API_KEY") or None,
             twelvedata_api_key=os.environ.get("TWELVEDATA_API_KEY") or None,
+            thesis_vault_key=os.environ.get("THESIS_VAULT_KEY") or None,
         )
