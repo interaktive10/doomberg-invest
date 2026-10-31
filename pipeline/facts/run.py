@@ -352,20 +352,24 @@ def filing_jobs(f: Mapping[str, Any], company: Company, http: HttpClient) -> lis
 
 
 def triage_announcements(conn: psycopg.Connection[Any], router: Router, companies: Mapping[UUID, Company],
-                         day: date, stats: TextStats) -> list[DocJob]:  # fmt: skip
-    """Triage the scope companies' recent announcements (the last TRIAGE_DAYS); returns PDF jobs for read_pdf ones,
-    also those triaged on an earlier day whose PDF couldn't be fetched (the caller skips URLs already read)."""
+                         day: date, stats: TextStats, limit: int | None = None) -> list[DocJob]:  # fmt: skip
+    """Triage the scope companies' recent announcements (the last TRIAGE_DAYS), newest first and at most `limit` P-07
+    calls (config/quotas.yaml announcements_per_day; the rest wait for the next run, docs/SPEC_ISSUES.md 62); returns
+    PDF jobs for read_pdf ones, also those triaged on an earlier day whose PDF couldn't be fetched (the caller skips
+    URLs already read)."""
     ids = [cid for cid, c in companies.items() if c.market == "in"]
     if not ids:
         return []
-    events = [e for e in as_of(day).corp_events(conn, ids, since=day - timedelta(days=TRIAGE_DAYS + RETRY_DAYS))
-              if e.kind == "announcement" and e.id is not None]  # fmt: skip
+    events = sorted((e for e in as_of(day).corp_events(conn, ids, since=day - timedelta(days=TRIAGE_DAYS + RETRY_DAYS))
+                     if e.kind == "announcement" and e.id is not None),
+                    key=lambda e: (e.event_date, e.filed_at), reverse=True)  # fmt: skip
     recent = day - timedelta(days=TRIAGE_DAYS)
     done = facts_repo.triaged(conn, [e.id for e in events if e.id is not None])
     first = day - timedelta(days=RETRY_DAYS)
     pdf = facts_repo.triaged_pdf(conn, [e.id for e in events if e.id is not None],
                                  datetime(first.year, first.month, first.day, tzinfo=UTC))  # fmt: skip
     jobs = []
+    calls = 0
     for e in events:
         assert e.id is not None
         title = str(e.detail.get("category") or "")
@@ -374,9 +378,10 @@ def triage_announcements(conn: psycopg.Connection[Any], router: Router, companie
             continue  # (the caller drops a URL already read; a failed fetch left none: M5 review R2-F4, R3)
         if e.event_date < recent or e.id in done or any(s in title.lower() for s in SKIP_TRIAGE):
             continue
-        if router.exhausted("P-07"):
+        if router.exhausted("P-07") or (limit is not None and calls >= limit):
             stats.triage_deferred += 1
             continue
+        calls += 1
         answer = router.call(triage.TriageInput(title, str(e.detail.get("text") or "")))
         if isinstance(answer, Deferred):
             stats.triage_deferred += 1
@@ -475,6 +480,7 @@ def recheck_stored(conn: psycopg.Connection[Any]) -> dict[str, int]:
 
 def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClient, nse: NseClient | None,
         raw_root: Path, documents_per_day: int | None = None, minutes: float | None = None,
+        announcements_per_day: int | None = None,
         clock: Callable[[], float] = time.monotonic) -> TextStats:  # fmt: skip
     """`minutes`: no document starts after this much time (BRIEF §2.5: the daily run's minutes budget); a document
     is read whole or not at all, so the rest waits for the next day."""
@@ -506,7 +512,7 @@ def run(conn: psycopg.Connection[Any], day: date, router: Router, http: HttpClie
 
     limit = documents_per_day if documents_per_day is not None else DEFAULT_DOCUMENTS_PER_DAY
     with conn.transaction():
-        pdf_jobs = triage_announcements(conn, router, in_scope, day, stats)
+        pdf_jobs = triage_announcements(conn, router, in_scope, day, stats, announcements_per_day)
 
     jobs: list[Job] = []
     # one query a place in ORDER: the later places' filings never crowd the earlier ones' out of the window
@@ -591,7 +597,8 @@ def main(argv: list[str] | None = None) -> int:
             print("text: no provider quota is set in config/quotas.yaml (BRIEF §11.3); nothing to do")
             tracked.update({"skipped": "quotas not set"})
             return 0
-        stats = run(conn, a.day, router, http, nse, settings.cache_dir / "raw", quotas.documents_per_day, a.minutes)
+        stats = run(conn, a.day, router, http, nse, settings.cache_dir / "raw", quotas.documents_per_day, a.minutes,
+                    quotas.announcements_per_day)  # fmt: skip
         tracked.update(asdict(stats))
     rechecked = f"{sum(stats.rechecked.values())} stored facts re-checked out of the ledger {stats.rechecked}; "
     print(f"text {a.day}: scope {stats.scope} (theses {stats.theses}, stage names {stats.stage}), "
