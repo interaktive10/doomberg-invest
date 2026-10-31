@@ -305,12 +305,19 @@ def test_the_queue_needs_this_weeks_scores_while_the_digest_and_guard_run_regard
 
 def test_the_queue_commit_is_main_only_and_stages_the_queue_alone() -> None:
     """M6 review R1-F5 (queue_commit): the commit step runs only on refs/heads/main, stages data/thesis_queue/ alone,
-    and pushes on top of a freshly fetched origin/main, rebasing and retrying when main moved."""
+    and pushes on top of a freshly fetched origin/main, rebasing and retrying when main moved. The repository is
+    public (SPEC_ISSUES 60): the queue job gets THESIS_VAULT_KEY to seal the queue, and a staged file that isn't
+    sealed fails the step before the commit (.gitignore keeps the plaintext out; this catches a broken ignore)."""
+    _, q = step("weekly.yml", "publish", "python -m pipeline.thesis.queue")
+    assert q["env"]["THESIS_VAULT_KEY"] == "${{ secrets.THESIS_VAULT_KEY }}"
     _, s = step("weekly.yml", "publish", "git push")
     run = s["run"]
     assert s["if"] == "needs.scores.result == 'success' && github.ref == 'refs/heads/main'"
     assert "git add -- data/thesis_queue" in run and "git add -A" not in run and "git add ." not in run
     assert 'git commit -m "Thesis queue $(date -u +%G-W%V)" -- data/thesis_queue' in run
+    refuse = "if git diff --cached --name-only -- data/thesis_queue | grep -v '\\.sealed$'; then"
+    at = run.index(refuse)
+    assert run.index("git add --") < at < run.index("git commit") and "exit 1" in run[at : run.index("git commit")]
     fetch, rebase, push = (run.index(x) for x in ("git fetch --no-tags origin main", "git rebase --autostash "
                                                    "origin/main", "git push origin HEAD:refs/heads/main"))  # fmt: skip
     assert fetch < rebase < push and "for attempt in 1 2 3" in run
@@ -368,7 +375,16 @@ def test_cards_are_ingested_on_push_and_the_fallback_runs_monday_morning() -> No
     assert 'git checkout "$SHA" -- data/thesis_cards' in "\n".join(steps("thesis-ingest.yml", "ingest"))
     fallback = load("thesis-fallback.yml")
     assert fallback[True]["schedule"] == [{"cron": "0 6 * * 1"}]  # BRIEF §2.5
+    # SPEC_ISSUES 60: with no routine the fallback writes every week's cards; ten take up to about 140 Gemini calls
+    # (P-04, then P-05 for each sentence, two attempts) at 15 a minute, so 10 minutes would cut the week short
+    assert fallback["jobs"]["fallback"]["timeout-minutes"] >= 30
     assert steps("thesis-fallback.yml", "fallback")[-1].endswith("python -m pipeline.thesis.fallback_writer")
+    # SPEC_ISSUES 60: both open the sealed files, and the public log never lists a path inside a week's folder
+    for doc, job in ((ingest_doc, "ingest"), (fallback, "fallback")):
+        assert doc["jobs"][job]["env"]["THESIS_VAULT_KEY"] == "${{ secrets.THESIS_VAULT_KEY }}", job
+    changed = "\n".join(steps("thesis-ingest.yml", "ingest"))
+    assert 'cat "$RUNNER_TEMP/changed.txt"' not in changed
+    assert "grep -Ev '^data/thesis_cards/.+/' \"$RUNNER_TEMP/changed.txt\"" in changed
 
 
 def test_weights_approval_runs_when_weights_change_on_main() -> None:

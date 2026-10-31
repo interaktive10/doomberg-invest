@@ -14,6 +14,7 @@ Pinned in `uv.lock` (Python) and `web/pnpm-lock.yaml` (web, from M7). Regenerate
 | rapidfuzz | 3.14.6 |
 | scipy | 1.18.1 |
 | pyyaml | 6.0.3 |
+| cryptography | 50.0.2 |
 | pytest | 9.1.1 |
 | ruff | 0.16.8 |
 | mypy | 2.3.1 |

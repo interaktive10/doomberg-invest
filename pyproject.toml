@@ -12,6 +12,7 @@ dependencies = [
   "rapidfuzz",
   "scipy",
   "pyyaml",
+  "cryptography",
 ]
 
 [dependency-groups]

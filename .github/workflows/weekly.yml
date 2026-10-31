@@ -144,10 +144,12 @@ jobs:
 
   publish:
     # Every week, whatever us and scores did, in one job (one runner start instead of three):
-    # - M6 (BRIEF §4.9): kill criteria on the week's new rows -> evidence packs -> the thesis queue file, committed to
-    #   main for the Sunday routine (Appendix G); only after this week's scores. The queue is committed only from main,
-    #   staging data/thesis_queue/ alone, on top of a freshly fetched origin/main (rebased and retried if main moved;
-    #   M6 review R1-F5).
+    # - M6 (BRIEF §4.9): kill criteria on the week's new rows -> evidence packs -> the thesis queue file, sealed with
+    #   THESIS_VAULT_KEY (the repository is public; pipeline/thesis/vault.py, SPEC_ISSUES 60) and committed to main
+    #   for the Sunday routine (Appendix G); only after this week's scores. The sealed queue is committed only from
+    #   main, staging data/thesis_queue/ alone (the plaintext is gitignored and refused), on top of a freshly fetched
+    #   origin/main (rebased and retried if main moved; M6 review R1-F5). Without the key nothing is committed and the
+    #   week's cards come from Monday's fallback.
     # - BRIEF §4.12: the digest issue, also when scores or the queue commit failed, since those are the weeks source
     #   health matters (M6 review R1-F6). It has the funnel, To do, What changed and a health line naming the late
     #   sources with the Actions minutes line (overhaul PR 5), and says why the candidates are missing in a week
@@ -192,21 +194,25 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: uv run --frozen python -m pipeline.thesis.kill_criteria
-      - name: Evidence packs -> data/thesis_queue/<week>.json
+      - name: Evidence packs -> data/thesis_queue/<week>.sealed
         if: needs.scores.result == 'success'
         timeout-minutes: 5
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          THESIS_VAULT_KEY: ${{ secrets.THESIS_VAULT_KEY }}
         run: uv run --frozen python -m pipeline.thesis.queue
-      - name: Commit the queue to main (Actions bot; from main only)
+      - name: Commit the sealed queue to main (Actions bot; from main only)
         if: needs.scores.result == 'success' && github.ref == 'refs/heads/main'
         timeout-minutes: 3
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- data/thesis_queue
+          if git diff --cached --name-only -- data/thesis_queue | grep -v '\.sealed$'; then
+            echo "::error::only a sealed queue may be committed: the repository is public (SPEC_ISSUES 60)"; exit 1
+          fi
           if git diff --cached --quiet -- data/thesis_queue; then
-            echo "the queue file is unchanged"; exit 0
+            echo "the sealed queue is unchanged or was not written"; exit 0
           fi
           git commit -m "Thesis queue $(date -u +%G-W%V)" -- data/thesis_queue
           for attempt in 1 2 3; do

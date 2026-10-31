@@ -181,11 +181,11 @@ The Capex Ledger types, plus general types:
 | fact_type | Definition |
 |---|---|
 | `capex_guidance`, `capex_reported`, `backlog`, `rpo`, `lead_time`, `capacity_addition`, `commitment_lease`, `commitment_purchase`, `commitment_ppa`, `financing`, `customer_concentration`, `supply_link`, `utility_load`, `risk_factor_change` | Defined in Appendix F.1 (kept in `pipeline/facts/types.py`) |
-| `order_win` | A stated order or contract win with value, customer or segment |
-| `customer_win` | A new named customer or program |
-| `price_increase` | A stated price increase or pricing action |
-| `new_segment` | A new reportable segment or business line |
-| `governance_flag` | Auditor change, material weakness, going concern, restatement (added or removed) |
+| `order_win` | An order, contract, award or booking the company won, with its value, customer or program; not an acquisition or sale of a business, a settlement, refund or escrow, revenue or guidance (SPEC_ISSUES 61) |
+| `customer_win` | A new named customer or program the company won |
+| `price_increase` | A price increase or pricing action on the company's own products or services; not a margin |
+| `new_segment` | A segment or business line the company newly created or entered; not its existing segments |
+| `governance_flag` | Auditor change (the independent accounting firm), material weakness, going concern, restatement (added or removed); not an officer's departure, a debt default or a lawsuit |
 | `export_exposure` | A stated export share or overseas order book (India: US/data-center exports) |
 
 ### 1.10 Capex Desk (deleted)
@@ -209,8 +209,8 @@ GitHub Actions (free minutes, cron) ──▶ pipeline/ (Python 3.12, uv, Polars
         ▼                                                │
 Supabase free (Postgres + Auth) ◀── web/ (Next.js on Vercel Hobby or Cloudflare Pages, single user)
         ▲
-Claude Code routine (weekly, on Manzoor's existing plan): reads data/thesis_queue/<week>.json from the repo,
-writes thesis cards to data/thesis_cards/, runs `make thesis-validate`, pushes its branch
+Claude Code routine (weekly, on Manzoor's existing plan): opens the sealed queue data/thesis_queue/<week>.sealed
+from the repo, writes thesis cards, runs `make thesis-validate`, pushes them sealed on its branch (§4.9)
 → workflow `thesis-ingest.yml` validates again and upserts into Supabase.
 Fallback, if no routine output by Monday 06:00 UTC: Gemini free tier writes the cards in Actions.
 ```
@@ -219,6 +219,7 @@ Fallback, if no routine output by Monday 06:00 UTC: Gemini free tier writes the 
 - **Pipeline:**
   - Python 3.12 (uv)
   - `polars`, `httpx`, `pydantic` 2, `psycopg[binary]` 3, `pypdfium2`, `rapidfuzz`, `scipy` (root finding, stats), `pyyaml`
+  - `cryptography` (the sealed thesis queue and cards, §4.9; SPEC_ISSUES 60)
   - `pytest`, `ruff`, `mypy`
   - the packages nothing imported were removed (SPEC_ISSUES 52): SEC, NSE and XBRL parsing, Newey-West and the LLM calls are this repo's own code
 - **LLM clients:** plain HTTPS calls (no SDK) to Gemini, Groq and OpenRouter, the last **only** at the OpenRouter base URL in `config/quotas.yaml`. No Anthropic or OpenAI paid endpoints at runtime (guard, Appendix E).
@@ -244,13 +245,13 @@ doomberg-invest/
     prices/ (bars.py, benchmarks.py, source.py, splits.py)
     facts/ (Appendix F: extract, ground, numbers, periods, verify1)
     signals/ (s01_orderbook.py … s12_cycle.py, redflags.py, context.py, reverse_dcf.py, scores.py, buckets.py)
-    thesis/ (evidence_pack.py, queue.py, validate.py, render.py, ingest.py, fallback_writer.py, kill_criteria.py)
+    thesis/ (evidence_pack.py, queue.py, validate.py, render.py, ingest.py, fallback_writer.py, kill_criteria.py, vault.py)
     lab/ (panel.py, pit.py, evaluate.py, report.py, legacy_doomberg.py)
     llm/ (router.py, providers/, prompts/P-0X.yaml, cassettes/, privacy.py)
     digest/ (weekly.py, github_issue.py)
     db/ (migrate.py, repo.py, pit.py (as_of helper), size_guard.py)
   web/ app/… components/ lib/ e2e/
-  data/ thesis_queue/ thesis_cards/           # small JSON/MD, public-data only
+  data/ thesis_queue/ thesis_cards/           # sealed files only (§4.9); the JSON/MD working copies are gitignored
   scripts/ guard.py guard_hook.py session_start.sh fetch_fixtures.py make_synthetic.py verify.py
   fixtures/ tests/ docs/
 ```
@@ -261,6 +262,7 @@ doomberg-invest/
   - `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` (optional)
   - `TWELVEDATA_API_KEY`
   - `SEC_USER_AGENT`
+  - `THESIS_VAULT_KEY`: seals the thesis queue and cards (§4.9). It is a generated value of at least 24 characters, and the routine's environment has the same value as a variable (Appendix G).
   - `GH_ISSUES_TOKEN`: none needed; the workflow's `GITHUB_TOKEN` with `issues: write` suffices
 - **Web env:** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server only), `APP_ALLOWED_EMAIL`.
 - **Mocks:** every external client has a real implementation and a mock. `MOCK_EXTERNALS=true` in cloud sessions.
@@ -270,7 +272,7 @@ doomberg-invest/
 |---|---|---|
 | `daily.yml` | `13 1 * * 2-6` | ≤ 40 min (the text step: about 15, at most 30 on a slow day; SPEC_ISSUES 58) |
 | `weekly.yml` | `7 2 * * 6` (Saturday) | ≤ 45 min |
-| `thesis-fallback.yml` | `0 6 * * 1` | ≤ 10 min, only if no cards |
+| `thesis-fallback.yml` | `0 6 * * 1` | ≤ 30 min, only if no cards (ten cards take up to about 140 Gemini calls at 15 a minute; SPEC_ISSUES 60) |
 | `thesis-ingest.yml` | on push touching `data/thesis_cards/**` | ≤ 3 min |
 | `quarterly.yml` | `23 3 22 3,6,9,12 *` | ≤ 60 min |
 | `lab.yml` | manual | ≤ 90 min |
@@ -546,10 +548,21 @@ There is no S11 (SPEC_ISSUES 52).
 Every item has a stable id (`m:…` metrics, `f:…` facts, `s:…` signals, `c:…` context).
 
 **Weekly flow:**
-1. `weekly.yml` writes `data/thesis_queue/{YYYY}-W{WW}.json` (≤ 10 packs: the shortlist, then the research entries still waiting for a card, oldest first; one that doesn't fit waits a week) and commits it to `main` with the Actions bot.
-2. **Routine** (Appendix G), Sunday 06:00 IST: reads the queue, writes one `data/thesis_cards/{week}/{company}.json` + `.md` per pack following P-04, runs `make thesis-validate WEEK=…`, fixes failures (≤ 2 attempts per card), then commits and pushes its branch.
-3. `thesis-ingest.yml` (on push touching `data/thesis_cards/**`) re-validates and upserts `theses` (state `research`, author `routine`) and `kill_criteria`; a card for a research entry fills that entry in place (SPEC_ISSUES 35).
-4. **Fallback:** `thesis-fallback.yml`, Monday 06:00 UTC. If no cards were ingested for the week, it generates them with Gemini (P-04), validates, and upserts with author `fallback`.
+1. `weekly.yml` writes the queue `data/thesis_queue/{YYYY}-W{WW}.json`: ≤ 10 packs, the shortlist first, then the research entries still waiting for a card, oldest first. An entry that doesn't fit waits a week. The job seals the queue to `data/thesis_queue/{YYYY}-W{WW}.sealed` with `THESIS_VAULT_KEY` and commits the sealed file alone to `main` with the Actions bot. Without the key it commits nothing, and step 4 covers the week.
+2. **Routine** (Appendix G), Sunday 06:00 IST:
+   - opens the sealed queue (`make thesis-open`)
+   - writes one `data/thesis_cards/{week}/{company}.json` + `.md` per pack following P-04
+   - runs `make thesis-validate WEEK=…` and fixes failures (≤ 2 attempts per card)
+   - seals the week's cards into `data/thesis_cards/{week}.sealed` (`make thesis-seal`), commits that file alone and pushes its branch
+3. `thesis-ingest.yml` (on push touching `data/thesis_cards/**`) opens the pushed sealed cards and `main`'s sealed queue, re-validates, and upserts `theses` (state `research`, author `routine`) and `kill_criteria`. A card for a research entry fills that entry in place (SPEC_ISSUES 35). A push carrying anything but sealed cards ingests nothing, and the job's log names no card.
+4. **Fallback:** `thesis-fallback.yml`, Monday 06:00 UTC. If no cards were ingested for the week of the last Friday, it generates them with Gemini (P-04), validates them and upserts them with author `fallback`. Its packs come from `main`'s sealed queue. Without one, it builds them from the database as step 1 does, for a week with scores.
+
+**The vault (`vault.py`; SPEC_ISSUES 60):**
+- The repository is public, and the queue lists Manzoor's research entries after the shortlist, so git holds the queue and the cards only sealed.
+- The cipher is Fernet (AES-128-CBC with HMAC-SHA256), under a key that scrypt derives from `THESIS_VAULT_KEY`.
+- The week's cards are one bundle, because a file per card would name its company.
+- The JSON and Markdown working copies, which `validate.py` and `render.py` read, are gitignored.
+- A wrong key or a changed file opens nothing.
 
 **Validation (`validate.py`; the card is rejected if any rule fails):**
 - the JSON schema (P-04) is valid
@@ -866,7 +879,7 @@ Return only JSON.
 3. **Free accounts and keys** (0.5) by M2/M5. Add the GitHub secrets, and copy the live quota values from each console into `config/quotas.yaml`.
 4. **M3:** if NSE blocks the fixture fetch, download the sample files by hand from the NSE pages.
 5. **M8:** nothing to download: `lab-prices.yml` fetches the Lab's prices from Twelve Data into the database (November 2026) and starts the first Lab run itself.
-6. **After M6:** create the weekly routine (Appendix G).
+6. **After M6:** create the weekly routine (Appendix G). Generate `THESIS_VAULT_KEY` and set it both as the GitHub secret (§2.4) and as the routine environment's variable.
 7. **Weekly** (about 30 min, weekend):
    - read the digest
    - open at most 3 cards
@@ -1159,6 +1172,7 @@ create table links (id uuid primary key default gen_random_uuid(), from_company_
 | V1-NUM | Every numeric field appears in the quote after normalization; a measure (capex, backlog, RPO, a lead time, a commitment, a customer or export share, a utility's load) states one (SPEC_ISSUES 59) | failed |
 | V1-UNIT | Unit consistent with quote tokens (e.g. "MW" ↔ mw, "$" ↔ usd) | failed |
 | V1-TYPE | fact_type allowed; no price fields in facts (prices live in `prices_w`); subject_key valid | failed |
+| V1-KIND | The quote shows the type S9 counts or R3 reads (SPEC_ISSUES 61): an order's names an order, award, contract or booking, and one that names an acquisition, a sale of a business, a settlement, a refund, revenue or guidance fails; a governance event's names its topic; a new segment's says it is new; a price increase's names a price; a customer win's names a customer, client, partner or program. The text run checks stored facts again on their quotes. | failed (a deal) / needs_review |
 | V1-PERIOD | Period resolvable and plausible (capex guidance and reported need one; on other types a label that names no fiscal or calendar period is kept as written, with no period: SPEC_ISSUES 59) | needs_review |
 | V1-XBRL | If an XBRL concept maps to the same period: \|value − xbrl\| ≤ 0.5% → `match`; else `mismatch` | needs_review on mismatch |
 | V1-CONF | confidence ≥ 0.70 | needs_review below |
@@ -1263,16 +1277,22 @@ cannot. Anything extra, stronger, or interpretive is unsupported. Return only th
 
 ## Appendix G — Weekly thesis routine (create after M6 is merged)
 - **How:** create it from the project conversation ("put this on a weekly schedule as a routine") or the Routines page.
-- **Settings:** environment `doomberg-invest`; schedule Sunday 00:30 UTC (06:00 IST).
+- **Settings:**
+  - environment `doomberg-invest`, with the variable `THESIS_VAULT_KEY`: the same value as the GitHub secret (§2.4, §4.9)
+  - schedule Sunday 00:30 UTC (06:00 IST)
 - **Prompt:**
 ```text
-Read docs/BRIEF.md §4.9 and §5 (P-04). Open the newest file in data/thesis_queue/. For each evidence pack in it,
-write data/thesis_cards/<week>/<company_key>.json following the P-04 schema, plus a .md rendering with
-`uv run python -m pipeline.thesis.render <json>`. Use only the pack. Cite pack ids on every fact and
-why-mispriced sentence; label inferences and assumptions; kill criteria per §4.9.
+Read docs/BRIEF.md §4.9 and §5 (P-04). Run `make thesis-open`: it opens the newest sealed queue
+data/thesis_queue/<week>.sealed into data/thesis_queue/<week>.json. If it fails, stop and say why.
+For each evidence pack in the queue, write data/thesis_cards/<week>/<company_key>.json following the P-04
+schema, plus a .md rendering with `uv run python -m pipeline.thesis.render <json>`. Use only the pack.
+Cite pack ids on every fact and why-mispriced sentence; label inferences and assumptions; kill criteria per §4.9.
 Run `make thesis-validate WEEK=<week>`. Fix failing cards (at most 2 attempts each); if a card still fails,
 delete it and list it with reasons in data/thesis_cards/<week>/FAILED.md.
-Commit and push your branch. Edit nothing else. Do not open a PR. Final message: cards written, cards failed.
+Run `make thesis-seal WEEK=<week>`. Commit data/thesis_cards/<week>.sealed alone, with the message
+"Thesis cards <week>", and push your branch. The repository is public: never commit or force-add a .json
+or .md under data/, and name no company in a commit message or branch name.
+Edit nothing else. Do not open a PR. Final message: cards written, cards failed.
 ```
 - **Fallback:** if the routine hits a plan limit, its turn stops. `thesis-fallback.yml` covers the week on Monday.
 

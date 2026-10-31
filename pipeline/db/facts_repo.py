@@ -20,6 +20,7 @@ from psycopg.types.json import Jsonb
 from pipeline.db.models import LlmCall
 from pipeline.facts.diff import Diff
 from pipeline.facts.fetch import STAGE_ITEMS
+from pipeline.facts.types import RELATION
 from pipeline.facts.verify1 import Candidate
 from pipeline.llm.providers.base import Provider
 from pipeline.llm.quotas import Quotas
@@ -249,6 +250,31 @@ def insert_diff(conn: Conn, company_id: UUID, subject_key: str, prev_id: UUID | 
         conn.execute(
             _q("update facts set superseded_by = %s where id = %s and superseded_by is null"), (new_id, prev_id)
         )
+
+
+def verified_of_types(conn: Conn, fact_types: Sequence[str]) -> list[dict[str, Any]]:
+    return _rows(conn, "select id, fact_type, subject_key, quote from facts where verification_status = 'verified' "
+                       "and fact_type = any(%s) order by created_at, id", (list(fact_types),))  # fmt: skip
+
+
+def demote_fact(conn: Conn, fact_id: UUID, status: str, notes: Mapping[str, str]) -> None:
+    """A stored fact that fails a later Verify-1 rule leaves the ledger (`failed`) or goes to review, with the rule's
+    note (docs/SPEC_ISSUES.md 61). Its counterparty link goes with it; another verified fact of the same link, if
+    any, carries it instead."""
+    conn.execute(_q("update facts set verification_status = %s, verification_notes = verification_notes || %s "
+                    "where id = %s"), (status, Jsonb(dict(notes)), fact_id))  # fmt: skip
+    gone = conn.execute(_q("delete from links where fact_id = %s returning from_company_id, to_entity_id, relation"),
+                        (fact_id,)).fetchone()  # fmt: skip
+    if gone is None:
+        return
+    types = [t for t, r in RELATION.items() if r == gone[2]]
+    conn.execute(
+        _q("insert into links (from_company_id, to_entity_id, relation, fact_id) select f.company_id, "
+           "f.counterparty_entity_id, %s, f.id from facts f where f.company_id = %s and f.counterparty_entity_id = %s "
+           "and f.verification_status = 'verified' and f.fact_type = any(%s) order by f.created_at limit 1 "
+           "on conflict (from_company_id, to_entity_id, relation) do nothing"),
+        (gone[2], gone[0], gone[1], types),
+    )  # fmt: skip
 
 
 def unlinked_facts(conn: Conn, limit: int = 200) -> list[dict[str, Any]]:

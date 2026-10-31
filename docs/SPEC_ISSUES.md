@@ -199,3 +199,62 @@
     - **Recordings 2 and 3** (runs 40708085409 and 40710560388, with the field rules): 18/19 on the documents read, then 21/24 and 23/24 stored correct with no deferral (the error log of #54 showed none). What was left: the model garbles a key's end (`lease_not_commenced:total,unit:`, `purchase_obligations:totalkoh`; production holds about 23 facts in review on `subject_key`), it skipped the one fact without a number in all three runs (F-SYN's new segment: S9's events often have none), and it verified "we monitor lead time trends" as a lead time with no value. Built: a vocabulary key with junk at its end is repaired (cut at the first character no key has, else the type's slot-free key it starts with; a valid slot key is never touched); P-01 says an event needs no number and a measure is a fact only with its number; Verify-1 rejects a measure (capex, backlog, RPO, a lead time, a commitment, a customer or export share, a utility's load) whose quote has no number.
     Not built: S1 reads a backlog fact only with a resolved period end (F-SYN's and most filings' backlog is "as of" a quarter end, which P-01 now puts in `as_of`); matching S1's quarters on `as_of` too is a later change (S1 is §4.6, protected). **Action (Manzoor):** none.
 
+60. **Nothing private may reach git: the thesis queue would publish Manzoor's research entries, and the routine's cards were plaintext** (Manzoor, 2026-10-29: "do what you think is the best"). Since 2026-10-26 the repository is public.
+    - weekly.yml committed `data/thesis_queue/<week>.json` to main. It holds the week's shortlist and, after it, Manzoor's open research entries (the web app's Research button): the companies he chose to research.
+    - The routine pushed its cards as plaintext JSON and Markdown on its branch, and thesis-ingest's log listed the pushed paths, which name the companies.
+
+    So far only the algorithm's output went public:
+    - In main's history, W40's queue holds its shortlist (AMR, PFE, CELH, EMBC, HHH, MTDR, named in 41-43), and W39 and W41-W43 are empty.
+    - `thesis-cards-2026-w40` holds those six cards.
+    - No research entry was ever committed. The first would have gone into W44's queue on 2026-10-31.
+
+    The routine's environment reaches git but not the database, so the files stay in git, sealed. Built:
+    - **The vault** (`pipeline/thesis/vault.py`, §4.9):
+      - Fernet (AES-128-CBC with HMAC-SHA256, `cryptography`) under a key that scrypt derives from `THESIS_VAULT_KEY` (§2.4).
+      - `data/thesis_queue/<week>.sealed` is the queue. `data/thesis_cards/<week>.sealed` is the week's cards as one bundle, because a file per card would name its company.
+      - The JSON and Markdown working copies are gitignored, so validate.py, render.py and `make thesis-validate` are unchanged.
+      - Sealing unchanged content keeps the file as it is. A wrong key or a changed byte opens nothing.
+    - **weekly.yml** seals the queue and commits the sealed file alone. A staged file that isn't sealed fails the step. Without the key it commits nothing and leaves a notice.
+    - **The routine** (Appendix G's new prompt) runs `make thesis-open`, writes the cards as before, runs `make thesis-validate` and `make thesis-seal`, then commits the sealed bundle alone.
+    - **thesis-ingest.yml** opens the pushed bundle and main's sealed queue. A push with anything else, a plaintext card included, ingests nothing. Its log counts rejected cards by week, and lists no path inside a week's folder.
+    - **thesis-fallback.yml** reads the week of the last Friday and opens main's sealed queue. Without one, it builds the packs from the database as weekly.yml does, for a week with scores, so the week still gets Gemini's cards.
+    - W39-W43's plaintext queues are deleted from main. Their history stays, and holds nothing personal.
+
+    The account's scheduled tasks hold no thesis routine (§11.6), so until one exists Monday's fallback writes the cards. Its limit is therefore 30 minutes (§2.5; it was 10). Ten cards take up to about 140 Gemini calls (P-04, then P-05 for each sentence, two attempts) at 15 a minute. A cut-off run would have left the week's other packs without cards, because the fallback runs only for a week that has none.
+
+    **Action (Manzoor):** none needed. For the routine's cards instead of the fallback's:
+    1. Generate a key of at least 24 characters.
+    2. Set it as the GitHub secret `THESIS_VAULT_KEY`.
+    3. Set the same value as the variable `THESIS_VAULT_KEY` of the `doomberg-invest` environment.
+    4. Create the routine from Appendix G.
+
+61. **The new P-01's first day stored deals, settlements and guidance as order wins** (the 2026-10-29 check-in on 58 and 59, before the first scores to read them). In the text runs of 2026-10-28 and 2026-10-29, 33 order wins at 12 companies were verified.
+    - About 20 of them were no order:
+      - acquisitions and their consideration (ADBE, IESC, SSRM, TRMB)
+      - MDL settlement payments, escrow and a regulatory liability (AWK)
+      - business sales and their proceeds (CMCT, TRMB)
+      - a tariff refund and recurring revenue (TRMB)
+      - revenue guidance (VELO)
+    - Other types were wrong too:
+      - a Chief Accounting Officer's resignation stored as an auditor change (ASAN)
+      - a mortgage default stored as a material weakness (CMCT): R3's hard flag would have excluded the name
+      - a margin outlook stored as a price increase (KNF)
+      - a list of existing segments stored as a new segment (ORCL)
+
+    S9 counts each of these types at +20 Evidence, and one fact makes a `one_fact` name a Candidate (58). Saturday's scores would have put names on the board on facts like these. The real orders (CWCO, LTRX, LUNR, ORN, RTX) and the new segments (IESC, KGS) were right. Grounding was never the problem: every quote was the document's text. The type was the model's guess from a one-line definition.
+
+    Built:
+    - **V1-KIND** (Appendix F.5): the quote has to show the type S9 counts or R3 reads.
+      - An order win's quote names an order, award, contract or booking ("in order to" doesn't count). One that names an acquisition, a sale of a business, a settlement, escrow, a refund, revenue or guidance fails.
+      - A governance event's quote names its topic (an auditor or accounting firm, a material weakness or ineffective controls, a going-concern doubt, a restatement).
+      - A new segment's quote says the segment or business line is new.
+      - A price increase's quote names a price.
+      - A customer win's quote names a customer, client, partner or program. This was added after the first re-check (#63), when DXC's incoming president was still verified as a customer win. S9 never counted it (a customer win needs a named counterparty), but the app showed it.
+      - Short of these, a fact waits for review, since it may still be one whose words fell outside the quote.
+    - **Stored facts:** the text run checks the verified facts of those types again on their stored quotes, by the same rule. A deal leaves the ledger (`failed`) with its counterparty link; the rest go to review. The next run finds none.
+    - **P-01's definitions** (§1.9, `pipeline/facts/types.py`) say what each type is not.
+
+    On the stored quotes of those two days, the rule keeps every real order's company firing S9. For CWCO and RTX that is through the quotes that name the award; RTX's "Standard Missile 6 ... up to $24.4 billion" lacks the word and goes to review. Every deal fails, and the wrong governance, price and segment facts go to review.
+
+    Not built: materiality. WDAY's named new customers (BWX, Guess, KPMG, S-E-B) are real wins, but small for a company that size. Saturday's check-in reads the fires before proposing a rule (50, 58). **Action (Manzoor):** none.
+

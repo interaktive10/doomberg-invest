@@ -771,3 +771,53 @@ def test_an_announcement_pdf_is_fetched_again_after_the_weekend(conn: psycopg.Co
     assert [j.url for j in run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 22), stats)] == [pdf]
     conn.execute("update announcement_triage set created_at = '2026-09-01 00:00+00'")  # triaged > RETRY_DAYS ago
     assert run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 22), run.TextStats("x")) == []
+
+
+def test_stored_facts_are_checked_again_with_v1_kind(conn: psycopg.Connection[Any]) -> None:
+    """docs/SPEC_ISSUES.md 61: facts stored before V1-KIND are checked on their stored quotes by the text run. A deal
+    leaves the ledger (`failed`) with its link, which another verified fact of the same counterparty carries instead;
+    a quote that doesn't show its type goes to review; the rest stay verified, and the next run changes nothing."""
+    from tests.db.conftest import new_company
+
+    cid = new_company(conn, name="Acme")
+    doc = conn.execute("insert into documents (company_id, kind, url, published_at, sha256, raw_path) values "
+                       "(%s, 'EX-99.1', 'https://e.org/k', '2026-10-28', 'x', 'x') returning id",
+                       (cid,)).fetchone()  # fmt: skip
+    entity = conn.execute("insert into entities (name, normalized, kind) values ('Nimbus Compute', 'nimbus compute', "
+                          "'company') returning id").fetchone()  # fmt: skip
+    assert doc is not None and entity is not None
+
+    def fact(fact_type: str, key: str, quote: str, linked: bool = False) -> UUID:
+        row = conn.execute(
+            "insert into facts (company_id, document_id, fact_type, subject, subject_key, unit, as_of, quote, "
+            "char_start, char_end, extraction_model, confidence, verification_status, counterparty, "
+            "counterparty_entity_id) values (%s, %s, %s, 'x', %s, 'other', '2026-10-28', %s, 0, %s, 'm', 0.9, "
+            "'verified', %s, %s) returning id",
+            (cid, doc[0], fact_type, key, quote, len(quote), "Nimbus Compute" if linked else None,
+             entity[0] if linked else None),
+        ).fetchone()  # fmt: skip
+        assert row is not None
+        return UUID(str(row[0]))
+
+    deal = fact("order_win", "order_win:nimbus", "We agreed to acquire Nimbus Compute for $340 million.", linked=True)
+    order = fact("order_win", "order_win:nimbus_cooling", "Acme received an order from Nimbus Compute.", linked=True)
+    conn.execute("insert into links (from_company_id, to_entity_id, relation, fact_id) values (%s, %s, 'customer', %s)",
+                 (cid, entity[0], deal))  # fmt: skip
+    orderless = fact("order_win", "order_win:sm6", "Standard Missile 6 with a total value of up to $24.4 billion.")
+    cao = fact("governance_flag", "governance:auditor_change:added", "Our Chief Accounting Officer resigned.")
+    weak = fact("governance_flag", "governance:material_weakness:added", "Our controls were not effective.")
+    segments = fact("new_segment", "new_segment:x", "We have three businesses, each a single operating segment.")
+    president = fact("customer_win", "customer_win:x", "The addition of Paul Taylor as President strengthens our team.")
+    customers = fact("customer_win", "customer_win:y", "We welcomed new customers including KPMG LLP.")
+    link = fact("supply_link", "link:x", "We agreed to acquire a stake in Nimbus Compute.")  # not a type S9 counts
+
+    assert run.recheck_stored(conn) == {"order_win": 2, "governance_flag": 1, "new_segment": 1, "customer_win": 1}
+    status = dict(conn.execute("select id, verification_status from facts where company_id = %s", (cid,)).fetchall())
+    assert {k: status[k] for k in (deal, orderless, cao, segments, president)} == {
+        deal: "failed", orderless: "needs_review", cao: "needs_review", segments: "needs_review",
+        president: "needs_review"}  # fmt: skip
+    assert {status[k] for k in (order, weak, link, customers)} == {"verified"}
+    notes = conn.execute("select verification_notes from facts where id = %s", (deal,)).fetchone()
+    assert notes is not None and notes[0]["kind"].startswith("an acquisition")
+    assert conn.execute("select fact_id from links where from_company_id = %s", (cid,)).fetchall() == [(order,)]
+    assert run.recheck_stored(conn) == {}
