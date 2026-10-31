@@ -464,7 +464,7 @@ def recheck_stored(conn: psycopg.Connection[Any]) -> dict[str, int]:
     out: dict[str, int] = {}
     with conn.transaction():
         for f in facts_repo.verified_of_types(conn, sorted(KIND_TYPES)):
-            problem = kind_problem(f["fact_type"], f["subject_key"], f["quote"])
+            problem = kind_problem(f["fact_type"], f["subject_key"], f["quote"], f["unit"])
             if problem is None:
                 continue
             fails, why = problem

@@ -253,8 +253,8 @@ def insert_diff(conn: Conn, company_id: UUID, subject_key: str, prev_id: UUID | 
 
 
 def verified_of_types(conn: Conn, fact_types: Sequence[str]) -> list[dict[str, Any]]:
-    return _rows(conn, "select id, fact_type, subject_key, quote from facts where verification_status = 'verified' "
-                       "and fact_type = any(%s) order by created_at, id", (list(fact_types),))  # fmt: skip
+    return _rows(conn, "select id, fact_type, subject_key, quote, unit from facts where verification_status = "
+                       "'verified' and fact_type = any(%s) order by created_at, id", (list(fact_types),))  # fmt: skip
 
 
 def demote_fact(conn: Conn, fact_id: UUID, status: str, notes: Mapping[str, str]) -> None:
