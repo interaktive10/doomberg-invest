@@ -808,14 +808,16 @@ def test_stored_facts_are_checked_again_with_v1_kind(conn: psycopg.Connection[An
     weak = fact("governance_flag", "governance:material_weakness:added", "Our controls were not effective.")
     segments = fact("new_segment", "new_segment:x", "We have three businesses, each a single operating segment.")
     president = fact("customer_win", "customer_win:x", "The addition of Paul Taylor as President strengthens our team.")
+    revolver = fact("capacity_addition", "capacity:usd:revolver", "The amendment increases borrowing capacity.")
     customers = fact("customer_win", "customer_win:y", "We welcomed new customers including KPMG LLP.")
     link = fact("supply_link", "link:x", "We agreed to acquire a stake in Nimbus Compute.")  # not a type S9 counts
 
-    assert run.recheck_stored(conn) == {"order_win": 2, "governance_flag": 1, "new_segment": 1, "customer_win": 1}
+    assert run.recheck_stored(conn) == {"order_win": 2, "governance_flag": 1, "new_segment": 1, "customer_win": 1,
+                                        "capacity_addition": 1}  # fmt: skip
     status = dict(conn.execute("select id, verification_status from facts where company_id = %s", (cid,)).fetchall())
-    assert {k: status[k] for k in (deal, orderless, cao, segments, president)} == {
+    assert {k: status[k] for k in (deal, orderless, cao, segments, president, revolver)} == {
         deal: "failed", orderless: "needs_review", cao: "needs_review", segments: "needs_review",
-        president: "needs_review"}  # fmt: skip
+        president: "needs_review", revolver: "failed"}  # fmt: skip
     assert {status[k] for k in (order, weak, link, customers)} == {"verified"}
     notes = conn.execute("select verification_notes from facts where id = %s", (deal,)).fetchone()
     assert notes is not None and notes[0]["kind"].startswith("an acquisition")

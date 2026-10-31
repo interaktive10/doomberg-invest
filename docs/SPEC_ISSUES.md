@@ -256,5 +256,17 @@
 
     On the stored quotes of those two days, the rule keeps every real order's company firing S9. For CWCO and RTX that is through the quotes that name the award; RTX's "Standard Missile 6 ... up to $24.4 billion" lacks the word and goes to review. Every deal fails, and the wrong governance, price and segment facts go to review.
 
+    **The first scores to read the facts (2026-10-31, W44)** put 27 names on the boards (US 18, India 9; there were 2), 14 of them through S9. The check-in read every S9 fire's counted facts.
+    - 12 of those 14 Candidates rest on a fact of the right type: CWCO, LUNR, RTX, AMCX, MP, ENPH, IESC, ASPN, LPG, LDOS, WDAY, KWR.
+    - The other two are soft: ALV's "Toyota as the first customer to evaluate" a software platform, and JSL's 40 MW captive solar project.
+    - Outside the boards there were four more type errors, so V1-KIND reads two more types:
+      - a credit facility's "committed capacity" (PHM) and "borrowing capacity" (STRL) stored as capacity additions. A capacity addition's quote now has to say capacity is added and isn't money; one that names borrowing or a credit facility fails.
+      - a company's existing (or acquired) plants stored as added capacity (ASPN, IESC), caught by the same rule
+      - a divestiture's "cash at closing", seller note and transition services stored as orders (CLVT): these join the deal words
+      - a warranty term stored as a lead time (LTRX): a lead time's quote has to name one
+    - Still counted, because it is not a type error:
+      - RIVN's Amazon order of 100,000 vans, restated in a 10-Q with no date, so its `as_of` is the filing's
+      - KGS's own order for gas turbines, which is a purchase, not a sale
+
     Not built: materiality. WDAY's named new customers (BWX, Guess, KPMG, S-E-B) are real wins, but small for a company that size. Saturday's check-in reads the fires before proposing a rule (50, 58). **Action (Manzoor):** none.
 

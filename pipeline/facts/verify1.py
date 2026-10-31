@@ -140,15 +140,18 @@ def pricing_word(sentence: str) -> bool:
 # - recurring revenue and guidance
 # It also stored an officer's resignation as an auditor change, a mortgage default as a material weakness, a margin
 # outlook as a price increase, a company's existing segments as a new one, and a new president as a customer win.
-# S9 counts these types, R3's hard flag reads the governance ones, and a fact's quote is its evidence, so the quote
-# has to show its type:
+# The first scores to read the facts (2026-10-31) found a credit facility's borrowing capacity and a company's
+# existing plants stored as capacity additions, a divestiture's cash at closing as an order and a warranty as a lead
+# time. S9 counts these types, R3's hard flag reads the governance ones, and a fact's quote is its evidence, so the
+# quote has to show its type:
 # - an order's quote that names a deal fails it
 # - a quote without its type's words waits for review
 # The text run checks the stored quotes of earlier facts the same way (pipeline/facts/run.py recheck_stored).
 DEAL = re.compile(
     r"\bacquir(?:e|ed|es|ing)\b|\bacquisitions?\b|\bmerg(?:e|er|ers|ed|ing)\b|\bconsideration\b|\bdivest\w*"
     r"|\bsale\s+of\b|\bsold\b|\bsettlements?\b|\bescrow(?:ed)?\b|\brefunds?\b|\bguidance\b|\boutlook\b"
-    r"|\bproceeds\b|\bliabilit(?:y|ies)\b|\b(?:equity|enterprise)\s+value\b|\brecurring\s+revenue\b|(?-i:\bARR\b)",
+    r"|\bproceeds\b|\bliabilit(?:y|ies)\b|\b(?:equity|enterprise)\s+value\b|\brecurring\s+revenue\b|(?-i:\bARR\b)"
+    r"|\bat\s+(?:the\s+)?closing\b|\bseller\s+notes?\b|\btransition\s+services?\b",
     re.I,
 )
 ORDER = re.compile(
@@ -179,12 +182,31 @@ CUSTOMER = re.compile(
     r"|\bselected\b|\bchose\b|\bawards?\b|\bawarded\b|\bcontracts?\b|\bwins?\b|\bwon\b|\bonboard\w*",
     re.I,
 )
-KIND_TYPES = frozenset({"order_win", "customer_win", "governance_flag", "new_segment", "price_increase"})
+FINANCING = re.compile(
+    r"\bborrow\w*|\bcredit\s+(?:agreements?|facilit(?:y|ies)|lines?)\b|\brevolv(?:er|ers|ing)\b|\bterm\s+loans?\b"
+    r"|\bloans?\b|\bdebt\b",
+    re.I,
+)
+ADDED = re.compile(
+    r"\badd(?:s|ed|ing|ition|itions)?\b|\bnew\b|\bexpan\w*|\bbuil[dt]\w*|\bconstruct\w*|\bincreas\w*|\bcommission\w*"
+    r"|\bopen(?:s|ed|ing)?\b|\blaunch\w*|\bonline\b|\bdevelop\w*|\bplan(?:s|ned|ning)?\b|\bdeliver\w*|\bramp\w*"
+    r"|\bacquir\w*|\bstart(?:s|ed|ing)?\b|\bbegin\w*|\bbegan\b|\bcomplet\w*|\bextend\w*|\bupgrad\w*|\bdoubl\w*"
+    r"|\btripl\w*|\bgrow\w*",
+    re.I,
+)
+LEAD_TIME = re.compile(
+    r"\blead[\s-]?times?\b|\bdelivery\s+(?:times?|schedules?|periods?)\b|\bwait(?:ing)?\s+(?:times?|lists?)\b"
+    r"|\bturnaround\b",
+    re.I,
+)
+KIND_TYPES = frozenset({"order_win", "customer_win", "governance_flag", "new_segment", "price_increase",
+                        "capacity_addition", "lead_time"})  # fmt: skip
 
 
-def kind_problem(fact_type: str, subject_key: str, quote: str) -> tuple[bool, str] | None:
-    """(fails, why) when the quote doesn't show the fact's type (V1-KIND), else None. Only a deal fails an order: a
-    quote that lacks its type's words may still be one, so it waits for review."""
+def kind_problem(fact_type: str, subject_key: str, quote: str, unit: str | None = None) -> tuple[bool, str] | None:
+    """(fails, why) when the quote doesn't show the fact's type (V1-KIND), else None. Only a deal fails an order, and
+    financing fails a capacity addition: a quote that lacks its type's words may still be one, so it waits for review.
+    `unit` is the stored unit (a capacity is MW, square feet, plants or sites, not money)."""
     if fact_type == "order_win":
         if DEAL.search(quote):
             return True, "an acquisition, a sale of a business, a settlement, a refund, revenue or guidance is no order"
@@ -202,6 +224,15 @@ def kind_problem(fact_type: str, subject_key: str, quote: str) -> tuple[bool, st
         return False, "the quote names no price or pricing action"
     elif fact_type == "customer_win" and not CUSTOMER.search(quote):
         return False, "the quote names no customer, client, partner or program"
+    elif fact_type == "capacity_addition":
+        if FINANCING.search(quote):
+            return True, "a credit facility's borrowing capacity is financing, not capacity"
+        if unit == "usd":
+            return False, "capacity is MW, square feet, plants or sites, not money"
+        if not ADDED.search(quote):
+            return False, "the quote doesn't say capacity is added"
+    elif fact_type == "lead_time" and not LEAD_TIME.search(quote):
+        return False, "the quote names no lead time"
     return None
 
 
@@ -370,7 +401,7 @@ def verify(p: Proposed, chunk: Chunk, doc: DocContext, xbrl: XbrlLookup | None =
     key, key_ok = keys.check(p.fact_type, p.subject_key, p.subject, slug)
     if not key_ok:
         review["subject_key"] = f"{p.subject_key!r} is not in config/subject_keys.yaml for {p.fact_type}"
-    problem = kind_problem(p.fact_type, key, quote)
+    problem = kind_problem(p.fact_type, key, quote, stored_unit(p.unit, matched))
     if problem is not None:
         fails, why = problem
         if fails:

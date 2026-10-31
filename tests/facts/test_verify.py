@@ -599,3 +599,44 @@ def test_governance_segment_and_price_facts_name_their_kind(key: str, quote: str
     c = ok(r)
     assert c.verification_status == status, c.verification_notes
     assert ("kind" in c.verification_notes) == (status == "needs_review")
+
+
+@pytest.mark.parametrize(("fact_type", "key", "quote", "value", "unit", "outcome"), [
+    ("capacity_addition", "capacity:usd:x", "The Amended Credit Agreement increases borrowing capacity by $1.05 "
+     "billion.", D("1.05"), "usd", "V1-KIND"),
+    ("capacity_addition", "capacity:usd:x", "We increased the total committed capacity from $1.25 billion to $1.75 "
+     "billion.", D("1.75"), "usd", "needs_review"),
+    ("capacity_addition", "capacity:usd:x", "Existing manufacturing footprint supports $600 million of annual revenue.",
+     D(600), "usd", "needs_review"),
+    ("capacity_addition", "capacity:sq_ft:x", "With more than 2 million square feet of fabrication facilities across "
+     "the United States.", D(2), "sq_ft", "needs_review"),
+    ("capacity_addition", "capacity:mw:x", "We plan to add 800 MW of data center capacity at our Ohio campus.",
+     D(800), "mw", "verified"),
+    ("lead_time", "lead_time:x", "We currently offer warranties of up to 5 years on each of our products.", D(5),
+     "years", "needs_review"),
+    ("lead_time", "lead_time:x", "Lead times for large power transformers extended to 147 weeks.", D(147), "weeks",
+     "verified"),
+    ("order_win", "order_win:x", "Clarivate will receive $500 million in cash at closing.", D(500), "usd", "V1-KIND"),
+    ("order_win", "order_win:x", "The consideration includes a $75 million seller note.", D(75), "usd", "V1-KIND"),
+])  # fmt: skip
+def test_capacity_lead_time_and_divestiture_facts_name_their_kind(
+    fact_type: str, key: str, quote: str, value: D | None, unit: str, outcome: str
+) -> None:
+    """docs/SPEC_ISSUES.md 61, the first scores to read the facts (2026-10-31): a credit facility's borrowing capacity
+    and a company's existing plants came back as capacity additions (S9 counts one with a commitment), a divestiture's
+    cash at closing and a seller note as orders, a warranty as a lead time."""
+    if value is None:
+        r = kind(fact_type, key, quote)
+    else:
+        scale = "billion" if "billion" in quote else ("million" if unit == "usd" else None)
+        doc = DocContext("10-Q", date(2026, 10, 28), "1231", quote)
+        r = verify(prop(fact_type=fact_type, subject="x", subject_key=key, value=value, unit=unit,
+                        currency="USD" if unit == "usd" else None, scale_word=scale, period_label=None, quote=quote),
+                   Chunk(quote, 0, None), doc)  # fmt: skip
+        assert r is not None
+    if outcome == "V1-KIND":
+        assert isinstance(r, Rejected) and r.check == "V1-KIND", r
+    else:
+        c = ok(r)
+        assert c.verification_status == outcome, c.verification_notes
+        assert ("kind" in c.verification_notes) == (outcome == "needs_review")
