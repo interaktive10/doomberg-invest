@@ -91,6 +91,35 @@ def main() -> None:
         show(cur, "llm calls since 2026-10-28 15:00Z by day, prompt and outcome", """
             select created_at::date as day, prompt_id, provider, ok, count(*) as calls, round(avg(latency_ms)) as avg_ms
             from llm_calls where created_at >= '2026-10-28 15:00+00' group by 1, 2, 3, 4 order by 1, 2, 3, 4""")
+        show(cur, "the boards of each market's latest scored week (algorithm output; S9 = text fired)", """
+            with wk as (select c.market, max(s.week_end) as week_end from scores s join companies c on c.id = s.company_id
+                        group by 1)
+            select c.market, s.bucket, coalesce(c.ticker, c.nse_symbol) as code, left(c.name, 28) as name,
+                   s.evidence, s.gap, array_to_string(s.families, '+') as families,
+                   (select v.fired from signal_values v where v.company_id = s.company_id and v.week_end = s.week_end
+                      and v.signal_id = 'S9') as s9
+            from scores s join companies c on c.id = s.company_id join wk on wk.market = c.market
+                 and wk.week_end = s.week_end
+            where s.bucket in ('candidate', 'watch', 'early')
+            order by c.market desc, s.bucket, s.evidence desc, code""")
+        show(cur, "S9 inputs of the boards' text fires (the facts each S9 counted)", """
+            with wk as (select c.market, max(s.week_end) as week_end from scores s join companies c on c.id = s.company_id
+                        group by 1)
+            select coalesce(c.ticker, c.nse_symbol) as code, s.bucket, v.inputs ->> 'facts' as facts
+            from scores s join companies c on c.id = s.company_id join wk on wk.market = c.market
+                 and wk.week_end = s.week_end
+            join signal_values v on v.company_id = s.company_id and v.week_end = s.week_end and v.signal_id = 'S9'
+            where v.fired order by s.bucket, code""")
+        show(cur, "full quotes of chosen fires (ALV, ASPN, JSL, IESC, LPG, MP, ENPH, AMCX: the S9 types)", """
+            select coalesce(c.ticker, c.nse_symbol) as code, f.fact_type, f.subject_key, f.counterparty, f.unit,
+                   f.value_num, f.as_of, regexp_replace(f.quote, '\\s+', ' ', 'g') as quote
+            from facts f join companies c on c.id = f.company_id
+            where coalesce(c.ticker, c.nse_symbol) in ('ALV','ASPN','JSL','IESC','LPG','MP','ENPH','AMCX')
+              and f.verification_status = 'verified'
+              and f.fact_type in ('order_win','customer_win','price_increase','new_segment','governance_flag',
+                                  'capacity_addition','lead_time')
+              and f.as_of >= '2026-04-30'
+            order by code, f.as_of desc""")
         show(cur, "facts V1-KIND took out of the ledger (verification_notes.kind), by type and status", """
             select f.fact_type, f.verification_status, f.verification_notes ->> 'kind' as why, count(*) as facts,
                    count(distinct f.company_id) as companies
