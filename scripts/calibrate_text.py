@@ -120,6 +120,19 @@ def main() -> None:
                                   'capacity_addition','lead_time')
               and f.as_of >= '2026-04-30'
             order by code, f.as_of desc""")
+        show(cur, "capacity and lead-time facts V1-KIND took out (stage names with no thesis; quote cut at 150)", """
+            select coalesce(c.ticker, c.nse_symbol) as code, f.fact_type, f.verification_status as status, f.unit,
+                   left(f.verification_notes ->> 'kind', 40) as why,
+                   left(regexp_replace(f.quote, '\\s+', ' ', 'g'), 150) as quote
+            from facts f join companies c on c.id = f.company_id
+            where f.verification_notes ? 'kind' and f.fact_type in ('capacity_addition', 'lead_time')
+              and not exists (select 1 from theses t where t.company_id = f.company_id)
+            order by f.fact_type, f.verification_status, code limit 60""")
+        show(cur, "llm calls today and yesterday by prompt, provider and error (429s by kind)", """
+            select created_at::date as day, prompt_id, provider, ok,
+                   left(regexp_replace(coalesce(error, ''), '[0-9a-f]{8,}', '#', 'g'), 60) as error, count(*) as calls
+            from llm_calls where created_at >= now() - interval '2 days'
+            group by 1, 2, 3, 4, 5 order by 1, 2, 3, 4, 6 desc""")
         show(cur, "facts V1-KIND took out of the ledger (verification_notes.kind), by type and status", """
             select f.fact_type, f.verification_status, f.verification_notes ->> 'kind' as why, count(*) as facts,
                    count(distinct f.company_id) as companies
