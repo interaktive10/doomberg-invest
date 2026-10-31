@@ -47,6 +47,7 @@ class Quotas:
     work_order: tuple[str, ...] = ()
     documents_per_day: int | None = None
     raw: Mapping[str, Any] = field(default_factory=dict)
+    announcements_per_day: int | None = None  # P-07 triage calls a day (docs/SPEC_ISSUES.md 62)
 
     @classmethod
     def from_doc(cls, doc: Mapping[str, Any]) -> Quotas:
@@ -63,7 +64,8 @@ class Quotas:
         }
         routing = {pid: tuple(order) for pid, order in (doc.get("routing") or {}).items()}
         limits = doc.get("text_daily_limits") or {}
-        return cls(providers, routing, tuple(doc.get("work_order") or ()), _int(limits.get("documents_per_day")), doc)
+        return cls(providers, routing, tuple(doc.get("work_order") or ()), _int(limits.get("documents_per_day")), doc,
+                   _int(limits.get("announcements_per_day")))  # fmt: skip
 
     @classmethod
     def load(cls, root: Path = REPO_ROOT) -> Quotas:

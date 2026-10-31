@@ -33,6 +33,9 @@ work_order: [thesis, board, one_fact, stage, excluded]
 text_daily_limits:
   # about 230 P-01 calls at 1.5 a document: Gemini's 500 a day leave about 270 for P-02, P-07 and Monday's cards
   documents_per_day: 150
+  # P-07 triage of the Indian scope names' announcements, newest first (docs/SPEC_ISSUES.md 62): 222 calls on
+  # 2026-10-31, the first day with India's stage in scope, in results season; the rest wait a day (3 days to triage)
+  announcements_per_day: 200
 # GitHub Actions minutes (overhaul PR 3, pipeline/digest/minutes.py): the account's private repos share the free 2,000
 # a billing cycle, and going over stops every workflow until the reset. Read from github.com/settings/billing: Manzoor
 # updates cycle_day (the day the cycle resets) and other_repos (this cycle's minutes in his other private repos; 0 while

@@ -270,3 +270,9 @@
 
     Not built: materiality. WDAY's named new customers (BWX, Guess, KPMG, S-E-B) are real wins, but small for a company that size. Saturday's check-in reads the fires before proposing a rule (50, 58). **Action (Manzoor):** none.
 
+62. **India's announcement triage took nearly half of Gemini's free day** (the 2026-10-31 check-in). W44's scores were the first with India's stage in the text run's scope: 243 names in Indian results season.
+    - The run of 2026-10-31 10:18Z made 222 P-07 calls, triaging every announcement of the last 3 days. Its P-01 then stopped after 37 documents: "every provider is out for today".
+    - That day also had the scheduled run, which read 150 documents. On a normal day the triage (about 220) and the 150 documents (about 230) just fit in the 500. On a results-season peak the triage alone could take 300 or more, and the US 10-Qs of the same weeks would wait.
+
+    Built: P-07 is capped at `text_daily_limits.announcements_per_day` (200) calls a day, newest announcement first. The rest wait for the next run, which still triages them within 3 days. **Action (Manzoor):** none.
+

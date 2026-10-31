@@ -639,6 +639,30 @@ def test_india_announcements_are_triaged_once(conn: psycopg.Connection[Any]) -> 
     assert [j.url for j in again] == [events[0].source_url] and stats.triaged == 1
 
 
+def test_triage_stops_at_its_daily_cap_newest_first(conn: psycopg.Connection[Any]) -> None:
+    """docs/SPEC_ISSUES.md 62: on 2026-10-31, the first day with India's stage in scope, P-07 took 222 of Gemini's 500
+    calls. Triage is capped a day (config/quotas.yaml announcements_per_day), newest announcement first; the rest wait
+    for the next run and are triaged while they are within TRIAGE_DAYS."""
+    from pipeline.llm.quotas import Quotas
+
+    cos = add_companies(conn)
+    arvl = cos["ARVL"]
+    assert arvl.id is not None
+    pdf = "https://nsearchives.nseindia.com/corporate/ARVL_{}.pdf"
+    events = [CorpEvent(company_id=arvl.id, event_date=date(2026, 9, d), filed_at=datetime(2026, 9, d, 10, tzinfo=UTC),
+                        kind="announcement", detail={"category": "Award of Order", "text": f"Order {d}."},
+                        source_url=pdf.format(d)) for d in (22, 24, 23)]  # fmt: skip
+    repo.insert_corp_events(conn, events)
+    stats = run.TextStats("2026-09-25")
+    pdfs = run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 25), stats, limit=1)
+    assert stats.triaged == 1 and stats.triage_deferred == 2
+    assert [j.url for j in pdfs] == [pdf.format(24)]  # the newest
+    later = run.TextStats("2026-09-25")
+    run.triage_announcements(conn, router(), {arvl.id: arvl}, date(2026, 9, 25), later, limit=5)
+    assert later.triaged == 2 and later.triage_deferred == 0  # the next run triages the rest
+    assert Quotas.load().announcements_per_day == 200
+
+
 class RupeesWithoutCurrency:
     """F-SYN's oracle, but its P-01 answers leave `currency` null for rupee amounts (P-01's schema allows it)."""
 
