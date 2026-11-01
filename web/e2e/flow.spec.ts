@@ -47,16 +47,16 @@ async function journalEntry(page: Page, action: string, reason: string, override
   await page.getByRole("button", { name: "Add entry" }).click();
 }
 
-test("the nav has three places and More; the Screener's and the Capex Desk's old links redirect", async ({ page }) => {
+test("the nav has four places and More; the Screener's and the Capex Desk's old links redirect", async ({ page }) => {
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Main" });
-  for (const name of ["This week", "Candidates", "Theses"]) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(1);
+  for (const name of ["Home", "Undervalued", "Winners", "My list"]) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(1);
   await nav.locator("summary", { hasText: "More" }).click();
   for (const name of ["Journal", "Signal Lab", "Settings"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
-  await expect(nav.getByRole("link")).toHaveCount(6);
+  await expect(nav.getByRole("link")).toHaveCount(7);
   await page.goto("/screener");
   await expect(page).toHaveURL(/\/candidates$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Candidates" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Undervalued" })).toBeVisible();
   await page.goto("/capex");
   await expect(page).toHaveURL(/localhost:3000\/$/);
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
@@ -126,7 +126,7 @@ test("the theme button cycles Auto, Light, Dark and back, and the server writes 
 
 test("candidates: dismiss one with a reason, start research on another", async ({ page }) => {
   await page.goto("/candidates");
-  await expect(page.getByRole("heading", { level: 1, name: "Candidates" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Undervalued" })).toBeVisible();
   // the NEW badge (overhaul PR 4): ECHO is in Candidate for the first time in 12 weeks
   await expect(card(page, "Echo Grid Corp.").getByText("NEW", { exact: true })).toBeVisible();
   // the card (overhaul PR 6): the two rings, and why it's here in plain words with the signal's code in the tooltip
