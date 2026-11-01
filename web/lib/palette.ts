@@ -6,78 +6,83 @@
 
 export const LIGHT = {
   // surfaces
-  canvas: "#f5f6f8", // the page
+  canvas: "#f6f5f0", // the page
   panel: "#ffffff", // sheets (Section), menus, the active nav pill's ground
-  raised: "#f7f8fa", // tiles inside a sheet
-  hover: "#f1f3f6", // chips, secondary pills, row hover
+  raised: "#f8f7f3", // tiles inside a sheet
+  hover: "#f0eee7", // chips, secondary pills, row hover
   field: "#ffffff", // inputs
-  track: "#e6e8ee", // ring and bar tracks, the segmented nav's track
+  track: "#e8e5dc", // ring and bar tracks, the segmented nav's track
   thumb: "#ffffff", // the segmented nav's active pill
-  line: "#ebecef", // hairlines between rows
-  "line-strong": "#d9dbe0", // field borders, dashed empties
-  edge: "#8a8a90", // control borders that must stand out (>= 3:1)
+  line: "#ebe9e2", // hairlines between rows
+  "line-strong": "#d8d5cb", // field borders, dashed empties
+  edge: "#85837c", // control borders that must stand out (>= 3:1)
   // text
-  fg: "#1c1c1e",
-  muted: "#55555b", // secondary text
-  subtle: "#636369", // meta text, eyebrows, placeholders
+  fg: "#18181b",
+  muted: "#4f4f57", // secondary text
+  subtle: "#5e5e66", // meta text, eyebrows, placeholders
   // actions
-  accent: "#3656d6", // links, focus, the Evidence ring, count pills
-  "accent-hover": "#2a47b8",
+  accent: "#4f46e5", // links, focus, the Evidence ring, count pills
+  "accent-hover": "#4338ca",
   "on-accent": "#ffffff",
-  ink: "#1c1c1e", // primary pills
+  ink: "#18181b", // primary pills
   "on-ink": "#ffffff",
   // meaning
-  up: "#2b6d44", // good
-  down: "#a33a3a", // bad
-  warn: "#8a5a2a", // needs a look
-  violet: "#6e5bbf", // chart series 2 only
-  gap: "#3f8a5b", // the Gap ring and bars (a fill, never text: use up for green text)
+  up: "#166534", // good
+  down: "#a3123a", // bad
+  warn: "#7f4a06", // needs a look
+  violet: "#7c3aed", // chart series 2 only
+  gap: "#16a34a", // the Gap ring and bars (a fill, never text: use up for green text)
   // evidence families (dots and bars; the text beside them carries the meaning)
-  "fam-business": "#6f9478",
-  "fam-insiders": "#7089ab",
-  "fam-ownership": "#c29b5a",
-  "fam-text": "#b58468",
+  "fam-business": "#3fa66a",
+  "fam-insiders": "#4f7fd9",
+  "fam-ownership": "#e0a12e",
+  "fam-text": "#e0714a",
   // ticker tiles
-  "tint-sky": "#e7eefb",
-  "tint-sage": "#e8f1ea",
-  "tint-sand": "#f6efe2",
-  "tint-clay": "#f5ebe5",
+  "tint-sky": "#e8ebff",
+  "tint-sage": "#e1f4e7",
+  "tint-sand": "#fcf0d6",
+  "tint-clay": "#fde8df",
+  // Winners
+  pink: "#db2777",
+  "tint-rose": "#fde6f0",
 } as const;
 
 export type Token = keyof typeof LIGHT;
 
 export const DARK: Record<Token, string> = {
-  canvas: "#0b0c0e",
-  panel: "#1a1b1f",
-  raised: "#222328",
-  hover: "#2a2b30",
-  field: "#141518",
-  track: "#2e2f35",
-  thumb: "#4a4b52",
-  line: "#28292e",
-  "line-strong": "#3a3b41",
-  edge: "#6e6e76",
-  fg: "#f2f2f4",
-  muted: "#b4b4ba",
-  subtle: "#9b9ba2",
-  accent: "#9bb0cb",
-  "accent-hover": "#b9c8dd",
-  "on-accent": "#0b0c0e",
-  ink: "#f2f2f4",
-  "on-ink": "#0b0c0e",
-  up: "#80b190",
-  down: "#e08a8a",
-  warn: "#d4a574",
-  violet: "#b4a8e6",
-  gap: "#7aab8a",
-  "fam-business": "#93b39a",
-  "fam-insiders": "#a0b4ce",
-  "fam-ownership": "#d6b77e",
-  "fam-text": "#c99d82",
-  "tint-sky": "#2a3550",
-  "tint-sage": "#24382c",
-  "tint-sand": "#3d3424",
-  "tint-clay": "#3d2e27",
+  canvas: "#0d0d10",
+  panel: "#1a1a1f",
+  raised: "#222228",
+  hover: "#2a2a31",
+  field: "#141418",
+  track: "#2f2f37",
+  thumb: "#4a4a54",
+  line: "#29292f",
+  "line-strong": "#3b3b43",
+  edge: "#70707a",
+  fg: "#f4f4f5",
+  muted: "#b6b6be",
+  subtle: "#9d9da6",
+  accent: "#a5b4fc",
+  "accent-hover": "#c7d2fe",
+  "on-accent": "#0d0d10",
+  ink: "#f4f4f5",
+  "on-ink": "#0d0d10",
+  up: "#7ddc9f",
+  down: "#fb8fa3",
+  warn: "#f5c04a",
+  violet: "#c4b5fd",
+  gap: "#4ade80",
+  "fam-business": "#6cc58f",
+  "fam-insiders": "#8fb0f0",
+  "fam-ownership": "#f2c463",
+  "fam-text": "#f29a78",
+  "tint-sky": "#262b4d",
+  "tint-sage": "#1c3828",
+  "tint-sand": "#3d311d",
+  "tint-clay": "#41271e",
+  pink: "#f472b6",
+  "tint-rose": "#43203a",
 };
 
 /** Chart ink (components/charts.tsx). */

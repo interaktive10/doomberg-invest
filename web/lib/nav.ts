@@ -1,16 +1,21 @@
-// The app's places (overhaul PR 6 shell): three in the main nav (the desktop header's segmented pills and the phone's
-// bottom dock), the rest under More. Pure, so tests/nav.test.ts covers it; components/nav-links.tsx draws it.
+// The app's places (the 2026-11 redesign: docs/SPEC_ISSUES.md 65): four in the main nav (the desktop header's pills and
+// the phone's bottom dock), each with its own colour, the rest under More. Pure, so tests/nav.test.ts covers it;
+// components/nav-links.tsx draws it.
+
+export type PlaceTone = "accent" | "up" | "pink" | "warn";
 
 export interface Place {
   href: string;
   label: string;
-  icon: "home" | "trend" | "doc" | "book" | "flask" | "gear";
+  icon: "home" | "tag" | "trophy" | "bookmark" | "spark" | "book" | "flask" | "gear";
+  tone?: PlaceTone;
 }
 
 export const MAIN: readonly Place[] = [
-  { href: "/", label: "This week", icon: "home" },
-  { href: "/candidates", label: "Candidates", icon: "trend" },
-  { href: "/theses", label: "Theses", icon: "doc" },
+  { href: "/", label: "Home", icon: "home", tone: "accent" },
+  { href: "/candidates", label: "Undervalued", icon: "tag", tone: "up" },
+  { href: "/winners", label: "Winners", icon: "trophy", tone: "pink" },
+  { href: "/theses", label: "My list", icon: "bookmark", tone: "warn" },
 ];
 
 export const MORE: readonly Place[] = [
@@ -19,7 +24,10 @@ export const MORE: readonly Place[] = [
   { href: "/settings", label: "Settings", icon: "gear" },
 ];
 
-/** Whether `path` is the place at `href` or under it ("/theses/<id>" is Theses); "/" is This week only. */
+/** The text colour class of a place's icon (a fill-strength colour on an icon is decoration: the label carries it). */
+export const TONE_TEXT: Record<PlaceTone, string> = { accent: "text-accent", up: "text-up", pink: "text-pink", warn: "text-warn" };
+
+/** Whether `path` is the place at `href` or under it ("/theses/<id>" is My list); "/" is Home only. */
 export function isCurrent(path: string, href: string): boolean {
   return href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);
 }

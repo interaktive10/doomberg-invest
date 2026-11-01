@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LinkPending } from "@/components/link-pending";
 import { Callout } from "@/components/callout";
 import { Chip, Dot, DotRow } from "@/components/chip";
 import { Disclosure } from "@/components/disclosure";
@@ -292,6 +293,7 @@ function TodoRow({ t, f }: { t: Thesis; f: Figure | undefined }) {
         </span>
         <span className={cn(buttonVariants({ size: "sm" }), "hidden sm:inline-flex")}>{action}</span>
         <Icon name="chevron-right" className="text-subtle sm:hidden" />
+        <LinkPending />
       </Link>
     </li>
   );
@@ -463,6 +465,7 @@ function ByMarket({ rows, empty }: { rows: ScreenerRow[]; empty: string }) {
                         <span className="line-clamp-2">{boardWhy(r.fired_signals)}</span>
                       </span>
                     </span>
+                    <LinkPending />
                   </Link>
                 </li>
               ))}

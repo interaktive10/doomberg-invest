@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LinkPending } from "@/components/link-pending";
 import { Chip, Legend } from "@/components/chip";
 import { DetailsMenu } from "@/components/details-menu";
 import { Icon } from "@/components/icons";
@@ -43,7 +44,7 @@ import type { ScreenSpec } from "@/lib/screener";
 import { cn } from "@/lib/utils";
 import { dismiss, research } from "./actions";
 
-export const metadata = { title: "Candidates" };
+export const metadata = { title: "Undervalued" };
 
 // BRIEF §6 Candidates (overhaul PR 4: one entry per company in plain words, filters folded away), drawn as the overhaul
 // PR 6 mock: a segmented switch for the three buckets (Candidate is "On the board"), then one card per company with its
@@ -120,7 +121,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   return (
     <Page
       eyebrow={week ? weekEyebrow(week, false) : undefined}
-      title="Candidates"
+      title="Undervalued"
       description={BUCKET_LINE[bucket]}
       actions={
         <Segmented
@@ -343,10 +344,12 @@ function CandidateCard({
       <div className="mt-auto flex items-center gap-2">
         <Link href={`/company/${r.company_id}`} className={cn(buttonVariants(), "flex-1")}>
           Open<span className="sr-only"> {r.name}</span>
+          <LinkPending />
         </Link>
         {card ? (
           <Link href={`/theses/${card.id}`} aria-describedby={nameId} className={buttonVariants({ variant: "secondary" })}>
             Open card
+            <LinkPending />
           </Link>
         ) : (
           <form action={research}>
