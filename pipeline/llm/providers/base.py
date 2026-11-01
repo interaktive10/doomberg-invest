@@ -31,6 +31,7 @@ class Request:
     mode: Mode
     tool_name: str
     temperature: float
+    reasoning_effort: str | None = None  # config/quotas.yaml providers.<name>.reasoning (docs/SPEC_ISSUES.md 63)
 
 
 @dataclass(frozen=True)

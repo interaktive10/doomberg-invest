@@ -8,8 +8,8 @@ make setup | make test | make lint | make type | make guard | make migrate-dev |
 make thesis-validate WEEK=YYYY-Www | Web: cd web && pnpm test && pnpm e2e
 
 ## Hard rules (guard and CI enforce; never weaken or work around)
-- $0 running cost: free tiers only; no paid endpoints (api.anthropic.com, api.openai.com) in runtime code; no credit
-  cards anywhere.
+- Near-$0 running cost: free tiers, except OpenRouter (DeepSeek, Manzoor's choice, capped in config/quotas.yaml:
+  SPEC_ISSUES 63); no paid endpoints (api.anthropic.com, api.openai.com) in runtime code.
 - Research tool: no broker SDKs, no order placement, no intraday data, no price alerts.
 - Point-in-time: read fundamentals/ownership/events only through as_of(); never use data filed after the as-of date.
 - Journal, positions and post-mortems never go to any LLM (llm/privacy.py).

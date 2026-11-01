@@ -1,7 +1,7 @@
-"""OpenAI-compatible chat completions over plain HTTP (BRIEF §2.6 fallbacks): Groq's free tier and OpenRouter's
-`:free` models. No SDK: the request is a JSON POST with a bearer key to an allowlisted host (pipeline/net/http.py),
-so nothing can reach a paid endpoint (the guard's banned_runtime_domains). OpenRouter's base URL comes from
-config/quotas.yaml (the guard's openai_client_rule)."""
+"""OpenAI-compatible chat completions over plain HTTP (BRIEF §2.6): OpenRouter (DeepSeek V4.1 Flash, the primary since
+docs/SPEC_ISSUES.md 63) and Groq's free tier. No SDK: the request is a JSON POST with a bearer key to an allowlisted
+host (pipeline/net/http.py), so nothing can reach a banned endpoint (the guard's banned_runtime_domains).
+OpenRouter's base URL comes from config/quotas.yaml (the guard's openai_client_rule)."""
 
 from __future__ import annotations
 
@@ -37,6 +37,8 @@ def body(req: Request) -> dict[str, Any]:
         out["tool_choice"] = {"type": "function", "function": {"name": req.tool_name}}
     else:
         out["response_format"] = {"type": "json_object"}
+    if req.reasoning_effort:
+        out["reasoning"] = {"effort": req.reasoning_effort, "exclude": True}  # the answer only, not the thinking
     return out
 
 
@@ -52,6 +54,8 @@ def parse(raw: bytes, req: Request, provider: str) -> Completion:
         calls = msg.get("tool_calls") or []
         fn = calls[0].get("function", {}) if calls and isinstance(calls[0], dict) else {}
         if fn.get("name") != req.tool_name:
+            if not calls and msg.get("content"):  # a reasoning model may answer the tool's JSON as text
+                return Completion(parse_json_object(str(msg["content"])), tin, tout)
             raise ProviderError(f"{provider}: no call to the requested tool")
         args = fn.get("arguments")
         content = args if isinstance(args, dict) else parse_json_object(str(args or ""))
@@ -74,7 +78,7 @@ class OpenAICompatible:
             raw = self.http.post_json(
                 f"{self.base_url.rstrip('/')}/chat/completions",
                 body(req),
-                headers={"Authorization": f"Bearer {self.key}"},
+                headers={"Authorization": f"Bearer {self.key}", "X-Title": "Doomberg Invest"},
             )
         except httpx.HTTPError as e:
             raise_for(e, self.name)

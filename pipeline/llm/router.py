@@ -194,7 +194,8 @@ class Router:
                 q, u = self.quotas.providers[name], self._usage[name]
                 model = q.model(spec.task)
                 self._pace(name)
-                req = Request(spec.id, model, system, user, schema, spec.mode, spec.tool_name, spec.temperature)
+                req = Request(spec.id, model, system, user, schema, spec.mode, spec.tool_name, spec.temperature,
+                              q.reasoning.get(spec.task))  # fmt: skip
                 t0 = time.monotonic()
                 u.requests += 1
                 u.minute.append(self.clock.now())
