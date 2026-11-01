@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { Callout } from "@/components/callout";
 import { Chip, Dot } from "@/components/chip";
 import { Disclosure } from "@/components/disclosure";
@@ -27,7 +28,7 @@ import { one, UUID, type Query } from "@/lib/forms";
 import { ACTION_LABEL, label } from "@/lib/labels";
 import type { Tone } from "@/lib/palette";
 import type { PackDiff } from "@/lib/reviews";
-import { acceptable, canMove, killCheckLine, markMoved, positionOpen, RESEARCH_QUEUED, showsReviews, STATE_LABEL } from "@/lib/theses";
+import { acceptable, canMove, killCheckLine, markMoved, positionOpen, RESEARCH_QUEUED, researchStatus, showsReviews, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
 import { requireUser } from "@/lib/auth";
@@ -62,6 +63,38 @@ function Day({ iso, className }: { iso: string; className?: string }) {
     <time dateTime={iso.slice(0, 10)} className={cn("num", className)}>
       {shortDate(iso, true)}
     </time>
+  );
+}
+
+/** A research entry without a card: being written (the page re-reads itself), covered by the week's card, or given up
+ * on with the checks that failed (docs/SPEC_ISSUES.md 66). */
+function NoCard({ state, validation }: { state: string; validation: unknown }) {
+  if (state !== "research") return <Empty>No card: this research entry closed before one was written.</Empty>;
+  const st = researchStatus(validation);
+  if (st.kind === "covered") {
+    return (
+      <Empty action={<Link href={`/theses/${st.id}`} className={buttonVariants({ size: "sm" })}>Open its card</Link>}>
+        This week already has a card for this company.
+      </Empty>
+    );
+  }
+  if (st.kind === "failed") {
+    return (
+      <Empty>
+        No card passed the checks twice, so it waits for Sunday&apos;s routine.
+        {st.errors[0] ? <span className="mt-1 block text-[13px] text-subtle">Last check that failed: {st.errors[0]}</span> : null}
+      </Empty>
+    );
+  }
+  return (
+    <Empty>
+      <span className="inline-flex items-center gap-2">
+        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
+        {RESEARCH_QUEUED}
+      </span>
+      <span className="mt-1 block text-[13px] text-subtle">This page updates itself when it lands.</span>
+      <AutoRefresh seconds={30} />
+    </Empty>
   );
 }
 
@@ -266,11 +299,7 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                 ))}
               </div>
             ) : (
-              <Empty>
-                {t.state === "research"
-                  ? `No card yet. ${RESEARCH_QUEUED} It writes a grounded card for this research entry after the week's shortlist.`
-                  : "No card: this research entry closed before the routine wrote one."}
-              </Empty>
+              <NoCard state={t.state} validation={t.validation} />
             )}
           </Section>
 

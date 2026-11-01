@@ -20,9 +20,9 @@ from pipeline.db import repo, thesis_repo
 from pipeline.db.models import FundamentalsRow, Score, SignalValue
 from pipeline.digest import weekly as digest
 from pipeline.digest.github_issue import MockIssues, publish
-from pipeline.llm.router import Done
+from pipeline.llm.router import Deferred, Done
 from pipeline.thesis import evidence_pack as ep
-from pipeline.thesis import fallback_writer, ingest, kill_criteria, queue, vault
+from pipeline.thesis import fallback_writer, ingest, kill_criteria, on_demand, queue, vault
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures"
 SNAPSHOT = Path(__file__).resolve().parents[1] / "digest" / "snapshots" / "digest_2026-W38.md"
@@ -795,3 +795,83 @@ def test_the_digest_never_carries_private_fields(conn: psycopg.Connection[Any]) 
     # a public repository's issue (SPEC_ISSUES 57): not even the position's name or ticker
     pub = digest.public_body(body, "https://doomberg.example")
     assert "Private Test" not in pub and "PRIV" not in pub and "DISM" not in pub and "- Theses in review: 1" in pub
+
+
+# ---------------------------------------------------------------- research cards on demand (SPEC_ISSUES 66)
+
+
+class DeferRouter:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def call(self, data: Any) -> Deferred:
+        self.calls += 1
+        return Deferred("out of budget")
+
+
+def fcard_pack(tmp_path: Path) -> Any:
+    """F-CARD's pack for whichever company the entry names (its week is the entry's, 2026-W38)."""
+
+    def pack_of(conn: psycopg.Connection[Any], company: Any, week: date) -> dict[str, Any]:
+        assert week == W
+        pack = json.loads((FIX / "card" / "pack.json").read_text(encoding="utf-8"))
+        pack["company"]["company_id"] = str(company.id)
+        return dict(pack)
+
+    (tmp_path / "config").mkdir(exist_ok=True)
+    shutil.copy(FIX.parent / "config" / "terms.yaml", tmp_path / "config" / "terms.yaml")
+    return pack_of
+
+
+def test_research_writes_the_entrys_card_now_in_place(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """The Research button's entry gets its card on the next run (not Sunday's): the same row, author fallback, the
+    validation result and kill criteria; a second run has nothing to do."""
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    entry = research_entry(conn, cid, W)
+    router = CardRouter(json.loads((FIX / "card" / "good.json").read_text()))
+    stats = on_demand.run(conn, router, tmp_path, pack_of=fcard_pack(tmp_path))  # type: ignore[arg-type]
+    assert (stats.written, stats.failed) == (1, 0)
+    row = conn.execute("select id, author, state, card_md <> '', validation -> 'ok', "
+                       "(select count(*) from kill_criteria k where k.thesis_id = t.id) from theses t "
+                       "where company_id = %s", (cid,)).fetchall()  # fmt: skip
+    assert row == [(entry, "fallback", "research", True, True, 2)]
+    calls = router.calls
+    assert on_demand.run(conn, router, tmp_path, pack_of=fcard_pack(tmp_path)).written == 0  # type: ignore[arg-type]
+    assert router.calls == calls
+
+
+def test_research_that_fails_validation_gives_up_after_two_runs(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    entry = research_entry(conn, cid, W)
+    router = CardRouter(json.loads((FIX / "card" / "bad_number.json").read_text()))
+    pack_of = fcard_pack(tmp_path)
+    for attempts in (1, 2):
+        assert on_demand.run(conn, router, tmp_path, pack_of=pack_of).failed == 1  # type: ignore[arg-type]
+        note = conn.execute("select validation -> 'on_demand', card_md from theses where id = %s", (entry,)).fetchone()
+        assert note is not None and note[0]["attempts"] == attempts and note[0]["errors"] and note[1] == ""
+    calls = router.calls
+    assert on_demand.run(conn, router, tmp_path, pack_of=pack_of).failed == 0  # type: ignore[arg-type]
+    assert router.calls == calls  # left for Sunday's routine; the web app says why
+
+
+def test_research_waits_while_the_router_is_out_of_budget(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    entry = research_entry(conn, cid, W)
+    stats = on_demand.run(conn, DeferRouter(), tmp_path, pack_of=fcard_pack(tmp_path))  # type: ignore[arg-type]
+    assert stats.deferred == 1
+    assert conn.execute("select validation from theses where id = %s", (entry,)).fetchone() == ({},)
+
+
+def test_research_of_a_company_with_the_weeks_card_points_to_it(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    card_tree(tmp_path, cid)
+    ingest.ingest(conn, ["2026-W38"], tmp_path)  # the routine's card for the week
+    generated = conn.execute("select id from theses where company_id = %s", (cid,)).fetchone()
+    assert generated is not None
+    conn.execute("update theses set state = 'dismissed' where id = %s", (generated[0],))
+    entry = research_entry(conn, cid, W)  # Research again after dismissing it
+    router = CardRouter({})
+    stats = on_demand.run(conn, router, tmp_path, pack_of=fcard_pack(tmp_path))  # type: ignore[arg-type]
+    assert stats.pointed == 1 and router.calls == 0
+    note = conn.execute("select validation -> 'on_demand' from theses where id = %s", (entry,)).fetchone()
+    assert note is not None and note[0]["card"] == str(generated[0])
