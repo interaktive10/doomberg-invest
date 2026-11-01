@@ -108,12 +108,14 @@ def write_cards(
         if str(pack["company"]["company_id"]) not in known:
             stats.failed[key] = ["the pack's company is not in the database"]
             continue
-        _one(conn, router, key, pack, words, stats)
+        write_one(conn, router, key, pack, words, stats)
     return stats
 
 
-def _one(conn: psycopg.Connection[Any], router: Router, key: str, pack: Mapping[str, Any], words: Sequence[str],
-         stats: FallbackStats) -> None:  # fmt: skip
+def write_one(conn: psycopg.Connection[Any], router: Router, key: str, pack: Mapping[str, Any], words: Sequence[str],
+              stats: FallbackStats) -> None:  # fmt: skip
+    """One card from one pack: P-04, validated, at most ATTEMPTS tries; written (author `fallback`), deferred (the
+    router is out of budget) or failed with the validator's errors, in `stats`."""
     try:
         model = EvidencePack.model_validate(pack)  # the schema first: P-04 reads only a valid pack (M6 R1-F4)
     except ValidationError as e:

@@ -61,5 +61,7 @@ actions:
     thesis-fallback.yml: 12  # writes the week's cards while no routine does (SPEC_ISSUES 60); 2 when the routine did
     lab-prices.yml: 0        # gated: each run asks for its own 120 minutes
     india-backfill.yml: 0    # gated: each run asks for its own 345 minutes (once, about two days: SPEC_ISSUES 55)
+    research.yml: 0          # every 10 minutes, about 1 a run, but free: the repository is public (SPEC_ISSUES 66;
+                             # if it goes private again, lower its cron first)
   download_run: 95   # one lab-prices.yml run (its 90 minutes + setup): the digest projects only the runs the Lab
                      # download still needs (its pending tickers, 650 a run); the gate leaves them out

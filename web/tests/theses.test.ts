@@ -145,3 +145,14 @@ describe("when the kill criteria are checked (PR 6 final review EYE2-1)", () => 
     expect(killCheckLine([{ check_after: "2026-09-01" }])).not.toMatch(/filing/);
   });
 });
+
+describe("a research entry's card status (docs/SPEC_ISSUES.md 66)", () => {
+  it("is being written until on_demand records a covering card or gives up after two attempts", async () => {
+    const { researchStatus } = await import("@/lib/theses");
+    expect(researchStatus({})).toEqual({ kind: "writing" });
+    expect(researchStatus({ on_demand: { attempts: 1, errors: ["x"] } })).toEqual({ kind: "writing" });
+    expect(researchStatus({ on_demand: { attempts: 2, errors: ["bad number", 3] } })).toEqual({ kind: "failed", errors: ["bad number"] });
+    expect(researchStatus({ on_demand: { card: "abc", attempts: 0 } })).toEqual({ kind: "covered", id: "abc" });
+    expect(researchStatus(null)).toEqual({ kind: "writing" });
+  });
+});

@@ -377,3 +377,4 @@
 2026-11-01 LLM primary: OpenRouter deepseek/deepseek-v4.1-flash-1017 for every prompt, Gemini then Groq as fallbacks (SPEC_ISSUES 63). Reasoning effort per task: card (P-04, P-05) high, extract (P-01, P-02, P-07) low. Caps 1,500 requests, 60 a minute and 6M tokens a day.
 
 2026-11-01 Winners: top 5 by Jan-Dec price return per market among names >= $5/Rs 20 at the start and >= $1B/Rs 5,000 cr at the end (shares point-in-time); US backtest 2012 on vs the average investable stock (SPEC_ISSUES 64).
+2026-11-01 Research cards on demand: research.yml every 10 min, 3 entries a run, 2 attempts then Sunday's routine (SPEC_ISSUES 66).

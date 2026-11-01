@@ -7,9 +7,24 @@ import { shortDate } from "@/lib/dates";
 export const STATES: readonly ThesisState[] = ["research", "thesis", "position", "review", "closed", "dismissed"];
 export const LIVE_STATES = ["research", "thesis", "position", "review"] as const;
 
-/** What a research entry says until the routine writes its card (overhaul PR 5): the weekly queue packs research
- * entries after the shortlist, within its 10 packs, for Sunday's routine. */
-export const RESEARCH_QUEUED = "Card queued for Sunday's routine.";
+/** What a research entry says until its card is written: research.yml writes it within minutes (pipeline/thesis/
+ * on_demand.py, docs/SPEC_ISSUES.md 66); Sunday's routine is the backstop. */
+export const RESEARCH_QUEUED = "Writing your card: usually ready within 15 minutes.";
+
+export type ResearchStatus = { kind: "writing" } | { kind: "covered"; id: string } | { kind: "failed"; errors: string[] };
+
+/** Where a research entry without a card stands, from what on_demand recorded (validation.on_demand): being written,
+ * covered by the week's generated card (its id), or given up after MAX_ATTEMPTS (2) with the checks that failed. */
+export function researchStatus(validation: unknown): ResearchStatus {
+  const v = validation && typeof validation === "object" ? (validation as Record<string, unknown>).on_demand : undefined;
+  if (!v || typeof v !== "object") return { kind: "writing" };
+  const o = v as Record<string, unknown>;
+  if (typeof o.card === "string") return { kind: "covered", id: o.card };
+  if (typeof o.attempts === "number" && o.attempts >= 2) {
+    return { kind: "failed", errors: Array.isArray(o.errors) ? o.errors.filter((e): e is string => typeof e === "string") : [] };
+  }
+  return { kind: "writing" };
+}
 
 export const STATE_LABEL: Record<ThesisState, string> = {
   research: "Research",
