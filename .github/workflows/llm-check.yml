@@ -1,0 +1,31 @@
+name: llm-check
+# Manual: one tiny JSON answer and one forced tool call per LLM provider with a key (pipeline/llm/check.py,
+# docs/SPEC_ISSUES.md 63). The log shows only ok, latency and token counts, and the database's region.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: llm-check
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  providers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - name: Providers
+        run: uv run --frozen python -m pipeline.llm.check

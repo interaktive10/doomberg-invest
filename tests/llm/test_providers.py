@@ -117,3 +117,29 @@ def test_retry_after_from_header_or_gemini_retry_info() -> None:
     minute = daily.replace("PerDayPerProject", "PerMinutePerProject")
     e4 = httpx.HTTPStatusError("429", request=req, response=httpx.Response(429, text=minute, request=req))
     assert retry_after(e4) == 19.0
+
+
+def test_openrouter_deepseek_reasoning_effort_and_a_tool_answer_given_as_text(tmp_path: Path) -> None:
+    """docs/SPEC_ISSUES.md 63: OpenRouter's DeepSeek V4.1 Flash is the primary. The task's reasoning effort goes in the
+    body (the answer only, not the thinking), none for a request without one; and a reasoning model that writes the
+    tool's JSON as its text instead of calling the tool is still read."""
+    from dataclasses import replace
+
+    from pipeline.llm.providers.openai_compat import body
+    from pipeline.llm.quotas import Quotas
+
+    q = Quotas.load()
+    rt = q.providers["openrouter"]
+    assert rt.model("extract") == rt.model("card") == "deepseek/deepseek-v4.1-flash-1017"
+    assert rt.reasoning == {"card": "high", "extract": "low"} and q.routing["P-01"][0] == "openrouter"
+    assert body(replace(TOOL, reasoning_effort="high"))["reasoning"] == {"effort": "high", "exclude": True}
+    assert "reasoning" not in body(TOOL)
+    h = http(tmp_path)
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    fenced = '```json\n{"n": 5, "k": "a"}\n```'
+    h.register_mock(url, json.dumps({"choices": [{"message": {"content": fenced}}]}).encode())
+    c = OpenAICompatible(h, "k", "https://openrouter.ai/api/v1", "openrouter").complete(TOOL)
+    assert c.content == {"n": 5, "k": "a"}
+    h.register_mock(url, json.dumps({"choices": [{"message": {"content": ""}}]}).encode())
+    with pytest.raises(ProviderError, match="no call to the requested tool"):
+        OpenAICompatible(h, "k", "https://openrouter.ai/api/v1", "openrouter").complete(TOOL)

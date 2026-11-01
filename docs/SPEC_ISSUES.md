@@ -276,3 +276,15 @@
 
     Built: P-07 is capped at `text_daily_limits.announcements_per_day` (200) calls a day, newest announcement first. The rest wait for the next run, which still triages them within 3 days. **Action (Manzoor):** none.
 
+63. **The LLM moves to DeepSeek V4.1 Flash on OpenRouter, paid and capped** (Manzoor, 2026-11-01: "looks like gemini is getting rate limited. let's use openrouter deepseek v4.1flash 1017 ... use this as well in high effort. this is relatively cheap"). Gemini's free 500 a day ran out on 2026-10-31 (62).
+    - The model is `deepseek/deepseek-v4.1-flash-1017`: $0.15 per million input tokens and $0.60 per million output tokens on 2026-11-01, a 1M context, tools, structured outputs and `reasoning`.
+    - It is first for P-01, P-02, P-05, P-07 and the fallback's P-04, with Gemini's free tier and Groq after it.
+    - **Effort:** high for the reasoning prompts (P-04 cards, P-05 claim checks; the `card` task); low for the lookups (P-01 extraction, P-07 triage, P-02 links; the `extract` task). High effort on about 400 extraction calls a day would roughly triple their tokens and push the daily run past its 30 minutes. `config/quotas.yaml` `providers.openrouter.reasoning` sets this.
+    - **Spend:** a typical day is about 230 P-01 calls of about 8k tokens plus about 200 P-07 calls, about $0.40 a day, or $10-25 a month with the cards. The caps (1,500 requests and 6M tokens a day) hold the worst day near $1. This replaces the "$0, free tiers only" rule (CLAUDE.md, BRIEF Appendix A) with "free tiers, except OpenRouter's capped DeepSeek".
+    - A reasoning model that writes the tool's JSON as its text instead of calling the tool is still read.
+    - `llm-check.yml` (manual) makes one tiny JSON call and one tool call per provider and prints ok, latency and tokens.
+
+    **Action (Manzoor):**
+    1. Add `OPENROUTER_API_KEY` as a GitHub Actions secret. The pipeline runs in Actions; the key in Vercel serves only the web app.
+    2. Set a monthly credit limit on the key in OpenRouter.
+

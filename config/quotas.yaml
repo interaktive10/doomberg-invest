@@ -16,16 +16,20 @@ providers:
     tokens_per_day: null
   openrouter:
     base_url: https://openrouter.ai/api/v1       # the ONLY base_url an OpenAI(...) client may use (guard)
-    models: {extract: "meta-llama/llama-3.3-70b-instruct:free"}
-    requests_per_day: null
-    requests_per_minute: null
-    tokens_per_day: null
-routing:
-  P-01: [gemini, groq, openrouter]
-  P-02: [gemini, groq, openrouter]
-  P-05: [gemini, groq]
-  P-07: [gemini, groq, openrouter]
-  P-04-fallback: [gemini]
+    # DeepSeek V4.1 Flash 1017, paid ($0.15/M in, $0.60/M out on 2026-11-01; Manzoor's choice: docs/SPEC_ISSUES.md 63)
+    models: {extract: deepseek/deepseek-v4.1-flash-1017, card: deepseek/deepseek-v4.1-flash-1017}
+    # high effort where the model reasons (cards, claim checks, themes); low where it looks things up (extraction,
+    # triage, links): high on ~400 extraction calls a day would take the daily run past its time limit
+    reasoning: {card: high, extract: low}
+    requests_per_day: 1500      # spend caps: about $1 a day at most; typical use is a third of it
+    requests_per_minute: 60
+    tokens_per_day: 6000000
+routing:  # OpenRouter first, Gemini's free tier when it is out or fails (docs/SPEC_ISSUES.md 63)
+  P-01: [openrouter, gemini, groq]
+  P-02: [openrouter, gemini, groq]
+  P-05: [openrouter, gemini, groq]
+  P-07: [openrouter, gemini, groq]
+  P-04-fallback: [openrouter, gemini]
 # the text run's order, for the record (the code's is pipeline/facts/run.py ORDER; a test keeps the two the same;
 # docs/SPEC_ISSUES.md 58): theses and research entries, the stage names on a board, those one verified fact would make
 # a Candidate, the rest, Excluded names last

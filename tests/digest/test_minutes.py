@@ -220,7 +220,13 @@ def gate_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, runs: minutes.Runs
             raise runs
         return runs
 
+    class Fixed(datetime):  # mid-cycle: on a cycle's first day the other repos' 30 days ahead fill the gate
+        @classmethod
+        def now(cls, tz: Any = None) -> Fixed:
+            return cls(2026, 10, 20, 9, tzinfo=UTC)
+
     monkeypatch.setattr(minutes, "runs_client", client)
+    monkeypatch.setattr(minutes, "datetime", Fixed)
     code = minutes.main(["gate", "--need", "120"])
     return code, out.read_text(encoding="utf-8"), capsys.readouterr().out
 

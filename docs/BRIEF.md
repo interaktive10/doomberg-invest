@@ -1,5 +1,5 @@
 # DOOMBERG — Long-term investing research app (US + India)
-**Builder: Claude Code Projects (cloud threads) · Thread model: Opus 5.5 · Thread effort: High · Running cost: $0**
+**Builder: Claude Code Projects (cloud threads) · Thread model: Opus 5.5 · Thread effort: High · Running cost: about $0 (OpenRouter's DeepSeek, capped: SPEC_ISSUES 63)**
 
 Doomberg is a private, single-user research app for long-term investing. It covers all sectors, US and India. It finds companies where the **evidence of fundamental change is strong but the market's attention and expectations haven't caught up**, and turns each one into a thesis card with cited evidence, kill criteria and review dates. (The Capex Desk, which tracked AI and infrastructure capex, was deleted: SPEC_ISSUES 52.)
 
@@ -286,18 +286,18 @@ doomberg-invest/
 - **Enforcement:** `scripts/verify.py` estimates monthly minutes from the last 4 runs and fails M9 above budget.
 - **Concurrency:** one pipeline run at a time.
 
-### 2.6 LLM on free tiers (`pipeline/llm/router.py`, `config/quotas.yaml`)
+### 2.6 LLM (`pipeline/llm/router.py`, `config/quotas.yaml`)
 | Task | Primary | Fallbacks |
 |---|---|---|
-| Fact extraction P-01, entities P-02, announcement triage P-07 | Gemini Flash-Lite/Flash (free tier) | Groq free (Llama 3.3 70B class) → OpenRouter `:free` models |
-| Thesis cards P-04 | **Claude Code routine** (weekly; existing plan) | Gemini Flash (free) in `thesis-fallback.yml` |
-| Claim support P-05 | Gemini Flash | Groq |
+| Fact extraction P-01, entities P-02, announcement triage P-07 | DeepSeek V4.1 Flash on OpenRouter (paid, capped; reasoning effort low: SPEC_ISSUES 63) | Gemini Flash-Lite (free tier) → Groq free |
+| Thesis cards P-04 | **Claude Code routine** (weekly; existing plan) | DeepSeek V4.1 Flash (reasoning effort high) → Gemini, in `thesis-fallback.yml` |
+| Claim support P-05 | DeepSeek V4.1 Flash (high) | Gemini → Groq |
 
 **Router rules:**
 - **Quotas:** per-provider daily request and token budgets in `config/quotas.yaml`, with values set from each provider's console in M0 (limits are per project and change; never hard-code "known" numbers).
 - **On 429 or quota exhaustion:** fall back to the next provider. When all are exhausted, the item stays `deferred` and the next day's run picks it up. When no provider answered but one could soon (a 429 asking for at most 90 s, or a transient failure: an HTTP 5xx, a timeout, a malformed answer), the router waits and tries once more; a short wait never ends a run (SPEC_ISSUES 59).
 - **Work order:** text work is prioritized: theses, research entries and positions, then the stage names in §4.5's order.
-- **No paid endpoints:** `api.anthropic.com` and `api.openai.com` are banned in runtime code (guard). There is no credit card on any provider, so nothing can bill by accident.
+- **Paid use:** OpenRouter is the only paid provider (Manzoor's choice, 2026-11-01: Gemini's free day ran out). Its `requests_per_day` and `tokens_per_day` in `config/quotas.yaml` cap the spend at about $1 a day, and Manzoor sets a credit limit on the key. `api.anthropic.com` and `api.openai.com` are banned in runtime code (guard).
 - **Privacy (`llm/privacy.py`):** the router accepts only `EvidencePack`/`DocumentChunk` types built from public data. Journal, positions and notes can't be passed (a typed API plus a unit test). Free tiers may use inputs to improve their services, and that's acceptable only for public filings.
 - **Grounding:** every text fact passes Appendix F grounding. Thesis cards pass `thesis/validate.py` (§4.9). Free-model errors are caught there, not trusted.
 
@@ -902,8 +902,8 @@ make setup | make test | make lint | make type | make guard | make migrate-dev |
 make thesis-validate WEEK=YYYY-Www | Web: cd web && pnpm test && pnpm e2e
 
 ## Hard rules (guard and CI enforce; never weaken or work around)
-- $0 running cost: free tiers only; no paid endpoints (api.anthropic.com, api.openai.com) in runtime code; no credit
-  cards anywhere.
+- Near-$0 running cost: free tiers, except OpenRouter (DeepSeek, Manzoor's choice, capped in config/quotas.yaml:
+  SPEC_ISSUES 63); no paid endpoints (api.anthropic.com, api.openai.com) in runtime code.
 - Research tool: no broker SDKs, no order placement, no intraday data, no price alerts.
 - Point-in-time: read fundamentals/ownership/events only through as_of(); never use data filed after the as-of date.
 - Journal, positions and post-mortems never go to any LLM (llm/privacy.py).
@@ -936,7 +936,7 @@ How threads work
 - Never merge, force-push, change required CI checks, or edit protected paths (Appendix D) without asking me.
 
 Hard rules (the guard enforces them)
-- $0 running cost: free tiers only; no paid APIs in runtime code; nothing that needs a credit card.
+- Near-$0 running cost: free tiers, except OpenRouter's DeepSeek (capped; SPEC_ISSUES 63); no other paid APIs in runtime code.
 - Research tool only: no broker SDKs, order placement, intraday data or price alerts.
 - Point-in-time data access through as_of(); no look-ahead.
 - Journal, positions and post-mortems never go to any LLM.

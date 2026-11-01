@@ -26,6 +26,7 @@ class ProviderQuota:
     requests_per_minute: int | None
     tokens_per_day: int | None
     base_url: str | None = None
+    reasoning: Mapping[str, str] = field(default_factory=dict)  # task -> reasoning effort (OpenRouter's `reasoning`)
 
     @property
     def configured(self) -> bool:
@@ -59,6 +60,7 @@ class Quotas:
                 requests_per_minute=_int(p.get("requests_per_minute")),
                 tokens_per_day=_int(p.get("tokens_per_day")),
                 base_url=p.get("base_url"),
+                reasoning=dict(p.get("reasoning") or {}),
             )
             for name, p in (doc.get("providers") or {}).items()
         }
