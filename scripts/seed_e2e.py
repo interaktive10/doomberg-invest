@@ -319,6 +319,41 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         "Actions: 812 of 2,000 this cycle, projected 1,340.\n"
     )
     x("insert into digests (week_end, title, body_md) values (%s, 'Doomberg weekly — 2026-W38', %s)", (W, digest))
+
+    # last year's winners (migration 0019; pipeline/reports/winners.py's body): the Winners screen
+    def pick(cid: str, code: str, name: str, sector: str, ret: float, ytd: float | None) -> dict[str, object]:
+        return {"company_id": cid, "code": code, "name": name, "sector": sector, "ret": ret, "start": 10.0,
+                "end": 10.0 * (1 + ret), "ytd": ytd}  # fmt: skip
+
+    years = [
+        (2016, 0.31, 0.12),
+        (2017, 0.44, 0.19),
+        (2018, -0.21, -0.08),
+        (2019, 0.52, 0.27),
+        (2020, 0.88, 0.21),
+        (2021, 0.12, 0.24),
+        (2022, -0.38, -0.17),
+        (2023, 0.41, 0.18),
+        (2024, 0.36, 0.15),
+        (2025, 0.29, 0.14),
+    ]
+    winners = {"as_of": "2026-09-19", "markets": [
+        {"market": "us", "year": 2025, "currency": "USD", "priced": 2649, "universe": 4606, "min_price": 5.0,
+         "min_cap": 1e9, "top": [pick(ECHO, "ECHO", "Echo Grid Corp.", "Industrials", 3.12, 0.18),
+                                 pick(OMEGA, "OMGA", "Omega Systems Inc.", "Technology", 2.41, -0.07),
+                                 pick(LUMEN, "LMNW", "Lumen Water Co.", "Utilities", 1.87, 0.04),
+                                 pick(SIGMA, "SGMA", "Sigma Retail Corp.", "Consumer", 1.55, 0.11),
+                                 pick(DELTA, "DLTP", "Delta Pharma Inc.", "Health Care", 1.32, -0.15)],
+         "this_year": {"through": "2026-08-31", "picks": 0.022, "average": 0.071, "stocks": 2400},
+         "backtest": {"rows": [{"year": y, "picks": [], "ret": r, "average": a, "stocks": 2000} for y, r, a in years],
+                      "summary": {"years": 10, "first": 2016, "last": 2025, "growth": 4.31, "average_growth": 2.68,
+                                  "cagr": 0.157, "average_cagr": 0.104, "beat": 7, "best": 2020, "worst": 2022}}},
+        {"market": "in", "year": 2025, "currency": "INR", "priced": 1210, "universe": 1984, "min_price": 20.0,
+         "min_cap": 5e10, "top": [pick(KAPPA, "KAPPA", "Kappa Cables Ltd", "Industrials", 2.05, 0.09),
+                                  pick(TARA, "TARAPUMP", "Tara Pumps Ltd", "Industrials", 1.64, 0.21)],
+         "this_year": {"through": "2026-09-18", "picks": 0.15, "average": 0.06, "stocks": 900}, "backtest": None},
+    ]}  # fmt: skip
+    x("insert into reports (name, week_end, body) values ('winners', %s, %s)", (W, json.dumps(winners)))
     x("insert into source_health (source, last_success, last_error, stale) values "
       "('sec', '2026-09-18 06:00+00', null, false), ('nse', '2026-09-18 06:00+00', null, false), "
       "('bse', '2026-08-01 06:00+00', null, false), "

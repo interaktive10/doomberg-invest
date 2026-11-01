@@ -153,6 +153,12 @@ export async function latestDigest(): Promise<{ week_end: string; title: string;
     .limit(1).maybeSingle());
 }
 
+/** The newest computed report of a kind (migration 0019: winners, themes), or null before the first. */
+export async function latestReport<T>(name: "winners" | "themes"): Promise<{ week_end: string; body: T } | null> {
+  return one(await db().from("reports").select("week_end, body").eq("name", name).order("week_end", { ascending: false })
+    .limit(1).maybeSingle());
+}
+
 export interface SourceHealth {
   source: string;
   last_success: string | null;

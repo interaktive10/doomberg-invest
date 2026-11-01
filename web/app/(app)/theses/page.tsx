@@ -8,7 +8,7 @@ import { thesesLine } from "@/lib/explain";
 import { group, GROUP_LABEL, markMoved, type Group } from "@/lib/theses";
 import { requireUser } from "@/lib/auth";
 
-export const metadata = { title: "Theses" };
+export const metadata = { title: "My list" };
 
 // BRIEF §6 Theses (overhaul PR 4): three groups, Needs you (cards to accept or dismiss, reviews to decide), Watching
 // (theses and positions) and Closed (folded). Each row (components/thesis-list.tsx, overhaul PR 6): the ticker, what it
@@ -22,7 +22,7 @@ export default async function Theses() {
   const of = (g: Group) => all.filter((t) => group(t) === g);
   const [needs, watching, closed] = [of("needs"), of("watching"), of("closed")];
   return (
-    <Page title="Theses" eyebrow="Research → thesis → position → closed" description={thesesLine(needs.length, watching.length)}>
+    <Page title="My list" eyebrow="Research → thesis → position → closed" description={thesesLine(needs.length, watching.length)}>
       {all.length === 0 ? (
         <Empty
           action={
