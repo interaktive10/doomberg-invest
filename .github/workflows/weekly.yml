@@ -161,7 +161,7 @@ jobs:
     needs: [us, india, scores]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: write   # the queue commit
       issues: write     # the digest issue
@@ -222,6 +222,13 @@ jobs:
             sleep $((attempt * 5))
           done
           exit 1
+      - name: Last year's winners report (reports table; SPEC_ISSUES 64)
+        if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: uv run --frozen python -m pipeline.reports.winners
       - name: Digest issue
         if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
         timeout-minutes: 5

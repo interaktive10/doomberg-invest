@@ -52,6 +52,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("weights.yml", ("weights",)),
         ("backfill.yml", ("us",)),
         ("india-backfill.yml", ("history",)),
+        ("reports.yml", ("reports",)),
     ):
         for job in jobs:  # the Actions minutes gate reads no table, so it may come first
             runs = [r for r in steps(name, job) if "python -m pipeline" in r and "pipeline.digest.minutes" not in r]
@@ -294,11 +295,13 @@ def test_the_queue_needs_this_weeks_scores_while_the_digest_and_guard_run_regard
         _, s = step("weekly.yml", "publish", key)
         assert "needs.scores.result == 'success'" in s["if"] and "cancelled()" not in s["if"], key
         assert "always()" not in s["if"], key
-    for key in ("pipeline.digest.weekly", "pipeline.db.size_guard"):
+    for key in ("pipeline.digest.weekly", "pipeline.db.size_guard", "pipeline.reports.winners"):
         _, s = step("weekly.yml", "publish", key)
         assert s["if"] == "${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}", key
+    _, report = step("weekly.yml", "publish", "pipeline.reports.winners")
+    assert report["continue-on-error"] is True  # a report never fails the week (SPEC_ISSUES 64)
     work = [s for s in publish["steps"] if "python -m pipeline" in str(s.get("run", "")) and "migrate" not in s["run"]]
-    assert len(work) == 4 and all(s["timeout-minutes"] for s in work)
+    assert len(work) == 5 and all(s["timeout-minutes"] for s in work)
     total = sum(s["timeout-minutes"] for s in publish["steps"] if "timeout-minutes" in s)
     assert total < publish["timeout-minutes"]
 

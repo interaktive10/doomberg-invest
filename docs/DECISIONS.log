@@ -376,3 +376,4 @@
 2026-10-31 P-07 triage cap 200 calls a day, newest announcement first (SPEC_ISSUES 62): with 150 documents (about 230 P-01) about 430 of Gemini's 500, leaving P-02, retries and a margin; India keeps its own share of the day and US reading keeps its 150.
 2026-11-01 LLM primary: OpenRouter deepseek/deepseek-v4.1-flash-1017 for every prompt, Gemini then Groq as fallbacks (SPEC_ISSUES 63). Reasoning effort per task: card (P-04, P-05) high, extract (P-01, P-02, P-07) low. Caps 1,500 requests, 60 a minute and 6M tokens a day.
 
+2026-11-01 Winners: top 5 by Jan-Dec price return per market among names >= $5/Rs 20 at the start and >= $1B/Rs 5,000 cr at the end (shares point-in-time); US backtest 2012 on vs the average investable stock (SPEC_ISSUES 64).
