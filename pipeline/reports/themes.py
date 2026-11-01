@@ -465,8 +465,11 @@ FRED_STATE = "fred_series"
 FRED_BUDGET_S = 150.0  # all the drivers' downloads together; past it, last good copies are used
 
 
+Fetched = tuple[dict[str, dv.Points], list[str]]
+
+
 def driver_points(http: HttpClient, ids: Sequence[str], cached: Mapping[str, dv.Points] | None = None,
-                  budget: float = FRED_BUDGET_S) -> tuple[dict[str, dv.Points], list[str]]:  # fmt: skip
+                  budget: float = FRED_BUDGET_S, api_key: str | None = None) -> Fetched:  # fmt: skip
     """Each driver's monthly points from FRED (20 s a request, FRED_BUDGET_S in all); a series that fails, comes back
     empty or is past the budget uses its last good copy (`cached`), else is missing."""
     out: dict[str, dv.Points] = {}
@@ -478,7 +481,7 @@ def driver_points(http: HttpClient, ids: Sequence[str], cached: Mapping[str, dv.
             why = "over the time budget"
         else:
             try:
-                pts = fred.series(http, i)
+                pts = fred.series(http, i, api_key=api_key)
                 if pts:
                     out[i] = pts
                     continue
@@ -493,12 +496,19 @@ def driver_points(http: HttpClient, ids: Sequence[str], cached: Mapping[str, dv.
     return out, missing
 
 
-def load_cached(conn: psycopg.Connection[Any]) -> dict[str, dv.Points]:
+SNAPSHOT = REPO_ROOT / "data" / "fred"  # the series as of 2026-11-01, committed: the first last-good copies
+
+
+def load_cached(conn: psycopg.Connection[Any], snapshot: Path = SNAPSHOT) -> dict[str, dv.Points]:
+    """The last good copy of each series: the database's (saved each week), else the committed snapshot's."""
+    out: dict[str, dv.Points] = {
+        f.stem: fred.parse(f.read_text(encoding="utf-8")) for f in sorted(snapshot.glob("*.csv"))
+    }
     stored = db_state.get(conn, FRED_STATE)
-    if stored is None:
-        return {}
-    doc = json.loads(stored.body)
-    return {k: [(date.fromisoformat(d), float(v)) for d, v in pts] for k, pts in doc.items()}
+    if stored is not None:
+        doc = json.loads(stored.body)
+        out.update({k: [(date.fromisoformat(d), float(v)) for d, v in pts] for k, pts in doc.items() if pts})
+    return out
 
 
 def save_cached(conn: psycopg.Connection[Any], points: Mapping[str, dv.Points]) -> None:
@@ -519,7 +529,7 @@ def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient
     medians = {m: round(statistics.median(f.move for f in firms if f.company.market == m and f.move is not None), 3)
                for m in ("us", "in") if any(f.company.market == m and f.move is not None for f in firms)}  # fmt: skip
     drv = dv.load(root)
-    points, missing = driver_points(http, list(drv), load_cached(conn))
+    points, missing = driver_points(http, list(drv), load_cached(conn), api_key=http.settings.fred_api_key)
     save_cached(conn, points)
     lap(f"{len(points)} drivers read, {len(missing)} not fresh")
     shares = [r["share"] for r in rows]

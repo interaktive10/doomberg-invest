@@ -75,3 +75,22 @@ def test_every_configured_driver_has_a_name_and_the_summary_reads_real_data() ->
         and isinstance(s["yoy_z"], float)
         and set(s["cohort_z"]) == {"24", "36", "48", "60", "84"}
     )
+
+
+def test_the_api_answer_reads_like_the_csv_and_the_key_picks_the_api(tmp_path: Path) -> None:
+    from pipeline.net.http import HttpClient
+    from pipeline.settings import Settings
+
+    body = b'{"observations": [{"date": "2026-01-01", "value": "10"}, {"date": "2026-02-01", "value": "."}]}'
+    assert fred.parse_api(body) == [(date(2026, 1, 1), 10.0)]
+    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    http.register_mock(fred.API.format(id="HSN1F", key="k123"), body)
+    assert fred.series(http, "HSN1F", api_key="k123") == [(date(2026, 1, 1), 10.0)]
+    assert http._headers("fred.stlouisfed.org")["User-Agent"].startswith("doomberg-invest/")  # not a browser's
+
+
+def test_the_committed_snapshot_parses() -> None:
+    files = sorted((ROOT / "data" / "fred").glob("*.csv"))
+    drv = dv.load(ROOT)
+    assert len(files) >= 10 and all(f.stem in drv for f in files)
+    assert all(len(fred.parse(f.read_text())) > 200 for f in files)

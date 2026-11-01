@@ -51,12 +51,16 @@ ALLOWED_HOSTS: dict[str, float] = {
     "openrouter.ai": 0.0,
     "api.github.com": 0.0,
     "fred.stlouisfed.org": 1.0,  # Themes' demand drivers (net/fred.py; docs/SPEC_ISSUES.md 68)
+    "api.stlouisfed.org": 1.0,  # the same, through FRED's API with FRED_API_KEY
 }
 
 BROWSER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+
+FRED_AGENT = "doomberg-invest/1.0 (research; +https://github.com/interaktive10/doomberg-invest)"
 
 
 def host_of(url: str) -> str:
@@ -116,6 +120,9 @@ class HttpClient:
             if not self.settings.sec_user_agent:
                 raise RuntimeError("SEC_USER_AGENT is required for SEC requests (BRIEF §2.4)")
             return {"User-Agent": self.settings.sec_user_agent, "Accept-Encoding": "gzip, deflate"}
+        if host.endswith("stlouisfed.org"):
+            # FRED stalls a browser User-Agent that isn't a browser (2026-11-01: every request from a runner timed out)
+            return {"User-Agent": FRED_AGENT, "Accept-Language": "en-US,en;q=0.9"}
         return dict(BROWSER_HEADERS)
 
     def _cache_path(self, url: str) -> Path:
