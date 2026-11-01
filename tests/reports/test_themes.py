@@ -1,132 +1,147 @@
-"""Themes (pipeline/reports/themes.py; docs/SPEC_ISSUES.md 67): demand evidence per industry against its price move,
-the candidates P-08 reads, its answer checked, and its memory of earlier calls."""
+"""Themes v2 (pipeline/reports/themes.py; docs/SPEC_ISSUES.md 68): a library of demand chains, keywords to companies,
+statuses, the rethink's calendar, P-08's answer checked and applied."""
 
 from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from pipeline.db.models import Company, FactRow, FundamentalsRow
+from pipeline.db.models import Company, FundamentalsRow
+from pipeline.reports import drivers as dv
 from pipeline.reports import themes as t
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def quarters(revenues: list[float]) -> list[FundamentalsRow]:
     cid = uuid4()
-    out = []
-    for i, rev in enumerate(revenues):
-        y, q = 2024 + i // 4, i % 4
-        end = date(y, 3 * q + 3, 28)
-        out.append(FundamentalsRow(company_id=cid, period_end=end, fiscal_label=f"Q{q + 1}",
-                                   filed_at=datetime(y, 3 * q + 3, 28, tzinfo=UTC), revenue=Decimal(str(rev)),
-                                   currency="USD", source="sec_xbrl"))  # fmt: skip
-    return out
+    return [FundamentalsRow(company_id=cid, period_end=date(2024 + i // 4, 3 * (i % 4) + 3, 28), fiscal_label="Q",
+                            filed_at=datetime(2024 + i // 4, 3 * (i % 4) + 3, 28, tzinfo=UTC),
+                            revenue=Decimal(str(r)), currency="USD", source="sec_xbrl")
+            for i, r in enumerate(revenues)]  # fmt: skip
 
 
 def test_revenue_acceleration_needs_growth_that_speeds_up() -> None:
-    flat = quarters([100] * 9)
-    assert t.ttm_growth(flat, 0) == 0.0 and not t.accelerating(flat)
-    speeding = quarters([100, 100, 100, 100, 100, 100, 110, 130, 150])
-    assert t.ttm_growth(speeding, 0) is not None and t.accelerating(speeding)
-    assert t.ttm_growth(quarters([100] * 7), 0) is None  # two years needed
+    assert not t.accelerating(quarters([100] * 9))
+    assert t.accelerating(quarters([100, 100, 100, 100, 100, 100, 110, 130, 150]))
+    assert t.ttm_growth(quarters([100] * 7), 0) is None
 
 
-def firm(market: str, industry: str, move: float, demand: bool = False, fact: bool = False) -> t.Firm:
+def firm(name: str, industry: str | None = None, sector: str | None = None, market: str = "us",
+         move: float | None = 0.1, demand: bool = False) -> t.Firm:  # fmt: skip
     c = Company(
         id=uuid4(),
         market=market,
-        name=f"{industry} {uuid4().hex[:4]}",
-        ticker="T" + uuid4().hex[:3].upper(),
-        industry=industry,
-    )  # type: ignore[arg-type]
-    f = t.Firm(c, industry, accelerating=demand, move=move, price=10.0)
-    if fact:
-        assert c.id is not None
-        f.facts.append(FactRow(company_id=c.id, fact_type="order_win", subject="a transformer order", subject_key="x",
-                               unit="usd", as_of=date(2026, 10, 1),
-                               published_at=datetime(2026, 10, 1, tzinfo=UTC)))  # fmt: skip
-    return f
+        name=name,
+        ticker=name[:4].upper(),
+        industry=industry,  # type: ignore[arg-type]
+        sector=sector,
+    )
+    return t.Firm(c, industry or sector or "Unclassified", accelerating=demand, move=move, price=10.0)
 
 
 def world() -> list[t.Firm]:
-    """Grid: 6 names, 4 with demand, flat price (early). Chips: 6 names, 3 with demand, up 80% (running). Retail and
-    Banks: little demand evidence."""
-    fs = [firm("us", "Grid", 0.02, demand=i < 2, fact=2 <= i < 4) for i in range(6)]
-    fs += [firm("us", "Chips", 0.8, demand=i < 3) for i in range(6)]
-    fs += [firm("us", "Retail", 0.1, demand=i < 1) for i in range(6)]
-    fs += [firm("us", "Banks", 0.15) for _ in range(6)]
-    fs += [firm("us", "Tiny", 0.0, demand=True) for _ in range(3)]  # under MIN_NAMES: no row
-    return fs
+    return [firm("Goodgrip Inc", "Tires & Inner Tubes", demand=True), firm("Roadway Corp", "Tires & Inner Tubes"),
+            firm("Apollo Tyres Ltd", sector="Automobile and Auto Components", market="in", demand=True),
+            firm("Brakeline Inc", "Motor Vehicle Parts & Accessories", move=0.02),
+            firm("Asian Paints Ltd", sector="Consumer Durables", market="in"),
+            firm("Big Bank", "National Commercial Banks", move=0.3)]  # fmt: skip
 
 
-def test_industries_count_demand_and_the_median_move() -> None:
-    rows = {r["industry"]: r for r in t.industries(world())}
-    assert set(rows) == {"Grid", "Chips", "Retail", "Banks"}
-    assert rows["Grid"]["with_demand"] == 4 and rows["Grid"]["facts"] == 2 and rows["Grid"]["median_move"] == 0.02
-    assert rows["Grid"]["examples"][0]["what"].startswith("order_win: ")  # facts first
+def test_keywords_match_industry_sector_or_name_in_either_market() -> None:
+    fs = t.members(world(), ["tire", "TYRE", "motor vehicle parts"])
+    assert sorted(f.company.name for f in fs) == ["Apollo Tyres Ltd", "Brakeline Inc", "Goodgrip Inc", "Roadway Corp"]
+    assert [f.company.name for f in t.members(world(), ["paint"])] == [
+        "Asian Paints Ltd"
+    ]  # by name, India's sector is coarse
 
 
-def test_candidates_are_the_top_quarter_by_share_marked_early_or_running() -> None:
-    rows = t.industries(world())
-    cands = t.candidates(rows, {"us": 0.12})
-    assert [(c["industry"], c["early"]) for c in cands] == [("Grid", True)]
-    assert [e["id"] for e in cands[0]["examples"]] == ["e1", "e2", "e3", "e4"]
+def test_status_reads_the_driver_and_the_run_up() -> None:
+    assert t.status_of(0.8, 0.02) == "building" and t.status_of(0.8, 0.25) == "priced_in"
+    assert (
+        t.status_of(-0.9, 0.0) == "fading"
+        and t.status_of(0.1, 0.0) == "watching"
+        and t.status_of(None, None) == "watching"
+    )
 
 
-def cands() -> list[dict[str, Any]]:
-    return t.candidates(t.industries(world()), {"us": 0.12})
+def test_the_rethink_is_monthly_sooner_on_a_trigger_never_twice_a_week() -> None:
+    assert t.rethink_due(date(2026, 11, 6), None, False) == (True, "the first rethink")
+    assert t.rethink_due(date(2026, 11, 6), date(2026, 10, 2), False)[0]  # the first Friday of a new month
+    assert not t.rethink_due(date(2026, 11, 13), date(2026, 11, 6), False)[0]  # mid-month, nothing moved
+    assert t.rethink_due(date(2026, 11, 13), date(2026, 11, 6), True)[0]  # a status changed
+    assert not t.rethink_due(date(2026, 11, 8), date(2026, 11, 6), True)[0]  # never twice in a week
+    assert t.rethink_due(date(2026, 12, 18), date(2026, 11, 6), False)[0]  # five weeks
+    assert t.next_rethink(date(2026, 11, 13)) == date(2026, 12, 4) and t.next_rethink(date(2026, 12, 11)) == date(
+        2027, 1, 1
+    )
+    prev = [{"slug": "a", "status": "watching", "z_at_rethink": 0.1}]
+    assert t.triggered(prev, [{"slug": "a", "status": "building", "z": 0.2}])
+    assert t.triggered(prev, [{"slug": "a", "status": "watching", "z": 1.3}])
+    assert not t.triggered(prev, [{"slug": "a", "status": "watching", "z": 0.5}])
 
 
-def answer(**over: Any) -> dict[str, Any]:
-    theme = {"market": "us", "industry": "Grid", "title": "Grid gear orders build", "confidence": "medium",
-             "why": "4 of 6 grid companies show demand evidence while the median price moved 0.02.",
-             "wrong_if": "orders stop and revenue slows", "evidence": ["e1", "e2"]} | over  # fmt: skip
-    return {"themes": [theme], "reviews": [], "note": "First week."}
+def test_the_seed_library_is_valid() -> None:
+    lib = t.seed(ROOT)
+    drv = dv.load(ROOT)
+    assert len(lib) >= 6 and len({x["slug"] for x in lib}) == len(lib)
+    for x in lib:
+        assert x["driver"] in drv or x["driver"] == dv.FILINGS
+        assert x["transform"] in dv.TRANSFORMS and x["keywords"] and x["category"]
+        assert x["transform"] != "cohort" or x["lag_months"] >= 12
+    assert {x["category"] for x in lib} - {"Technology & AI"}  # not only about AI
 
 
-def test_a_grounded_theme_is_kept_with_its_evidence() -> None:
-    c = cands()
-    text = json.dumps(c)
-    themes, _, note, dropped = t.check_answer(answer(), c, text, [])
-    assert dropped == [] and note == "First week." and len(themes) == 1
-    assert themes[0]["early"] and [e["id"] for e in themes[0]["evidence"]] == ["e1", "e2"]
+DRV = {"TOTALSA": dv.Driver("TOTALSA", "US light vehicle sales", "m"), "HSN1F": dv.Driver("HSN1F", "Homes", "k")}
+LIB = [{"slug": "vehicle-replacement", "title": "Cars bought in a boom", "category": "Replacement cycles",
+        "driver": "TOTALSA", "transform": "cohort", "lag_months": 48, "keywords": ["tire"], "why": "w",
+        "notes": []}]  # fmt: skip
 
 
-def test_a_theme_that_strays_is_dropped_with_why() -> None:
-    c = cands()
-    text = json.dumps(c)
-    for over, why in [({"industry": "Chips"}, "not a candidate industry"),
-                      ({"evidence": ["e99"]}, "cites no evidence of its industry"),
-                      ({"evidence": ["e1"]}, "a theme needs evidence from two companies"),
-                      ({"why": "Orders up 340% this year."}, "a number the input lacks"),
-                      ({"confidence": "sure"}, "unknown confidence")]:  # fmt: skip
-        themes, _, _, dropped = t.check_answer(answer(**over), c, text, [])
-        assert themes == [] and dropped[0].endswith(why), (over, dropped)
+def answer(**new: Any) -> dict[str, Any]:
+    n = {"title": "Cheaper money lifts brakes", "category": "Replacement cycles", "driver": "TOTALSA",
+         "reading": "yoy", "lag_months": 0, "keywords": ["tire", "motor vehicle parts"],
+         "why": "Sales rose 3% while parts makers lag.", "wrong_if": "Parts sales stall."} | new  # fmt: skip
+    return {
+        "reviews": [{"slug": "vehicle-replacement", "decision": "keep", "note": "The 48 month wave holds."}],
+        "new": [n],
+        "note": "Added a parts theme.",
+    }
 
 
-def test_reviews_name_only_earlier_calls_and_the_scorecard_measures_them() -> None:
-    earlier = [{"week": "2026-10-23", "themes": [{"market": "us", "industry": "Grid", "title": "Grid",
-                                                  "evidence": [{"company_id": "a", "price": 10.0},
-                                                               {"company_id": "b", "price": 20.0}]}]}]  # fmt: skip
-    card = t.scorecard(earlier, {"a": 12.0, "b": 21.0})
-    assert card == [{"week": "2026-10-23", "market": "us", "industry": "Grid", "title": "Grid", "since": 0.125}]
-    ans = {"themes": [], "note": "", "reviews": [
-        {"market": "us", "industry": "Grid", "decision": "keep", "reason": "orders keep coming"},
-        {"market": "us", "industry": "Oil", "decision": "drop", "reason": "never called"}]}  # fmt: skip
-    _, reviews, _, _ = t.check_answer(ans, cands(), "{}", card)
-    assert reviews == [{"market": "us", "industry": "Grid", "decision": "keep", "reason": "orders keep coming"}]
+def test_a_grounded_answer_is_kept_and_applied() -> None:
+    r = t.check_answer(answer(), LIB, world(), DRV, json.dumps({"x": 0.03, "lag": 48}))
+    assert (
+        r.dropped == [] and r.note == "Added a parts theme." and r.reviews["vehicle-replacement"]["decision"] == "keep"
+    )
+    assert r.new[0]["slug"] == "cheaper-money-lifts-brakes" and r.new[0]["origin"] == "ai"
+    lib, retired = t.apply([dict(x) for x in LIB], [], r, date(2026, 11, 6))
+    assert [x["slug"] for x in lib] == ["vehicle-replacement", "cheaper-money-lifts-brakes"] and retired == []
+    assert lib[0]["notes"][-1] == {"week": "2026-11-06", "decision": "keep", "text": "The 48 month wave holds."}
+    assert lib[1]["born"] == "2026-11-06"
 
 
-def test_a_theme_may_say_a_fraction_as_its_percent() -> None:
-    """Review of the first live run's risk: the input says 0.02 and 0.571; "2%" and "57%" (or "57.1%") are those
-    numbers, "47%" is not."""
-    c = cands()
-    text = json.dumps(c) + json.dumps({"share": 0.571, "market_median_move": 0.12})
-    ok = answer(why="Demand at 57% of grid companies, and the price moved only 2% while the market moved 12%.")
-    assert t.check_answer(ok, c, text, [])[0]
-    bad = answer(why="Demand at 57% of grid companies, and the price moved only 47%.")
-    assert t.check_answer(bad, c, text, [])[3][0].endswith("a number the input lacks")
+def test_a_new_theme_that_strays_is_dropped_with_why() -> None:
+    text = json.dumps({"x": 0.03, "lag": 48})
+    for over, why in [({"driver": "GOLD"}, "an unknown driver"), ({"category": "Vibes"}, "an unknown category"),
+                      ({"reading": "cohort", "lag_months": 6}, "a bad lag"),
+                      ({"keywords": ["spaceships"]}, "keywords that match too few companies"),
+                      ({"why": "Sales rose 41% this year."}, "a number the input lacks"),
+                      ({"title": "Cars bought in a boom"}, "a theme the library has")]:  # fmt: skip
+        r = t.check_answer(answer(**over), LIB, world(), DRV, text)
+        assert r.new == [] and why in r.dropped[0], (over, r.dropped)
+
+
+def test_a_retired_theme_moves_out_with_its_notes() -> None:
+    ans = {
+        "reviews": [{"slug": "vehicle-replacement", "decision": "retire", "note": "The wave has passed."}],
+        "new": [],
+    }
+    r = t.check_answer(ans, LIB, world(), DRV, "{}")
+    lib, retired = t.apply([dict(x) for x in LIB], [], r, date(2026, 12, 4))
+    assert lib == [] and retired[0]["slug"] == "vehicle-replacement" and retired[0]["notes"][-1]["decision"] == "retire"
     assert {"57", "57.1", "2", "12"} <= t.allowed_numbers("0.571 0.02 0.12") and "3" not in t.allowed_numbers("0.02")
-    assert "17" not in t.allowed_numbers('{"id": "e17", "move": 0.02}')  # an evidence id is not a number

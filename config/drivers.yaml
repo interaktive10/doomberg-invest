@@ -1,0 +1,33 @@
+# Themes' demand drivers (docs/SPEC_ISSUES.md 68): public monthly series from FRED (St. Louis Fed; free, no key, the
+# fredgraph CSV). A theme names one of these (or `filings`: its industries' own demand evidence) and how to read it:
+#   yoy     the latest 3 months against the same 3 months a year before
+#   level   the latest 3 months against the 10 years before
+#   cohort  the 12 months that ended `lag` months ago against the 10 years before them: a wave bought then is due now
+# `inverse`: lower is the tailwind (rates). Each reading is scored against its own 20-year history (z), so one scale
+# fits every series. India has no current free macro series here (FRED's OECD India series stopped in 2023-25):
+# Indian themes use the global ones (commodities) or filings.
+drivers:
+  TOTALSA: {name: "US light vehicle sales", unit: "million a year"}
+  IPG3361T3S: {name: "US motor vehicle production", unit: "index"}
+  TRFVOLUSM227NFWA: {name: "US miles driven", unit: "million miles"}
+  CUSR0000SETA02: {name: "US used car prices", unit: "index"}
+  HSN1F: {name: "US new home sales", unit: "thousand a year"}
+  HOUST: {name: "US housing starts", unit: "thousand a year"}
+  PERMIT: {name: "US building permits", unit: "thousand a year"}
+  TTLCONS: {name: "US construction spending", unit: "million dollars"}
+  MORTGAGE30US: {name: "US 30-year mortgage rate", unit: "percent", inverse: true}
+  FEDFUNDS: {name: "US policy interest rate", unit: "percent", inverse: true}
+  RSAFS: {name: "US retail sales", unit: "million dollars"}
+  UMCSENT: {name: "US consumer sentiment", unit: "index"}
+  NEWORDER: {name: "US core capital goods orders", unit: "million dollars"}
+  DGORDER: {name: "US durable goods orders", unit: "million dollars"}
+  BUSINV: {name: "US business inventories", unit: "million dollars"}
+  IPG3344S: {name: "US semiconductor production", unit: "index"}
+  IPG2211S: {name: "US electric power generation", unit: "index"}
+  AIRRPMTSID11: {name: "US air passenger miles", unit: "thousand miles"}
+  RAILFRTCARLOADSD11: {name: "US rail freight carloads", unit: "carloads"}
+  WPU0811: {name: "US lumber prices", unit: "index"}
+  DCOILWTICO: {name: "Oil price (WTI)", unit: "dollars a barrel"}
+  PNGASUSUSDM: {name: "Natural gas price", unit: "dollars per MMBtu"}
+  PCOPPUSDM: {name: "Copper price", unit: "dollars a tonne"}
+  PIORECRUSDM: {name: "Iron ore price", unit: "dollars a tonne"}

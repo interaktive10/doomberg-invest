@@ -114,6 +114,11 @@ jobs:
       - name: Keep the India state (also after a failure)
         if: always() && steps.secrets.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.db.state put in_weekly=.cache/in/weekly_state.json
+      - name: India's sectors from NSE's index lists (themes; SPEC_ISSUES 68)
+        if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 3
+        run: uv run --frozen python -m pipeline.india.sectors
 
   scores:
     # M4 (BRIEF §2.1): signals -> red flags -> Evidence -> candidate prices (Twelve Data) -> context C1-C3 -> Gap ->
@@ -161,7 +166,7 @@ jobs:
     needs: [us, india, scores]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
     permissions:
       contents: write   # the queue commit
       issues: write     # the digest issue
@@ -229,10 +234,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: uv run --frozen python -m pipeline.reports.winners
-      - name: Themes (P-08 over the week's industry evidence; SPEC_ISSUES 67)
+      - name: Themes (the library's numbers weekly; P-08 rethinks monthly; SPEC_ISSUES 67, 68)
         if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

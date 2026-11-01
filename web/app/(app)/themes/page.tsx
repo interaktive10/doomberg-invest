@@ -1,181 +1,303 @@
 import Link from "next/link";
 import { Callout } from "@/components/callout";
-import { Disclosure } from "@/components/disclosure";
+import { LineChartCard } from "@/components/charts";
 import { Icon } from "@/components/icons";
 import { LinkPending } from "@/components/link-pending";
 import { Empty, Page, Section } from "@/components/page";
+import { ThemePicker, type PickerGroup } from "@/components/theme-picker";
 import { requireUser } from "@/lib/auth";
 import { latestReport } from "@/lib/data";
-import { dayDate, shortDate } from "@/lib/dates";
+import { shortDate } from "@/lib/dates";
+import type { Query } from "@/lib/forms";
+import {
+  byCategory,
+  historyLine,
+  isLibrary,
+  lagWords,
+  pct,
+  readingWords,
+  STATUS,
+  STATUS_ORDER,
+  type LibraryTheme,
+  type RetiredTheme,
+  type Status,
+  type ThemesReport,
+} from "@/lib/themes";
 import { cn } from "@/lib/utils";
-import { evidenceLine, reviewOf, sharePct, type EarlierCall, type Review, type Theme, type ThemesReport } from "@/lib/themes";
-import { marketName, signedPct } from "@/lib/winners";
+import { marketName } from "@/lib/winners";
 
 export const metadata = { title: "Themes" };
 
-// Themes (docs/SPEC_ISSUES.md 67): where demand is building before the price. The week's thinking in one line, each
-// theme as a card (how broad the demand is, how far the price has moved, why, what would prove it wrong, the companies
-// behind it), then the earlier calls and how they have done. Rewritten every Saturday from the week's evidence.
-export default async function Themes() {
+// Themes v2 (docs/SPEC_ISSUES.md 68): a library of chains from something measurable in the world (car sales, home
+// sales, rates, power, prices, or the companies' own filings) to the companies it should lift. The dropdown opens any
+// theme; with none picked, the library by status. Numbers refresh every Saturday; the library is rethought monthly.
+export default async function Themes({ searchParams }: { searchParams: Promise<Query> }) {
   await requireUser();
-  const report = await latestReport<ThemesReport>("themes");
-  const r = report?.body;
+  const q = await searchParams;
+  const report = await latestReport<unknown>("themes");
+  const r = report && isLibrary(report.body) ? report.body : null;
+  const pick = typeof q.t === "string" ? q.t : "";
+  const theme = r?.library.find((t) => t.slug === pick);
+  const gone = theme ? undefined : r?.retired.find((t) => t.slug === pick);
   return (
-    <Page title="Themes" description="Where demand is building before the price. Rethought every Saturday.">
+    <Page
+      title="Themes"
+      description="What is happening in the world, and the companies it should lift before their price does."
+      actions={r ? <ThemePicker groups={groups(r)} current={theme || gone ? pick : ""} /> : undefined}
+    >
       {!r ? (
-        <Empty>The first themes are written on Saturday, after the week&apos;s scores.</Empty>
+        <Empty>The first theme library is built on Saturday, after the week&apos;s scores.</Empty>
+      ) : theme ? (
+        <Detail t={theme} r={r} />
+      ) : gone ? (
+        <Retired t={gone} />
       ) : (
-        <>
-          {r.note ? (
-            <Callout>
-              <strong className="font-semibold text-fg">This week&apos;s thinking: </strong>
-              {r.note}
-            </Callout>
-          ) : null}
-          {r.themes.length === 0 ? (
-            <Empty>
-              {r.answered || r.candidates === 0
-                ? "No industry shows broad demand that the price hasn't caught yet."
-                : "The theme pass didn't answer this week; the industry table below is up to date."}
-            </Empty>
-          ) : (
-            <ul aria-label="This week's themes" className="grid gap-5 lg:grid-cols-2">
-              {r.themes.map((t, i) => (
-                <ThemeCard key={`${t.market}-${t.industry}`} t={t} median={r.medians[t.market] ?? 0} i={i} />
-              ))}
-            </ul>
-          )}
-          {r.scorecard.length > 0 ? <Earlier calls={r.scorecard} reviews={r.reviews} /> : null}
-          <Disclosure summary={`All ${r.industries.length} industries`}>
-            <Industries rows={r.industries} medians={r.medians} />
-          </Disclosure>
-          <p className="text-[13px] text-subtle">
-            Demand evidence: verified order and customer wins, capacity additions, lead-time and price-increase statements
-            from filings in the last six months, a growing order book, or revenue growth that sped up. Price: the median
-            12-month move of the industry&apos;s companies. Research, not advice · computed {dayDate(report!.week_end)}.
-          </p>
-        </>
+        <Overview r={r} />
       )}
+      {r ? (
+        <p className="text-[13px] text-subtle">
+          Numbers refresh every Saturday. The AI rethinks the library once a month (sooner when a theme&apos;s status
+          changes or its driver jumps): it keeps, edits or retires themes and adds new ones the numbers point to.
+          {r.last_rethink ? ` Last rethink ${shortDate(r.last_rethink, true)}.` : " No rethink yet."} Next{" "}
+          {shortDate(r.next_rethink, true)}. Research, not advice.
+        </p>
+      ) : null}
     </Page>
   );
 }
 
-const CONFIDENCE = { low: "Low confidence", medium: "Medium confidence", high: "High confidence" } as const;
+function groups(r: ThemesReport): PickerGroup[] {
+  const out = byCategory(r.library).map(([label, list]) => ({
+    label,
+    options: list.map((t) => ({ value: t.slug, label: `${t.title} · ${STATUS[t.status].label}` })),
+  }));
+  if (r.retired.length > 0) out.push({ label: "Retired", options: r.retired.map((t) => ({ value: t.slug, label: t.title })) });
+  return out;
+}
 
-function ThemeCard({ t, median, i }: { t: Theme; median: number; i: number }) {
-  const ahead = t.median_move - median;
+const TONE_CHIP: Record<"up" | "warn" | "muted" | "down", string> = {
+  up: "bg-tint-sage text-up",
+  warn: "bg-tint-sand text-warn",
+  muted: "bg-hover text-muted",
+  down: "bg-tint-clay text-down",
+};
+
+function StatusChip({ s }: { s: Status }) {
+  return <span className={cn("rounded-full px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap", TONE_CHIP[STATUS[s].tone])}>{STATUS[s].label}</span>;
+}
+
+/** "US light vehicle sales → tire, motor vehicle parts" */
+function chainLine(t: LibraryTheme, r: ThemesReport): string {
+  const from = t.driver === "filings" ? "Company filings" : (r.drivers[t.driver] ?? t.driver);
+  return `${from} → ${t.keywords.slice(0, 3).join(", ")}`;
+}
+
+function Overview({ r }: { r: ThemesReport }) {
   return (
-    <li className="sheet rise flex min-w-0 flex-col gap-4 p-5 md:p-6" style={{ "--i": i } as React.CSSProperties}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="eyebrow">
-          {marketName(t.market)} · {t.industry}
-        </span>
-        <span className={cn("rounded-full px-2.5 py-0.5 text-[12px] font-semibold", t.early ? "bg-tint-sage text-up" : "bg-tint-sand text-warn")}>
-          {t.early ? "Price hasn't moved" : "Price already moving"}
-        </span>
-      </div>
-      <h2 className="text-[22px] leading-tight font-bold tracking-[-0.02em] text-fg">{t.title}</h2>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5 rounded-tile bg-raised p-3">
-          <span className="text-[12px] font-medium text-muted">Demand</span>
-          <span className="num text-[20px] font-bold text-fg">
-            {t.with_demand}
-            <span className="text-[14px] font-semibold text-subtle"> of {t.companies}</span>
-          </span>
-          <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-track">
-            <span className="grow-x block h-full rounded-full bg-up" style={{ width: `${sharePct(t.share)}%` }} />
-          </span>
+    <>
+      {r.note ? (
+        <Callout>
+          <strong className="font-semibold text-fg">The AI&apos;s latest thinking: </strong>
+          {r.note}
+        </Callout>
+      ) : null}
+      {STATUS_ORDER.map((s) => {
+        const list = r.library.filter((t) => t.status === s);
+        if (list.length === 0) return null;
+        return (
+          <Section key={s} id={`status-${s}`} title={STATUS[s].label} count={list.length} description={`${STATUS[s].hint[0]!.toUpperCase()}${STATUS[s].hint.slice(1)}.`} plain>
+            <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {list.map((t, i) => (
+                <li key={t.slug}>
+                  <Link
+                    href={`/themes?t=${t.slug}`}
+                    style={{ "--i": i } as React.CSSProperties}
+                    className="sheet rise press flex h-full flex-col gap-3 p-5 text-fg no-underline transition-transform duration-150 hover:-translate-y-0.5 hover:text-fg"
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="eyebrow truncate">{t.category}</span>
+                      <StatusChip s={t.status} />
+                    </span>
+                    <span className="text-[18px] leading-snug font-bold tracking-[-0.01em]">{t.title}</span>
+                    <span className="line-clamp-2 text-[13px] text-muted">{chainLine(t, r)}</span>
+                    <span className="mt-auto grid grid-cols-3 gap-2 text-[12px]">
+                      <Mini label="Driver" value={t.signal.replace(" normal", "")} />
+                      <Mini label="Demand" value={`${t.with_demand} of ${t.companies}`} />
+                      <Mini label="Price vs mkt" value={pct(t.run)} />
+                    </span>
+                    <LinkPending />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        );
+      })}
+    </>
+  );
+}
+
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex min-w-0 flex-col rounded-xl bg-raised px-2.5 py-2">
+      <span className="truncate text-subtle">{label}</span>
+      <span className="num truncate font-semibold text-fg">{value}</span>
+    </span>
+  );
+}
+
+function Detail({ t, r }: { t: LibraryTheme; r: ThemesReport }) {
+  const from = t.driver === "filings" ? "Company filings" : (r.drivers[t.driver] ?? t.driver);
+  const big = t.chart.some(([, v]) => Math.abs(v) >= 10000);
+  const history = historyLine(t.history);
+  return (
+    <>
+      <Link href="/themes" className="inline-flex min-h-11 items-center gap-1.5 self-start text-[14px] font-medium no-underline md:min-h-0">
+        <Icon name="chevron-left" />
+        All themes
+      </Link>
+      <section aria-labelledby="theme-title" className="sheet rise flex flex-col gap-5 p-5 md:p-7">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="eyebrow">{t.category}</span>
+          <StatusChip s={t.status} />
+          {t.origin === "ai" && t.born ? <span className="text-[12px] text-subtle">added by the AI {shortDate(t.born, true)}</span> : null}
         </div>
-        <div className="flex flex-col gap-1.5 rounded-tile bg-raised p-3">
-          <span className="text-[12px] font-medium text-muted">Price, 12 months</span>
-          <span className="num text-[20px] font-bold text-fg">{signedPct(t.median_move)}</span>
-          <span className={cn("text-[12px]", ahead > 0 ? "text-warn" : "text-up")}>
-            {ahead > 0 ? `${signedPct(ahead)} vs market` : `${signedPct(ahead)} vs market`}
+        <h2 id="theme-title" className="text-[26px] leading-tight font-bold tracking-[-0.02em] text-fg md:text-[32px]">
+          {t.title}
+        </h2>
+        <p className="max-w-3xl text-[16px] leading-relaxed text-fg">{t.why}</p>
+        <ol aria-label="The chain" className="flex flex-col gap-2 md:flex-row md:items-stretch">
+          <Step tone="bg-tint-sky" head="What happens" body={from} sub={readingWords(t)} />
+          <Arrow text={lagWords(t)} />
+          <Step tone="bg-tint-sage" head="Who it lifts" body={t.keywords.join(", ")} sub={`${t.companies} companies${t.markets.length ? ` · ${t.markets.map(marketName).join(" and ")}` : ""}`} />
+        </ol>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Stat label="The driver now" value={t.signal} sub={t.z === null ? "" : `z ${t.z > 0 ? "+" : ""}${t.z.toFixed(1)}`} />
+          <Stat label="Demand evidence" value={`${t.with_demand} of ${t.companies}`} sub="companies report it" />
+          <Stat label="Price, 12 months" value={pct(t.move)} sub={t.market_move === null ? "" : `market ${pct(t.market_move)}`} />
+          <Stat label="Undervalued" value={String(t.undervalued)} sub="on the board or Watch" />
+        </div>
+        {history ? <p className="rounded-tile bg-raised px-4 py-3 text-[14px] text-muted">{history} Today&apos;s companies only, so it flatters.</p> : null}
+        <p className="flex items-start gap-2 text-[14px] text-muted">
+          <Icon name="alert" className="mt-0.5 text-warn" />
+          <span>
+            <span className="font-semibold text-fg">Wrong if: </span>
+            {t.wrong_if}
           </span>
+        </p>
+      </section>
+      <div className="grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
+        <Section id="names" title="The companies" description="Undervalued names first, then by Evidence.">
+          {t.names.length === 0 ? (
+            <Empty>No company in the universe matches this theme yet.</Empty>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {t.names.map((n) => (
+                <li key={n.company_id}>
+                  <Link
+                    href={`/company/${n.company_id}`}
+                    className="press tile flex items-center gap-3 px-3 py-2.5 text-fg no-underline transition-colors duration-150 hover:bg-hover hover:text-fg"
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-[14px] font-bold">
+                        {n.code ?? ""} <span className="font-medium text-muted">{n.name}</span>
+                      </span>
+                      <span className="truncate text-[12px] text-subtle">
+                        {marketName(n.market)} · {n.industry}
+                        {n.demand ? " · reports demand" : ""}
+                      </span>
+                    </span>
+                    {n.bucket === "candidate" || n.bucket === "watch" ? (
+                      <span className="rounded-full bg-tint-sage px-2 py-0.5 text-[11px] font-semibold text-up">{n.bucket === "candidate" ? "On the board" : "Watch"}</span>
+                    ) : null}
+                    <span className={cn("num w-12 shrink-0 text-right text-[13px] font-semibold", (n.move ?? 0) >= 0 ? "text-up" : "text-down")}>{pct(n.move)}</span>
+                    <LinkPending />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+        <div className="flex min-w-0 flex-col gap-6">
+          {t.chart.length > 0 ? (
+            <LineChartCard
+              title={from}
+              data={t.chart.map(([m, v]) => ({ period: `${m}-01`, value: v }))}
+              series={[{ key: "value", label: from }]}
+              format={big ? "big" : "num"}
+              surface="sheet"
+              note="Monthly, the last ten years (FRED)."
+            />
+          ) : null}
+          <Section id="notes" title="How it evolved" description="The AI's notes at each rethink, newest first.">
+            {t.notes.length === 0 ? (
+              <p className="text-[14px] text-muted">A starter theme: the first rethink will say whether it stays.</p>
+            ) : (
+              <Notes notes={t.notes} />
+            )}
+          </Section>
         </div>
       </div>
-      <p className="text-[15px] leading-relaxed text-fg">{t.why}</p>
-      <p className="flex items-start gap-2 text-[13px] text-muted">
-        <Icon name="alert" className="mt-0.5 text-warn" />
-        <span>
-          <span className="font-semibold text-fg">Wrong if: </span>
-          {t.wrong_if}
-        </span>
-      </p>
-      <ul aria-label={`Behind ${t.title}`} className="flex flex-col gap-1.5">
-        {t.evidence.map((e) => (
-          <li key={e.id}>
-            <Link
-              href={`/company/${e.company_id}`}
-              className="press tile flex items-center gap-3 px-3 py-2 text-fg no-underline transition-colors duration-150 hover:bg-hover hover:text-fg"
-            >
-              <span className="w-16 shrink-0 truncate text-[13px] font-bold">{e.code ?? e.name}</span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-muted">{evidenceLine(e.what)}</span>
-              <span className={cn("num shrink-0 text-[12px] font-semibold", e.move >= 0 ? "text-up" : "text-down")}>{signedPct(e.move)}</span>
-              <LinkPending />
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <p className="text-[12px] text-subtle">{CONFIDENCE[t.confidence]}</p>
+    </>
+  );
+}
+
+function Step({ tone, head, body, sub }: { tone: string; head: string; body: string; sub: string }) {
+  return (
+    <li className={cn("flex min-w-0 flex-1 flex-col gap-1 rounded-tile p-4", tone)}>
+      <span className="text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">{head}</span>
+      <span className="text-[16px] font-bold text-fg">{body}</span>
+      <span className="text-[13px] text-muted">{sub}</span>
     </li>
   );
 }
 
-/** The earlier calls (one per industry, newest first) with their companies' move since and this week's verdict. */
-function Earlier({ calls, reviews }: { calls: EarlierCall[]; reviews: Review[] }) {
+function Arrow({ text }: { text: string }) {
   return (
-    <Section id="earlier" title="Earlier calls" description="How the companies behind each call have moved since, and whether this week's pass kept it.">
-      <ul className="flex flex-col">
-        {calls.map((c) => {
-          const r = reviewOf(reviews, c);
-          return (
-            <li key={`${c.market}-${c.industry}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-line py-3 first:border-t-0 first:pt-0">
-              <span className="num w-14 shrink-0 text-[13px] text-subtle">{shortDate(c.week)}</span>
-              <span className="min-w-0 flex-1 text-[15px] font-semibold text-fg">
-                {c.title} <span className="text-[13px] font-normal text-muted">· {marketName(c.market === "in" ? "in" : "us")} {c.industry}</span>
-              </span>
-              <span className={cn("num text-[14px] font-semibold", c.since === null ? "text-subtle" : c.since >= 0 ? "text-up" : "text-down")}>
-                {c.since === null ? "n/a" : signedPct(c.since)}
-              </span>
-              {r ? (
-                <span className="w-full pl-[4.25rem] text-[13px] text-muted">
-                  <span className={cn("font-semibold", r.decision === "keep" ? "text-up" : "text-warn")}>{r.decision === "keep" ? "Kept" : "Dropped"}</span>: {r.reason}
-                </span>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </Section>
+    <li aria-label={text} className="flex shrink-0 items-center justify-center gap-1.5 px-2 text-[13px] font-semibold text-muted md:flex-col">
+      <Icon name="chevron-right" className="rotate-90 md:rotate-0" strokeWidth={2.4} />
+      <span>{text}</span>
+    </li>
   );
 }
 
-function Industries({ rows, medians }: { rows: ThemesReport["industries"]; medians: ThemesReport["medians"] }) {
+function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[30rem] text-[13px]">
-        <thead>
-          <tr className="text-left">
-            <th className="caps py-2 pr-3">Industry</th>
-            <th className="caps py-2 pr-3">Demand</th>
-            <th className="caps py-2 text-right">Price 12m</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.slice(0, 30).map((r) => (
-            <tr key={`${r.market}-${r.industry}`} className="border-t border-line">
-              <td className="py-2 pr-3 text-fg">
-                {r.industry} <span className="text-subtle">· {marketName(r.market)}</span>
-              </td>
-              <td className="num py-2 pr-3 text-muted">
-                {r.with_demand} of {r.companies}
-              </td>
-              <td className={cn("num py-2 text-right", r.median_move > (medians[r.market] ?? 0) ? "text-warn" : "text-muted")}>{signedPct(r.median_move)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="flex min-w-0 flex-col gap-1 rounded-tile bg-raised p-3.5">
+      <span className="text-[12px] font-medium text-muted">{label}</span>
+      <span className="num text-[18px] leading-tight font-bold text-fg">{value}</span>
+      {sub ? <span className="text-[12px] text-subtle">{sub}</span> : null}
     </div>
+  );
+}
+
+const DECISION: Record<string, string> = { keep: "Kept", edit: "Edited", retire: "Retired", new: "Added" };
+
+function Notes({ notes }: { notes: LibraryTheme["notes"] }) {
+  return (
+    <ol className="flex flex-col">
+      {[...notes].reverse().map((n, i) => (
+        <li key={`${n.week}-${i}`} className="flex flex-col gap-0.5 border-t border-line py-3 first:border-t-0 first:pt-0">
+          <span className="text-[12px] text-subtle">
+            {shortDate(n.week, true)} · <span className="font-semibold text-fg">{DECISION[n.decision] ?? n.decision}</span>
+          </span>
+          <span className="text-[14px] text-fg">{n.text}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Retired({ t }: { t: RetiredTheme }) {
+  return (
+    <>
+      <Link href="/themes" className="inline-flex min-h-11 items-center gap-1.5 self-start text-[14px] font-medium no-underline md:min-h-0">
+        <Icon name="chevron-left" />
+        All themes
+      </Link>
+      <Section id="retired" eyebrow={`${t.category} · retired ${shortDate(t.week, true)}`} title={t.title} description={t.note}>
+        <Notes notes={t.notes} />
+      </Section>
+    </>
   );
 }

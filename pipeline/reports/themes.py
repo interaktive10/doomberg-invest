@@ -1,23 +1,33 @@
-"""Themes: where demand is building before the price (docs/SPEC_ISSUES.md 67; weekly.yml's publish job, reports.yml).
+"""Themes: a library of demand chains that evolves (docs/SPEC_ISSUES.md 67, 68; weekly.yml's publish job, reports.yml).
 
 Manzoor: "we need a way to see which sectors will have demand and outperform in the future. not the ones that have
-already run up ... an evolution prompt which should kinda have it's own consiousness ... and try to adapt to what's
-happening in the world."
+already run up ... an evolution prompt which should kinda have it's own consiousness"; then: "don't make this specific
+to AI ... a lot of automobiles purchased in certain year ... people would want to replace the tires after four years
+... if people are buying homes, we should buy more paint ... I should be able to see things in the dropdown ... this
+needs to evolve as well".
 
-1. Per company in the universe, as of the latest scored week (point in time: fundamentals and facts through as_of):
-   demand evidence = verified demand facts of the last DEMAND_DAYS (order and customer wins, capacity additions, lead
-   times, price increases, new segments), S1 (the order book growing faster than sales) fired, or revenue
-   accelerating (TTM growth up at least ACCEL points on the quarter before, and above MIN_GROWTH). Its 12-month price
-   move: the Lab's US month-ends, India's weekly closes.
-2. Per market and industry (at least MIN_NAMES priced companies): the share with demand evidence and the median price
-   move. An industry is a candidate when at least two companies show evidence and its share is in the market's top
-   quarter; "early" when its median move is at or below the market's.
-3. P-08 reads the candidates (numbers and evidence ids only) and its own earlier calls with how their companies have
-   moved since, names at most five themes and reviews the earlier calls. Its answer is checked: a theme must name a
-   candidate industry, cite that industry's evidence, and use no number the input lacks; one that fails is dropped
-   (counted). Without an answer (out of budget, no provider) the report still carries the table.
+A theme is a chain: a driver (a public FRED series, config/drivers.yaml, or `filings`: its industries' own demand
+evidence), read one way (pipeline/reports/drivers.py: yoy, level, or cohort `lag_months` back), reaching the companies
+whose industry, sector or name matches its keywords. The library starts from config/themes_seed.yaml and lives in the
+weekly report body (`library`, `retired`); each week's report carries it forward.
 
-Not part of the Evidence score; no weight reads it. `python -m pipeline.reports.themes [--week D]`."""
+Every Saturday (numbers only, no LLM), per theme: the driver's z-score and its last ten years; its companies' demand
+evidence (verified demand facts of the last 180 days, S1 fired, revenue accelerating; point in time through as_of) and
+median 12-month price move against the market's; the undervalued names among them (the latest scores' Candidate and
+Watch buckets); a history check (US: did these companies beat the market in years the driver said so); a status:
+- building: the driver is a tailwind (z >= 0.5; for `filings`, the evidence share in the industries' top quarter) and
+  the price hasn't run (at most RUN_UP above the market's median move);
+- priced in: a tailwind, and the price already ran;
+- fading: the driver turned (z <= -0.5);
+- watching: anything else.
+
+Monthly, P-08 rethinks the library (the first Saturday of a month; sooner when a theme's status changed or a driver
+moved a full z since the last rethink; never more than weekly): keep, edit or retire each theme, propose at most three
+new ones. Its answer is checked: a real driver and reading, keywords that match at least MIN_MEMBERS companies, word
+limits, no number the input lacks; what fails is dropped and counted. Notes accumulate per theme, so the library has
+a memory of why it changed. Not part of the Evidence score; no weight reads it.
+
+`python -m pipeline.reports.themes [--week D] [--rethink]`."""
 
 from __future__ import annotations
 
@@ -31,29 +41,39 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import psycopg
+import yaml
 
 from pipeline.db import repo
 from pipeline.db.models import Company, FactRow, FundamentalsRow
 from pipeline.db.pit import as_of
 from pipeline.llm.router import Deferred, Router
-from pipeline.llm.themes import CONFIDENCE, MAX_THEMES, ThemesInput
-from pipeline.reports.winners import close_at, india_series, us_series
-from pipeline.settings import Settings
+from pipeline.llm.themes import CATEGORIES, MAX_NEW, READINGS, ThemesInput
+from pipeline.net import fred
+from pipeline.net.http import HttpClient
+from pipeline.reports import drivers as dv
+from pipeline.reports.winners import close_at, india_series, us_series, year_return
+from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals.weekly import last_friday
 
 DEMAND_FACTS = ("order_win", "customer_win", "capacity_addition", "lead_time", "price_increase", "new_segment")
 DEMAND_DAYS = 180
 ACCEL = 0.03
 MIN_GROWTH = 0.05
-MIN_NAMES = 5
-TOP_SHARE = 0.75  # the market's top quarter of industries by demand share
-MAX_EXAMPLES = 4
-MEMORY_WEEKS = 8
-WORDS = {"title": 8, "why": 45, "wrong_if": 25, "note": 60, "reason": 30}
+MIN_NAMES = 5  # an industry row in the table
+MIN_MEMBERS = 3  # a theme's keywords must match at least this many companies
+RUN_UP = 0.10
+TAILWIND = 0.5
+MAX_ACTIVE = 24
+MAX_NAMES = 8
+MAX_NOTES = 12
+MAX_RETIRED = 30
+WORDS = {"title": 8, "why": 45, "wrong_if": 25, "note": 60, "review": 35}
+FIRST_YEAR = 2012
 
 Series = Mapping[UUID, Sequence[tuple[date, Decimal]]]
 
@@ -67,10 +87,20 @@ class Firm:
     facts: list[FactRow] = field(default_factory=list)
     move: float | None = None
     price: float | None = None
+    evidence: float | None = None
+    bucket: str | None = None
+    series: Sequence[tuple[date, Decimal]] = ()
 
     @property
     def demand(self) -> bool:
         return self.accelerating or self.order_book or bool(self.facts)
+
+    def haystack(self) -> str:
+        c = self.company
+        return " | ".join(x for x in (c.industry, c.sector, c.name) if x).casefold()
+
+
+# ---------------------------------------------------------------- per company
 
 
 def ttm_growth(rows: Sequence[FundamentalsRow], back: int) -> float | None:
@@ -105,9 +135,11 @@ def industry_of(c: Company) -> str | None:
     return c.industry or c.sector
 
 
+# ---------------------------------------------------------------- the industry table
+
+
 def industries(firms: Sequence[Firm]) -> list[dict[str, Any]]:
-    """Per market and industry with at least MIN_NAMES priced companies: counts, the demand share, the median move
-    and up to MAX_EXAMPLES pieces of evidence (ids e1, e2, ... assigned later)."""
+    """Per market and industry with at least MIN_NAMES priced companies: counts, demand share and median move."""
     groups: dict[tuple[str, str], list[Firm]] = defaultdict(list)
     for f in firms:
         if f.move is not None:
@@ -116,48 +148,140 @@ def industries(firms: Sequence[Firm]) -> list[dict[str, Any]]:
     for (market, ind), fs in groups.items():
         if len(fs) < MIN_NAMES:
             continue
-        shown = [f for f in fs if f.demand]
-        examples = []
-        for f in sorted(shown, key=lambda f: (-len(f.facts), f.company.name)):
-            what = (f"{f.facts[-1].fact_type}: {f.facts[-1].subject}"[:160] if f.facts
-                    else "order book growing faster than sales" if f.order_book
-                    else "revenue growth accelerating")  # fmt: skip
-            examples.append({"company_id": str(f.company.id), "code": f.company.ticker or f.company.nse_symbol,
-                             "name": f.company.name, "what": what, "move": round(f.move or 0.0, 3)})  # fmt: skip
-            if len(examples) == MAX_EXAMPLES:
-                break
-        out.append({"market": market, "industry": ind, "companies": len(fs), "with_demand": len(shown),
-                    "share": round(len(shown) / len(fs), 3),
-                    "facts": sum(len(f.facts) for f in fs), "order_book": sum(f.order_book for f in fs),
-                    "accelerating": sum(f.accelerating for f in fs),
-                    "median_move": round(statistics.median(f.move for f in fs if f.move is not None), 3),
-                    "examples": examples})  # fmt: skip
-    return sorted(out, key=lambda r: (r["market"], -r["share"], -r["with_demand"]))
+        shown = sum(f.demand for f in fs)
+        out.append({"market": market, "industry": ind, "companies": len(fs), "with_demand": shown,
+                    "share": round(shown / len(fs), 3), "facts": sum(len(f.facts) for f in fs),
+                    "median_move": round(statistics.median(f.move for f in fs if f.move is not None), 3)})  # fmt: skip
+    return sorted(out, key=lambda r: (r["market"], -r["share"], -r["companies"]))
 
 
-def candidates(rows: Sequence[dict[str, Any]], market_median: Mapping[str, float]) -> list[dict[str, Any]]:
-    """The industries P-08 reads: at least two companies with evidence and a share in the market's top quarter, each
-    marked early (median move at or below the market's) or running; evidence ids e1, e2, ... in order."""
-    out = []
-    by_market: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for r in rows:
-        by_market[r["market"]].append(r)
-    n = 0
-    for market, rs in sorted(by_market.items()):
-        shares = sorted(r["share"] for r in rs)
-        cut = shares[int(len(shares) * TOP_SHARE)] if len(shares) >= 4 else 0.0
-        for r in rs:
-            if r["with_demand"] < 2 or r["share"] < cut:
-                continue
-            ex = []
-            for e in r["examples"]:
-                n += 1
-                ex.append({**e, "id": f"e{n}"})
-            out.append({**r, "examples": ex, "early": r["median_move"] <= market_median.get(market, 0.0)})
+# ---------------------------------------------------------------- a theme's numbers
+
+
+def members(firms: Sequence[Firm], keywords: Sequence[str]) -> list[Firm]:
+    keys = [k.casefold().strip() for k in keywords if k.strip()]
+    return [f for f in firms if any(k in f.haystack() for k in keys)]
+
+
+def slug_of(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")[:60] or "theme"
+
+
+def group_excess(fs: Sequence[Firm], market_by_year: Mapping[int, float], last_year: int) -> dict[int, float]:
+    """Each year's average return of the US companies in `fs` with a price at both ends, minus the market's."""
+    out = {}
+    for year in range(FIRST_YEAR, last_year + 1):
+        rets = [r for f in fs if f.company.market == "us" and f.series
+                and (r := year_return(f.series, year, "us")) is not None]  # fmt: skip
+        if len(rets) >= MIN_MEMBERS and year in market_by_year:
+            out[year] = statistics.fmean(rets) - market_by_year[year]
     return out
 
 
-# ---------------------------------------------------------------- P-08's answer, checked
+def market_years(firms: Sequence[Firm], last_year: int) -> dict[int, float]:
+    out = {}
+    for year in range(FIRST_YEAR, last_year + 1):
+        rets = [r for f in firms if f.company.market == "us" and f.series
+                and (r := year_return(f.series, year, "us")) is not None]  # fmt: skip
+        if len(rets) >= 50:
+            out[year] = statistics.fmean(rets)
+    return out
+
+
+def status_of(z: float | None, run: float | None) -> str:
+    if z is not None and z >= TAILWIND:
+        return "priced_in" if run is not None and run > RUN_UP else "building"
+    if z is not None and z <= -TAILWIND:
+        return "fading"
+    return "watching"
+
+
+def filings_z(share: float, shares: Sequence[float]) -> float | None:
+    """`filings` themes: the companies' evidence share against the industries' shares, as a z-score."""
+    if len(shares) < 5 or statistics.pstdev(shares) == 0:
+        return None
+    return round((share - statistics.fmean(shares)) / statistics.pstdev(shares), 2)
+
+
+def numbers(theme: Mapping[str, Any], firms: Sequence[Firm], points: Mapping[str, dv.Points],
+            drv: Mapping[str, dv.Driver], medians: Mapping[str, float], shares: Sequence[float],
+            market_by_year: Mapping[int, float], last_year: int) -> dict[str, Any]:  # fmt: skip
+    """This week's numbers for one theme (merged into its library entry)."""
+    fs = members(firms, theme["keywords"])
+    priced = [f for f in fs if f.move is not None]
+    shown = sum(f.demand for f in fs)
+    share = round(shown / len(fs), 3) if fs else 0.0
+    moves = [f.move for f in priced if f.move is not None]
+    move = round(statistics.median(moves), 3) if moves else None
+    markets = sorted({f.company.market for f in priced})
+    market_move = (round(statistics.fmean(medians[m] for m in markets if m in medians), 3)
+                   if any(m in medians for m in markets) else None)  # fmt: skip
+    run = round(move - market_move, 3) if move is not None and market_move is not None else None
+    driver, reading, lag = theme["driver"], theme["transform"], int(theme.get("lag_months") or 0)
+    pts = points.get(driver, [])
+    if driver == dv.FILINGS:
+        z, chart, history = filings_z(share, shares), [], None
+    else:
+        d = drv.get(driver)
+        inv = bool(d.inverse) if d else False
+        z = dv.latest_z(pts, reading, lag, inv) if pts else None
+        chart = dv.chart(pts)
+        history = (dv.history_check(pts, reading, lag, inv, group_excess(fs, market_by_year, last_year))
+                   if pts else None)  # fmt: skip
+    ranked = sorted(fs, key=lambda f: ({"candidate": 0, "watch": 1}.get(f.bucket or "", 2), -(f.evidence or 0),
+                                       f.company.name))  # fmt: skip
+    names = [{"company_id": str(f.company.id), "code": f.company.ticker or f.company.nse_symbol,
+              "name": f.company.name, "market": f.company.market, "industry": f.industry,
+              "evidence": f.evidence, "bucket": f.bucket, "move": round(f.move, 3) if f.move is not None else None,
+              "demand": f.demand} for f in ranked[:MAX_NAMES]]  # fmt: skip
+    return {"z": z, "signal": dv.words(z), "chart": chart, "companies": len(fs), "priced": len(priced),
+            "with_demand": shown, "share": share, "move": move, "market_move": market_move, "run": run,
+            "markets": markets, "status": status_of(z, run), "history": history, "names": names,
+            "undervalued": sum(1 for f in fs if f.bucket in ("candidate", "watch"))}  # fmt: skip
+
+
+# ---------------------------------------------------------------- the library and its rethink
+
+
+def seed(root: Path = REPO_ROOT) -> list[dict[str, Any]]:
+    doc = yaml.safe_load((root / "config" / "themes_seed.yaml").read_text(encoding="utf-8"))
+    return [{**t, "lag_months": int(t.get("lag_months") or 0), "origin": "starter", "born": None, "notes": []}
+            for t in doc["themes"]]  # fmt: skip
+
+
+def rethink_due(week: date, last: date | None, triggered: bool) -> tuple[bool, str]:
+    if last is None:
+        return True, "the first rethink"
+    days = (week - last).days
+    if days < 7:
+        return False, ""
+    if week.day <= 7 and (week.year, week.month) != (last.year, last.month):
+        return True, "the month's rethink"
+    if days >= 35:
+        return True, "five weeks since the last rethink"
+    if triggered:
+        return True, "a theme's status changed or its driver moved"
+    return False, ""
+
+
+def next_rethink(week: date) -> date:
+    """The first Friday of next month: the week whose Saturday run rethinks."""
+    first = date(week.year + (week.month == 12), week.month % 12 + 1, 1)
+    return first + timedelta(days=(4 - first.weekday()) % 7)
+
+
+def triggered(prev: Sequence[Mapping[str, Any]], now: Sequence[Mapping[str, Any]]) -> bool:
+    before = {t["slug"]: t for t in prev}
+    for t in now:
+        p = before.get(t["slug"])
+        if p is None:
+            continue
+        if p.get("status") and p.get("status") != t.get("status"):
+            return True
+        z0, z1 = p.get("z_at_rethink"), t.get("z")
+        if z0 is not None and z1 is not None and abs(z1 - z0) >= 1.0:
+            return True
+    return False
 
 
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
@@ -170,10 +294,10 @@ def _norm(n: str) -> str:
 
 
 def allowed_numbers(text: str) -> set[str]:
-    """The numbers the input states, and each fraction as the percent a writer says it as (0.123 -> 12.3 and 12;
-    -0.05 -> 5): a theme may say "up 12%" for a median move of 0.12, never a number the input lacks."""
+    """The numbers the input states, and each fraction as the percent a writer says it as (0.123 -> 12.3 and 12):
+    a theme may say "up 12%" for a move of 0.12, never a number the input lacks."""
     out = set()
-    for raw in NUMBER.findall(re.sub(r"\be\d+\b", "", text)):  # evidence ids (e1, e2, ...) state no number
+    for raw in NUMBER.findall(text):
         n = _norm(raw)
         out.add(n)
         v = float(n)
@@ -186,80 +310,118 @@ def _words(text: str) -> int:
     return len(text.split())
 
 
-Checked = tuple[list[dict[str, Any]], list[dict[str, Any]], str, list[str]]
+@dataclass
+class Rethink:
+    reviews: dict[str, dict[str, Any]] = field(default_factory=dict)
+    new: list[dict[str, Any]] = field(default_factory=list)
+    note: str = ""
+    dropped: list[str] = field(default_factory=list)
 
 
-def check_answer(answer: Mapping[str, Any], cands: Sequence[Mapping[str, Any]], input_text: str,
-                 earlier: Sequence[Mapping[str, Any]]) -> Checked:  # fmt: skip
-    """(themes kept, reviews kept, note, why each dropped one was dropped)."""
-    known = {(c["market"], c["industry"]): c for c in cands}
-    numbers = allowed_numbers(input_text)
-    dropped: list[str] = []
+def check_answer(answer: Mapping[str, Any], library: Sequence[Mapping[str, Any]], firms: Sequence[Firm],
+                 drivers: Mapping[str, dv.Driver], input_text: str) -> Rethink:  # fmt: skip
+    """P-08's answer, checked; what fails is dropped with why."""
+    out = Rethink()
+    allowed = allowed_numbers(input_text)
+    slugs = {t["slug"] for t in library} | {slug_of(t["title"]) for t in library}
 
-    def numbers_ok(text: str) -> bool:
-        return all(_norm(n) in numbers for n in NUMBER.findall(text))
+    def ok_text(text: str, limit: int) -> bool:
+        return bool(text) and _words(text) <= limit and all(_norm(n) in allowed for n in NUMBER.findall(text))
 
-    themes = []
-    for t in answer.get("themes") or []:
-        if not isinstance(t, dict):
-            continue
-        key = (str(t.get("market")), str(t.get("industry")))
-        c = known.get(key)
-        ids = {e["id"] for e in c["examples"]} if c else set()
-        cited = [e for e in (t.get("evidence") or []) if isinstance(e, str)]
-        texts = {k: str(t.get(k) or "").strip() for k in ("title", "why", "wrong_if")}
-        why = ("not a candidate industry" if c is None
-               else "cites no evidence of its industry" if not cited or not set(cited) <= ids
-               else "a theme needs evidence from two companies" if len({e["company_id"] for e in c["examples"]
-                                                                         if e["id"] in cited}) < 2
-               else "a number the input lacks" if not all(numbers_ok(v) for v in texts.values())
-               else "too long" if any(_words(v) > WORDS[k] for k, v in texts.items())
-               else "empty" if not all(texts.values())
-               else "unknown confidence" if t.get("confidence") not in CONFIDENCE else None)  # fmt: skip
-        if why is not None:
-            dropped.append(f"{key[0]} {key[1]}: {why}")
-            continue
-        assert c is not None
-        themes.append({**texts, "market": key[0], "industry": key[1], "confidence": t["confidence"],
-                       "evidence": [e for e in c["examples"] if e["id"] in cited],
-                       "share": c["share"], "with_demand": c["with_demand"], "companies": c["companies"],
-                       "median_move": c["median_move"], "early": c["early"]})  # fmt: skip
-        if len(themes) == MAX_THEMES:
-            break
-    called = {(str(e["market"]), str(e["industry"])) for e in earlier}
-    reviews = []
+    def ok_keywords(kws: Any) -> list[str] | None:
+        if not isinstance(kws, list) or not 1 <= len(kws) <= 6:
+            return None
+        clean = [str(k).strip() for k in kws if isinstance(k, str) and 3 <= len(str(k).strip()) <= 40]
+        return clean if len(clean) == len(kws) and len(members(firms, clean)) >= MIN_MEMBERS else None
+
     for r in answer.get("reviews") or []:
-        if not isinstance(r, dict):
+        if not isinstance(r, dict) or r.get("slug") not in slugs:
             continue
-        key = (str(r.get("market")), str(r.get("industry")))
-        reason = str(r.get("reason") or "").strip()
-        if key in called and r.get("decision") in ("keep", "drop") and reason and _words(reason) <= WORDS["reason"] \
-                and numbers_ok(reason):  # fmt: skip
-            reviews.append({"market": key[0], "industry": key[1], "decision": r["decision"], "reason": reason})
+        note = str(r.get("note") or "").strip()
+        decision = r.get("decision")
+        if decision not in ("keep", "edit", "retire") or not ok_text(note, WORDS["review"]):
+            out.dropped.append(f"review {r.get('slug')}: no decision or a bad note")
+            continue
+        review: dict[str, Any] = {"decision": decision, "note": note}
+        if decision == "edit":
+            for k in ("title", "why", "wrong_if"):
+                v = str(r.get(k) or "").strip()
+                if v and ok_text(v, WORDS[k]):
+                    review[k] = v
+            if r.get("keywords") is not None:
+                kws = ok_keywords(r.get("keywords"))
+                if kws:
+                    review["keywords"] = kws
+        out.reviews[str(r["slug"])] = review
+    for n in (answer.get("new") or [])[:MAX_NEW]:
+        if not isinstance(n, dict):
+            continue
+        title, why, wrong = (str(n.get(k) or "").strip() for k in ("title", "why", "wrong_if"))
+        driver, reading = str(n.get("driver") or ""), str(n.get("reading") or "")
+        lag = n.get("lag_months")
+        kws = ok_keywords(n.get("keywords"))
+        problem = ("an unknown category" if n.get("category") not in CATEGORIES
+                   else "an unknown driver" if driver != dv.FILINGS and driver not in drivers
+                   else "an unknown reading" if reading not in READINGS
+                   else "a bad lag" if not isinstance(lag, int) or not 0 <= lag <= 120
+                   or (reading == "cohort" and lag < 12)
+                   else "keywords that match too few companies" if kws is None
+                   else "a title, why or wrong-if that is empty, too long or has a number the input lacks"
+                   if not (ok_text(title, WORDS["title"]) and ok_text(why, WORDS["why"])
+                           and ok_text(wrong, WORDS["wrong_if"]))
+                   else "a theme the library has" if slug_of(title) in slugs else None)  # fmt: skip
+        if problem:
+            out.dropped.append(f"new {title[:40]!r}: {problem}")
+            continue
+        assert kws is not None and isinstance(lag, int)
+        out.new.append({"slug": slug_of(title), "title": title, "category": n["category"], "driver": driver,
+                        "transform": reading, "lag_months": lag, "keywords": kws, "why": why, "wrong_if": wrong,
+                        "origin": "ai"})  # fmt: skip
     note = str(answer.get("note") or "").strip()
-    if _words(note) > WORDS["note"] or not numbers_ok(note):
-        dropped.append("note: too long or a number the input lacks")
-        note = ""
-    return themes, reviews, note, dropped
-
-
-# ---------------------------------------------------------------- memory: earlier calls and how they did
-
-
-def scorecard(earlier: Sequence[Mapping[str, Any]], prices: Mapping[str, float]) -> list[dict[str, Any]]:
-    """Each earlier theme (newest week first, one per industry) with its companies' average move since the call."""
-    out, seen = [], set()
-    for rep in earlier:
-        for t in rep.get("themes") or []:
-            key = (t.get("market"), t.get("industry"))
-            if key in seen:
-                continue
-            seen.add(key)
-            moves = [prices[e["company_id"]] / e["price"] - 1 for e in t.get("evidence") or []
-                     if e.get("price") and e.get("company_id") in prices]  # fmt: skip
-            out.append({"week": rep.get("week"), "market": key[0], "industry": key[1], "title": t.get("title"),
-                        "since": round(statistics.fmean(moves), 3) if moves else None})  # fmt: skip
+    if note and ok_text(note, WORDS["note"]):
+        out.note = note
+    elif note:
+        out.dropped.append("note: too long or a number the input lacks")
     return out
+
+
+def apply(library: list[dict[str, Any]], retired: list[dict[str, Any]], r: Rethink,
+          week: date) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:  # fmt: skip
+    """The rethink applied: notes appended, edits made, retired themes moved out, new ones added (MAX_ACTIVE)."""
+    kept = []
+    for t in library:
+        rev = r.reviews.get(t["slug"])
+        if rev is None:
+            kept.append(t)
+            continue
+        t = {**t, **{k: v for k, v in rev.items() if k in ("title", "why", "wrong_if", "keywords")}}
+        t["notes"] = ([*t.get("notes", []), {"week": week.isoformat(), "decision": rev["decision"],
+                                             "text": rev["note"]}])[-MAX_NOTES:]  # fmt: skip
+        if rev["decision"] == "retire":
+            retired = [{"slug": t["slug"], "title": t["title"], "category": t["category"], "week": week.isoformat(),
+                        "note": rev["note"], "notes": t["notes"], "status": t.get("status")},
+                       *retired][:MAX_RETIRED]  # fmt: skip
+        else:
+            kept.append(t)
+    for n in r.new:
+        if len(kept) >= MAX_ACTIVE:
+            break
+        kept.append({**n, "born": week.isoformat(), "notes": [{"week": week.isoformat(), "decision": "new",
+                                                              "text": n["why"]}]})  # fmt: skip
+    return kept, retired
+
+
+def prompt_input(drivers_summary: Sequence[Mapping[str, Any]], rows: Sequence[Mapping[str, Any]],
+                 library: Sequence[Mapping[str, Any]],
+                 retired: Sequence[Mapping[str, Any]]) -> ThemesInput:  # fmt: skip
+    lib = [{k: t.get(k) for k in ("slug", "title", "category", "driver", "transform", "lag_months", "keywords",
+                                  "why", "status", "z", "signal", "companies", "with_demand", "share", "move",
+                                  "market_move", "history")}
+           | {"notes": [n["text"] for n in t.get("notes", [])[-3:]]} for t in library]  # fmt: skip
+    ind = [{k: r[k] for k in ("market", "industry", "companies", "with_demand", "share", "median_move")} for r in rows]
+    ret = [{"title": t["title"], "week": t["week"], "note": t["note"]} for t in retired[:10]]
+    return ThemesInput(json.dumps(list(drivers_summary), ensure_ascii=False), json.dumps(ind, ensure_ascii=False),
+                       json.dumps(lib, ensure_ascii=False), json.dumps(ret, ensure_ascii=False))  # fmt: skip
 
 
 # ---------------------------------------------------------------- the database
@@ -267,14 +429,19 @@ def scorecard(earlier: Sequence[Mapping[str, Any]], prices: Mapping[str, float])
 
 def gather(conn: psycopg.Connection[Any], week: date, today: date) -> list[Firm]:
     firms: dict[UUID, Firm] = {}
+    scores = repo.scores_for_week(conn, week)
     for market in ("us", "in"):
-        cs = [c for c in repo.companies(conn, market=market, in_universe=True) if c.id is not None and industry_of(c)]
+        cs = [c for c in repo.companies(conn, market=market, in_universe=True) if c.id is not None]
         ids = [c.id for c in cs if c.id is not None]
         series: Series = us_series(conn, cs) if market == "us" else india_series(conn, ids, today)
         for c in cs:
             assert c.id is not None
-            f = Firm(c, str(industry_of(c)))
-            f.move, f.price = move_12m(series.get(c.id, []), today)
+            s = series.get(c.id, [])
+            f = Firm(c, industry_of(c) or "Unclassified", series=s if market == "us" else ())
+            f.move, f.price = move_12m(s, today)
+            sc = scores.get(c.id)
+            if sc is not None:
+                f.evidence, f.bucket = float(sc.evidence), sc.bucket
             firms[c.id] = f
     ids = list(firms)
     snap = as_of(week)
@@ -292,38 +459,70 @@ def gather(conn: psycopg.Connection[Any], week: date, today: date) -> list[Firm]
     return list(firms.values())
 
 
-def build(conn: psycopg.Connection[Any], router: Router | None, week: date, today: date) -> dict[str, Any]:
+def driver_points(http: HttpClient, ids: Sequence[str]) -> tuple[dict[str, dv.Points], list[str]]:
+    out: dict[str, dv.Points] = {}
+    missing: list[str] = []
+    for i in ids:
+        try:
+            pts = fred.series(http, i)
+        except Exception as e:  # noqa: BLE001 - one series down must not stop the week's themes
+            missing.append(f"{i}: {type(e).__name__}")
+            continue
+        if pts:
+            out[i] = pts
+        else:
+            missing.append(f"{i}: empty")
+    return out, missing
+
+
+def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient, week: date, today: date,
+          force_rethink: bool = False, root: Path = REPO_ROOT) -> dict[str, Any]:  # fmt: skip
     firms = gather(conn, week, today)
     rows = industries(firms)
     medians = {m: round(statistics.median(f.move for f in firms if f.company.market == m and f.move is not None), 3)
                for m in ("us", "in") if any(f.company.market == m and f.move is not None for f in firms)}  # fmt: skip
-    cands = candidates(rows, medians)
-    prices = {str(f.company.id): f.price for f in firms if f.price}
-    earlier = [r for _, r in repo.recent_reports(conn, "themes", week, MEMORY_WEEKS)]
-    card = scorecard(earlier, prices)
-    body: dict[str, Any] = {"week": week.isoformat(), "as_of": today.isoformat(), "medians": medians,
-                            "industries": rows[:60], "candidates": len(cands), "themes": [], "reviews": [],
-                            "note": "", "scorecard": card, "dropped": [], "answered": False}  # fmt: skip
-    if router is None or not cands:
-        body["note"] = "" if cands else "No industry shows broad demand evidence this week."
-        return body
-    slim = [{k: c[k] for k in ("market", "industry", "companies", "with_demand", "share", "facts", "order_book",
-                               "accelerating", "median_move", "early")}
-            | {"market_median_move": medians.get(c["market"]),
-               "evidence": [{"id": e["id"], "company": e["code"] or e["name"], "what": e["what"], "move": e["move"]}
-                            for e in c["examples"]]} for c in cands]  # fmt: skip
-    industries_json = json.dumps(slim, ensure_ascii=False)
-    calls_json = json.dumps(card, ensure_ascii=False)
-    answer = router.call(ThemesInput(industries_json, calls_json))
-    if isinstance(answer, Deferred):
-        body["note"] = ""
-        body["dropped"] = [f"no answer: {answer.reason}"[:200]]
-        return body
-    themes, reviews, note, dropped = check_answer(answer.content, cands, industries_json + calls_json, card)
-    for t in themes:
-        for e in t["evidence"]:
-            e["price"] = prices.get(e["company_id"])
-    body.update({"themes": themes, "reviews": reviews, "note": note, "dropped": dropped, "answered": True})
+    drv = dv.load(root)
+    points, missing = driver_points(http, list(drv))
+    shares = [r["share"] for r in rows]
+    last_year = today.year - 1
+    mkt = market_years(firms, last_year)
+    prev: dict[str, Any] = next((b for _, b in repo.recent_reports(conn, "themes", week, 1)), {})
+    library: list[dict[str, Any]] = list(prev.get("library") or seed(root))
+    retired: list[dict[str, Any]] = list(prev.get("retired") or [])
+    last = date.fromisoformat(prev["last_rethink"]) if prev.get("last_rethink") else None
+
+    def refresh(lib: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [{**t, **numbers(t, firms, points, drv, medians, shares, mkt, last_year)} for t in lib]
+
+    library = refresh(library)
+    due, why = rethink_due(week, last, triggered(prev.get("library") or [], library))
+    if force_rethink and not due:
+        due, why = True, "asked for"
+    body: dict[str, Any] = {"week": week.isoformat(), "as_of": today.isoformat(), "version": 2, "medians": medians,
+                            "industries": rows[:80], "missing_drivers": missing,
+                            "drivers": {k: d.name for k, d in drv.items()},
+                            "last_rethink": last.isoformat() if last else None, "rethought": False, "why": "",
+                            "note": prev.get("note", ""), "dropped": []}  # fmt: skip
+    if due and router is not None:
+        inp = prompt_input([dv.summary(points[k], d) for k, d in drv.items() if k in points], rows, library, retired)
+        answer = router.call(inp)
+        if isinstance(answer, Deferred):
+            body["dropped"] = [f"no answer: {answer.reason}"[:200]]
+        else:
+            text = inp.drivers_json + inp.industries_json + inp.library_json
+            r = check_answer(answer.content, library, firms, drv, text)
+            library, retired = apply(library, retired, r, week)
+            library = refresh(library)
+            for t in library:
+                t["z_at_rethink"] = t.get("z")
+            body.update({"rethought": True, "why": why, "last_rethink": week.isoformat(), "note": r.note,
+                         "dropped": r.dropped})  # fmt: skip
+    elif due:
+        body["dropped"] = ["no rethink: no LLM provider is configured"]
+    body["next_rethink"] = next_rethink(week).isoformat()
+    order = {"building": 0, "priced_in": 1, "watching": 2, "fading": 3}
+    body["library"] = sorted(library, key=lambda t: (order.get(t.get("status", ""), 9), -(t.get("z") or -9)))
+    body["retired"] = retired
     return body
 
 
@@ -331,22 +530,28 @@ def main(argv: list[str] | None = None) -> int:
     from pipeline.db import facts_repo
     from pipeline.llm.clients import providers
     from pipeline.llm.quotas import Quotas
-    from pipeline.net.http import HttpClient
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--week", type=date.fromisoformat, default=None, help="the scored week (default: the last Friday)")
+    ap.add_argument("--rethink", action="store_true", help="rethink the library now, whatever the calendar says")
     a = ap.parse_args(argv)
     today = datetime.now(UTC).date()
     week = a.week or last_friday(today)
     settings = Settings.from_env()
     quotas = Quotas.load()
+    http = HttpClient(settings)
     with psycopg.connect(settings.database_url) as conn:
-        router = (facts_repo.logged_router(conn, providers(HttpClient(settings), settings, quotas), quotas, today)
+        router = (facts_repo.logged_router(conn, providers(http, settings, quotas), quotas, today)
                   if quotas.configured() else None)  # fmt: skip
-        body = build(conn, router, week, today)
+        body = build(conn, router, http, week, today, force_rethink=a.rethink)
         repo.upsert_report(conn, "themes", week, body)
-    print(f"themes {week}: {len(body['industries'])} industries, {body['candidates']} candidates, "
-          f"{len(body['themes'])} themes, {len(body['dropped'])} dropped, answered={body['answered']}")  # fmt: skip
+    counts: dict[str, int] = defaultdict(int)
+    for t in body["library"]:
+        counts[t["status"]] += 1
+    # the log is public: counts only
+    print(f"themes {week}: {len(body['library'])} in the library ({dict(counts)}), {len(body['retired'])} retired, "
+          f"rethought={body['rethought']}, {len(body['dropped'])} dropped, {len(body['missing_drivers'])} drivers "
+          f"missing; next rethink {body['next_rethink']}")  # fmt: skip
     return 0
 
 

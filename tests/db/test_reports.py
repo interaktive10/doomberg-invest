@@ -62,8 +62,8 @@ def test_winners_report_reads_both_markets_and_upserts(conn: psycopg.Connection[
     assert conn.execute("select count(*) from reports").fetchone() == (1,)
 
 
-class ThemeRouter:
-    """P-08 through a fake provider: names Grid with its first two pieces of evidence."""
+class LibraryRouter:
+    """P-08 through a fake provider: keeps the replacement theme, retires the chip one, adds a housing-parts theme."""
 
     def __init__(self) -> None:
         self.inputs: list[Any] = []
@@ -72,47 +72,84 @@ class ThemeRouter:
         from pipeline.llm.router import Done
 
         self.inputs.append(data)
-        ev = [e["id"] for c in json.loads(data.industries_json) if c["industry"] == "Grid" for e in c["evidence"]][:2]
-        return Done({"themes": [{"market": "us", "industry": "Grid", "title": "Grid demand builds quietly",
-                                 "why": "Most grid companies grow faster while prices barely moved.",
-                                 "wrong_if": "growth slows", "confidence": "medium", "evidence": ev}],
-                     "reviews": [], "note": "First call."}, "fake", "m")  # fmt: skip
+        return Done({"reviews": [{"slug": "vehicle-replacement", "decision": "keep", "note": "The wave is still due."},
+                                 {"slug": "chip-cycle", "decision": "retire", "note": "No chip makers here."}],
+                     "new": [{"title": "Home sales lift fittings", "category": "Housing & construction",
+                              "driver": "HSN1F", "reading": "yoy", "lag_months": 6, "keywords": ["paint"],
+                              "why": "Homes sold now get painted and fitted out within months.",
+                              "wrong_if": "Paint sales stay flat."}],
+                     "note": "Housing joins the library."}, "fake", "m")  # fmt: skip
 
 
-def test_themes_report_names_the_quiet_industry_and_remembers_it(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
-    """Grid: revenue accelerating at 5 of 6 companies, prices flat; Chips: no evidence, prices up. P-08 reads Grid
-    alone; its theme is stored with each company's price, and next week's run hands it back as an earlier call."""
+def mocked_http(tmp_path: Path) -> Any:
+    from pipeline.net import fred
+    from pipeline.net.http import HttpClient
+    from pipeline.settings import Settings
+
+    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    for f in (Path(__file__).resolve().parents[2] / "fixtures" / "fred").glob("*.csv"):
+        http.register_mock(fred.URL.format(id=f.stem), f.read_bytes())
+    return http  # the other drivers aren't registered: they show as missing, the week goes on
+
+
+def test_themes_library_numbers_weekly_rethink_monthly(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
+    """The seed library gets its numbers (US vehicle sales from FRED, the tire makers' evidence and prices, a history
+    check); the first run rethinks (keep, retire, a new housing theme matched by name in India's coarse sector); the
+    next week carries the library with its notes and doesn't rethink again."""
     from pipeline.reports import themes
 
-    names = [(f"G{i}", "Grid") for i in range(6)] + [(f"C{i}", "Chips") for i in range(6)]
-    repo.upsert_us_companies(conn, [Company(market="us", name=f"Co {t}", cik=f"{700000 + i:010d}", ticker=t,
-                                            industry=ind) for i, (t, ind) in enumerate(names)])  # fmt: skip
-    ids = {c.ticker: c.id for c in repo.companies(conn, market="us")}
-    rows = []
-    for t, _ in names:
-        speed = t.startswith("G") and t != "G5"
-        revs = [100] * 6 + ([110, 130, 150] if speed else [100] * 3)
-        for q, rev in enumerate(revs):
-            y, m = 2024 + q // 4, 3 * (q % 4) + 3
-            rows.append(FundamentalsRow(company_id=ids[t], period_end=date(y, m, 28), fiscal_label=f"Q{q % 4 + 1}",
-                                        filed_at=datetime(y, m, 28, tzinfo=UTC) + timedelta(days=30),
-                                        revenue=Decimal(rev), currency="USD", source="sec_xbrl"))  # fmt: skip
-    repo.insert_fundamentals(conn, rows)
+    us = [(f"T{i}", "Tires & Inner Tubes") for i in range(4)] + [
+        (f"B{i}", "National Commercial Banks") for i in range(6)
+    ]
+    repo.upsert_us_companies(conn, [Company(market="us", name=f"Co {t}", cik=f"{600000 + i:010d}", ticker=t,
+                                            industry=ind) for i, (t, ind) in enumerate(us)])  # fmt: skip
+    repo.upsert_in_companies(conn, [Company(market="in", name=f"{n} Paints Ltd", nse_symbol=f"{n}PAINT",
+                                            isin=f"INE00{i}P01011")
+                                    for i, n in enumerate(["Asia", "Berg", "Kans"])])  # fmt: skip
     asset = tmp_path / "us_month_prices.csv.gz"
-    bars = {}
-    for t, _ in names:
-        up = t.startswith("C")
-        bars[t] = month_bars([20.0 + (j * 1.5 if up else 0) for j in range(22)])  # Dec 2024 .. Sep 2026
-    write_month_csv(asset, bars)
+    write_month_csv(asset, {t: month_bars([20.0] * 23) for t, _ in us})  # Dec 2024 .. Oct 2026
     state.put(conn, winners.LAB_ASSET, asset.read_bytes())
-    week = date(2026, 10, 23)
-    router = ThemeRouter()
-    body = themes.build(conn, router, week, date(2026, 10, 25))  # type: ignore[arg-type]
-    assert body["answered"] and body["candidates"] == 1 and [x["industry"] for x in body["themes"]] == ["Grid"]
-    assert all(e["price"] == 20.0 for e in body["themes"][0]["evidence"]) and body["themes"][0]["early"]
-    sent = json.loads(router.inputs[0].industries_json)
-    assert [c["industry"] for c in sent] == ["Grid"] and "company_id" not in json.dumps(sent)
+    ind = {c.nse_symbol: c.id for c in repo.companies(conn, market="in")}
+    weeks = [date(2025, 10, 3) + timedelta(weeks=k) for k in range(58)]
+    repo.upsert_prices(conn, [PriceW(company_id=cid, week_end=d, close=Decimal(100), source="nse")
+                              for cid in ind.values() for d in weeks])  # fmt: skip
+    router = LibraryRouter()
+    http = mocked_http(tmp_path)
+    week = date(2026, 11, 6)
+    body = themes.build(conn, router, http, week, date(2026, 11, 7))  # type: ignore[arg-type]
+    lib = {t["slug"]: t for t in body["library"]}
+    assert body["rethought"] and body["why"] == "the first rethink" and body["note"] == "Housing joins the library."
+    assert "chip-cycle" not in lib and body["retired"][0]["slug"] == "chip-cycle"
+    v = lib["vehicle-replacement"]
+    assert v["companies"] == 4 and v["markets"] == ["us"] and v["chart"] and isinstance(v["z"], float)
+    assert v["notes"][-1]["text"] == "The wave is still due." and v["status"] in (
+        "building",
+        "watching",
+        "fading",
+        "priced_in",
+    )
+    home = lib["home-sales-lift-fittings"]
+    assert home["companies"] == 3 and home["markets"] == ["in"] and home["origin"] == "ai"
+    assert any(m.startswith("NEWORDER") for m in body["missing_drivers"])  # not registered: missing, not fatal
+    sent = json.loads(router.inputs[0].library_json)
+    assert {x["slug"] for x in sent} >= {"vehicle-replacement", "chip-cycle"} and "company_id" not in router.inputs[
+        0
+    ].library_json
     repo.upsert_report(conn, "themes", week, body)
-    later = themes.build(conn, router, week + timedelta(days=7), date(2026, 11, 1))  # type: ignore[arg-type]
-    assert later["scorecard"][0]["industry"] == "Grid" and later["scorecard"][0]["since"] == 0.0
-    assert json.loads(router.inputs[1].calls_json)[0]["title"] == "Grid demand builds quietly"
+    later = themes.build(conn, router, http, week + timedelta(days=7), date(2026, 11, 14))  # type: ignore[arg-type]
+    assert not later["rethought"] and len(router.inputs) == 1 and later["last_rethink"] == "2026-11-06"
+    assert {t["slug"] for t in later["library"]} == set(lib) and later["next_rethink"] == "2026-12-04"
+
+
+def test_india_sectors_come_from_nse_index_lists(conn: psycopg.Connection[Any]) -> None:
+    from pipeline.india import sectors
+
+    repo.upsert_in_companies(conn, [Company(market="in", name="ABB India Ltd.", nse_symbol="ABB", isin="INE117A01022"),
+                                    Company(market="in", name="Other Ltd", nse_symbol="OTHR",
+                                            isin="INE999Z01011")])  # fmt: skip
+    lists = sectors.parse(
+        "Company Name,Industry,Symbol,Series,ISIN Code\nABB India Ltd.,Capital Goods,ABB,EQ,INE117A01022\n"
+    )
+    assert sectors.sectors(conn, lists) == 1 and sectors.sectors(conn, lists) == 0  # unchanged the second time
+    got = {c.nse_symbol: c.sector for c in repo.companies(conn, market="in")}
+    assert got == {"ABB": "Capital Goods", "OTHR": None}

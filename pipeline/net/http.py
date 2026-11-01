@@ -50,6 +50,7 @@ ALLOWED_HOSTS: dict[str, float] = {
     "api.groq.com": 0.0,
     "openrouter.ai": 0.0,
     "api.github.com": 0.0,
+    "fred.stlouisfed.org": 1.0,  # Themes' demand drivers (net/fred.py; docs/SPEC_ISSUES.md 68)
 }
 
 BROWSER_HEADERS = {
