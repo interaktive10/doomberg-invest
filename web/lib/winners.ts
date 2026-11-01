@@ -93,3 +93,12 @@ export function barScale(rows: readonly BacktestRow[]): number {
 export function marketName(m: "us" | "in"): string {
   return m === "us" ? "US" : "India";
 }
+
+/** Home's Winners door: last year's biggest gainer, the US first (null before the first report). */
+export function topWinner(r: WinnersReport | null): (WinnerPick & { year: number }) | null {
+  for (const m of r?.markets ?? []) {
+    const p = m.top[0];
+    if (p) return { ...p, year: m.year };
+  }
+  return null;
+}
