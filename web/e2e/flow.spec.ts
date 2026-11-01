@@ -72,7 +72,7 @@ test("Home: three doors, To do live from the theses and What changed from the se
   const doors = page.getByRole("navigation", { name: "Shortcuts" });
   await expect(doors.getByRole("link", { name: /^2 undervalued/ })).toHaveAttribute("href", "/candidates");
   await expect(doors.getByRole("link", { name: /^2 to do/ })).toHaveAttribute("href", "/theses");
-  await expect(doors.getByRole("link", { name: /^\+312% ECHO/ })).toHaveAttribute("href", "/winners");
+  await expect(doors.getByRole("link", { name: /^\+184% SGMA leads 2026/ })).toHaveAttribute("href", "/winners"); // this year's leader
   await expect(doors).toContainText("+2 on Watch");
   // the funnel and the per-source list are gone from Home (the headline says it; Settings lists the sources)
   await expect(page.getByRole("region", { name: "From 5 companies to 2 ideas" })).toHaveCount(0);

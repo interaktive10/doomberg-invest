@@ -325,6 +325,17 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         return {"company_id": cid, "code": code, "name": name, "sector": sector, "ret": ret, "start": 10.0,
                 "end": 10.0 * (1 + ret), "ytd": ytd}  # fmt: skip
 
+    def lead(cid: str, code: str, name: str, sector: str, ytd: float) -> dict[str, object]:
+        return {
+            "company_id": cid,
+            "code": code,
+            "name": name,
+            "sector": sector,
+            "ytd": ytd,
+            "start": 10.0,
+            "end": 10.0 * (1 + ytd),
+        }
+
     years = [
         (2016, 0.31, 0.12),
         (2017, 0.44, 0.19),
@@ -344,6 +355,9 @@ def seed(conn: psycopg.Connection[Any]) -> None:
                                  pick(LUMEN, "LMNW", "Lumen Water Co.", "Utilities", 1.87, 0.04),
                                  pick(SIGMA, "SGMA", "Sigma Retail Corp.", "Consumer", 1.55, 0.11),
                                  pick(DELTA, "DLTP", "Delta Pharma Inc.", "Health Care", 1.32, -0.15)],
+         "leaders": [lead(SIGMA, "SGMA", "Sigma Retail Corp.", "Consumer", 1.84),
+                     lead(ECHO, "ECHO", "Echo Grid Corp.", "Industrials", 0.92),
+                     lead(LUMEN, "LMNW", "Lumen Water Co.", "Utilities", 0.47)],
          "this_year": {"through": "2026-08-31", "picks": 0.022, "average": 0.071, "stocks": 2400},
          "backtest": {"rows": [{"year": y, "picks": [], "ret": r, "average": a, "stocks": 2000} for y, r, a in years],
                       "summary": {"years": 10, "first": 2016, "last": 2025, "growth": 4.31, "average_growth": 2.68,
@@ -351,6 +365,8 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         {"market": "in", "year": 2025, "currency": "INR", "priced": 1210, "universe": 1984, "min_price": 20.0,
          "min_cap": 5e10, "top": [pick(KAPPA, "KAPPA", "Kappa Cables Ltd", "Industrials", 2.05, 0.09),
                                   pick(TARA, "TARAPUMP", "Tara Pumps Ltd", "Industrials", 1.64, 0.21)],
+         "leaders": [lead(TARA, "TARAPUMP", "Tara Pumps Ltd", "Capital Goods", 1.12),
+                     lead(KAPPA, "KAPPA", "Kappa Cables Ltd", "Capital Goods", -0.02)],
          "this_year": {"through": "2026-09-18", "picks": 0.15, "average": 0.06, "stocks": 900}, "backtest": None},
     ]}  # fmt: skip
     x("insert into reports (name, week_end, body) values ('winners', %s, %s)", (W, json.dumps(winners)))

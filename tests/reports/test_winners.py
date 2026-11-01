@@ -98,3 +98,16 @@ def test_the_market_report_shows_this_year_so_far() -> None:
     assert m["year"] == 2025 and [t["code"] for t in m["top"]] == ["C5", "C4", "C3", "C2", "C1"]
     assert m["this_year"]["through"] == "2026-06-30" and m["top"][0]["ytd"] == pytest.approx(2 / 15)
     assert m["backtest"] is None  # too few names to compare with
+
+
+def test_this_years_leaders_use_the_same_rules_through_the_latest_close() -> None:
+    ids = [uuid4() for _ in range(4)]
+    series = {ids[0]: months(2026, [10, 11, 12, 13, 20]), ids[1]: months(2026, [10, 10, 11, 12, 15]),
+              ids[2]: months(2026, [3, 4, 6, 9, 30]), ids[3]: months(2026, [10, 10, 10, 60, 61])}  # fmt: skip
+    versions = {cid: [shares(cid, 1e9, date(2025, 2, 1))] for cid in ids}
+    picks = w.ytd_leaders(series, versions, "us", 2026, date(2026, 4, 30))
+    # under $5 at the start (ids[2]) and a 500% month (ids[3]) sit out
+    assert [p.company_id for p in picks] == [ids[0], ids[1]] and picks[0].ret == pytest.approx(1.0)
+    m = w.market_report("us", {c: Company(id=c, market="us", name=f"C{i}", ticker=f"C{i}") for i, c in enumerate(ids)},
+                        series, versions, date(2026, 5, 10), universe=4)  # fmt: skip
+    assert [x["code"] for x in m["leaders"]] == ["C0", "C1"] and m["this_year"]["through"] == "2026-04-30"

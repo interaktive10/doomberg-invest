@@ -90,8 +90,9 @@ export default async function Home() {
           icon="trophy"
           tone="winner"
           value={winner ? signedPct(winner.ret) : "–"}
+          valueClass={winner ? (winner.ret >= 0 ? "text-up" : "text-down") : undefined}
           label={winner ? `${winner.code ?? winner.name}` : "winners"}
-          sub={winner ? `top of ${winner.year}` : "computed Saturday"}
+          sub={winner ? winner.label : "computed Saturday"}
           i={2}
         />
       </nav>
@@ -157,11 +158,11 @@ export default async function Home() {
 const SHORTCUT_TONE = {
   value: { tile: "bg-tint-sage", icon: "text-up" },
   list: { tile: "bg-tint-sky", icon: "text-accent" },
-  winner: { tile: "bg-tint-rose", icon: "text-pink" },
+  winner: { tile: "bg-tint-sand", icon: "text-warn" },
 } as const;
 
 /** One of Home's three doors: a big figure, what it counts, one small line. */
-function Shortcut({ href, icon, tone, value, label, sub, i }: { href: string; icon: IconName; tone: keyof typeof SHORTCUT_TONE; value: number | string; label: string; sub: string; i: number }) {
+function Shortcut({ href, icon, tone, value, label, sub, i, valueClass }: { href: string; icon: IconName; tone: keyof typeof SHORTCUT_TONE; value: number | string; label: string; sub: string; i: number; valueClass?: string }) {
   const t = SHORTCUT_TONE[tone];
   return (
     <Link
@@ -170,7 +171,7 @@ function Shortcut({ href, icon, tone, value, label, sub, i }: { href: string; ic
       className={cn("rise press flex min-w-0 flex-col gap-1 rounded-sheet p-3.5 text-fg no-underline transition-transform duration-150 hover:-translate-y-0.5 hover:text-fg md:p-5", t.tile)}
     >
       <Icon name={icon} className={cn("size-5 md:size-6", t.icon)} strokeWidth={2.2} />
-      <span className="num mt-1 truncate text-[24px] leading-none font-bold tracking-[-0.03em] md:text-[34px]">{value}</span>
+      <span className={cn("num mt-1 truncate text-[24px] leading-none font-bold tracking-[-0.03em] md:text-[34px]", valueClass)}>{value}</span>
       <span className="truncate text-[13px] font-semibold md:text-[15px]">{label}</span>
       <span className="hidden truncate text-[12px] text-muted sm:block md:text-[13px]">{sub}</span>
       <LinkPending />
