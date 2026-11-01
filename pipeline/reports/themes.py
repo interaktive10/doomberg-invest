@@ -173,7 +173,7 @@ def allowed_numbers(text: str) -> set[str]:
     """The numbers the input states, and each fraction as the percent a writer says it as (0.123 -> 12.3 and 12;
     -0.05 -> 5): a theme may say "up 12%" for a median move of 0.12, never a number the input lacks."""
     out = set()
-    for raw in NUMBER.findall(text):
+    for raw in NUMBER.findall(re.sub(r"\be\d+\b", "", text)):  # evidence ids (e1, e2, ...) state no number
         n = _norm(raw)
         out.add(n)
         v = float(n)

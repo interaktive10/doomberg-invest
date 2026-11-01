@@ -129,3 +129,4 @@ def test_a_theme_may_say_a_fraction_as_its_percent() -> None:
     bad = answer(why="Demand at 57% of grid companies, and the price moved only 47%.")
     assert t.check_answer(bad, c, text, [])[3][0].endswith("a number the input lacks")
     assert {"57", "57.1", "2", "12"} <= t.allowed_numbers("0.571 0.02 0.12") and "3" not in t.allowed_numbers("0.02")
+    assert "17" not in t.allowed_numbers('{"id": "e17", "move": 0.02}')  # an evidence id is not a number
