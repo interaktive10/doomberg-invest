@@ -117,3 +117,16 @@ def test_reviews_name_only_earlier_calls_and_the_scorecard_measures_them() -> No
         {"market": "us", "industry": "Oil", "decision": "drop", "reason": "never called"}]}  # fmt: skip
     _, reviews, _, _ = t.check_answer(ans, cands(), "{}", card)
     assert reviews == [{"market": "us", "industry": "Grid", "decision": "keep", "reason": "orders keep coming"}]
+
+
+def test_a_theme_may_say_a_fraction_as_its_percent() -> None:
+    """Review of the first live run's risk: the input says 0.02 and 0.571; "2%" and "57%" (or "57.1%") are those
+    numbers, "47%" is not."""
+    c = cands()
+    text = json.dumps(c) + json.dumps({"share": 0.571, "market_median_move": 0.12})
+    ok = answer(why="Demand at 57% of grid companies, and the price moved only 2% while the market moved 12%.")
+    assert t.check_answer(ok, c, text, [])[0]
+    bad = answer(why="Demand at 57% of grid companies, and the price moved only 47%.")
+    assert t.check_answer(bad, c, text, [])[3][0].endswith("a number the input lacks")
+    assert {"57", "57.1", "2", "12"} <= t.allowed_numbers("0.571 0.02 0.12") and "3" not in t.allowed_numbers("0.02")
+    assert "17" not in t.allowed_numbers('{"id": "e17", "move": 0.02}')  # an evidence id is not a number
