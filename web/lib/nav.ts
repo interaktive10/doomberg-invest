@@ -17,8 +17,8 @@ export const MAIN: readonly Place[] = [
   { href: "/", label: "Home", icon: "home", tone: "accent" },
   { href: "/candidates", label: "Undervalued", icon: "tag", tone: "up", short: "Value" },
   { href: "/themes", label: "Themes", icon: "spark", tone: "violet" },
-  { href: "/winners", label: "Winners", icon: "trophy", tone: "pink" },
-  { href: "/theses", label: "My list", icon: "bookmark", tone: "warn" },
+  { href: "/winners", label: "Winners", icon: "trophy", tone: "warn" },
+  { href: "/theses", label: "My list", icon: "bookmark", tone: "pink" },
 ];
 
 export const MORE: readonly Place[] = [
