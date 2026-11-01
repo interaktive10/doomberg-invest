@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LinkPending } from "@/components/link-pending";
 import { Chip } from "@/components/chip";
 import { Icon } from "@/components/icons";
 import { Empty, Section } from "@/components/page";
@@ -14,7 +15,7 @@ import { GROUP_LABEL, STATE_LABEL, type Group } from "@/lib/theses";
 // The Theses screen's groups and rows (overhaul PR 4). Drawn as clean rows (overhaul PR 6): the ticker tile, the name
 // with its state and the kill criteria triggered as a chip in words at every width, what the row asks of you and the
 // next review, and Evidence now as a ring (and what it was at the card; PR 6 final review V4-7). Home's To do lists the
-// same Needs you group with its own rows (app/(app)/page.tsx).
+// same Needs you group with its own rows (app/(app)/(home)/page.tsx).
 
 /** A group's line under its title: only Closed, whose summary has room for it; the rows of the other two say what
  * they ask (PR 6 final review EYE-18). */
@@ -67,6 +68,7 @@ export function ThesisRows({ list, figures }: { list: readonly Thesis[]; figures
                 >
                   {c ? c.name : t.company_id}
                   {c ? <span className="sr-only"> ({code(c)})</span> : null}
+                  <LinkPending />
                 </Link>
                 <Badge variant={STATE_BADGE[t.state]}>{STATE_LABEL[t.state]}</Badge>
                 {kills.length > 0 ? (
