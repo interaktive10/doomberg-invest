@@ -62,16 +62,20 @@ test("the nav has four places and More; the Screener's and the Capex Desk's old 
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
 });
 
-test("Home: the funnel strip, To do live from the theses and What changed from the seeded digest (overhaul PR 5, drawn in PR 6)", async ({ page }) => {
+test("Home: three doors, To do live from the theses and What changed from the seeded digest (overhaul PR 5, drawn in PR 6)", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
   // the digest's week, and one line that leads with the answer: nothing new, one candidate per market on the board
   await expect(page.getByText("Week 38 · Sep 14–18")).toBeVisible();
   await expect(page.getByRole("main")).toContainText("A quiet week: nothing new cleared the bar. Two ideas are still worth your time.");
-  // the funnel: the markets' lines added up into four numbers and one insight; the digest's own lines under Details
-  const funnel = page.getByRole("region", { name: "From 5 companies to 2 ideas" });
-  await expect(funnel).toContainText("1 of 5 shows only one kind of signal, so its score stops at 55.");
-  await expect(funnel).toContainText("US 4 → stage 4 → candidates 1 → new 0 · 1 of 4 fire one family, capped at 55");
+  // three doors (SPEC_ISSUES 65): the names on the board (and on Watch), what needs you, last year's top gainer
+  const doors = page.getByRole("navigation", { name: "Shortcuts" });
+  await expect(doors.getByRole("link", { name: /^2 undervalued/ })).toHaveAttribute("href", "/candidates");
+  await expect(doors.getByRole("link", { name: /^2 to do/ })).toHaveAttribute("href", "/theses");
+  await expect(doors.getByRole("link", { name: /^\+312% ECHO/ })).toHaveAttribute("href", "/winners");
+  await expect(doors).toContainText("+2 on Watch");
+  // the funnel and the per-source list are gone from Home (the headline says it; Settings lists the sources)
+  await expect(page.getByRole("region", { name: "From 5 companies to 2 ideas" })).toHaveCount(0);
   // To do is the Theses screen's Needs you group: the card to decide (ECHO) and the thesis in review (OMEGA)
   const todo = page.getByRole("region", { name: /^To do/ });
   await expect(todo.getByRole("link", { name: "Echo Grid Corp. (ECHO)" })).toBeVisible();
@@ -191,12 +195,9 @@ test("a board per market and the Watch tab (docs/SPEC_ISSUES.md 56)", async ({ p
   await expect(card(page, "Lumen Water Co.")).toHaveCount(0);
   await page.getByRole("group", { name: "Markets" }).getByRole("link", { name: /^Both/ }).click();
   await expect(page.getByRole("list", { name: "Candidates in the US" }).getByRole("listitem").filter({ hasText: "Lumen Water Co." })).toHaveCount(1);
-  // Home: On the board and Watch, each per market
+  // Home: On the board per market; Watch is counted on the Undervalued door, its names on the Watch tab
   await page.goto("/");
-  const watch = page.getByRole("region", { name: "Watch" });
-  await expect(watch.getByRole("list", { name: "US" }).getByRole("link", { name: /LMNW Lumen Water Co\./ })).toBeVisible();
-  await expect(watch.getByRole("list", { name: "India" }).getByRole("link", { name: /TARAPUMP Tara Pumps Ltd/ })).toBeVisible();
-  await expect(watch.getByRole("link", { name: "All 2 on Watch" })).toHaveAttribute("href", "/candidates?bucket=watch");
+  await expect(page.getByRole("region", { name: "Watch" })).toHaveCount(0);
   const board = page.getByRole("region", { name: "On the board" });
   await expect(board.getByRole("list", { name: "US" }).getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toBeVisible();
 });

@@ -83,6 +83,9 @@ const BUCKET_BADGE: Record<Bucket, "default" | "secondary" | "destructive" | "ou
   none: "outline",
 };
 
+/** The first three charts show; the rest fold under "more charts" (SPEC_ISSUES 65: show less, let the reader ask). */
+const KEY_CHARTS = 3;
+
 /** The quarterly charts, in the order a reader asks: is it growing, is it profitable, is the cash real, is it diluting,
  * is it levered, is there an order book. One shows only when its series has a value. Each has its own colour, as the
  * Company mock: sales in the accent, profitability in the business green, cash in the insiders blue. */
@@ -391,8 +394,9 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
         {charts.length === 0 ? (
           <Empty>No quarterly series yet: the weekly scoring run computes them.</Empty>
         ) : (
+          <>
           <ChartGrid className="gap-5">
-            {charts.map((ch) => (
+            {charts.slice(0, KEY_CHARTS).map((ch) => (
               <LineChartCard
                 key={ch.title}
                 title={ch.title}
@@ -412,6 +416,32 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
               />
             ))}
           </ChartGrid>
+          {charts.length > KEY_CHARTS ? (
+            <Disclosure summary={`${charts.length - KEY_CHARTS} more charts`} className="mt-1">
+              <ChartGrid className="mt-3 gap-5">
+                {charts.slice(KEY_CHARTS).map((ch) => (
+                  <LineChartCard
+                    key={ch.title}
+                    title={ch.title}
+                    data={data}
+                    series={ch.series}
+                    format={ch.format}
+                    currency={currency}
+                    tone={ch.tone}
+                    surface="sheet"
+                    note={trendNote(
+                      data.map((r) => {
+                        const v = r[ch.series[0]!.key];
+                        return typeof v === "number" ? v : null;
+                      }),
+                      ch.format,
+                    )}
+                  />
+                ))}
+              </ChartGrid>
+            </Disclosure>
+          ) : null}
+          </>
         )}
       </Section>
 

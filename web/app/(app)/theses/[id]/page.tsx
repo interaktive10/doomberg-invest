@@ -53,6 +53,22 @@ const SECTION_TONE: Record<string, Tone> = {
   risks: "down",
 };
 
+/** The card's sections read first (SPEC_ISSUES 65): why it may be mispriced and the risks; facts, inferences and
+ * assumptions fold under one disclosure (a citation that points into it opens it: components/open-target.tsx). */
+const UP_FRONT = new Set(["why it may be mispriced", "risks"]);
+
+function CardPart({ title, body, cite }: { title: string; body: string; cite: Parameters<typeof Markdown>[0]["cite"] }) {
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-line pt-4 first:border-t-0 first:pt-0">
+      <h3 className="flex items-center gap-2 text-[17px] font-bold tracking-[-0.01em] text-fg">
+        <Dot tone={SECTION_TONE[title.toLowerCase()] ?? "muted"} className="size-2.5" />
+        {title}
+      </h3>
+      <Markdown text={body} cite={cite} />
+    </div>
+  );
+}
+
 function Hidden({ id }: { id: string }) {
   return <input type="hidden" name="thesis_id" value={id} />;
 }
@@ -288,15 +304,21 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                     <Markdown text={lead} cite={cite} />
                   </div>
                 ) : null}
-                {parts.sections.map((s, i) => (
-                  <div key={`${i}-${s.title}`} className="flex flex-col gap-1.5 border-t border-line pt-4 first:border-t-0 first:pt-0">
-                    <h3 className="flex items-center gap-2 text-[17px] font-bold tracking-[-0.01em] text-fg">
-                      <Dot tone={SECTION_TONE[s.title.toLowerCase()] ?? "muted"} className="size-2.5" />
-                      {s.title}
-                    </h3>
-                    <Markdown text={unlabel(s.title, s.body)} cite={cite} />
-                  </div>
+                {parts.sections.filter((s) => UP_FRONT.has(s.title.toLowerCase())).map((s, i) => (
+                  <CardPart key={`${i}-${s.title}`} title={s.title} body={unlabel(s.title, s.body)} cite={cite} />
                 ))}
+                {parts.sections.some((s) => !UP_FRONT.has(s.title.toLowerCase())) ? (
+                  <Disclosure
+                    summary={`The evidence: ${parts.sections.filter((s) => !UP_FRONT.has(s.title.toLowerCase())).map((s) => s.title.toLowerCase()).join(", ")}`}
+                    className="border-t border-line pt-4"
+                  >
+                    <div className="mt-3 flex flex-col gap-5">
+                      {parts.sections.filter((s) => !UP_FRONT.has(s.title.toLowerCase())).map((s, i) => (
+                        <CardPart key={`${i}-${s.title}`} title={s.title} body={unlabel(s.title, s.body)} cite={cite} />
+                      ))}
+                    </div>
+                  </Disclosure>
+                ) : null}
               </div>
             ) : (
               <NoCard state={t.state} validation={t.validation} />
