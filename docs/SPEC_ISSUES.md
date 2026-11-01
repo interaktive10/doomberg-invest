@@ -288,3 +288,9 @@
     1. Add `OPENROUTER_API_KEY` as a GitHub Actions secret. The pipeline runs in Actions; the key in Vercel serves only the web app.
     2. Set a monthly credit limit on the key in OpenRouter.
 
+
+64. **The app gets computed reports; the first is last year's winners** (Manzoor, 2026-11-01: "in india and usa, pick top five best performing assets each from the previous year. take jan to dec ... a portfolio which only invests in biggest gainers of the previous year vastly outperforms the index"). The brief has no such view and no place for a report computed from prices alone.
+    - Migration 0019 adds `reports (name, week_end, body jsonb)`, one row per report a week, closed to the API roles like every table. `pipeline/reports/winners.py` writes `winners`; the themes pass (next) writes `themes`.
+    - A winner is a price-only Jan-Dec return among names that were investable: at least $5 / Rs 20 when the year began and $1B / Rs 5,000 crore of market cap when it ended, from the diluted shares of the latest quarter filed by then (as_of; point-in-time). A US month up 300% or an Indian week up 100% is read as an unadjusted corporate action and the name sits the year out.
+    - The claim is tested, not assumed: a US backtest from 2012 (the Lab's month-end prices start in 2010) buys the previous year's five every January, equal weight, against the average investable stock. Today's universe only (survivorship): fair between the two, flattering for both. India has two years of prices: the list and this year so far, no backtest.
+    - It is not part of the Evidence score and changes no weight: a separate tab. Computed in weekly.yml's publish job (continue-on-error) and by the manual reports.yml.

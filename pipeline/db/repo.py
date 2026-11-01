@@ -787,3 +787,22 @@ def prune_scoring_history(conn: Conn, week: date, keep_from: date, none_from: da
         n = conn.execute(_q(f"delete from {t} where week_end < %s"), (keep_from,)).rowcount  # noqa: S608
         out[t] = out.get(t, 0) + n
     return out
+
+
+# ---------------------------------------------------------------- reports
+
+
+def upsert_report(conn: Conn, name: str, week: date, body: Mapping[str, Any]) -> None:
+    """One computed report a week (0019: winners, themes), replaced when its week is computed again."""
+    conn.execute(
+        _q("insert into reports (name, week_end, body) values (%s, %s, %s) on conflict (name, week_end) "
+           "do update set body = excluded.body, updated_at = now()"),
+        (name, week, Jsonb(dict(body))),
+    )  # fmt: skip
+
+
+def latest_report(conn: Conn, name: str) -> tuple[date, dict[str, Any]] | None:
+    row = conn.execute(
+        _q("select week_end, body from reports where name = %s order by week_end desc limit 1"), (name,)
+    ).fetchone()
+    return (row[0], row[1]) if row else None

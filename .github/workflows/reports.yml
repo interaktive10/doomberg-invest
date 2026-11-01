@@ -1,0 +1,29 @@
+name: reports
+# Manual: recompute the web app's computed reports now (pipeline/reports; docs/SPEC_ISSUES.md 64). weekly.yml's publish
+# job computes them every Saturday; this is for a change to a report or a first fill.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reports:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Last year's winners
+        run: uv run --frozen python -m pipeline.reports.winners
