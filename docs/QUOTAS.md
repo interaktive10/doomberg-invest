@@ -30,3 +30,4 @@ Non-LLM sources (documented fair-use limits, enforced in `pipeline/net/http.py`)
 | SEC EDGAR | ≤ 8 req/s, declared `SEC_USER_AGENT` | SEC fair-access policy (10 req/s max); BRIEF §2.7 |
 | NSE / BSE | 1 request per 3 s, cookie warm-up | BRIEF §4.3; old Doomberg measured about 3-4/min/IP (`docs/DOOMBERG_AUDIT.md` §4) |
 | Twelve Data (US weekly prices; the Signal Lab's history) | 1 request per 8 s, ≤ 400 symbols/week (one credit each, Saturday); the Lab's download (lab-prices.yml) ≤ 650 credits a run, Sunday to Thursday, while the minutes gate allows | free plan: 8 credits a minute, 800 a day, no card; key in `TWELVEDATA_API_KEY`; docs/SPEC_ISSUES.md 38, 51 |
+| FRED (Themes' 24 demand drivers) | 24 requests a week, 1 a second, 150 s in all; last good copies otherwise | free API key, no card, in `FRED_API_KEY`; without it the fredgraph CSV (rate-limited); docs/SPEC_ISSUES.md 68 |

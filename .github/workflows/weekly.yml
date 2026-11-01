@@ -242,6 +242,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: uv run --frozen python -m pipeline.reports.themes
       - name: Digest issue
         if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}

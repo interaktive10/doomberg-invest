@@ -24,7 +24,6 @@ def _settings(tmp_path: Path, mock: bool = True) -> Settings:
         "https://query1.finance.yahoo.com/v8/finance/chart/AAPL",
         "https://stooq.com/q/d/l/?s=aapl.us&i=w",
         "https://api.eia.gov/v2/electricity/",
-        "https://api.stlouisfed.org/fred/series",
         "http://www.sec.gov/files/company_tickers.json",  # plain http
         "https://www.sec.gov.evil.example/x",
     ],
