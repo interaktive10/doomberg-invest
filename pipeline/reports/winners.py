@@ -10,10 +10,12 @@ prices before anyone trusts it.
   closes (prices_w). A US month up more than MAX_STEP_US or an Indian week up more than MAX_STEP_IN is taken for an
   unadjusted corporate action or a bad print, and that name sits the year out.
 - A winner was investable: a price of at least MIN_PRICE when the year began, and a market cap (that close times the
-  diluted shares of the latest quarter filed by then: pipeline/db/pit.py) of at least MIN_CAP when it ended.
+  diluted shares, else shares outstanding, of the latest quarter filed by then: pipeline/db/pit.py) of at least
+  MIN_CAP when it ended.
 - The backtest (US only, from the Lab's 2010 start; India has two years of prices): in each year, the previous year's
   top five, equal weight, against the average stock investable at that year's start. Both read today's universe, so
-  companies that died since are missing from both (survivorship): the comparison is fair, the levels flatter.
+  companies that died since are missing from both (survivorship). That flatters the picks more than the average: a
+  year's big winner that later collapsed and delisted is exactly what the list can't show.
 
 `python -m pipeline.reports.winners [--week D]` writes reports('winners', D)."""
 
@@ -85,15 +87,22 @@ def jumpy(series: Sequence[tuple[date, Decimal]], start: date, end: date, max_st
     return False
 
 
+def _shares(r: FundamentalsRow) -> Decimal | None:
+    """Diluted shares, else shares outstanding (India's filings give paid-up capital over face value, no diluted
+    count: pipeline/india/results_xbrl.py)."""
+    return r.diluted_shares or r.shares_outstanding
+
+
 def shares_at(versions: Mapping[UUID, Sequence[FundamentalsRow]], cutoff: datetime) -> dict[UUID, Decimal]:
-    """Each company's diluted shares in the latest quarter filed before the cutoff (point in time)."""
+    """Each company's share count in the latest quarter filed before the cutoff (point in time)."""
     out: dict[UUID, Decimal] = {}
     for cid, rows in versions.items():
-        known = [r for r in rows if r.filed_at < cutoff and r.diluted_shares]
+        known = [r for r in rows if r.filed_at < cutoff and _shares(r)]
         if known:
             last = max(known, key=lambda r: (r.period_end, r.filed_at))
-            assert last.diluted_shares is not None
-            out[cid] = last.diluted_shares
+            n = _shares(last)
+            assert n is not None
+            out[cid] = n
     return out
 
 
@@ -102,18 +111,24 @@ def _cutoff(d: date) -> datetime:
 
 
 def year_winners(series: Series, versions: Mapping[UUID, Sequence[FundamentalsRow]], market: str, year: int,
-                 top: int = TOP) -> list[Pick]:  # fmt: skip
-    """The year's `top` gainers among the names investable that year (MIN_PRICE at its start, MIN_CAP at its end)."""
+                 top: int = TOP, skipped: dict[str, int] | None = None) -> list[Pick]:  # fmt: skip
+    """The year's `top` gainers among the names investable that year (MIN_PRICE at its start, MIN_CAP at its end);
+    `skipped` counts why the others were left out."""
     start, end = date(year - 1, 12, 31), date(year, 12, 31)
     shares = shares_at(versions, _cutoff(end))
     step = MAX_STEP_US if market == "us" else MAX_STEP_IN
+    why = skipped if skipped is not None else {}
     out = []
     for cid, s in series.items():
         a, b = close_at(s, start, TOLERANCE_DAYS[market]), close_at(s, end, TOLERANCE_DAYS[market])
-        if a is None or b is None or a < MIN_PRICE[market] or cid not in shares:
+        reason = ("no price at the start" if a is None else "no price at the end" if b is None
+                  else "under the price floor" if a < MIN_PRICE[market] else "no share count" if cid not in shares
+                  else "under the size floor" if b * shares[cid] < MIN_CAP[market]
+                  else "a jump read as a bad print" if jumpy(s, start, end, step) else None)  # fmt: skip
+        if reason is not None:
+            why[reason] = why.get(reason, 0) + 1
             continue
-        if b * shares[cid] < MIN_CAP[market] or jumpy(s, start, end, step):
-            continue
+        assert a is not None and b is not None
         out.append(Pick(cid, float(b / a - 1), a, b))
     return sorted(out, key=lambda p: p.ret, reverse=True)[:top]
 
@@ -206,7 +221,8 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
                   versions: Mapping[UUID, Sequence[FundamentalsRow]], today: date,
                   universe: int) -> dict[str, Any]:  # fmt: skip
     year = today.year - 1
-    picks = year_winners(series, versions, market, year)
+    skipped: dict[str, int] = {}
+    picks = year_winners(series, versions, market, year, skipped=skipped)
     # this year so far: through the latest close most of the investable names have (month-ends for the US)
     pool = investable_at_start(series, versions, market, today.year)
     ends = sorted((last[0] for cid in pool if (last := latest(series[cid])) is not None and last[0].year == today.year),
@@ -226,7 +242,7 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
     picks_ytd = [float(t["ytd"]) for t in top if t["ytd"] is not None]
     rows = backtest(series, versions, market, 2012, year) if market == "us" else []
     return {"market": market, "year": year, "currency": CURRENCY[market], "priced": len(series), "universe": universe,
-            "min_price": float(MIN_PRICE[market]), "min_cap": float(MIN_CAP[market]), "top": top,
+            "min_price": float(MIN_PRICE[market]), "min_cap": float(MIN_CAP[market]), "top": top, "skipped": skipped,
             "this_year": {"through": through.isoformat() if through else None,
                           "picks": fmean(picks_ytd) if picks_ytd else None,
                           "average": fmean(pool_ytd) if pool_ytd else None, "stocks": len(pool_ytd)},
@@ -257,7 +273,9 @@ def main(argv: list[str] | None = None) -> int:
         repo.upsert_report(conn, "winners", week, body)
     for m in body["markets"]:
         bt = (m["backtest"] or {}).get("summary") if m["backtest"] else None
+        left = ", ".join(f"{n} {why}" for why, n in sorted(m["skipped"].items(), key=lambda kv: -kv[1]))
         print(f"winners {m['market']} {m['year']}: {len(m['top'])} picks from {m['priced']} priced of {m['universe']}"
+              + (f" (left out: {left})" if left else "")
               + (f"; backtest {bt['first']}-{bt['last']}: picks {bt['cagr']:.1%} a year vs average "
                  f"{bt['average_cagr']:.1%}, ahead in {bt['beat']} of {bt['years']} years" if bt else ""))  # fmt: skip
     return 0
