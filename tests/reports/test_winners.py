@@ -43,8 +43,10 @@ def test_the_top_gainers_are_the_investable_ones() -> None:
     series[ids[8]] = months(2020, [10] * 6 + [60] * 7)  # one month up 500%: a bad print, sits out
     versions = {cid: [shares(cid, big, date(2019, 2, 1))] for cid in ids}
     versions[ids[7]] = [shares(ids[7], 10_000, date(2019, 2, 1))]
-    picks = w.year_winners(series, versions, "us", 2020)
+    skipped: dict[str, int] = {}
+    picks = w.year_winners(series, versions, "us", 2020, skipped=skipped)
     assert [p.company_id for p in picks] == [ids[5], ids[4], ids[3], ids[2], ids[1]]
+    assert skipped == {"under the price floor": 1, "under the size floor": 1, "a jump read as a bad print": 1}
     assert picks[0].ret == pytest.approx(0.5) and picks[0].start == Decimal(10)
 
 
@@ -62,7 +64,9 @@ def test_india_closes_within_ten_days_of_the_year_end() -> None:
     s = [(date(2023, 12, 29), Decimal(100)), (date(2024, 6, 28), Decimal(180)), (date(2024, 12, 27), Decimal(250))]
     assert w.close_at(s, date(2024, 12, 31), w.TOLERANCE_DAYS["in"]) == Decimal(250)
     assert w.close_at(s, date(2024, 12, 31), w.TOLERANCE_DAYS["us"]) is None
-    row = shares(cid, 1e9, date(2023, 6, 1)).model_copy(update={"currency": "INR", "source": "nse_xbrl"})
+    row = shares(cid, 1e9, date(2023, 6, 1)).model_copy(
+        update={"currency": "INR", "source": "nse_xbrl", "diluted_shares": None, "shares_outstanding": Decimal(10**9)}
+    )  # India's filings carry shares outstanding, no diluted count
     picks = w.year_winners({cid: s}, {cid: [row]}, "in", 2024)
     assert len(picks) == 1 and picks[0].ret == pytest.approx(1.5)
     doubled = [*s[:2], (date(2024, 7, 5), Decimal(400)), (date(2024, 12, 27), Decimal(450))]  # a week up 122%
