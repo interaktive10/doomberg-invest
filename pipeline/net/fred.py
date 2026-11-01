@@ -32,5 +32,5 @@ def parse(text: str) -> Points:
     return [(m, sum(vs) / len(vs)) for m, vs in sorted(months.items())]
 
 
-def series(http: HttpClient, series_id: str) -> Points:
-    return parse(http.get_bytes(URL.format(id=series_id)).decode("utf-8", errors="replace"))
+def series(http: HttpClient, series_id: str, timeout: float = 20.0) -> Points:
+    return parse(http.get_bytes(URL.format(id=series_id), timeout=timeout).decode("utf-8", errors="replace"))

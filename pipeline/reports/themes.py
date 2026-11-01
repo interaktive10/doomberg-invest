@@ -36,6 +36,7 @@ import json
 import re
 import statistics
 import sys
+import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -49,6 +50,7 @@ import psycopg
 import yaml
 
 from pipeline.db import repo
+from pipeline.db import state as db_state
 from pipeline.db.models import Company, FactRow, FundamentalsRow
 from pipeline.db.pit import as_of
 from pipeline.llm.router import Deferred, Router
@@ -459,30 +461,67 @@ def gather(conn: psycopg.Connection[Any], week: date, today: date) -> list[Firm]
     return list(firms.values())
 
 
-def driver_points(http: HttpClient, ids: Sequence[str]) -> tuple[dict[str, dv.Points], list[str]]:
+FRED_STATE = "fred_series"
+FRED_BUDGET_S = 150.0  # all the drivers' downloads together; past it, last good copies are used
+
+
+def driver_points(http: HttpClient, ids: Sequence[str], cached: Mapping[str, dv.Points] | None = None,
+                  budget: float = FRED_BUDGET_S) -> tuple[dict[str, dv.Points], list[str]]:  # fmt: skip
+    """Each driver's monthly points from FRED (20 s a request, FRED_BUDGET_S in all); a series that fails, comes back
+    empty or is past the budget uses its last good copy (`cached`), else is missing."""
     out: dict[str, dv.Points] = {}
     missing: list[str] = []
+    t0 = time.monotonic()
     for i in ids:
-        try:
-            pts = fred.series(http, i)
-        except Exception as e:  # noqa: BLE001 - one series down must not stop the week's themes
-            missing.append(f"{i}: {type(e).__name__}")
-            continue
-        if pts:
-            out[i] = pts
+        why = ""
+        if time.monotonic() - t0 > budget:
+            why = "over the time budget"
         else:
-            missing.append(f"{i}: empty")
+            try:
+                pts = fred.series(http, i)
+                if pts:
+                    out[i] = pts
+                    continue
+                why = "empty"
+            except Exception as e:  # noqa: BLE001 - one series down must not stop the week's themes
+                why = type(e).__name__
+        if cached and cached.get(i):
+            out[i] = cached[i]
+            missing.append(f"{i}: {why}, last good copy used")
+        else:
+            missing.append(f"{i}: {why}")
     return out, missing
+
+
+def load_cached(conn: psycopg.Connection[Any]) -> dict[str, dv.Points]:
+    stored = db_state.get(conn, FRED_STATE)
+    if stored is None:
+        return {}
+    doc = json.loads(stored.body)
+    return {k: [(date.fromisoformat(d), float(v)) for d, v in pts] for k, pts in doc.items()}
+
+
+def save_cached(conn: psycopg.Connection[Any], points: Mapping[str, dv.Points]) -> None:
+    doc = {k: [[d.isoformat(), v] for d, v in pts] for k, pts in points.items()}
+    db_state.put(conn, FRED_STATE, json.dumps(doc).encode())
 
 
 def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient, week: date, today: date,
           force_rethink: bool = False, root: Path = REPO_ROOT) -> dict[str, Any]:  # fmt: skip
+    t0 = time.monotonic()
+
+    def lap(what: str) -> None:  # the log is public: counts and seconds only
+        print(f"themes: {what} at {time.monotonic() - t0:.0f} s", flush=True)
+
     firms = gather(conn, week, today)
+    lap(f"{len(firms)} companies gathered")
     rows = industries(firms)
     medians = {m: round(statistics.median(f.move for f in firms if f.company.market == m and f.move is not None), 3)
                for m in ("us", "in") if any(f.company.market == m and f.move is not None for f in firms)}  # fmt: skip
     drv = dv.load(root)
-    points, missing = driver_points(http, list(drv))
+    points, missing = driver_points(http, list(drv), load_cached(conn))
+    save_cached(conn, points)
+    lap(f"{len(points)} drivers read, {len(missing)} not fresh")
     shares = [r["share"] for r in rows]
     last_year = today.year - 1
     mkt = market_years(firms, last_year)
@@ -495,6 +534,7 @@ def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient
         return [{**t, **numbers(t, firms, points, drv, medians, shares, mkt, last_year)} for t in lib]
 
     library = refresh(library)
+    lap(f"{len(library)} themes measured")
     due, why = rethink_due(week, last, triggered(prev.get("library") or [], library))
     if force_rethink and not due:
         due, why = True, "asked for"
@@ -506,6 +546,7 @@ def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient
     if due and router is not None:
         inp = prompt_input([dv.summary(points[k], d) for k, d in drv.items() if k in points], rows, library, retired)
         answer = router.call(inp)
+        lap("the rethink answered" if not isinstance(answer, Deferred) else "the rethink deferred")
         if isinstance(answer, Deferred):
             body["dropped"] = [f"no answer: {answer.reason}"[:200]]
         else:
