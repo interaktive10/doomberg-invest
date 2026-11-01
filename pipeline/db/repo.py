@@ -806,3 +806,19 @@ def latest_report(conn: Conn, name: str) -> tuple[date, dict[str, Any]] | None:
         _q("select week_end, body from reports where name = %s order by week_end desc limit 1"), (name,)
     ).fetchone()
     return (row[0], row[1]) if row else None
+
+
+def recent_reports(conn: Conn, name: str, before: date, limit: int) -> list[tuple[date, dict[str, Any]]]:
+    """The newest `limit` reports of a kind from weeks before `before`, newest first (the themes pass's memory)."""
+    rows = conn.execute(
+        _q("select week_end, body from reports where name = %s and week_end < %s order by week_end desc limit %s"),
+        (name, before, limit),
+    ).fetchall()
+    return [(r[0], r[1]) for r in rows]
+
+
+def fired_companies(conn: Conn, week: date, signal_id: str) -> set[UUID]:
+    rows = conn.execute(
+        _q("select company_id from signal_values where week_end = %s and signal_id = %s and fired"), (week, signal_id)
+    ).fetchall()
+    return {r[0] for r in rows}

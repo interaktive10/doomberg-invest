@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { hashId, inMore, isCurrent, MAIN, MORE } from "@/lib/nav";
 
 describe("the app's places (lib/nav.ts)", () => {
-  it("has four main places and three under More (e2e/flow.spec.ts counts the seven links)", () => {
-    expect(MAIN.map((p) => p.label)).toEqual(["Home", "Undervalued", "Winners", "My list"]);
+  it("has five main places and three under More (e2e/flow.spec.ts counts the eight links)", () => {
+    expect(MAIN.map((p) => p.label)).toEqual(["Home", "Undervalued", "Themes", "Winners", "My list"]);
     expect(MORE.map((p) => p.label)).toEqual(["Journal", "Signal Lab", "Settings"]);
-    expect([...MAIN, ...MORE].map((p) => p.href)).toEqual(["/", "/candidates", "/winners", "/theses", "/journal", "/lab", "/settings"]);
+    expect([...MAIN, ...MORE].map((p) => p.href)).toEqual(["/", "/candidates", "/themes", "/winners", "/theses", "/journal", "/lab", "/settings"]);
   });
 
   it("marks a place current on its own page and the pages under it, This week on the home page only", () => {

@@ -16,6 +16,7 @@ export const PAGES = [
   `/company/${ECHO}`,
   "/search?q=Corp",
   "/winners",
+  "/themes",
   "/theses",
   `/theses/${ECHO_THESIS}`,
   `/theses/${OMEGA_THESIS}`,

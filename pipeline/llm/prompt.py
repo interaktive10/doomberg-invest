@@ -38,6 +38,7 @@ PROMPTS: dict[str, PromptSpec] = {
     "P-04": PromptSpec("P-04", "json", "thesis_card", 0.3, "card", route="P-04-fallback"),
     "P-05": PromptSpec("P-05", "tool", "record_support", 0.0, "card"),
     "P-07": PromptSpec("P-07", "json", "announcement_triage", 0.0, "extract"),
+    "P-08": PromptSpec("P-08", "json", "themes", 0.3, "card"),  # not in the brief: docs/SPEC_ISSUES.md 67
 }
 
 
