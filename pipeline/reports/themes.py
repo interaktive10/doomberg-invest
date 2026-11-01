@@ -163,6 +163,25 @@ def candidates(rows: Sequence[dict[str, Any]], market_median: Mapping[str, float
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 
 
+def _norm(n: str) -> str:
+    """ "12.0" -> "12", "0.50" -> "0.5", "1,240" -> "1240"."""
+    n = n.replace(",", "")
+    return n.rstrip("0").rstrip(".") if "." in n else n
+
+
+def allowed_numbers(text: str) -> set[str]:
+    """The numbers the input states, and each fraction as the percent a writer says it as (0.123 -> 12.3 and 12;
+    -0.05 -> 5): a theme may say "up 12%" for a median move of 0.12, never a number the input lacks."""
+    out = set()
+    for raw in NUMBER.findall(text):
+        n = _norm(raw)
+        out.add(n)
+        v = float(n)
+        if v < 10:
+            out.update(_norm(f"{v * 100:.{d}f}") for d in (0, 1))
+    return out
+
+
 def _words(text: str) -> int:
     return len(text.split())
 
@@ -174,11 +193,11 @@ def check_answer(answer: Mapping[str, Any], cands: Sequence[Mapping[str, Any]], 
                  earlier: Sequence[Mapping[str, Any]]) -> Checked:  # fmt: skip
     """(themes kept, reviews kept, note, why each dropped one was dropped)."""
     known = {(c["market"], c["industry"]): c for c in cands}
-    numbers = set(NUMBER.findall(input_text))
+    numbers = allowed_numbers(input_text)
     dropped: list[str] = []
 
     def numbers_ok(text: str) -> bool:
-        return all(n in numbers or n.rstrip("0").rstrip(".") in numbers for n in NUMBER.findall(text))
+        return all(_norm(n) in numbers for n in NUMBER.findall(text))
 
     themes = []
     for t in answer.get("themes") or []:
