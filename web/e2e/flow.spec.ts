@@ -6,7 +6,7 @@ import { ECHO, OMEGA_THESIS, SIGMA } from "./seed";
 // BRIEF §8 M7-01 (restated in overhaul PR 4): login → candidates → company → thesis → journal entry → review → close
 // with a post-mortem (the allowlist login is e2e/auth.setup.ts); the Screener's and the Capex Desk's old links
 // redirect. Overhaul PR 5: Home's funnel, To do and What changed from the seeded digest; search → company → Research →
-// "Card queued". One seeded world, so the steps run in order.
+// "Writing your card". One seeded world, so the steps run in order.
 test.describe.configure({ mode: "serial" });
 
 // When a step fails, the job log shows where the page was, what it said and any browser errors (the trace is in the
@@ -161,11 +161,11 @@ test("candidates: dismiss one with a reason, start research on another", async (
   await page.getByRole("link", { name: "Early" }).click();
   await card(page, "Delta Power Inc.").getByRole("button", { name: "Research" }).click();
   await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}\?ok=/);
-  await flash(page, "Card queued for Sunday's routine.");
+  await flash(page, "Writing your card: usually ready within 15 minutes.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Delta Power Inc.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Research");
-  await expect(page.getByText("No card yet")).toBeVisible();
-  // a manual research entry has no validated card until the routine fills it, so it can't become a thesis yet (M7
+  await expect(page.getByText("This page updates itself when it lands.")).toBeVisible();
+  // a manual research entry has no validated card until it is written, so it can't become a thesis yet (M7
   // review R1-F2)
   await expect(page.getByRole("button", { name: "Accept as thesis" })).toHaveCount(0);
 });
@@ -202,7 +202,7 @@ test("a board per market and the Watch tab (docs/SPEC_ISSUES.md 56)", async ({ p
   await expect(board.getByRole("list", { name: "US" }).getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toBeVisible();
 });
 
-test("search → company → Research → 'Card queued' (overhaul PR 5)", async ({ page }) => {
+test("search → company → Research → 'Writing your card' (overhaul PR 5)", async ({ page }) => {
   await page.goto("/candidates");
   await page.waitForLoadState("networkidle"); // the "/" shortcut listens once the page is hydrated
   const box = page.getByRole("searchbox", { name: "Search companies" });
@@ -232,7 +232,7 @@ test("search → company → Research → 'Card queued' (overhaul PR 5)", async 
   await expect(page.getByText("hard: excludes the company")).toBeVisible(); // R3, an auditor change
   await page.getByRole("main").getByRole("button", { name: "Research" }).click();
   await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}\?ok=/);
-  await flash(page, "Card queued for Sunday's routine.");
+  await flash(page, "Writing your card: usually ready within 15 minutes.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Sigma Holdings Inc.");
   // the entry is live now: the Company page opens it instead of starting another
   await page.goto(`/company/${SIGMA}`);

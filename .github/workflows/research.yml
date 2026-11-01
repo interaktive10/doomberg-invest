@@ -1,0 +1,46 @@
+name: research
+# Research cards on demand (pipeline/thesis/on_demand.py; docs/SPEC_ISSUES.md 66): the web app's Research button opens
+# an entry with no card; this writes it within minutes instead of on Sunday. Most runs find nothing and stop at once.
+# The repository is public, so its runs cost no Actions minutes.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: research
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cards:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - name: Database secret
+        id: db
+        run: |
+          if [ -n "$DATABASE_URL" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the DATABASE_URL secret is not set (BRIEF §2.4): nothing to do"; fi
+      - uses: actions/checkout@v4
+        if: steps.db.outputs.ok == 'true'
+      - uses: astral-sh/setup-uv@v6
+        if: steps.db.outputs.ok == 'true'
+        with:
+          enable-cache: true
+      - if: steps.db.outputs.ok == 'true'
+        run: uv python install 3.12
+      - if: steps.db.outputs.ok == 'true'
+        run: uv sync --frozen --no-dev
+      - if: steps.db.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.db.migrate
+      - name: Cards for research entries waiting for one
+        if: steps.db.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.thesis.on_demand

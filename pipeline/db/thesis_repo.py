@@ -315,3 +315,34 @@ def upsert_digest(conn: Conn, week: date, title: str, body_md: str, issue_number
         ),
         (week, title, body_md, issue_number),
     )
+
+
+# ---------------------------------------------------------------- research cards on demand (SPEC_ISSUES 66)
+
+
+def pending_research(conn: Conn, max_attempts: int, limit: int) -> list[dict[str, Any]]:
+    """Manual research entries still without a card, oldest first, that on_demand hasn't given up on: id, company_id,
+    created_week and the attempts so far (validation.on_demand.attempts)."""
+    return _rows(conn, "select id, company_id, created_week, coalesce((validation->'on_demand'->>'attempts')::int, 0) "
+                       "as attempts from theses where author = 'manual' and state = 'research' and card_md = '' "
+                       "and coalesce((validation->'on_demand'->>'attempts')::int, 0) < %s "
+                       "and validation->'on_demand'->>'card' is null "
+                       "order by updated_at, id limit %s", (max_attempts, limit))  # fmt: skip
+
+
+def mark_research(conn: Conn, thesis_id: UUID, note: dict[str, Any]) -> None:
+    """Record what on_demand did with a research entry (validation.on_demand: attempts, the last errors, or the
+    generated card that already covers the company and week); the web app reads it."""
+    conn.execute(
+        _q("update theses set validation = jsonb_set(validation, '{on_demand}', %s), updated_at = now() "
+           "where id = %s and card_md = ''"),
+        (Jsonb(note), thesis_id),
+    )  # fmt: skip
+
+
+def generated_for(conn: Conn, company_id: UUID, week: date) -> UUID | None:
+    row = conn.execute(
+        _q("select id from theses where company_id = %s and created_week = %s and author = any(%s) and card_md <> ''"),
+        (company_id, week, list(GENERATED)),
+    ).fetchone()
+    return row[0] if row else None
