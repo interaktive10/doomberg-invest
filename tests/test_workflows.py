@@ -53,7 +53,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("backfill.yml", ("us",)),
         ("india-backfill.yml", ("history",)),
         ("research.yml", ("cards",)),
-        ("reports.yml", ("reports",)),
+        ("reports.yml", ("sectors", "reports")),
     ):
         for job in jobs:  # the Actions minutes gate reads no table, so it may come first
             runs = [r for r in steps(name, job) if "python -m pipeline" in r and "pipeline.digest.minutes" not in r]
@@ -493,7 +493,8 @@ def test_every_nse_job_is_in_the_nse_group() -> None:
             if any("python -m pipeline.india." in str(s.get("run", "")) for s in job["steps"]):
                 found.append((path.name, name))
                 assert job.get("concurrency") == {"group": "nse", "cancel-in-progress": False}, (path.name, name)
-    assert found == [("daily.yml", "india"), ("india-backfill.yml", "history"), ("weekly.yml", "india")]
+    assert found == [("daily.yml", "india"), ("india-backfill.yml", "history"), ("reports.yml", "sectors"),
+                     ("weekly.yml", "india")]  # fmt: skip
 
 
 def test_every_job_runs_on_a_pinned_runner() -> None:

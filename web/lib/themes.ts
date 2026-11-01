@@ -1,84 +1,141 @@
-// Themes (pipeline/reports/themes.py writes reports('themes', week); docs/SPEC_ISSUES.md 67): the body's shape and the
-// words the Themes screen shows. Pure, so tests/themes.test.ts covers it.
+// Themes v2 (pipeline/reports/themes.py writes reports('themes', week); docs/SPEC_ISSUES.md 68): a library of demand
+// chains (a driver, read one way, reaching the companies its keywords match) with this week's numbers, rethought
+// monthly. The body's shape and the plain words the Themes screen shows. Pure, so tests/themes.test.ts covers it.
 
-export interface ThemeEvidence {
-  id: string;
+export type Status = "building" | "priced_in" | "watching" | "fading";
+
+export interface ThemeName {
   company_id: string;
   code: string | null;
   name: string;
-  what: string;
-  move: number;
-  price?: number | null;
-}
-
-export interface Theme {
   market: "us" | "in";
   industry: string;
+  evidence: number | null;
+  bucket: string | null;
+  move: number | null;
+  demand: boolean;
+}
+
+export interface ThemeNote {
+  week: string;
+  decision: "keep" | "edit" | "retire" | "new";
+  text: string;
+}
+
+export interface HistoryCheck {
+  years: number;
+  first: number;
+  last: number;
+  tail_years: number;
+  tail_beat: number;
+  tail_excess: number | null;
+  other_excess: number | null;
+}
+
+export interface LibraryTheme {
+  slug: string;
   title: string;
+  category: string;
+  driver: string;
+  transform: "yoy" | "level" | "cohort";
+  lag_months: number;
+  keywords: string[];
   why: string;
   wrong_if: string;
-  confidence: "low" | "medium" | "high";
-  evidence: ThemeEvidence[];
-  share: number;
-  with_demand: number;
+  origin: "starter" | "ai";
+  born: string | null;
+  notes: ThemeNote[];
+  z: number | null;
+  signal: string;
+  chart: [string, number][];
   companies: number;
-  median_move: number;
-  early: boolean;
-}
-
-export interface IndustryRow {
-  market: "us" | "in";
-  industry: string;
-  companies: number;
+  priced: number;
   with_demand: number;
   share: number;
-  facts: number;
-  order_book: number;
-  accelerating: number;
-  median_move: number;
+  move: number | null;
+  market_move: number | null;
+  run: number | null;
+  markets: ("us" | "in")[];
+  status: Status;
+  history: HistoryCheck | null;
+  names: ThemeName[];
+  undervalued: number;
 }
 
-export interface EarlierCall {
-  week: string;
-  market: string;
-  industry: string;
+export interface RetiredTheme {
+  slug: string;
   title: string;
-  since: number | null;
-}
-
-export interface Review {
-  market: string;
-  industry: string;
-  decision: "keep" | "drop";
-  reason: string;
+  category: string;
+  week: string;
+  note: string;
+  notes: ThemeNote[];
 }
 
 export interface ThemesReport {
+  version: 2;
   week: string;
-  medians: Partial<Record<"us" | "in", number>>;
-  industries: IndustryRow[];
-  candidates: number;
-  themes: Theme[];
-  reviews: Review[];
+  library: LibraryTheme[];
+  retired: RetiredTheme[];
+  drivers: Record<string, string>;
   note: string;
-  scorecard: EarlierCall[];
-  answered: boolean;
+  last_rethink: string | null;
+  next_rethink: string;
+  rethought: boolean;
 }
 
-/** A fact's kind in plain words ("order_win: a $40M transformer order" -> "Order win: a $40M transformer order"). */
-export function evidenceLine(what: string): string {
-  const m = /^([a-z_]+): (.*)$/s.exec(what);
-  if (!m) return what.charAt(0).toUpperCase() + what.slice(1);
-  const kind = m[1]!.replace(/_/g, " ");
-  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}: ${m[2]}`;
+/** A v1 report (before the library) reads as none: the screen waits for Saturday's first library. */
+export function isLibrary(body: unknown): body is ThemesReport {
+  return !!body && typeof body === "object" && (body as { version?: unknown }).version === 2 && Array.isArray((body as { library?: unknown }).library);
 }
 
-/** The review of an earlier call, if this week's pass gave one. */
-export function reviewOf(reviews: readonly Review[], c: Pick<EarlierCall, "market" | "industry">): Review | undefined {
-  return reviews.find((r) => r.market === c.market && r.industry === c.industry);
+export const STATUS: Record<Status, { label: string; tone: "up" | "warn" | "muted" | "down"; hint: string }> = {
+  building: { label: "Building", tone: "up", hint: "the driver says yes and the price hasn't run" },
+  priced_in: { label: "Priced in", tone: "warn", hint: "the driver says yes but the price already ran" },
+  watching: { label: "Watching", tone: "muted", hint: "the driver is about normal" },
+  fading: { label: "Fading", tone: "down", hint: "the driver turned against it" },
+};
+
+export const STATUS_ORDER: Status[] = ["building", "priced_in", "watching", "fading"];
+
+/** "4 years", "18 months", "6 months". */
+export function span(months: number): string {
+  if (months % 12 === 0 && months >= 24) return `${months / 12} years`;
+  if (months === 12) return "1 year";
+  return `${months} months`;
 }
 
-/** A demand bar's width: the share of companies with evidence, as a percent. */
-export function sharePct(share: number): number {
-  return Math.max(0, Math.min(100, Math.round(share * 100)));
+/** How the driver is read, in words: "vs a year ago", "vs its 10-year average", "the wave of 4 years ago". */
+export function readingWords(t: Pick<LibraryTheme, "transform" | "lag_months" | "driver">): string {
+  if (t.driver === "filings") return "how many of its companies report rising demand";
+  if (t.transform === "cohort") return `the 12 months that ended ${span(t.lag_months)} ago, against the decade before`;
+  if (t.transform === "level") return "against its 10-year average";
+  return "against a year ago";
+}
+
+/** When the driver reaches the companies: "now", "about 6 months later" (a cohort's wait is in its reading). */
+export function lagWords(t: Pick<LibraryTheme, "transform" | "lag_months">): string {
+  if (t.transform === "cohort" || t.lag_months === 0) return "now";
+  return `about ${span(t.lag_months)} later`;
+}
+
+/** The history check in one sentence, or null without enough years. */
+export function historyLine(h: HistoryCheck | null): string | null {
+  if (!h) return null;
+  if (h.tail_years === 0) return `In ${h.years} years (${h.first}–${h.last}) the driver never gave a clear signal.`;
+  const ex = h.tail_excess === null ? "" : `, by ${pct(h.tail_excess)} on average`;
+  return `In the ${h.tail_years} of ${h.years} years (${h.first}–${h.last}) the driver said yes, these companies beat the market ${h.tail_beat} times${ex}.`;
+}
+
+/** 0.123 -> "+12%", -0.04 -> "-4%". */
+export function pct(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "n/a";
+  const p = Math.round(v * 100);
+  return p > 0 ? `+${p}%` : p < 0 ? `-${Math.abs(p)}%` : "0%";
+}
+
+/** The library grouped by category for the picker, categories in first-seen order. */
+export function byCategory(lib: readonly LibraryTheme[]): [string, LibraryTheme[]][] {
+  const out = new Map<string, LibraryTheme[]>();
+  for (const t of lib) out.set(t.category, [...(out.get(t.category) ?? []), t]);
+  return [...out];
 }

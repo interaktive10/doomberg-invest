@@ -1,0 +1,78 @@
+# Themes v2's starter library (docs/SPEC_ISSUES.md 68): hypotheses to test, not conclusions. Each runs through the same
+# weekly numbers as the AI's own themes (driver signal, its industries' demand evidence and price, a history check),
+# and the monthly rethink keeps, edits or retires them on those numbers like any other.
+# keywords match a company's industry, sector or name, case-insensitively (US industries are SEC SIC descriptions;
+# Indian ones NSE's index sectors).
+themes:
+  - slug: vehicle-replacement
+    title: "Cars bought in a boom wear out together"
+    category: "Replacement cycles"
+    driver: TOTALSA
+    transform: cohort
+    lag_months: 48
+    keywords: ["tire", "tyre", "motor vehicle parts", "auto components", "auto parts"]
+    why: "Vehicles sold in a strong year come due for tires, brakes and parts a few years later, whoever made them."
+    wrong_if: "Parts makers' sales stay flat while the cohort ages."
+  - slug: miles-driven
+    title: "More miles, more wear"
+    category: "Replacement cycles"
+    driver: TRFVOLUSM227NFWA
+    transform: yoy
+    lag_months: 0
+    keywords: ["tire", "tyre", "motor vehicle parts", "auto parts"]
+    why: "Tires and parts wear with miles driven; rising miles pull replacement forward."
+    wrong_if: "Miles keep rising while replacement demand does not."
+  - slug: housing-finishing
+    title: "New homes need paint and fittings"
+    category: "Housing & construction"
+    driver: HSN1F
+    transform: yoy
+    lag_months: 6
+    keywords: ["paint", "lumber", "building materials", "home improvement", "furniture"]
+    why: "Homes sold today are painted, furnished and fixed up over the following months."
+    wrong_if: "Home sales rise but paint and fittings sellers see no lift."
+  - slug: rates-homebuilders
+    title: "Cheaper mortgages pull buyers back"
+    category: "Rates & credit"
+    driver: MORTGAGE30US
+    transform: yoy
+    lag_months: 0
+    keywords: ["operative builders", "construction", "building materials", "realty"]
+    why: "Lower mortgage rates widen the pool of buyers who can afford a new home."
+    wrong_if: "Rates fall but permits and starts keep falling."
+  - slug: power-demand
+    title: "Power demand needs grid equipment"
+    category: "Energy & power"
+    driver: IPG2211S
+    transform: yoy
+    lag_months: 0
+    keywords: ["electrical equipment", "electrical industrial apparatus", "power", "cable", "transformer"]
+    why: "Rising power generation strains the grid and lifts orders for equipment that carries it."
+    wrong_if: "Generation rises while grid equipment orders slow."
+  - slug: chip-cycle
+    title: "Chip output turns up"
+    category: "Technology & AI"
+    driver: IPG3344S
+    transform: yoy
+    lag_months: 0
+    keywords: ["semiconductor", "electronic components", "printed circuit"]
+    why: "Semiconductor production swings in cycles; an upturn lifts makers and their suppliers."
+    wrong_if: "Production rises but chip makers' revenue does not."
+  - slug: copper-miners
+    title: "Copper demand outruns supply"
+    category: "Materials & commodities"
+    driver: PCOPPUSDM
+    transform: yoy
+    lag_months: 0
+    keywords: ["copper", "metal mining", "non - ferrous", "metals & mining", "cable"]
+    why: "Copper is wired into grids, cars and data centers; a rising price signals demand ahead of supply."
+    wrong_if: "The copper price rises on supply cuts alone while volumes fall."
+  - slug: capex-orders
+    title: "Companies start buying equipment again"
+    category: "Industrial capex"
+    driver: NEWORDER
+    transform: yoy
+    lag_months: 0
+    keywords: ["machinery", "capital goods", "industrial", "instruments"]
+    why: "Core capital goods orders lead business spending on machines by a few quarters."
+    wrong_if: "Orders rise but machinery makers' backlogs shrink."

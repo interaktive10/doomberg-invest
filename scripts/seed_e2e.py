@@ -355,43 +355,151 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     ]}  # fmt: skip
     x("insert into reports (name, week_end, body) values ('winners', %s, %s)", (W, json.dumps(winners)))
 
-    # the week's themes (pipeline/reports/themes.py's body): the Themes screen
-    def theme_ev(i: int, cid: str, code: str, name: str, what: str, move: float) -> dict[str, object]:
-        return {"id": f"e{i}", "company_id": cid, "code": code, "name": name, "what": what, "move": move, "price": 10.0}
+    # the theme library (pipeline/reports/themes.py's v2 body; docs/SPEC_ISSUES.md 68): the Themes screen
+    chart = [[f"{2016 + i // 12}-{i % 12 + 1:02d}", 16.0 + (i % 24) / 10] for i in range(120)]
 
-    themes = {
-        "week": "2026-09-18", "as_of": "2026-09-19", "medians": {"us": 0.12, "in": 0.18}, "candidates": 2,
-        "themes": [
-            {"market": "us", "industry": "Electrical Equipment", "title": "Grid gear orders outrun the price",
-             "why": "Four of seven grid equipment makers show demand evidence, led by verified order wins, while "
-                    "the group's price moved 4% against 12% for the market.",
-             "wrong_if": "New orders stall and lead times shorten next quarter.", "confidence": "medium",
-             "evidence": [theme_ev(1, ECHO, "ECHO", "Echo Grid Corp.", "order_win: a $40M transformer order", 0.31),
-                          theme_ev(2, DELTA, "DLTP", "Delta Power Inc.", "lead_time: lead times now 60 weeks", -0.05)],
-             "share": 0.571, "with_demand": 4, "companies": 7, "median_move": 0.04, "early": True},
-            {"market": "in", "industry": "Cables", "title": "Cable capacity fills up",
-             "why": "Three of five cable makers added capacity or raised prices; the group's price is up 9% against "
-                    "18% for the market.",
-             "wrong_if": "Copper prices fall and price increases reverse.", "confidence": "low",
-             "evidence": [theme_ev(3, KAPPA, "KAPPA", "Kappa Cables Ltd", "capacity_addition: a new plant", 0.2),
-                          theme_ev(4, TARA, "TARAPUMP", "Tara Pumps Ltd", "price_increase: list prices up 6%", 0.02)],
-             "share": 0.6, "with_demand": 3, "companies": 5, "median_move": 0.09, "early": True},
-        ],
-        "reviews": [{"market": "us", "industry": "Semiconductors", "decision": "drop",
-                     "reason": "The price ran ahead of the orders."}],
-        "note": "Grid equipment stays the clearest case; chips dropped because the price already moved.",
-        "scorecard": [{"week": "2026-09-11", "market": "us", "industry": "Semiconductors",
-                       "title": "Chip tools restock", "since": 0.06}],
-        "industries": [
-            {"market": "us", "industry": "Electrical Equipment", "companies": 7, "with_demand": 4, "share": 0.571,
-             "facts": 3, "order_book": 1, "accelerating": 2, "median_move": 0.04},
-            {"market": "in", "industry": "Cables", "companies": 5, "with_demand": 3, "share": 0.6, "facts": 2,
-             "order_book": 0, "accelerating": 1, "median_move": 0.09},
-            {"market": "us", "industry": "Banks", "companies": 12, "with_demand": 1, "share": 0.083, "facts": 0,
-             "order_book": 0, "accelerating": 1, "median_move": 0.15},
-        ],
-        "dropped": [], "answered": True,
-    }  # fmt: skip
+    def name(
+        cid: str, code: str, nm: str, market: str, ind: str, ev: float, bucket: str, move: float
+    ) -> dict[str, object]:
+        return {
+            "company_id": cid,
+            "code": code,
+            "name": nm,
+            "market": market,
+            "industry": ind,
+            "evidence": ev,
+            "bucket": bucket,
+            "move": move,
+            "demand": True,
+        }
+
+    def theme(
+        slug: str,
+        title: str,
+        category: str,
+        driver: str,
+        transform: str,
+        lag: int,
+        kws: list[str],
+        status: str,
+        z: float | None,
+        signal: str,
+        why: str,
+        **kw: object,
+    ) -> dict[str, object]:
+        base: dict[str, object] = {
+            "slug": slug,
+            "title": title,
+            "category": category,
+            "driver": driver,
+            "transform": transform,
+            "lag_months": lag,
+            "keywords": kws,
+            "why": why,
+            "wrong_if": "Their sales stay flat while the driver rises.",
+            "origin": "starter",
+            "born": None,
+            "notes": [],
+            "z": z,
+            "signal": signal,
+            "chart": chart,
+            "companies": 9,
+            "priced": 9,
+            "with_demand": 4,
+            "share": 0.444,
+            "move": 0.03,
+            "market_move": 0.12,
+            "run": -0.09,
+            "markets": ["us", "in"],
+            "status": status,
+            "history": None,
+            "names": [],
+            "undervalued": 1,
+        }
+        return base | kw
+
+    library = [
+        theme(
+            "vehicle-replacement",
+            "Cars bought in a boom wear out together",
+            "Replacement cycles",
+            "TOTALSA",
+            "cohort",
+            48,
+            ["tire", "tyre", "motor vehicle parts"],
+            "building",
+            1.2,
+            "well above normal",
+            "Vehicles sold in a strong year come due for tires and parts a few years later.",
+            history={
+                "years": 14,
+                "first": 2012,
+                "last": 2025,
+                "tail_years": 5,
+                "tail_beat": 4,
+                "tail_excess": 0.061,
+                "other_excess": -0.01,
+            },
+            names=[
+                name(ECHO, "ECHO", "Echo Grid Corp.", "us", "Motor Vehicle Parts", 73, "candidate", 0.31),
+                name(TARA, "TARAPUMP", "Tara Pumps Ltd", "in", "Automobile and Auto Components", 50, "watch", 0.02),
+            ],
+            notes=[{"week": "2026-09-04", "decision": "keep", "text": "The 2022 cohort is due and parts makers lag."}],
+        ),
+        theme(
+            "housing-finishing",
+            "New homes need paint and fittings",
+            "Housing & construction",
+            "HSN1F",
+            "yoy",
+            6,
+            ["paint", "building materials"],
+            "watching",
+            0.1,
+            "about normal",
+            "Homes sold today are painted and furnished over the following months.",
+        ),
+        theme(
+            "copper-miners",
+            "Copper demand outruns supply",
+            "Materials & commodities",
+            "PCOPPUSDM",
+            "yoy",
+            0,
+            ["copper", "metal mining"],
+            "priced_in",
+            0.9,
+            "above normal",
+            "A rising copper price signals demand ahead of supply.",
+            move=0.41,
+            run=0.29,
+            origin="ai",
+            born="2026-09-04",
+        ),
+        theme(
+            "rates-homebuilders",
+            "Cheaper mortgages pull buyers back",
+            "Rates & credit",
+            "MORTGAGE30US",
+            "yoy",
+            0,
+            ["operative builders"],
+            "fading",
+            -0.8,
+            "below normal",
+            "Lower rates widen the pool of buyers.",
+        ),
+    ]
+    themes = {"version": 2, "week": "2026-09-18", "as_of": "2026-09-19", "library": library,
+              "retired": [{"slug": "chip-cycle", "title": "Chip output turns up", "category": "Technology & AI",
+                           "week": "2026-09-04", "note": "The price ran ahead of production.",
+                           "notes": [{"week": "2026-09-04", "decision": "retire",
+                                      "text": "The price ran ahead of production."}]}],
+              "drivers": {"TOTALSA": "US light vehicle sales", "HSN1F": "US new home sales",
+                          "PCOPPUSDM": "Copper price", "MORTGAGE30US": "US 30-year mortgage rate"},
+              "note": "Replacement demand looks strongest; chips retired because the price already moved.",
+              "last_rethink": "2026-09-04", "next_rethink": "2026-10-02", "rethought": False, "medians": {},
+              "industries": [], "missing_drivers": [], "dropped": []}  # fmt: skip
     x("insert into reports (name, week_end, body) values ('themes', %s, %s)", (W, json.dumps(themes)))
     x("insert into source_health (source, last_success, last_error, stale) values "
       "('sec', '2026-09-18 06:00+00', null, false), ('nse', '2026-09-18 06:00+00', null, false), "

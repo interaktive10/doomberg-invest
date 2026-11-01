@@ -3,6 +3,11 @@ name: reports
 # job computes them every Saturday; this is for a change to a report or a first fill.
 on:
   workflow_dispatch:
+    inputs:
+      rethink:
+        description: "Rethink the themes library now (P-08), whatever the calendar says"
+        type: boolean
+        default: false
 
 concurrency:
   group: pipeline
@@ -12,9 +17,29 @@ permissions:
   contents: read
 
 jobs:
-  reports:
+  sectors:
+    # India's sectors from NSE's index lists (themes match them): an NSE job, so it waits for the others
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
+    concurrency:
+      group: nse
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - run: uv run --frozen python -m pipeline.india.sectors
+  reports:
+    needs: [sectors]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -30,4 +55,4 @@ jobs:
       - name: Last year's winners
         run: uv run --frozen python -m pipeline.reports.winners
       - name: Themes
-        run: uv run --frozen python -m pipeline.reports.themes
+        run: uv run --frozen python -m pipeline.reports.themes ${{ inputs.rethink && '--rethink' || '' }}

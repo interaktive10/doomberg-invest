@@ -209,6 +209,15 @@ def update_us_company(
     )
 
 
+def set_sectors(conn: Conn, sectors: Mapping[UUID, str]) -> None:
+    """Indian companies' sectors from NSE's index lists (pipeline/india/sectors.py; docs/SPEC_ISSUES.md 68)."""
+    with conn.cursor() as cur:
+        cur.executemany(
+            _q("update companies set sector = %s, updated_at = now() where id = %s and market = 'in'"),
+            [(s, cid) for cid, s in sectors.items()],
+        )
+
+
 def ensure_company(conn: Conn, c: Company) -> UUID:
     """Insert a US company by CIK if missing (e.g. a spin-off registrant before it lists); return its id."""
     if c.market != "us" or not c.cik:
