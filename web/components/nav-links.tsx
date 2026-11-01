@@ -78,9 +78,16 @@ export function NavLinks({ email }: { email: string }) {
       {MAIN.map((p) => {
         const cur = isCurrent(path, p.href);
         return (
-          <Link key={p.href} href={p.href} aria-current={cur ? "page" : undefined} className={cn(PILL, "gap-1.5", cur ? PILL_ON : PILL_OFF)}>
-            <Icon name={p.icon} className={cn("size-4", p.tone && TONE_TEXT[p.tone])} strokeWidth={2.2} />
-            {p.label}
+          <Link key={p.href} href={p.href} aria-current={cur ? "page" : undefined} className={cn(PILL, "gap-1.5 px-3 xl:px-4", cur ? PILL_ON : PILL_OFF)}>
+            <Icon name={p.icon} className={cn("hidden size-4 xl:block", p.tone && TONE_TEXT[p.tone])} strokeWidth={2.2} />
+            {p.short ? (
+              <>
+                <span className="lg:hidden">{p.short}</span>
+                <span className="hidden lg:inline">{p.label}</span>
+              </>
+            ) : (
+              p.label
+            )}
             <LinkPending />
           </Link>
         );
@@ -150,7 +157,7 @@ export function SearchBox({ className }: { className?: string }) {
           maxLength={SEARCH_MAX}
           autoComplete="off"
           spellCheck={false}
-          placeholder="Search a company"
+          placeholder="Search"
           aria-keyshortcuts="/"
           className="h-full w-full min-w-0 bg-transparent text-[16px] text-fg placeholder:text-subtle focus-visible:outline-none md:text-[14px]"
         />

@@ -24,7 +24,7 @@ export function Nav({ email, theme }: { email: string; theme: ThemeMode }) {
           </div>
           <NavLinks email={email} />
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:basis-0">
-            <SearchBox className="w-full max-w-64 md:w-52 lg:w-60" />
+            <SearchBox className="w-full max-w-64 md:w-40 lg:w-44 xl:w-52" />
             <ThemeSwitch initial={theme} />
           </div>
         </div>
