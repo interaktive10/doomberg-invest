@@ -2,18 +2,21 @@
 // the phone's bottom dock), each with its own colour, the rest under More. Pure, so tests/nav.test.ts covers it;
 // components/nav-links.tsx draws it.
 
-export type PlaceTone = "accent" | "up" | "pink" | "warn";
+export type PlaceTone = "accent" | "up" | "violet" | "pink" | "warn";
 
 export interface Place {
   href: string;
   label: string;
   icon: "home" | "tag" | "trophy" | "bookmark" | "spark" | "book" | "flask" | "gear";
   tone?: PlaceTone;
+  /** the phone dock's shorter label, when the full one doesn't fit six tabs */
+  short?: string;
 }
 
 export const MAIN: readonly Place[] = [
   { href: "/", label: "Home", icon: "home", tone: "accent" },
-  { href: "/candidates", label: "Undervalued", icon: "tag", tone: "up" },
+  { href: "/candidates", label: "Undervalued", icon: "tag", tone: "up", short: "Value" },
+  { href: "/themes", label: "Themes", icon: "spark", tone: "violet" },
   { href: "/winners", label: "Winners", icon: "trophy", tone: "pink" },
   { href: "/theses", label: "My list", icon: "bookmark", tone: "warn" },
 ];
@@ -25,7 +28,7 @@ export const MORE: readonly Place[] = [
 ];
 
 /** The text colour class of a place's icon (a fill-strength colour on an icon is decoration: the label carries it). */
-export const TONE_TEXT: Record<PlaceTone, string> = { accent: "text-accent", up: "text-up", pink: "text-pink", warn: "text-warn" };
+export const TONE_TEXT: Record<PlaceTone, string> = { accent: "text-accent", up: "text-up", violet: "text-violet", pink: "text-pink", warn: "text-warn" };
 
 /** Whether `path` is the place at `href` or under it ("/theses/<id>" is My list); "/" is Home only. */
 export function isCurrent(path: string, href: string): boolean {

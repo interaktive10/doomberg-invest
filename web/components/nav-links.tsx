@@ -96,13 +96,13 @@ export function Dock({ email }: { email: string }) {
   const path = usePathname() ?? "/";
   return (
     <nav aria-label="Main" className="fixed inset-x-4 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 md:hidden">
-      <div className="glass mx-auto grid h-[68px] max-w-md grid-cols-5 items-center gap-0.5 rounded-full px-1.5">
+      <div className="glass mx-auto grid h-[68px] max-w-md grid-cols-6 items-center gap-0.5 rounded-full px-1.5">
         {MAIN.map((p) => {
           const cur = isCurrent(path, p.href);
           return (
             <Link key={p.href} href={p.href} aria-current={cur ? "page" : undefined} className={cn(TAB, cur ? TAB_ON : TAB_OFF)}>
               <Icon name={p.icon} className={cn("size-5", p.tone && TONE_TEXT[p.tone])} strokeWidth={2.2} />
-              {p.label}
+              {p.short ?? p.label}
               <LinkPending />
             </Link>
           );
