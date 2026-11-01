@@ -33,6 +33,16 @@ export interface BacktestSummary {
   worst: number;
 }
 
+export interface Leader {
+  company_id: string;
+  code: string | null;
+  name: string;
+  sector: string | null;
+  ytd: number;
+  start: number;
+  end: number;
+}
+
 export interface MarketWinners {
   market: "us" | "in";
   year: number;
@@ -42,6 +52,8 @@ export interface MarketWinners {
   min_price: number;
   min_cap: number;
   top: WinnerPick[];
+  /** this year's biggest gainers so far (reports before 2026-11-01 lack it) */
+  leaders?: Leader[];
   this_year: { through: string | null; picks: number | null; average: number | null; stocks: number };
   backtest: { rows: BacktestRow[]; summary: BacktestSummary | null } | null;
 }
@@ -94,11 +106,16 @@ export function marketName(m: "us" | "in"): string {
   return m === "us" ? "US" : "India";
 }
 
-/** Home's Winners door: last year's biggest gainer, the US first (null before the first report). */
-export function topWinner(r: WinnersReport | null): (WinnerPick & { year: number }) | null {
+/** Home's Winners door: this year's biggest gainer so far, the US first; last year's top one for a report without
+ * leaders (null before the first report). */
+export function topWinner(r: WinnersReport | null): { code: string | null; name: string; ret: number; label: string } | null {
+  for (const m of r?.markets ?? []) {
+    const l = m.leaders?.[0];
+    if (l) return { code: l.code, name: l.name, ret: l.ytd, label: `leads ${m.year + 1}` };
+  }
   for (const m of r?.markets ?? []) {
     const p = m.top[0];
-    if (p) return { ...p, year: m.year };
+    if (p) return { code: p.code, name: p.name, ret: p.ret, label: `top of ${m.year}` };
   }
   return null;
 }

@@ -1,5 +1,6 @@
-"""Last year's winners (docs/SPEC_ISSUES.md 64; reports.yml): each market's five biggest gainers of the last calendar
-year, how they have done this year, and a backtest of buying the previous year's top five every January.
+"""Winners (docs/SPEC_ISSUES.md 64; reports.yml): each market's biggest gainers of this year so far (the ten to
+watch for next January), last calendar year's five and how they have done this year, and a backtest of buying the
+previous year's top five every January.
 
 Manzoor: "pick top five best performing assets each from the previous year ... a portfolio which only invests in
 biggest gainers of the previous year vastly outperforms the index." This shows the list and tests the claim on our own
@@ -133,6 +134,27 @@ def year_winners(series: Series, versions: Mapping[UUID, Sequence[FundamentalsRo
     return sorted(out, key=lambda p: p.ret, reverse=True)[:top]
 
 
+LEADERS = 10
+
+
+def ytd_leaders(series: Series, versions: Mapping[UUID, Sequence[FundamentalsRow]], market: str, year: int,
+                through: date, top: int = LEADERS) -> list[Pick]:  # fmt: skip
+    """This year's biggest gainers so far, by the same rules as a year's winners (MIN_PRICE when the year began,
+    MIN_CAP at `through` from the shares filed by then, no bad print), through the date most names have a close."""
+    start = date(year - 1, 12, 31)
+    shares = shares_at(versions, _cutoff(through))
+    step = MAX_STEP_US if market == "us" else MAX_STEP_IN
+    out = []
+    for cid, s in series.items():
+        a, b = close_at(s, start, TOLERANCE_DAYS[market]), close_at(s, through, TOLERANCE_DAYS[market])
+        if a is None or b is None or a < MIN_PRICE[market] or cid not in shares:
+            continue
+        if b * shares[cid] < MIN_CAP[market] or jumpy(s, start, through, step):
+            continue
+        out.append(Pick(cid, float(b / a - 1), a, b))
+    return sorted(out, key=lambda p: p.ret, reverse=True)[:top]
+
+
 def year_return(s: Sequence[tuple[date, Decimal]], year: int, market: str, through: date | None = None) -> float | None:
     a = close_at(s, date(year - 1, 12, 31), TOLERANCE_DAYS[market])
     b = close_at(s, through or date(year, 12, 31), TOLERANCE_DAYS[market] if through is None else 40)
@@ -240,9 +262,15 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
                     "sector": c.sector, "ret": p.ret, "start": float(p.start), "end": float(p.end),
                     "ytd": ytd(p.company_id)})  # fmt: skip
     picks_ytd = [float(t["ytd"]) for t in top if t["ytd"] is not None]
+    leaders = []
+    for p in ytd_leaders(series, versions, market, today.year, through) if through else []:
+        c = companies[p.company_id]
+        leaders.append({"company_id": str(p.company_id), "code": c.ticker or c.nse_symbol, "name": c.name,
+                        "sector": c.sector, "ytd": p.ret, "start": float(p.start), "end": float(p.end)})  # fmt: skip
     rows = backtest(series, versions, market, 2012, year) if market == "us" else []
     return {"market": market, "year": year, "currency": CURRENCY[market], "priced": len(series), "universe": universe,
             "min_price": float(MIN_PRICE[market]), "min_cap": float(MIN_CAP[market]), "top": top, "skipped": skipped,
+            "leaders": leaders,
             "this_year": {"through": through.isoformat() if through else None,
                           "picks": fmean(picks_ytd) if picks_ytd else None,
                           "average": fmean(pool_ytd) if pool_ytd else None, "stocks": len(pool_ytd)},
