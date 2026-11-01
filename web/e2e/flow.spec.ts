@@ -6,7 +6,7 @@ import { ECHO, OMEGA_THESIS, SIGMA } from "./seed";
 // BRIEF §8 M7-01 (restated in overhaul PR 4): login → candidates → company → thesis → journal entry → review → close
 // with a post-mortem (the allowlist login is e2e/auth.setup.ts); the Screener's and the Capex Desk's old links
 // redirect. Overhaul PR 5: Home's funnel, To do and What changed from the seeded digest; search → company → Research →
-// "Card queued". One seeded world, so the steps run in order.
+// "Writing your card". One seeded world, so the steps run in order.
 test.describe.configure({ mode: "serial" });
 
 // When a step fails, the job log shows where the page was, what it said and any browser errors (the trace is in the
@@ -62,16 +62,20 @@ test("the nav has five places and More; the Screener's and the Capex Desk's old 
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
 });
 
-test("Home: the funnel strip, To do live from the theses and What changed from the seeded digest (overhaul PR 5, drawn in PR 6)", async ({ page }) => {
+test("Home: three doors, To do live from the theses and What changed from the seeded digest (overhaul PR 5, drawn in PR 6)", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "This week" })).toBeVisible();
   // the digest's week, and one line that leads with the answer: nothing new, one candidate per market on the board
   await expect(page.getByText("Week 38 · Sep 14–18")).toBeVisible();
   await expect(page.getByRole("main")).toContainText("A quiet week: nothing new cleared the bar. Two ideas are still worth your time.");
-  // the funnel: the markets' lines added up into four numbers and one insight; the digest's own lines under Details
-  const funnel = page.getByRole("region", { name: "From 5 companies to 2 ideas" });
-  await expect(funnel).toContainText("1 of 5 shows only one kind of signal, so its score stops at 55.");
-  await expect(funnel).toContainText("US 4 → stage 4 → candidates 1 → new 0 · 1 of 4 fire one family, capped at 55");
+  // three doors (SPEC_ISSUES 65): the names on the board (and on Watch), what needs you, last year's top gainer
+  const doors = page.getByRole("navigation", { name: "Shortcuts" });
+  await expect(doors.getByRole("link", { name: /^2 undervalued/ })).toHaveAttribute("href", "/candidates");
+  await expect(doors.getByRole("link", { name: /^2 to do/ })).toHaveAttribute("href", "/theses");
+  await expect(doors.getByRole("link", { name: /^\+312% ECHO/ })).toHaveAttribute("href", "/winners");
+  await expect(doors).toContainText("+2 on Watch");
+  // the funnel and the per-source list are gone from Home (the headline says it; Settings lists the sources)
+  await expect(page.getByRole("region", { name: "From 5 companies to 2 ideas" })).toHaveCount(0);
   // To do is the Theses screen's Needs you group: the card to decide (ECHO) and the thesis in review (OMEGA)
   const todo = page.getByRole("region", { name: /^To do/ });
   await expect(todo.getByRole("link", { name: "Echo Grid Corp. (ECHO)" })).toBeVisible();
@@ -157,11 +161,11 @@ test("candidates: dismiss one with a reason, start research on another", async (
   await page.getByRole("link", { name: "Early" }).click();
   await card(page, "Delta Power Inc.").getByRole("button", { name: "Research" }).click();
   await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}\?ok=/);
-  await flash(page, "Card queued for Sunday's routine.");
+  await flash(page, "Writing your card: usually ready within 15 minutes.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Delta Power Inc.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Research");
-  await expect(page.getByText("No card yet")).toBeVisible();
-  // a manual research entry has no validated card until the routine fills it, so it can't become a thesis yet (M7
+  await expect(page.getByText("This page updates itself when it lands.")).toBeVisible();
+  // a manual research entry has no validated card until it is written, so it can't become a thesis yet (M7
   // review R1-F2)
   await expect(page.getByRole("button", { name: "Accept as thesis" })).toHaveCount(0);
 });
@@ -191,17 +195,14 @@ test("a board per market and the Watch tab (docs/SPEC_ISSUES.md 56)", async ({ p
   await expect(card(page, "Lumen Water Co.")).toHaveCount(0);
   await page.getByRole("group", { name: "Markets" }).getByRole("link", { name: /^Both/ }).click();
   await expect(page.getByRole("list", { name: "Candidates in the US" }).getByRole("listitem").filter({ hasText: "Lumen Water Co." })).toHaveCount(1);
-  // Home: On the board and Watch, each per market
+  // Home: On the board per market; Watch is counted on the Undervalued door, its names on the Watch tab
   await page.goto("/");
-  const watch = page.getByRole("region", { name: "Watch" });
-  await expect(watch.getByRole("list", { name: "US" }).getByRole("link", { name: /LMNW Lumen Water Co\./ })).toBeVisible();
-  await expect(watch.getByRole("list", { name: "India" }).getByRole("link", { name: /TARAPUMP Tara Pumps Ltd/ })).toBeVisible();
-  await expect(watch.getByRole("link", { name: "All 2 on Watch" })).toHaveAttribute("href", "/candidates?bucket=watch");
+  await expect(page.getByRole("region", { name: "Watch" })).toHaveCount(0);
   const board = page.getByRole("region", { name: "On the board" });
   await expect(board.getByRole("list", { name: "US" }).getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toBeVisible();
 });
 
-test("search → company → Research → 'Card queued' (overhaul PR 5)", async ({ page }) => {
+test("search → company → Research → 'Writing your card' (overhaul PR 5)", async ({ page }) => {
   await page.goto("/candidates");
   await page.waitForLoadState("networkidle"); // the "/" shortcut listens once the page is hydrated
   const box = page.getByRole("searchbox", { name: "Search companies" });
@@ -231,7 +232,7 @@ test("search → company → Research → 'Card queued' (overhaul PR 5)", async 
   await expect(page.getByText("hard: excludes the company")).toBeVisible(); // R3, an auditor change
   await page.getByRole("main").getByRole("button", { name: "Research" }).click();
   await expect(page).toHaveURL(/\/theses\/[0-9a-f-]{36}\?ok=/);
-  await flash(page, "Card queued for Sunday's routine.");
+  await flash(page, "Writing your card: usually ready within 15 minutes.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Sigma Holdings Inc.");
   // the entry is live now: the Company page opens it instead of starting another
   await page.goto(`/company/${SIGMA}`);

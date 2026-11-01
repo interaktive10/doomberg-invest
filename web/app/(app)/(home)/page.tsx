@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LinkPending } from "@/components/link-pending";
 import { Callout } from "@/components/callout";
-import { Chip, Dot, DotRow } from "@/components/chip";
+import { Chip, DotRow } from "@/components/chip";
 import { Disclosure } from "@/components/disclosure";
 import { Icon, type IconName } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
@@ -11,7 +11,7 @@ import { TickerTile } from "@/components/ticker-tile";
 import { buttonVariants } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { byMarket, MARKET_LABEL, stillDismissed } from "@/lib/candidates";
-import { dismissals, ensureReviews, latestDigest, screen, sourceHealth, theses, thesisFigures, type ScreenerRow, type Thesis } from "@/lib/data";
+import { dismissals, ensureReviews, latestDigest, latestReport, screen, sourceHealth, theses, thesisFigures, type ScreenerRow, type Thesis } from "@/lib/data";
 import { dayDate, weekEyebrow } from "@/lib/dates";
 import { code } from "@/lib/format";
 import {
@@ -19,12 +19,8 @@ import {
   boardWhyAll,
   changeItems,
   comingUp,
-  funnelInsight,
-  funnelSteps,
-  funnelTitle,
   funnelTotals,
   headline,
-  healthRows,
   homeSections,
   lateLine,
   parseFunnel,
@@ -33,15 +29,13 @@ import {
   todoMinutes,
   type ChangeDir,
   type ChangeItem,
-  type FunnelKey,
-  type FunnelTotals,
-  type HealthState,
   type Upcoming,
 } from "@/lib/home";
-import { familyTone, type Tone } from "@/lib/palette";
+import { familyTone } from "@/lib/palette";
 import { lateSources } from "@/lib/staleness";
 import { group, markMoved } from "@/lib/theses";
 import { cn } from "@/lib/utils";
+import { signedPct, topWinner, type WinnersReport } from "@/lib/winners";
 
 export const metadata = { title: "This week" };
 
@@ -57,12 +51,13 @@ export const metadata = { title: "This week" };
 // (no digest) the headline says so once: no funnel, and no buttons to screens that are empty too (PR 6 final review).
 export default async function Home() {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
-  const [digest, sources, first, ranked, watching] = await Promise.all([
+  const [digest, sources, first, ranked, watching, winners] = await Promise.all([
     latestDigest(),
     sourceHealth(),
     theses(),
     screen({ buckets: ["candidate"], limit: 500 }),
     screen({ buckets: ["watch"], limit: 100 }),
+    latestReport<WinnersReport>("winners"),
   ]);
   const week = ranked[0]?.week_end;
   const held = week ? await dismissals(ranked.map((r) => r.company_id), week) : new Map<string, never>();
@@ -72,14 +67,14 @@ export default async function Home() {
   const needs = all.filter((t) => group(t) === "needs");
   const figures = await thesisFigures(needs);
   const { funnel, changed, legacy } = homeSections(digest?.body_md ?? "");
-  const lines = parseFunnel(funnel);
-  const totals = funnelTotals(lines);
+  const totals = funnelTotals(parseFunnel(funnel));
   const items = changeItems(changed);
   const now = new Date();
   const kills = new Map([...figures].map(([id, f]) => [id, f.kills.length]));
   const upcoming = comingUp(all, now.toISOString().slice(0, 10), kills);
   const late = lateSources(sources, now).length;
   const lateText = lateLine(sources, now);
+  const winner = topWinner(winners?.body ?? null);
   return (
     <Page
       eyebrow={digest ? weekEyebrow(digest.week_end) : undefined}
@@ -87,39 +82,30 @@ export default async function Home() {
       description={headline({ digest: digest !== null, totals, funnel, legacy })}
       actions={digest ? <AsOf week={digest.week_end} late={late} /> : undefined}
     >
-      {digest ? (
-        <Section id="funnel" title={totals ? funnelTitle(totals) : "This week's funnel"} quiet>
-          <Funnel totals={totals} lines={lines.map((l) => l.text)} funnel={funnel} legacy={legacy} />
-        </Section>
-      ) : null}
+      <nav aria-label="Shortcuts" className="grid grid-cols-3 gap-3 md:gap-4">
+        <Shortcut href="/candidates" icon="tag" tone="value" value={board.length} label="undervalued" sub={watching.length > 0 ? `+${watching.length} on Watch` : "on the board"} i={0} />
+        <Shortcut href="/theses" icon="bookmark" tone="list" value={needs.length} label="to do" sub={needs.length > 0 ? `about ${todoMinutes(needs.length)} min` : "all clear"} i={1} />
+        <Shortcut
+          href="/winners"
+          icon="trophy"
+          tone="winner"
+          value={winner ? signedPct(winner.ret) : "–"}
+          label={winner ? `${winner.code ?? winner.name}` : "winners"}
+          sub={winner ? `top of ${winner.year}` : "computed Saturday"}
+          i={2}
+        />
+      </nav>
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
-          <Section
-            id="todo"
-            title="To do"
-            count={needs.length}
-            actions={needs.length > 0 ? <span className="text-[14px] text-subtle">about {todoMinutes(needs.length)} minutes</span> : undefined}
-          >
-            {needs.length === 0 ? (
-              <Empty
-                action={
-                  digest ? (
-                    <Link href="/candidates" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-                      See the candidates
-                    </Link>
-                  ) : undefined
-                }
-              >
-                Nothing needs you this week.
-              </Empty>
-            ) : (
+          {needs.length > 0 ? (
+            <Section id="todo" title="To do" count={needs.length}>
               <ul className="flex flex-col gap-2">
                 {needs.map((t) => (
                   <TodoRow key={t.id} t={t} f={figures.get(t.id)} />
                 ))}
               </ul>
-            )}
-          </Section>
+            </Section>
+          ) : null}
           <Section id="changed" title="What changed">
             {items.length > 0 ? (
               <Feed items={items} />
@@ -148,38 +134,47 @@ export default async function Home() {
           >
             <Board rows={board} hidden={hidden.size} waiting={digest === null} />
           </Section>
-          {watching.length > 0 ? (
+          {lateText ? (
             <Section
-              id="watch"
-              title="Watch"
-              description="To research, not to act on."
+              id="health"
+              title="Data health"
+              quiet
               actions={
-                <Link href="/candidates?bucket=watch" className="inline-flex min-h-11 items-center text-[14px] font-medium no-underline md:min-h-0">
-                  All {watching.length}
-                  <span className="sr-only"> on Watch</span>
-                </Link>
-              }
-            >
-              <ByMarket rows={watching} empty="nothing on Watch" />
-            </Section>
-          ) : null}
-          <Section
-            id="health"
-            title="Data health"
-            quiet
-            actions={
-              lateText ? (
                 <Link href="/settings#sources" className="inline-flex min-h-11 items-center text-[14px] font-medium no-underline md:min-h-0">
                   Sources<span className="sr-only"> in Settings</span>
                 </Link>
-              ) : undefined
-            }
-          >
-            <Health rows={healthRows(sources, now)} late={lateText} />
-          </Section>
+              }
+            >
+              <Callout tone="warn">{lateText}</Callout>
+            </Section>
+          ) : null}
         </div>
       </div>
     </Page>
+  );
+}
+
+const SHORTCUT_TONE = {
+  value: { tile: "bg-tint-sage", icon: "text-up" },
+  list: { tile: "bg-tint-sky", icon: "text-accent" },
+  winner: { tile: "bg-tint-rose", icon: "text-pink" },
+} as const;
+
+/** One of Home's three doors: a big figure, what it counts, one small line. */
+function Shortcut({ href, icon, tone, value, label, sub, i }: { href: string; icon: IconName; tone: keyof typeof SHORTCUT_TONE; value: number | string; label: string; sub: string; i: number }) {
+  const t = SHORTCUT_TONE[tone];
+  return (
+    <Link
+      href={href}
+      style={{ "--i": i } as React.CSSProperties}
+      className={cn("rise press flex min-w-0 flex-col gap-1 rounded-sheet p-3.5 text-fg no-underline transition-transform duration-150 hover:-translate-y-0.5 hover:text-fg md:p-5", t.tile)}
+    >
+      <Icon name={icon} className={cn("size-5 md:size-6", t.icon)} strokeWidth={2.2} />
+      <span className="num mt-1 truncate text-[24px] leading-none font-bold tracking-[-0.03em] md:text-[34px]">{value}</span>
+      <span className="truncate text-[13px] font-semibold md:text-[15px]">{label}</span>
+      <span className="hidden truncate text-[12px] text-muted sm:block md:text-[13px]">{sub}</span>
+      <LinkPending />
+    </Link>
   );
 }
 
@@ -196,73 +191,6 @@ function AsOf({ week, late }: { week: string; late: number }) {
         {text} · {late} {late === 1 ? "source" : "sources"} late
       </Chip>
     </Link>
-  );
-}
-
-const FUNNEL_FILL: Record<FunnelKey, string> = {
-  scored: "bg-subtle/40",
-  stage: "bg-accent/45",
-  board: "bg-accent",
-  new: "bg-accent",
-};
-
-/** Four numbers with bars (log scale: 3 of 4,659 still shows), the one insight, and the digest's own line under
- * Details; a week without scores says why; a digest from before the funnel says so. */
-function Funnel({ totals, lines, funnel, legacy }: { totals: FunnelTotals | null; lines: string[]; funnel: string; legacy: string }) {
-  if (totals === null) {
-    if (funnel) {
-      return (
-        <Callout tone="warn">
-          <Markdown text={funnel} />
-        </Callout>
-      );
-    }
-    return <Empty>{legacy ? "This digest predates the funnel line; Saturday's weekly run writes it." : WAITING}</Empty>;
-  }
-  const insight = funnelInsight(totals);
-  return (
-    <div className="flex flex-col gap-5">
-      <ol className="grid grid-cols-4 gap-3 md:gap-6">
-        {funnelSteps(totals).map((s, i) => (
-          <li key={s.key} className="flex min-w-0 flex-col gap-2">
-            <span className="num text-[22px] leading-none font-bold tracking-[-0.03em] text-fg sm:text-[28px] md:text-[34px]">
-              {s.value.toLocaleString("en-US")}
-            </span>
-            <span aria-hidden="true" className="block h-2 overflow-hidden rounded-full bg-track">
-              <span
-                className={cn("grow-x block h-full rounded-full", FUNNEL_FILL[s.key])}
-                style={{ width: `${s.width}%`, animationDelay: `${i * 60}ms` }}
-              />
-            </span>
-            {/* a phone shows one word per step (the phone mock), the full words from sm up */}
-            <span className="text-[12px] leading-snug text-muted md:text-[13px]">
-              <span className="sm:hidden">{s.short}</span>
-              <span className="hidden sm:inline">{s.label}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-      {insight ? (
-        <Callout className="hidden sm:flex">
-          <strong className="font-semibold text-fg">{insight.lead}</strong>
-          {insight.rest}
-        </Callout>
-      ) : null}
-      <Disclosure summary="Details">
-        {insight ? (
-          <p className="mb-2 text-fg sm:hidden">
-            <strong className="font-semibold">{insight.lead}</strong>
-            {insight.rest}
-          </p>
-        ) : null}
-        <p>The weekly issue&apos;s line{lines.length === 1 ? "" : "s, one per market"}:</p>
-        {lines.map((l) => (
-          <p key={l} className="num mt-1 text-fg">
-            {l}
-          </p>
-        ))}
-      </Disclosure>
-    </div>
   );
 }
 
@@ -307,7 +235,7 @@ const GLYPH: Record<ChangeDir, { icon: IconName; ring: string; text: string }> =
   news: { icon: "doc", ring: "bg-accent/10 text-accent", text: "text-accent" },
 };
 
-const SHOWN = 8;
+const SHOWN = 5;
 
 /** What changed as a feed: the first eight lines, the rest one tap away. */
 function Feed({ items }: { items: ChangeItem[] }) {
@@ -383,7 +311,7 @@ function ComingUp({ list }: { list: Upcoming[] }) {
   );
 }
 
-const BOARD_SHOWN = 5;
+const BOARD_SHOWN = 3;
 
 const SHOW_DISMISSED = "/candidates?dismissed=1";
 
@@ -477,30 +405,3 @@ function ByMarket({ rows, empty }: { rows: ScreenerRow[]; empty: string }) {
   );
 }
 
-const HEALTH_DOT: Record<HealthState, Tone> = { ok: "up", late: "warn", down: "down", resting: "muted" };
-const HEALTH_TEXT: Record<HealthState, string> = { ok: "text-subtle", late: "text-warn", down: "text-down", resting: "text-subtle" };
-
-/** A dot and a date per source the pipeline reads; the stale-data line (BRIEF §2.7) under them when one is late (the
- * section's Sources link goes to each source's last success and error; PR 6 final review HC-4). */
-function Health({ rows, late }: { rows: ReturnType<typeof healthRows>; late: string | null }) {
-  return (
-    <div className="flex flex-col gap-3">
-      {rows.length === 0 ? (
-        <p className="text-[14px] text-muted">No source has reported yet.</p>
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {rows.map((h) => (
-            <li key={h.source} className="flex items-center gap-2.5 text-[14px]">
-              <Dot tone={HEALTH_DOT[h.state]} />
-              <span className="flex-1 text-fg">{h.name}</span>
-              <span className={cn("num", HEALTH_TEXT[h.state])}>{h.when}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {late ? (
-        <Callout tone="warn">{late}</Callout>
-      ) : null}
-    </div>
-  );
-}

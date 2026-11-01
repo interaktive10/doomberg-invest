@@ -252,7 +252,7 @@ describe("charts and cards", () => {
 
 describe("the Theses screen's words", () => {
   it("says what each row asks of you", () => {
-    expect(thesisAsk({ state: "research", author: "manual", card_md: "" })).toBe("Card queued for Sunday");
+    expect(thesisAsk({ state: "research", author: "manual", card_md: "" })).toBe("Writing the card");
     expect(thesisAsk({ state: "research", author: "routine", card_md: "# card" })).toBe("Card ready: accept it or pass");
     expect(thesisAsk({ state: "review", author: "routine", card_md: "x" })).toBe("A review waits for your verdict");
     expect(thesisAsk({ state: "position", author: "routine", card_md: "x" })).toBe("Position open");

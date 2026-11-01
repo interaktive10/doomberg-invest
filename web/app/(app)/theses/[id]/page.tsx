@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { Callout } from "@/components/callout";
 import { Chip, Dot } from "@/components/chip";
 import { Disclosure } from "@/components/disclosure";
@@ -27,7 +28,7 @@ import { one, UUID, type Query } from "@/lib/forms";
 import { ACTION_LABEL, label } from "@/lib/labels";
 import type { Tone } from "@/lib/palette";
 import type { PackDiff } from "@/lib/reviews";
-import { acceptable, canMove, killCheckLine, markMoved, positionOpen, RESEARCH_QUEUED, showsReviews, STATE_LABEL } from "@/lib/theses";
+import { acceptable, canMove, killCheckLine, markMoved, positionOpen, RESEARCH_QUEUED, researchStatus, showsReviews, STATE_LABEL } from "@/lib/theses";
 import { cn } from "@/lib/utils";
 import { accept, addJournal, close, decideReview, dismissThesis } from "./actions";
 import { requireUser } from "@/lib/auth";
@@ -52,6 +53,22 @@ const SECTION_TONE: Record<string, Tone> = {
   risks: "down",
 };
 
+/** The card's sections read first (SPEC_ISSUES 65): why it may be mispriced and the risks; facts, inferences and
+ * assumptions fold under one disclosure (a citation that points into it opens it: components/open-target.tsx). */
+const UP_FRONT = new Set(["why it may be mispriced", "risks"]);
+
+function CardPart({ title, body, cite }: { title: string; body: string; cite: Parameters<typeof Markdown>[0]["cite"] }) {
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-line pt-4 first:border-t-0 first:pt-0">
+      <h3 className="flex items-center gap-2 text-[17px] font-bold tracking-[-0.01em] text-fg">
+        <Dot tone={SECTION_TONE[title.toLowerCase()] ?? "muted"} className="size-2.5" />
+        {title}
+      </h3>
+      <Markdown text={body} cite={cite} />
+    </div>
+  );
+}
+
 function Hidden({ id }: { id: string }) {
   return <input type="hidden" name="thesis_id" value={id} />;
 }
@@ -62,6 +79,38 @@ function Day({ iso, className }: { iso: string; className?: string }) {
     <time dateTime={iso.slice(0, 10)} className={cn("num", className)}>
       {shortDate(iso, true)}
     </time>
+  );
+}
+
+/** A research entry without a card: being written (the page re-reads itself), covered by the week's card, or given up
+ * on with the checks that failed (docs/SPEC_ISSUES.md 66). */
+function NoCard({ state, validation }: { state: string; validation: unknown }) {
+  if (state !== "research") return <Empty>No card: this research entry closed before one was written.</Empty>;
+  const st = researchStatus(validation);
+  if (st.kind === "covered") {
+    return (
+      <Empty action={<Link href={`/theses/${st.id}`} className={buttonVariants({ size: "sm" })}>Open its card</Link>}>
+        This week already has a card for this company.
+      </Empty>
+    );
+  }
+  if (st.kind === "failed") {
+    return (
+      <Empty>
+        No card passed the checks twice, so it waits for Sunday&apos;s routine.
+        {st.errors[0] ? <span className="mt-1 block text-[13px] text-subtle">Last check that failed: {st.errors[0]}</span> : null}
+      </Empty>
+    );
+  }
+  return (
+    <Empty>
+      <span className="inline-flex items-center gap-2">
+        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
+        {RESEARCH_QUEUED}
+      </span>
+      <span className="mt-1 block text-[13px] text-subtle">This page updates itself when it lands.</span>
+      <AutoRefresh seconds={30} />
+    </Empty>
   );
 }
 
@@ -255,22 +304,24 @@ export default async function ThesisPage({ params, searchParams }: { params: Pro
                     <Markdown text={lead} cite={cite} />
                   </div>
                 ) : null}
-                {parts.sections.map((s, i) => (
-                  <div key={`${i}-${s.title}`} className="flex flex-col gap-1.5 border-t border-line pt-4 first:border-t-0 first:pt-0">
-                    <h3 className="flex items-center gap-2 text-[17px] font-bold tracking-[-0.01em] text-fg">
-                      <Dot tone={SECTION_TONE[s.title.toLowerCase()] ?? "muted"} className="size-2.5" />
-                      {s.title}
-                    </h3>
-                    <Markdown text={unlabel(s.title, s.body)} cite={cite} />
-                  </div>
+                {parts.sections.filter((s) => UP_FRONT.has(s.title.toLowerCase())).map((s, i) => (
+                  <CardPart key={`${i}-${s.title}`} title={s.title} body={unlabel(s.title, s.body)} cite={cite} />
                 ))}
+                {parts.sections.some((s) => !UP_FRONT.has(s.title.toLowerCase())) ? (
+                  <Disclosure
+                    summary={`The evidence: ${parts.sections.filter((s) => !UP_FRONT.has(s.title.toLowerCase())).map((s) => s.title.toLowerCase()).join(", ")}`}
+                    className="border-t border-line pt-4"
+                  >
+                    <div className="mt-3 flex flex-col gap-5">
+                      {parts.sections.filter((s) => !UP_FRONT.has(s.title.toLowerCase())).map((s, i) => (
+                        <CardPart key={`${i}-${s.title}`} title={s.title} body={unlabel(s.title, s.body)} cite={cite} />
+                      ))}
+                    </div>
+                  </Disclosure>
+                ) : null}
               </div>
             ) : (
-              <Empty>
-                {t.state === "research"
-                  ? `No card yet. ${RESEARCH_QUEUED} It writes a grounded card for this research entry after the week's shortlist.`
-                  : "No card: this research entry closed before the routine wrote one."}
-              </Empty>
+              <NoCard state={t.state} validation={t.validation} />
             )}
           </Section>
 

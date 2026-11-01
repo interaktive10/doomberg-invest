@@ -52,6 +52,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("weights.yml", ("weights",)),
         ("backfill.yml", ("us",)),
         ("india-backfill.yml", ("history",)),
+        ("research.yml", ("cards",)),
         ("reports.yml", ("reports",)),
     ):
         for job in jobs:  # the Actions minutes gate reads no table, so it may come first

@@ -4,7 +4,7 @@ import { Chip, Legend } from "@/components/chip";
 import { DetailsMenu } from "@/components/details-menu";
 import { Icon } from "@/components/icons";
 import { Empty, Flash, Page } from "@/components/page";
-import { ScoreTile } from "@/components/score-ring";
+import { ScoreRing } from "@/components/score-ring";
 import { Segmented } from "@/components/segmented";
 import { SubmitButton } from "@/components/submit-button";
 import { TickerTile } from "@/components/ticker-tile";
@@ -189,7 +189,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       ) : market ? (
         <Cards label="Candidates" rows={shown} cards={cards} dismissed={dismissed} history={history} back={back} />
       ) : (
-        <div className="grid items-start gap-x-6 gap-y-8 lg:grid-cols-[3fr_2fr]">
+        <div className="grid items-start gap-x-6 gap-y-8 lg:grid-cols-2">
           {byMarket(shown).map(([m, rows]) => (
           <section key={m} aria-labelledby={`market-${m}`} className="flex min-w-0 flex-col gap-3">
             <h2 id={`market-${m}`} className="flex items-center gap-2 text-[18px] font-bold tracking-[-0.01em] text-fg">
@@ -253,7 +253,7 @@ function Cards({
   back: string;
 }) {
   return (
-    <ul aria-label={label} className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-5">
+    <ul aria-label={label} className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] gap-3">
       {rows.map((r, i) => (
         <CandidateCard
           key={r.company_id}
@@ -293,61 +293,57 @@ function CandidateCard({
   const move = evidenceMove(change);
   const flags = flagLine(r.red_flags, r.hard_flag);
   return (
-    <li className="sheet rise flex min-w-0 flex-col gap-4 p-5" style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
-      <div className="flex items-center gap-3">
-        <TickerTile ticker={ticker} />
-        <div className="flex min-w-0 flex-col gap-0.5">
+    <li className="sheet rise flex min-w-0 flex-col gap-3 p-4" style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
+      <div className="flex items-start gap-3">
+        <div className="flex shrink-0 gap-1" title="Evidence: how sure · Gap: how far the price lags">
+          <ScoreRing value={score(r.evidence)} kind="evidence" size={46} />
+          <ScoreRing value={score(r.gap)} kind="gap" size={46} />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h2 id={nameId} className="text-[18px] leading-tight font-bold tracking-[-0.01em] text-fg">
+            <h2 id={nameId} className="text-[16px] leading-tight font-bold tracking-[-0.01em] text-fg">
               {r.name}
             </h2>
             {fresh ? <Badge title="In this bucket for the first time in 12 weeks">NEW</Badge> : null}
             {gone ? <Badge variant="secondary">dismissed</Badge> : null}
           </div>
-          <p className="truncate text-[13px] text-subtle">{[ticker, r.market === "in" ? "India" : null, r.sector].filter(Boolean).join(" · ")}</p>
-        </div>
-      </div>
-      <div className="flex flex-col gap-2">
-        <div className="flex gap-3">
-          <ScoreTile value={score(r.evidence)} kind="evidence" />
-          <ScoreTile value={score(r.gap)} kind="gap" />
-        </div>
-        {change !== null ? (
-          <p className={cn("flex items-center gap-1.5 text-[13px]", MOVE[move.tone].text)}>
-            <Icon name={MOVE[move.tone].icon} className="size-3.5" strokeWidth={2.4} />
-            <span>
-              <span className="font-semibold">Evidence</span> {move.text}
-            </span>
+          <p className="flex flex-wrap items-center gap-x-2 text-[13px] text-subtle">
+            <span className="truncate">{[ticker, r.market === "in" ? "India" : null, r.sector].filter(Boolean).join(" · ")}</span>
+            {change !== null ? (
+              <span className={cn("inline-flex items-center gap-1", MOVE[move.tone].text)}>
+                <Icon name={MOVE[move.tone].icon} className="size-3" strokeWidth={2.6} />
+                <span>Evidence {move.text}</span>
+              </span>
+            ) : null}
           </p>
-        ) : null}
+          {r.fired_signals.length === 0 ? (
+            <p className="text-[13px] text-muted">No signal fired.</p>
+          ) : (
+            <ul aria-label="Why it's here" className="flex flex-wrap gap-1.5">
+              {r.fired_signals.map((s) => (
+                <li key={s}>
+                  <Chip dot={signalTone(s)} title={SIGNAL_NAME[s] ? `${s} ${SIGNAL_NAME[s]}` : s}>
+                    {SIGNAL_PLAIN[s] ?? s}
+                  </Chip>
+                </li>
+              ))}
+            </ul>
+          )}
+          {flags.tone === "good" ? null : (
+            <p className={cn("flex items-start gap-1.5 text-[13px]", FLAG[flags.tone])} title={flags.codes || undefined}>
+              <Icon name="shield" className="mt-px" />
+              <span>{flags.text}</span>
+            </p>
+          )}
+        </div>
       </div>
-      <div className="flex flex-col gap-2">
-        <p className="eyebrow">Why it&apos;s here</p>
-        {r.fired_signals.length === 0 ? (
-          <p className="text-[13px] text-muted">No signal fired.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {r.fired_signals.map((s) => (
-              <li key={s}>
-                <Chip dot={signalTone(s)} title={SIGNAL_NAME[s] ? `${s} ${SIGNAL_NAME[s]}` : s}>
-                  {SIGNAL_PLAIN[s] ?? s}
-                </Chip>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <p className={cn("flex items-start gap-2 text-[13px]", FLAG[flags.tone])} title={flags.codes || undefined}>
-        <Icon name="shield" className={cn("mt-px", flags.tone === "good" && "text-subtle")} />
-        <span>{flags.text}</span>
-      </p>
-      <div className="mt-auto flex items-center gap-2">
-        <Link href={`/company/${r.company_id}`} className={cn(buttonVariants(), "flex-1")}>
+      <div className="flex items-center gap-2">
+        <Link href={`/company/${r.company_id}`} className={cn(buttonVariants({ size: "sm" }), "flex-1")}>
           Open<span className="sr-only"> {r.name}</span>
           <LinkPending />
         </Link>
         {card ? (
-          <Link href={`/theses/${card.id}`} aria-describedby={nameId} className={buttonVariants({ variant: "secondary" })}>
+          <Link href={`/theses/${card.id}`} aria-describedby={nameId} className={buttonVariants({ variant: "secondary", size: "sm" })}>
             Open card
             <LinkPending />
           </Link>
@@ -355,7 +351,7 @@ function CandidateCard({
           <form action={research}>
             <input type="hidden" name="company_id" value={r.company_id} />
             <input type="hidden" name="back" value={back} />
-            <SubmitButton variant="secondary" aria-describedby={nameId}>
+            <SubmitButton variant="secondary" size="sm" aria-describedby={nameId}>
               Research
             </SubmitButton>
           </form>

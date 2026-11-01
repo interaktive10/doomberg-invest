@@ -454,7 +454,7 @@ export function cardSections(md: string): { lead: string; sections: { title: str
 
 /** What a thesis row asks of you, or where it stands. */
 export function thesisAsk(t: { state: string; author: string; card_md: string }): string {
-  if (t.state === "research" && t.author === "manual" && t.card_md.trim() === "") return "Card queued for Sunday";
+  if (t.state === "research" && t.author === "manual" && t.card_md.trim() === "") return "Writing the card";
   switch (t.state) {
     case "research":
       return "Card ready: accept it or pass";
