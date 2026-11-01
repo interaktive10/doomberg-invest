@@ -145,3 +145,24 @@ def test_a_retired_theme_moves_out_with_its_notes() -> None:
     lib, retired = t.apply([dict(x) for x in LIB], [], r, date(2026, 12, 4))
     assert lib == [] and retired[0]["slug"] == "vehicle-replacement" and retired[0]["notes"][-1]["decision"] == "retire"
     assert {"57", "57.1", "2", "12"} <= t.allowed_numbers("0.571 0.02 0.12") and "3" not in t.allowed_numbers("0.02")
+
+
+def test_a_driver_that_fails_or_runs_past_the_budget_uses_its_last_good_copy(tmp_path: Path) -> None:
+    """The first live run (2026-11-01) ran past its job's limit; FRED from a runner can be slow, so downloads have a
+    budget and a stored copy to fall back on."""
+    from pipeline.net import fred
+    from pipeline.net.http import HttpClient
+    from pipeline.settings import Settings
+
+    http = HttpClient(Settings(database_url="x", mock_externals=True, sec_user_agent="t", cache_dir=tmp_path))
+    http.register_mock(fred.URL.format(id="TOTALSA"), (ROOT / "fixtures" / "fred" / "TOTALSA.csv").read_bytes())
+    old = [(date(2020, 1, 1), 1.0)]
+    pts, missing = t.driver_points(http, ["TOTALSA", "HSN1F", "PERMIT"], {"HSN1F": old})
+    assert len(pts["TOTALSA"]) > 400 and pts["HSN1F"] == old and "PERMIT" not in pts
+    assert (
+        missing[0].startswith("HSN1F: ")
+        and missing[0].endswith("last good copy used")
+        and missing[1].startswith("PERMIT")
+    )
+    late, why = t.driver_points(http, ["TOTALSA"], {"TOTALSA": old}, budget=-1)
+    assert late["TOTALSA"] == old and "over the time budget" in why[0]
