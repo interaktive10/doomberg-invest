@@ -229,6 +229,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: uv run --frozen python -m pipeline.reports.winners
+      - name: Themes (P-08 over the week's industry evidence; SPEC_ISSUES 67)
+        if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: uv run --frozen python -m pipeline.reports.themes
       - name: Digest issue
         if: ${{ !cancelled() && steps.secrets.outputs.ok == 'true' }}
         timeout-minutes: 5

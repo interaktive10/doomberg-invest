@@ -30,6 +30,7 @@ routing:  # OpenRouter first, Gemini's free tier when it is out or fails (docs/S
   P-05: [openrouter, gemini, groq]
   P-07: [openrouter, gemini, groq]
   P-04-fallback: [openrouter, gemini]
+  P-08: [openrouter, gemini]   # the weekly themes pass (docs/SPEC_ISSUES.md 67)
 # the text run's order, for the record (the code's is pipeline/facts/run.py ORDER; a test keeps the two the same;
 # docs/SPEC_ISSUES.md 58): theses and research entries, the stage names on a board, those one verified fact would make
 # a Candidate, the rest, Excluded names last

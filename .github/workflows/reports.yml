@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 10
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -27,3 +29,5 @@ jobs:
       - run: uv run --frozen python -m pipeline.db.migrate
       - name: Last year's winners
         run: uv run --frozen python -m pipeline.reports.winners
+      - name: Themes
+        run: uv run --frozen python -m pipeline.reports.themes
