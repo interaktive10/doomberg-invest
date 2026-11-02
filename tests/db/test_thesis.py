@@ -232,6 +232,25 @@ def test_fallback_runs_only_when_the_week_has_no_cards(conn: psycopg.Connection[
     assert not later.ran and later.reason == "the week already has cards"
 
 
+def test_fallback_starts_no_card_past_its_budget_and_logs_counts_only(conn: psycopg.Connection[Any], tmp_path: Path,
+                                                                   capsys: Any) -> None:  # fmt: skip
+    """2026-11-02: ten DeepSeek cards ran past the job's 30 minutes and it was cancelled with nothing printed. Now a
+    card past the budget is deferred, each card prints its outcome and seconds, and no line names a company."""
+    cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
+    cards, _ = card_tree(tmp_path, cid)
+    (cards / "us-nmbs.json").unlink()
+    good = json.loads((FIX / "card" / "good.json").read_text())
+    monday = datetime(2026, 9, 21, 6, 0, tzinfo=UTC)
+    ticks = iter([0.0, 2000.0, 2000.0])  # the budget is spent before the first card starts
+    out = fallback_writer.write_cards(conn, CardRouter(good), "2026-W38", tmp_path, now=lambda: monday,  # type: ignore[arg-type]
+                                      clock=lambda: next(ticks))  # fmt: skip
+    assert out.ran and out.deferred == ["us-nmbs"] and out.written == []
+    log = capsys.readouterr().out
+    assert "card 1/1: deferred (past 25 minutes)" in log and "Nimbus" not in log and "NMBS" not in log
+    again = fallback_writer.write_cards(conn, CardRouter(good), "2026-W38", tmp_path, now=lambda: monday)  # type: ignore[arg-type]
+    assert again.written == ["us-nmbs"] and "card 1/1: written in" in capsys.readouterr().out
+
+
 def test_fallback_skips_a_week_the_routine_covered(conn: psycopg.Connection[Any], tmp_path: Path) -> None:
     cid = company(conn, "00000000-0000-4000-8000-00000000c0de", "Nimbus Compute Corp.", "NMBS")
     card_tree(tmp_path, cid)

@@ -21,7 +21,9 @@ providers:
     # high effort where the model reasons (cards, claim checks, themes); low where it looks things up (extraction,
     # triage, links: medium since 2026-11-02 for recall, docs/SPEC_ISSUES.md 70): high on ~400 extraction calls a day
     # would take the daily run past its time limit
-    reasoning: {card: high, extract: medium}
+    # check: P-05 claim checks, low (a yes/no reading of quotes; high made ten cards outrun the fallback's 30 minutes);
+    # its model is the extract model unless models.check names one
+    reasoning: {card: high, extract: medium, check: low}
     requests_per_day: 1500      # spend caps: about $1 a day at most; typical use is a third of it
     requests_per_minute: 60
     tokens_per_day: 6000000

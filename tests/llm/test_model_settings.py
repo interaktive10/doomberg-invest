@@ -12,7 +12,7 @@ def test_a_listed_model_and_effort_replace_the_configs_per_task() -> None:
     p = q.with_settings({"extract": "z-ai/glm-5.3-flash", "card": "deepseek/deepseek-v4.1-flash"},
                         {"extract": "none", "card": "medium"}).providers["openrouter"]  # fmt: skip
     assert p.model("extract") == "z-ai/glm-5.3-flash" and p.model("card") == "deepseek/deepseek-v4.1-flash"
-    assert p.reasoning == {"card": "medium"}  # none sends no effort
+    assert p.reasoning == {"card": "medium", "check": "low"}  # none sends no effort; the check keeps its own
     assert p.requests_per_day == q.providers["openrouter"].requests_per_day  # the caps hold
 
 
