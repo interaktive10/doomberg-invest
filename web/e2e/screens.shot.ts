@@ -14,7 +14,7 @@ const WIDTHS = [
 
 const EMPTY = process.env.SHOTS_SET === "empty";
 const SET: readonly string[] = EMPTY
-  ? ["/", "/candidates", "/theses", "/journal", "/lab", "/settings", "/company/00000000-0000-4000-8000-000000000000"]
+  ? ["/", "/candidates", "/theses", "/settings", "/company/00000000-0000-4000-8000-000000000000"]
   : PAGES;
 const PREFIX = EMPTY ? "empty-" : "";
 

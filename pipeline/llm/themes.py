@@ -18,6 +18,7 @@ CATEGORIES = (
     "Energy & power",
     "Industrial capex",
     "Technology & AI",
+    "Digital & media",
     "Materials & commodities",
     "Rates & credit",
     "Transport & travel",

@@ -31,3 +31,11 @@ drivers:
   PNGASUSUSDM: {name: "Natural gas price", unit: "dollars per MMBtu"}
   PCOPPUSDM: {name: "Copper price", unit: "dollars a tonne"}
   PIORECRUSDM: {name: "Iron ore price", unit: "dollars a tonne"}
+  # slow shifts in how people live and spend (2026-11-02: "what are the impacts of social media? ... higher youtube
+  # revenue because more people are using internet"): the measurable part of each shift
+  RSNSR: {name: "US online and other non-store sales", unit: "million dollars"}
+  PCU518210518210: {name: "US data hosting and processing prices", unit: "index"}
+  CES6562000001: {name: "US health care jobs", unit: "thousand jobs"}
+  IPG3254S: {name: "US pharmaceutical production", unit: "index"}
+  PRMFGCONS: {name: "US factory construction spending", unit: "million dollars a year"}
+  RSFSDP: {name: "US restaurant and bar sales", unit: "million dollars"}

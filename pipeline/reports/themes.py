@@ -251,6 +251,18 @@ def seed(root: Path = REPO_ROOT) -> list[dict[str, Any]]:
             for t in doc["themes"]]  # fmt: skip
 
 
+def add_starters(library: Sequence[Mapping[str, Any]], retired: Sequence[Mapping[str, Any]],
+                 starters: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:  # fmt: skip
+    """The library with every starter theme it lacks, unless the rethink retired it (2026-11-02: starters added to
+    config/themes_seed.yaml join a library that already exists, not only an empty one); MAX_ACTIVE at most."""
+    have = {t["slug"] for t in library} | {t["slug"] for t in retired}
+    out = [dict(t) for t in library]
+    for t in starters:
+        if t["slug"] not in have and len(out) < MAX_ACTIVE:
+            out.append(dict(t))
+    return out
+
+
 def rethink_due(week: date, last: date | None, triggered: bool) -> tuple[bool, str]:
     if last is None:
         return True, "the first rethink"
@@ -537,8 +549,8 @@ def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient
     mkt = market_years(firms, last_year)
     # the latest report up to this week, this week's included: a re-run of the week carries its library, not the seed
     prev: dict[str, Any] = next((b for _, b in repo.recent_reports(conn, "themes", week + timedelta(days=1), 1)), {})
-    library: list[dict[str, Any]] = list(prev.get("library") or seed(root))
     retired: list[dict[str, Any]] = list(prev.get("retired") or [])
+    library = add_starters(list(prev.get("library") or []), retired, seed(root))
     last = date.fromisoformat(prev["last_rethink"]) if prev.get("last_rethink") else None
 
     def refresh(lib: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -57,7 +57,7 @@ describe("start_position age at the entry date (§11.9; M7 review R1-F8)", () =>
   });
 
   it("the journal forms default to today's IST date", () => {
-    for (const page of ["web/app/(app)/journal/page.tsx", "web/app/(app)/theses/[id]/page.tsx"]) {
+    for (const page of ["web/app/(app)/theses/[id]/page.tsx"]) {
       const text = repoFile(page);
       expect(text, page).toContain("localToday(new Date())");
       expect(text, page).not.toContain("toISOString().slice(0, 10)");

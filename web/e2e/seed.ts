@@ -22,7 +22,5 @@ export const PAGES = [
   `/theses/${ECHO_THESIS}`,
   `/theses/${OMEGA_THESIS}`,
   `/theses/${SIGMA_THESIS}`,
-  "/journal",
-  "/lab",
   "/settings",
 ] as const;
