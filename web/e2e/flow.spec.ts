@@ -385,3 +385,14 @@ test("Undervalued: a market-cap range per market filters the cards and survives 
   await expect(page.getByRole("slider", { name: "From" })).toHaveCount(2); // Both: a range per market
 });
 
+test("Themes: a theme's companies take a market-cap range (2026-11-02)", async ({ page }) => {
+  await page.goto("/themes?t=vehicle-replacement");
+  const names = page.getByRole("region", { name: "The companies" });
+  await expect(names.getByRole("link", { name: /ECHO/ })).toBeVisible();
+  await expect(names.getByRole("link", { name: /SGMA/ })).toBeVisible();
+  await expect(names.getByRole("slider", { name: "From" })).toHaveCount(2); // a US and an Indian company: a range each
+  await names.getByRole("slider", { name: "From" }).first().fill("6"); // the US one, from $100B
+  await expect(page).toHaveURL(/cap_us=6-9/);
+  await expect(names.getByRole("link", { name: /SGMA/ })).toHaveCount(0);
+  await expect(names.getByRole("link", { name: /ECHO/ })).toBeVisible();
+});

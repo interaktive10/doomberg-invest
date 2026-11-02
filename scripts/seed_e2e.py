@@ -393,6 +393,8 @@ def seed(conn: psycopg.Connection[Any]) -> None:
     # the theme library (pipeline/reports/themes.py's v2 body; docs/SPEC_ISSUES.md 68): the Themes screen
     chart = [[f"{2016 + i // 12}-{i % 12 + 1:02d}", 16.0 + (i % 24) / 10] for i in range(120)]
 
+    NAME_CAPS = {"ECHO": 2.4e11, "SGMA": 3e9, "TARAPUMP": 7e10}
+
     def name(
         cid: str, code: str, nm: str, market: str, ind: str, ev: float, bucket: str, move: float
     ) -> dict[str, object]:
@@ -406,6 +408,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
             "bucket": bucket,
             "move": move,
             "demand": True,
+            "cap": NAME_CAPS.get(code),  # the company list's market-cap range (2026-11-02)
         }
 
     def theme(
@@ -477,6 +480,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
             },
             names=[
                 name(ECHO, "ECHO", "Echo Grid Corp.", "us", "Motor Vehicle Parts", 73, "candidate", 0.31),
+                name(SIGMA, "SGMA", "Sigma Holdings Inc.", "us", "Motor Vehicle Parts", 40, "watch", 0.04),
                 name(TARA, "TARAPUMP", "Tara Pumps Ltd", "in", "Automobile and Auto Components", 50, "watch", 0.02),
             ],
             notes=[{"week": "2026-09-04", "decision": "keep", "text": "The 2022 cohort is due and parts makers lag."}],
