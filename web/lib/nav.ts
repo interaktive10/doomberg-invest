@@ -7,7 +7,7 @@ export type PlaceTone = "accent" | "up" | "violet" | "pink" | "warn";
 export interface Place {
   href: string;
   label: string;
-  icon: "home" | "tag" | "trophy" | "bookmark" | "spark" | "book" | "flask" | "gear";
+  icon: "home" | "tag" | "trophy" | "bookmark" | "spark" | "gear";
   tone?: PlaceTone;
   /** the phone dock's shorter label, when the full one doesn't fit six tabs */
   short?: string;
@@ -22,8 +22,6 @@ export const MAIN: readonly Place[] = [
 ];
 
 export const MORE: readonly Place[] = [
-  { href: "/journal", label: "Journal", icon: "book" },
-  { href: "/lab", label: "Signal Lab", icon: "flask" },
   { href: "/settings", label: "Settings", icon: "gear" },
 ];
 

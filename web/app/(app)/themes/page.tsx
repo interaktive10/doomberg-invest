@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Callout } from "@/components/callout";
 import { LineChartCard } from "@/components/charts";
 import { Icon } from "@/components/icons";
+import { Disclosure } from "@/components/disclosure";
 import { LinkPending } from "@/components/link-pending";
 import { Empty, Page, Section } from "@/components/page";
 import { ThemePicker, type PickerGroup } from "@/components/theme-picker";
@@ -16,8 +17,10 @@ import {
   lagWords,
   pct,
   readingWords,
+  zWords,
   STATUS,
   STATUS_ORDER,
+  STATUS_SHORT,
   type LibraryTheme,
   type RetiredTheme,
   type Status,
@@ -69,7 +72,7 @@ export default async function Themes({ searchParams }: { searchParams: Promise<Q
 function groups(r: ThemesReport): PickerGroup[] {
   const out = byCategory(r.library).map(([label, list]) => ({
     label,
-    options: list.map((t) => ({ value: t.slug, label: `${t.title} · ${STATUS[t.status].label}` })),
+    options: list.map((t) => ({ value: t.slug, label: `${t.title} · ${STATUS_SHORT[t.status]}` })),
   }));
   if (r.retired.length > 0) out.push({ label: "Retired", options: r.retired.map((t) => ({ value: t.slug, label: t.title })) });
   return out;
@@ -82,8 +85,38 @@ const TONE_CHIP: Record<"up" | "warn" | "muted" | "down", string> = {
   down: "bg-tint-clay text-down",
 };
 
-function StatusChip({ s }: { s: Status }) {
-  return <span className={cn("rounded-full px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap", TONE_CHIP[STATUS[s].tone])}>{STATUS[s].label}</span>;
+/** The status as a chip: the short word on a card, the full label on a theme's own page; the meaning in its title. */
+function StatusChip({ s, full = false }: { s: Status; full?: boolean }) {
+  return (
+    <span title={STATUS[s].hint} className={cn("rounded-full px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap", TONE_CHIP[STATUS[s].tone])}>
+      {full ? STATUS[s].label : STATUS_SHORT[s]}
+    </span>
+  );
+}
+
+/** How to read the screen, in four lines (Manzoor, 2026-11-02: "i didn't understand building, fading, etc"). */
+function HowToRead() {
+  return (
+    <Disclosure summary="How to read this" className="sheet px-5 py-4">
+      <div className="flex flex-col gap-3 pt-2 text-[14px] text-muted">
+        <p>
+          Each theme is a chain: <strong className="font-semibold text-fg">a trigger</strong> in the world (more cars sold, more people online, rates
+          falling) reaches <strong className="font-semibold text-fg">certain companies</strong>, sometimes years later (cars bought in 2021 need tires
+          around 2025). Every Saturday we check each trigger against its own past 20 years and how far its stocks have already moved.
+        </p>
+        <ul className="flex flex-col gap-1.5">
+          {STATUS_ORDER.map((s) => (
+            <li key={s} className="flex items-start gap-2">
+              <StatusChip s={s} />
+              <span>
+                <span className="font-semibold text-fg">{STATUS[s].label}:</span> {STATUS[s].hint}.
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Disclosure>
+  );
 }
 
 /** "US light vehicle sales → tire, motor vehicle parts" */
@@ -95,6 +128,7 @@ function chainLine(t: LibraryTheme, r: ThemesReport): string {
 function Overview({ r }: { r: ThemesReport }) {
   return (
     <>
+      <HowToRead />
       {r.note ? (
         <Callout>
           <strong className="font-semibold text-fg">The AI&apos;s latest thinking: </strong>
@@ -121,7 +155,7 @@ function Overview({ r }: { r: ThemesReport }) {
                     <span className="text-[18px] leading-snug font-bold tracking-[-0.01em]">{t.title}</span>
                     <span className="line-clamp-2 text-[13px] text-muted">{chainLine(t, r)}</span>
                     <span className="mt-auto grid grid-cols-3 gap-2 text-[12px]">
-                      <Mini label="Driver" value={t.signal.replace(" normal", "")} />
+                      <Mini label="Trigger" value={t.signal.replace(" normal", "")} />
                       <Mini label="Demand" value={`${t.with_demand} of ${t.companies}`} />
                       <Mini label="Price vs mkt" value={pct(t.run)} />
                     </span>
@@ -159,7 +193,7 @@ function Detail({ t, r }: { t: LibraryTheme; r: ThemesReport }) {
       <section aria-labelledby="theme-title" className="sheet rise flex flex-col gap-5 p-5 md:p-7">
         <div className="flex flex-wrap items-center gap-2">
           <span className="eyebrow">{t.category}</span>
-          <StatusChip s={t.status} />
+          <StatusChip s={t.status} full />
           {t.origin === "ai" && t.born ? <span className="text-[12px] text-subtle">added by the AI {shortDate(t.born, true)}</span> : null}
         </div>
         <h2 id="theme-title" className="text-[26px] leading-tight font-bold tracking-[-0.02em] text-fg md:text-[32px]">
@@ -167,12 +201,12 @@ function Detail({ t, r }: { t: LibraryTheme; r: ThemesReport }) {
         </h2>
         <p className="max-w-3xl text-[16px] leading-relaxed text-fg">{t.why}</p>
         <ol aria-label="The chain" className="flex flex-col gap-2 md:flex-row md:items-stretch">
-          <Step tone="bg-tint-sky" head="What happens" body={from} sub={readingWords(t)} />
+          <Step tone="bg-tint-sky" head="The trigger" body={from} sub={readingWords(t)} />
           <Arrow text={lagWords(t)} />
           <Step tone="bg-tint-sage" head="Who it lifts" body={t.keywords.join(", ")} sub={`${t.companies} companies${t.markets.length ? ` · ${t.markets.map(marketName).join(" and ")}` : ""}`} />
         </ol>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="The driver now" value={t.signal} sub={t.z === null ? "" : `z ${t.z > 0 ? "+" : ""}${t.z.toFixed(1)}`} />
+          <Stat label="The trigger now" value={t.signal} sub={zWords(t.z)} />
           <Stat label="Demand evidence" value={`${t.with_demand} of ${t.companies}`} sub="companies report it" />
           <Stat label="Price, 12 months" value={pct(t.move)} sub={t.market_move === null ? "" : `market ${pct(t.market_move)}`} />
           <Stat label="Undervalued" value={String(t.undervalued)} sub="on the board or Watch" />

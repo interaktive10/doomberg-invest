@@ -58,7 +58,15 @@ def logged_router(conn: Conn, providers: Mapping[str, Provider], quotas: Quotas,
     def log(r: CallRecord) -> None:
         record_llm_calls(conn, [LlmCall(**asdict(r))])
 
+    picked = llm_settings(conn)
+    quotas = quotas.with_settings(picked.get("llm_models"), picked.get("llm_effort"))
     return Router(providers, quotas, log=log, used_today=llm_usage(conn, day))
+
+
+def llm_settings(conn: Conn) -> dict[str, Any]:
+    """What Settings picked for OpenRouter (app_settings llm_models and llm_effort: {extract, card}); {} before."""
+    rows = conn.execute(_q("select key, value from app_settings where key in ('llm_models', 'llm_effort')")).fetchall()
+    return {k: v for k, v in rows if isinstance(v, dict)}
 
 
 def record_llm_calls(conn: Conn, calls: Iterable[LlmCall]) -> None:

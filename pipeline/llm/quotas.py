@@ -9,7 +9,7 @@ hard-coded. A provider whose `requests_per_day` is null hasn't been filled in an
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +68,35 @@ class Quotas:
         limits = doc.get("text_daily_limits") or {}
         return cls(providers, routing, tuple(doc.get("work_order") or ()), _int(limits.get("documents_per_day")), doc,
                    _int(limits.get("announcements_per_day")))  # fmt: skip
+
+    def choices(self) -> dict[str, Mapping[str, Any]]:
+        """The OpenRouter models Settings may pick, by id (config/quotas.yaml openrouter.choices)."""
+        doc = (self.raw.get("providers") or {}).get("openrouter") or {}
+        return {str(c["id"]): c for c in doc.get("choices") or []}
+
+    def with_settings(self, models: Mapping[str, Any] | None, effort: Mapping[str, Any] | None) -> Quotas:
+        """OpenRouter's model and reasoning effort per task as Settings picked them (app_settings llm_models and
+        llm_effort; docs/SPEC_ISSUES.md 69). Only a listed model and a listed effort count; anything else keeps the
+        config's value, and every cap stays as configured. "none" sends no effort."""
+        q = self.providers.get("openrouter")
+        if q is None:
+            return self
+        allowed = self.choices()
+        efforts = set(((self.raw.get("providers") or {}).get("openrouter") or {}).get("efforts") or [])
+        new_models = dict(q.models)
+        new_effort = dict(q.reasoning)
+        for task in ("extract", "card"):
+            m = (models or {}).get(task)
+            if isinstance(m, str) and m in allowed:
+                new_models[task] = m
+            e = (effort or {}).get(task)
+            if isinstance(e, str) and e in efforts:
+                if e == "none":
+                    new_effort.pop(task, None)
+                else:
+                    new_effort[task] = e
+        providers = {**self.providers, "openrouter": replace(q, models=new_models, reasoning=new_effort)}
+        return replace(self, providers=providers)
 
     @classmethod
     def load(cls, root: Path = REPO_ROOT) -> Quotas:
