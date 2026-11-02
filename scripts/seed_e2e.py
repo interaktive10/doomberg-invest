@@ -485,6 +485,15 @@ def seed(conn: psycopg.Connection[Any]) -> None:
                 name(TARA, "TARAPUMP", "Tara Pumps Ltd", "in", "Automobile and Auto Components", 50, "watch", 0.02),
             ],
             notes=[{"week": "2026-09-04", "decision": "keep", "text": "The 2022 cohort is due and parts makers lag."}],
+            # the data behind it (2026-11-02): the months its reading compares (pipeline/reports/drivers.py basis)
+            basis={
+                "transform": "cohort",
+                "now": {"from": "2021-10", "to": "2022-09", "value": 13.902},
+                "then": {"from": "2011-10", "to": "2021-09", "value": 16.644},
+                "change": -0.1647,
+                "peak": {"year": 2016, "value": 17.88},
+                "through": "2026-09",
+            },  # fmt: skip
         ),
         theme(
             "housing-finishing",
@@ -535,6 +544,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
                            "week": "2026-09-04", "note": "The price ran ahead of production.",
                            "notes": [{"week": "2026-09-04", "decision": "retire",
                                       "text": "The price ran ahead of production."}]}],
+              "units": {"TOTALSA": "million a year", "HSN1F": "thousand a year"},
               "drivers": {"TOTALSA": "US light vehicle sales", "HSN1F": "US new home sales",
                           "PCOPPUSDM": "Copper price", "MORTGAGE30US": "US 30-year mortgage rate"},
               "note": "Replacement demand looks strongest; chips retired because the price already moved.",

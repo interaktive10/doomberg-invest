@@ -401,3 +401,13 @@ test("Themes: a theme's companies take a market-cap range (2026-11-02)", async (
   await expect(names.getByRole("link", { name: /SGMA/ })).toHaveCount(0);
   await expect(names.getByRole("link", { name: /ECHO/ })).toBeVisible();
 });
+
+test("Themes: the data behind a theme opens from its info button (2026-11-02)", async ({ page }) => {
+  await page.goto("/themes");
+  await expect(page.getByText("Oct 2021–Sep 2022: 16% below the decade before")).toBeVisible();
+  await page.goto("/themes?t=vehicle-replacement");
+  await page.getByText("The data behind it").click();
+  await expect(page.getByText(/The wave it counts: Oct 2021–Sep 2022, when US light vehicle sales averaged 13\.9 million a year/)).toBeVisible();
+  await expect(page.getByText(/Highest year of the last 20: 2016 \(17\.9 million a year\)/)).toBeVisible();
+});
+

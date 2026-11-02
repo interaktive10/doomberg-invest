@@ -224,6 +224,9 @@ def numbers(theme: Mapping[str, Any], firms: Sequence[Firm], points: Mapping[str
     pts = points.get(driver, [])
     if driver == dv.FILINGS:
         z, chart, history = filings_z(share, shares), [], None
+        # the screen's numbers behind it: this theme's share against the typical industry's
+        basis: dict[str, Any] | None = {"transform": "filings", "share": share,
+                                        "typical": round(statistics.median(shares), 3) if shares else None}  # fmt: skip
     else:
         d = drv.get(driver)
         inv = bool(d.inverse) if d else False
@@ -231,6 +234,7 @@ def numbers(theme: Mapping[str, Any], firms: Sequence[Firm], points: Mapping[str
         chart = dv.chart(pts)
         history = (dv.history_check(pts, reading, lag, inv, group_excess(fs, market_by_year, last_year))
                    if pts else None)  # fmt: skip
+        basis = dv.basis(pts, reading, lag) if pts else None
     ranked = sorted(fs, key=lambda f: ({"candidate": 0, "watch": 1}.get(f.bucket or "", 2), -(f.evidence or 0),
                                        f.company.name))  # fmt: skip
     names = [{"company_id": str(f.company.id), "code": f.company.ticker or f.company.nse_symbol,
@@ -240,7 +244,7 @@ def numbers(theme: Mapping[str, Any], firms: Sequence[Firm], points: Mapping[str
              for f in ranked[:MAX_NAMES]]  # fmt: skip
     return {"z": z, "signal": dv.words(z), "chart": chart, "companies": len(fs), "priced": len(priced),
             "with_demand": shown, "share": share, "move": move, "market_move": market_move, "run": run,
-            "markets": markets, "status": status_of(z, run), "history": history, "names": names,
+            "markets": markets, "status": status_of(z, run), "history": history, "names": names, "basis": basis,
             "undervalued": sum(1 for f in fs if f.bucket in ("candidate", "watch"))}  # fmt: skip
 
 
@@ -568,6 +572,7 @@ def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient
     body: dict[str, Any] = {"week": week.isoformat(), "as_of": today.isoformat(), "version": 2, "medians": medians,
                             "industries": rows[:80], "missing_drivers": missing,
                             "drivers": {k: d.name for k, d in drv.items()},
+                            "units": {k: d.unit for k, d in drv.items()},
                             "last_rethink": last.isoformat() if last else None, "rethought": False, "why": "",
                             "note": prev.get("note", ""), "dropped": []}  # fmt: skip
     if due and router is not None:
