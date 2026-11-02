@@ -1,0 +1,19 @@
+{
+ "key": "5db7f26d7d86089b13babe8151749df4f5334a2953f0890401b6dafbfafc5cd1",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The c:C2 context value is 0.06 with g_implied 0.12, g_evidence 0.18, discount_rate 0.09, and terminal_growth 0.025.\nQUOTES: []\nCOMPUTED: [\"c:C2: {\\\"inputs\\\": {\\\"discount_rate\\\": 0.09, \\\"g_evidence\\\": 0.18, \\\"g_implied\\\": 0.12, \\\"terminal_growth\\\": 0.025}, \\\"value\\\": \\\"0.06\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed c:C2 entry states value 0.06 and inputs g_implied 0.12, g_evidence 0.18, discount_rate 0.09, and terminal_growth 0.025, matching every claim in the sentence.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 492,
+  "tokens_out": 183
+ }
+}
