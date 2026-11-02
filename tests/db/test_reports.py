@@ -136,6 +136,9 @@ def test_themes_library_numbers_weekly_rethink_monthly(conn: psycopg.Connection[
         0
     ].library_json
     repo.upsert_report(conn, "themes", week, body)
+    again = themes.build(conn, router, http, week, date(2026, 11, 8))  # type: ignore[arg-type]
+    assert not again["rethought"] and len(router.inputs) == 1  # a re-run of the week keeps its library and rethink
+    assert {t["slug"] for t in again["library"]} == set(lib) and again["last_rethink"] == "2026-11-06"
     later = themes.build(conn, router, http, week + timedelta(days=7), date(2026, 11, 14))  # type: ignore[arg-type]
     assert not later["rethought"] and len(router.inputs) == 1 and later["last_rethink"] == "2026-11-06"
     assert {t["slug"] for t in later["library"]} == set(lib) and later["next_rethink"] == "2026-12-04"

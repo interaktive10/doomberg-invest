@@ -535,7 +535,8 @@ def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient
     shares = [r["share"] for r in rows]
     last_year = today.year - 1
     mkt = market_years(firms, last_year)
-    prev: dict[str, Any] = next((b for _, b in repo.recent_reports(conn, "themes", week, 1)), {})
+    # the latest report up to this week, this week's included: a re-run of the week carries its library, not the seed
+    prev: dict[str, Any] = next((b for _, b in repo.recent_reports(conn, "themes", week + timedelta(days=1), 1)), {})
     library: list[dict[str, Any]] = list(prev.get("library") or seed(root))
     retired: list[dict[str, Any]] = list(prev.get("retired") or [])
     last = date.fromisoformat(prev["last_rethink"]) if prev.get("last_rethink") else None
