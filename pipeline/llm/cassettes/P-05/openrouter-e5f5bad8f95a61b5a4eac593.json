@@ -1,0 +1,19 @@
+{
+ "key": "e5f5bad8f95a61b5a4eac593aa0dfdc679067916adca011fb4283cc0dba99872",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Signal S1 fired with strength 0.82, a gap of 0.1728, order growth of 0.4483 against revenue growth of 0.2755, and consecutive 2.\nQUOTES: []\nCOMPUTED: [\"s:S1: {\\\"fired\\\": true, \\\"inputs\\\": {\\\"consecutive\\\": 2, \\\"g_ob\\\": 0.4483, \\\"g_rev\\\": 0.2755, \\\"gap\\\": 0.1728}, \\\"kind\\\": \\\"signal\\\", \\\"strength\\\": \\\"0.82\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "All values in the sentence (fired=true, strength 0.82, gap 0.1728, g_ob 0.4483, g_rev 0.2755, consecutive 2) match the provided computed value for signal S1 exactly.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 526,
+  "tokens_out": 176
+ }
+}

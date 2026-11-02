@@ -1,0 +1,21 @@
+{
+ "key": "2913199be3669d50e91187b25a8c788e828871fab65e6676654a815c7f713543",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The company reported a $600,000,000 multi-year order from a hyperscale cloud provider on the same date.\nQUOTES: [\"Nimbus received a $600 million multi-year order from a hyperscale cloud provider.\"]\nCOMPUTED: [\"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002: {\\\"as_of\\\": \\\"2026-08-06\\\", \\\"counterparty\\\": \\\"a hyperscale cloud provider\\\", \\\"currency\\\": \\\"USD\\\", \\\"fact_type\\\": \\\"order_win\\\", \\\"subject\\\": \\\"Multi-year hyperscaler order\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"600000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The quote and computed value confirm a $600,000,000 multi-year order from a hyperscale cloud provider (the computed fact has as_of 2026-08-06), but nothing states the order was reported \"on the same date\" as any other event. The date claim is an added temporal assertion not present in the source texts.",
+   "supported": false,
+   "unsupported_parts": [
+    "on the same date"
+   ]
+  },
+  "tokens_in": 556,
+  "tokens_out": 249
+ }
+}

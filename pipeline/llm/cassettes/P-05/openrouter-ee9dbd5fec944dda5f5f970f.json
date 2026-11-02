@@ -1,0 +1,19 @@
+{
+ "key": "ee9dbd5fec944dda5f5f970f4156f162090f9174c3a5ce202626276ea677c1bc",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The receivables red flag did not fire only because receivables_growth is missing, so the clean read is unresolved rather than confirmed.\nQUOTES: []\nCOMPUTED: [\"s:R2: {\\\"fired\\\": false, \\\"hard\\\": false, \\\"inputs\\\": {\\\"missing\\\": [\\\"receivables_growth\\\"]}, \\\"kind\\\": \\\"red_flag\\\", \\\"status\\\": \\\"unknown\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value shows the red_flag with fired=false, hard=false, status=\"unknown\", and its only missing input is receivables_growth. This matches the sentence's claims: the flag did not fire, the sole missing input is receivables_growth, and the resulting status (unknown) is unresolved rather than a confirmed clean read. No extra or stronger claim is added.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 461,
+  "tokens_out": 298
+ }
+}

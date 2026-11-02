@@ -1,0 +1,19 @@
+{
+ "key": "97d9841c0c48389fa1f0ced748badf4c33737b5ecad20c4716fa02d9322df3ee",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Diluted shares were 212,000,000 at 2026-06-30.\nQUOTES: []\nCOMPUTED: [\"m:diluted_shares:2026-06-30: {\\\"name\\\": \\\"diluted_shares\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"shares\\\", \\\"value\\\": \\\"212000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value m:diluted_shares:2026-06-30 gives value 212000000 shares for period end 2026-06-30, which matches the sentence exactly.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 485,
+  "tokens_out": 142
+ }
+}

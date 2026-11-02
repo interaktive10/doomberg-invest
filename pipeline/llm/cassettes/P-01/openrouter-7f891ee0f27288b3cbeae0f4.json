@@ -20,7 +20,7 @@
      "period_label": null,
      "quote": "We plan to bring 2.4 GW of new AI data center capacity online across our global campuses by 2028.",
      "scale_word": null,
-     "subject": "New AI data center capacity online across global campuses by 2028",
+     "subject": "New AI data center capacity to be brought online across global campuses by 2028",
      "subject_key": "capacity:gw:global_campuses",
      "unit": "gw",
      "value": 2.4,
@@ -31,6 +31,6 @@
    ]
   },
   "tokens_in": 1972,
-  "tokens_out": 337
+  "tokens_out": 334
  }
 }

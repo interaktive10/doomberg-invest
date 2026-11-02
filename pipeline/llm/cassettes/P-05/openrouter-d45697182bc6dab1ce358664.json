@@ -1,0 +1,22 @@
+{
+ "key": "d45697182bc6dab1ce3586642ea5d66081d57bd382bcbf06f070a80cab241cff",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The company reported a $600,000,000 multi-year order from a hyperscale cloud provider, published 2026-08-06.\nQUOTES: [\"Nimbus received a $600 million multi-year order from a hyperscale cloud provider.\"]\nCOMPUTED: [\"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002: {\\\"as_of\\\": \\\"2026-08-06\\\", \\\"counterparty\\\": \\\"a hyperscale cloud provider\\\", \\\"currency\\\": \\\"USD\\\", \\\"fact_type\\\": \\\"order_win\\\", \\\"subject\\\": \\\"Multi-year hyperscaler order\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"600000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The quote supports a $600 million multi-year order from a hyperscale cloud provider, and the computed value confirms 600000000 with as_of 2026-08-06. However, the quote does not state that \"the company reported\" it or that it was \"published\" on that date; \"as_of\" is not the same as a publication date.",
+   "supported": false,
+   "unsupported_parts": [
+    "The company reported",
+    "published 2026-08-06"
+   ]
+  },
+  "tokens_in": 561,
+  "tokens_out": 1064
+ }
+}

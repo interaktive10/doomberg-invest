@@ -1,0 +1,21 @@
+{
+ "key": "f720277dcb69e6985b1f92c04c0b83563e203102d52d57b0b5e627573800d951",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: RPO growth of 0.4483 is running well ahead of TTM revenue growth of 0.2410, and S1 fired on that kind of gap with strength 0.82.\nQUOTES: []\nCOMPUTED: [\"m:rpo_yoy: {\\\"description\\\": \\\"RPO vs a year earlier\\\", \\\"unit\\\": \\\"ratio\\\", \\\"value\\\": \\\"0.4483\\\"}\", \"m:revenue_ttm_yoy: {\\\"description\\\": \\\"TTM revenue vs the TTM a year earlier\\\", \\\"unit\\\": \\\"ratio\\\", \\\"value\\\": \\\"0.2410\\\"}\", \"s:S1: {\\\"fired\\\": true, \\\"inputs\\\": {\\\"consecutive\\\": 2, \\\"g_ob\\\": 0.4483, \\\"g_rev\\\": 0.2755, \\\"gap\\\": 0.1728}, \\\"kind\\\": \\\"signal\\\", \\\"strength\\\": \\\"0.82\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "RPO growth 0.4483 and TTM revenue growth 0.2410 are supported by computed values, and S1 fired with strength 0.82. However, the sentence implies S1 fired on the gap between 0.4483 and 0.2410, but the computed S1 inputs show g_rev = 0.2755 and gap = 0.1728, not 0.2410/0.2073. So the claim that S1 fired on that gap is not supported.",
+   "supported": false,
+   "unsupported_parts": [
+    "S1 fired on that kind of gap with strength 0.82"
+   ]
+  },
+  "tokens_in": 603,
+  "tokens_out": 633
+ }
+}
