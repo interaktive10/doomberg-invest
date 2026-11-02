@@ -393,3 +393,4 @@
 2026-11-02 Fallback: P-05 on a 'check' task at low effort; no card starts after 25 minutes; one log line per card (outcome, seconds).
 2026-11-02 Recent closes: 10 per name; US 700 a run stalest first, only names with a month-end history; India one bhavcopy; Winners and Themes recomputed after.
 2026-11-02 Freshness: dates in IST; next update from the crons; Rethink now once a UTC day; sparkline, status bar and gain bars only.
+2026-11-02 Card failure reasons: counted per kind (a card once per kind) in the fallback's log and runs row; diagnose.yml prints the latest.

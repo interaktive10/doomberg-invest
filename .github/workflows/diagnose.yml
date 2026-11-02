@@ -31,3 +31,5 @@ jobs:
       - run: uv sync --frozen --no-dev
       - name: Bucket diagnostics
         run: uv run --frozen python -m pipeline.db.diagnose ${WEEK:+--week "$WEEK"}
+      - name: Why the latest fallback's cards failed (counts only)
+        run: uv run --frozen python -m pipeline.thesis.fallback_writer --reasons
