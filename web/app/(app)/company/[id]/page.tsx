@@ -227,7 +227,6 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   }));
   const { bought, sold } = insiderSummary(trades, currency);
   const capped = insidersCapped(ins.length);
-  const noteHref = live ? `/theses/${live.id}#journal` : "/journal#add-note";
 
   const side: ReactNode[] = [];
   if (kills.length > 0) {
@@ -372,9 +371,6 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
               <SubmitButton className="w-full">Research</SubmitButton>
             </form>
           )}
-          <Link href={noteHref} className={cn(buttonVariants({ variant: "secondary" }), "w-full")}>
-            Add journal note
-          </Link>
         </div>
       </header>
 

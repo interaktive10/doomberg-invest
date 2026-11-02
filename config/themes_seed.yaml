@@ -76,3 +76,76 @@ themes:
     keywords: ["machinery", "capital goods", "industrial", "instruments"]
     why: "Core capital goods orders lead business spending on machines by a few quarters."
     wrong_if: "Orders rise but machinery makers' backlogs shrink."
+  # slow shifts in how people live (2026-11-02): one measurable sign of each, reaching the companies that sell into it
+  - slug: online-ads
+    title: "Life moves online, ad money follows"
+    category: "Digital & media"
+    driver: RSNSR
+    transform: yoy
+    lag_months: 0
+    keywords: ["advertising", "data processing", "media entertainment", "television", "motion picture"]
+    why: "As people spend more time and money online, advertisers move budgets to search, social and video platforms. Online sales are the measurable part of that shift."
+    wrong_if: "Online sales keep rising while ad platforms' revenue growth slows."
+  - slug: parcels-boxes
+    title: "Every online order ships in a box"
+    category: "Digital & media"
+    driver: RSNSR
+    transform: yoy
+    lag_months: 0
+    keywords: ["air courier", "trucking", "paperboard", "containers & boxes", "catalog & mail-order", "warehous"]
+    why: "More online shopping means more parcels: boxes, delivery and warehouse work grow with it."
+    wrong_if: "Online sales rise but parcel and box volumes fall."
+  - slug: cloud-capacity
+    title: "Cloud demand outruns hosting capacity"
+    category: "Technology & AI"
+    driver: PCU518210518210
+    transform: yoy
+    lag_months: 0
+    keywords: ["data processing", "prepackaged software", "computer integrated systems", "computer communications", "information technology"]
+    why: "When hosting prices rise, demand for computing is outrunning capacity, which feeds cloud and software sellers and the hardware behind them."
+    wrong_if: "Hosting prices rise while cloud and software revenue growth slows."
+  - slug: ageing-care
+    title: "An older population needs more care"
+    category: "Health"
+    driver: CES6562000001
+    transform: yoy
+    lag_months: 0
+    keywords: ["hospitals", "health care", "healthcare", "home health", "nursing", "medical laboratories"]
+    why: "As the population ages, care providers hire with patient volumes, lifting hospitals, clinics and the suppliers behind them."
+    wrong_if: "Health care hiring rises while providers' patient volumes fall."
+  - slug: drug-output
+    title: "New drug classes lift production"
+    category: "Health"
+    driver: IPG3254S
+    transform: yoy
+    lag_months: 0
+    keywords: ["pharmaceutical", "biological products", "medicinal chemicals", "in vitro"]
+    why: "Rising drug output (new classes such as weight-loss drugs among it) lifts drug makers and the contract makers and suppliers behind them."
+    wrong_if: "Output rises while drug makers' sales stay flat."
+  - slug: factories-at-home
+    title: "New factories get built at home"
+    category: "Industrial capex"
+    driver: PRMFGCONS
+    transform: yoy
+    lag_months: 6
+    keywords: ["general bldg contractors", "heavy construction", "electrical work", "construction special trade", "cement"]
+    why: "Spending on new factories pays contractors first, then the equipment, wiring and power hookups that fit them out."
+    wrong_if: "Factory construction spending rises but contractors' backlogs shrink."
+  - slug: eating-out
+    title: "People spend more eating out"
+    category: "Consumer"
+    driver: RSFSDP
+    transform: yoy
+    lag_months: 0
+    keywords: ["eating places", "restaurant", "hotels", "food service"]
+    why: "Rising restaurant and bar sales mean households spend spare money out, lifting chains and the suppliers that feed them."
+    wrong_if: "Restaurant sales rise only on prices while visits fall."
+  - slug: india-online
+    title: "India gets online"
+    category: "Digital & media"
+    driver: filings
+    transform: yoy
+    lag_months: 0
+    keywords: ["telecommunication", "information technology", "media entertainment", "financial technology", "internet"]
+    why: "Cheap mobile data brought a large share of India online; telecoms, payments, online retail and media sell into that shift."
+    wrong_if: "These companies' filings stop reporting rising users or orders."

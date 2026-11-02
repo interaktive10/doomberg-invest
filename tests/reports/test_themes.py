@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from pipeline.db.models import Company, FundamentalsRow
+from pipeline.llm.themes import CATEGORIES
 from pipeline.reports import drivers as dv
 from pipeline.reports import themes as t
 
@@ -94,6 +95,20 @@ def test_the_seed_library_is_valid() -> None:
         assert x["transform"] in dv.TRANSFORMS and x["keywords"] and x["category"]
         assert x["transform"] != "cohort" or x["lag_months"] >= 12
     assert {x["category"] for x in lib} - {"Technology & AI"}  # not only about AI
+    assert {x["category"] for x in lib} <= set(CATEGORIES)
+    for x in lib:  # the rethink's own word limits hold for the starters too
+        assert all(len(str(x[k]).split()) <= t.WORDS[k] for k in ("title", "why", "wrong_if")), x["slug"]
+    assert "Digital & media" in {x["category"] for x in lib}  # slow shifts too (2026-11-02: life moving online)
+
+
+def test_new_starters_join_an_existing_library_unless_retired() -> None:
+    lib = [{"slug": "a", "title": "A", "notes": [{"week": "2026-10-03"}]}]
+    starters = [{"slug": "a", "title": "A starter"}, {"slug": "b", "title": "B"}, {"slug": "c", "title": "C"}]
+    out = t.add_starters(lib, [{"slug": "c"}], starters)
+    assert [x["slug"] for x in out] == ["a", "b"] and out[0]["title"] == "A"  # the library's own copy stays
+    assert [x["slug"] for x in t.add_starters([], [], starters)] == ["a", "b", "c"]  # an empty library takes them all
+    full = [{"slug": f"x{i}"} for i in range(t.MAX_ACTIVE)]
+    assert len(t.add_starters(full, [], starters)) == t.MAX_ACTIVE
 
 
 DRV = {"TOTALSA": dv.Driver("TOTALSA", "US light vehicle sales", "m"), "HSN1F": dv.Driver("HSN1F", "Homes", "k")}

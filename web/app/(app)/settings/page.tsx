@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { Dot, Legend } from "@/components/chip";
 import { Disclosure } from "@/components/disclosure";
 import { SplitBar } from "@/components/meter";
 import { Empty, Flash, Note, Page, Section } from "@/components/page";
 import { SourceStatus } from "@/components/source-status";
 import { SubmitButton } from "@/components/submit-button";
-import { Input, Label } from "@/components/ui/input";
+import { Label, Select } from "@/components/ui/input";
 import { llmUse, setting, sourceHealth } from "@/lib/data";
 import { shortDate } from "@/lib/dates";
 import { one, type Query } from "@/lib/forms";
@@ -14,16 +13,17 @@ import { providerLabel, sourceLabel } from "@/lib/labels";
 import type { Tone } from "@/lib/palette";
 import { llmLine, llmParts, sourcesLine, statusChip, tokens, type ChipTone } from "@/lib/settings";
 import { sourceStatus, watched } from "@/lib/staleness";
-import { saveDiscipline } from "./actions";
+import { CHOICES, EFFORT_LABEL, EFFORTS, picked, priceText, TASKS } from "@/lib/models";
+import { saveModels } from "./actions";
 import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Settings" };
 
 // BRIEF §6 Settings (overhaul PR 4; drawn in PR 6): the health of the US sources the pipeline reads as dot rows with a
-// status chip (Home's Data health names them the same way, lib/home.ts healthRows), the §11.9 discipline rule
-// (configurable here) and the last 7 days of LLM calls per provider as bars split into answered, rate-limited and
-// failed. The config files (universes, quotas, weights) live in the repository and change through pull requests; the
-// weights in use are on the Signal Lab page.
+// status chip (Home's Data health names them the same way, lib/home.ts healthRows), the OpenRouter model and effort
+// per task (docs/SPEC_ISSUES.md 69: picked here, read by the pipeline's next run) and the last 7 days of LLM calls per
+// provider as bars split into answered, rate-limited and failed. The config files (universes, quotas, weights) live in
+// the repository and change through pull requests. The §11.9 discipline rule keeps its stored value (4 weeks).
 
 const DOT: Record<ChipTone, Tone> = { good: "up", warn: "warn", bad: "down", plain: "muted" };
 
@@ -36,15 +36,11 @@ function stamp(iso: string): string {
 export default async function Settings({ searchParams }: { searchParams: Promise<Query> }) {
   await requireUser(); // besides the middleware and the layout (M7 review R1-F10)
   const q = await searchParams;
-  const [all, weeks, llm] = await Promise.all([
-    sourceHealth(),
-    setting<number | string>("position_min_thesis_weeks", 4),
-    llmUse(),
-  ]);
+  const [all, models, effort, llm] = await Promise.all([sourceHealth(), setting<unknown>("llm_models", null), setting<unknown>("llm_effort", null), llmUse()]);
+  const pick = picked(models, effort);
   const now = new Date();
   const sources = watched(all);
   const health = new Map(healthRows(all, now).map((h) => [h.source, h]));
-  const n = Number(weeks);
   return (
     <Page title="Settings" description={sourcesLine([...health.values()])}>
       <Flash error={one(q, "error")} ok={one(q, "ok")} />
@@ -137,26 +133,41 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         </div>
 
         <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-6">
-          <Section title="Discipline" id="discipline" quiet>
-            <div className="flex flex-col gap-4">
-              <p className="text-[15px] text-fg">
-                A thesis waits{" "}
-                <span className="num text-[22px] font-bold tracking-[-0.02em]">{Number.isFinite(n) ? n : String(weeks)}</span>{" "}
-                {n === 1 ? "week" : "weeks"} before a start position. Earlier needs a written reason.
-              </p>
-              <form action={saveDiscipline} className="flex flex-col gap-1.5">
-                <Label htmlFor="weeks">Weeks a thesis must be old before a start-position entry</Label>
-                <div className="flex items-center gap-2">
-                  <Input id="weeks" name="weeks" type="number" min="0" max="104" step="1" defaultValue={String(weeks)} className="w-28" required />
-                  <SubmitButton>Save</SubmitButton>
-                </div>
-              </form>
-            </div>
+          <Section title="Models" id="models" description="OpenRouter, per task. Every model here costs no more than the default, and the daily caps hold whatever you pick.">
+            <form action={saveModels} className="flex flex-col gap-5">
+              {TASKS.map((t) => (
+                <fieldset key={t.key} className="flex flex-col gap-2.5">
+                  <legend className="mb-1 text-[15px] font-semibold text-fg">{t.label}</legend>
+                  <p className="text-[13px] text-subtle">{t.hint}</p>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`model_${t.key}`}>Model</Label>
+                    <Select id={`model_${t.key}`} name={`model_${t.key}`} defaultValue={pick.models[t.key]} className="w-full">
+                      {CHOICES.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label} — ${c.in.toFixed(2)} / ${c.out.toFixed(2)}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="num text-[12px] text-subtle">{priceText(CHOICES.find((c) => c.id === pick.models[t.key]) ?? CHOICES[0]!)}</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`effort_${t.key}`}>Reasoning effort</Label>
+                    <Select id={`effort_${t.key}`} name={`effort_${t.key}`} defaultValue={pick.effort[t.key]} className="w-full">
+                      {EFFORTS.map((e) => (
+                        <option key={e} value={e}>
+                          {EFFORT_LABEL[e]}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </fieldset>
+              ))}
+              <div>
+                <SubmitButton>Save models</SubmitButton>
+              </div>
+            </form>
           </Section>
-          <Note className="px-1">
-            Universes, quotas and weights live in the repository&apos;s config files and change through pull requests. The weights in use are
-            in the <Link href="/lab">Signal Lab</Link>.
-          </Note>
+          <Note className="px-1">Universes, quotas and weights live in the repository&apos;s config files and change through pull requests.</Note>
         </div>
       </div>
     </Page>

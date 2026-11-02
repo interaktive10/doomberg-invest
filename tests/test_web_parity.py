@@ -116,3 +116,20 @@ def test_why_this_score_reads_the_scoring_rules() -> None:
     assert int(const("GAP_MIN_METRICS")) == cfg["gap_min_metrics"]
     metrics = sorted({k.split("_")[0].upper() for k in context if re.fullmatch(r"c\d+(_\w+)?", k)})
     assert re.findall(r'"(C\d+)"', const("GAP_METRICS")) == metrics == ["C1", "C2", "C3"]
+
+
+def test_the_settings_model_list_is_the_configs() -> None:
+    """docs/SPEC_ISSUES.md 69: web/lib/models.ts CHOICES, EFFORTS and DEFAULTS mirror config/quotas.yaml openrouter."""
+    doc = yaml.safe_load((ROOT / "config" / "quotas.yaml").read_text(encoding="utf-8"))["providers"]["openrouter"]
+    ts = (WEB / "lib" / "models.ts").read_text(encoding="utf-8")
+    rows = re.findall(r'\{ id: "([^"]+)", label: "([^"]+)", in: ([\d.]+), out: ([\d.]+) \}', ts)
+    assert [(i, lab, float(a), float(b)) for i, lab, a, b in rows] == [
+        (c["id"], c["label"], float(c["in"]), float(c["out"])) for c in doc["choices"]
+    ]
+    efforts = re.search(r"EFFORTS = \[([^\]]+)\]", ts)
+    assert efforts and re.findall(r'"(\w+)"', efforts.group(1)) == doc["efforts"]
+    for task in ("extract", "card"):
+        assert re.search(rf'models: \{{[^}}]*{task}: "{re.escape(doc["models"][task])}"', ts)
+        assert re.search(rf'effort: \{{[^}}]*{task}: "{doc["reasoning"][task]}"', ts)
+    default = next(c for c in doc["choices"] if c["id"] == doc["models"]["card"])
+    assert all(c["in"] <= default["in"] and c["out"] <= default["out"] for c in doc["choices"])  # never dearer

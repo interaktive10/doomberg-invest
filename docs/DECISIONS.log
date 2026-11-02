@@ -385,4 +385,5 @@
 2026-11-01 Winners: this year's top 10 so far lead the screen; gains green, losses red; the Winners place colour moves to amber (pink read as a gain colour).
 2026-11-02 Winners slider: fixed steps US $1B-$500B (9), India Rs 5,000 cr-Rs 5 lakh cr (7), computed in the report; the average stock is recomputed per step; the backtest stays at the floor.
 2026-11-02 Winners caps: today's (latest close within 45 days x latest filed shares); slider steps above the floor filter on today's cap.
+2026-11-02 Settings models: two tasks (extract, card), the choices no dearer than the default; the discipline form goes, its stored value stays.
 2026-11-02 Card repair: up to 20 validator errors, each cut at 400 characters, as one user turn after the failed card.

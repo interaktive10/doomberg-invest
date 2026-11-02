@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byCategory, historyLine, isLibrary, lagWords, pct, readingWords, span, type LibraryTheme } from "@/lib/themes";
+import { byCategory, historyLine, isLibrary, lagWords, pct, readingWords, span, STATUS, STATUS_ORDER, STATUS_SHORT, zWords, type LibraryTheme } from "@/lib/themes";
 
 describe("the Themes screen's words (lib/themes.ts)", () => {
   it("says spans, readings and lags plainly", () => {
@@ -26,5 +26,23 @@ describe("the Themes screen's words (lib/themes.ts)", () => {
       ["Housing", ["a", "c"]],
       ["Energy", ["b"]],
     ]);
+  });
+});
+
+describe("the statuses and the trigger in plain words (2026-11-02)", () => {
+  it("reads a z-score as a share of the past 20 years", () => {
+    expect(zWords(1.3)).toBe("higher than 90% of the past 20 years");
+    expect(zWords(0)).toBe("higher than 50% of the past 20 years");
+    expect(zWords(-0.5)).toBe("lower than 69% of the past 20 years");
+    expect(zWords(4)).toBe("higher than 99% of the past 20 years");
+    expect(zWords(null)).toBe("");
+  });
+
+  it("names every status without the jargon", () => {
+    for (const s of STATUS_ORDER) {
+      expect(STATUS[s].label).not.toMatch(/building|fading|priced in|watching/i);
+      expect(STATUS_SHORT[s].length).toBeLessThanOrEqual(8);
+    }
+    expect(STATUS.building.label).toBe("Early: demand up, price not yet");
   });
 });
