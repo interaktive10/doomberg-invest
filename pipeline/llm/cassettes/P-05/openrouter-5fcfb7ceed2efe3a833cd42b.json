@@ -1,0 +1,22 @@
+{
+ "key": "5fcfb7ceed2efe3a833cd42bfed89fe5f584b0e0503aa1df998ff1a586e8d8fb",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Backlog growth of 0.4483 against revenue growth of 0.2755 is the specific gap the pack is pointing at.\nQUOTES: []\nCOMPUTED: [\"m:rpo_yoy: {\\\"description\\\": \\\"RPO vs a year earlier\\\", \\\"unit\\\": \\\"ratio\\\", \\\"value\\\": \\\"0.4483\\\"}\", \"s:S1: {\\\"fired\\\": true, \\\"inputs\\\": {\\\"consecutive\\\": 2, \\\"g_ob\\\": 0.4483, \\\"g_rev\\\": 0.2755, \\\"gap\\\": 0.1728}, \\\"kind\\\": \\\"signal\\\", \\\"strength\\\": \\\"0.82\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The value 0.4483 is computed only as \\\"RPO vs a year earlier\\\" (m:rpo_yoy), not as backlog growth; relabeling RPO change as backlog growth is an extra claim not stated in any quote or computed value. The only described gap is the omitted 0.1728 input to signal S1, and no quote establishes that \\\"the pack is pointing at\\\" this gap as \\\"the specific gap,\\\" so that framing is interpretive.",
+   "supported": false,
+   "unsupported_parts": [
+    "backlog growth of 0.4483",
+    "the specific gap the pack is pointing at"
+   ]
+  },
+  "tokens_in": 522,
+  "tokens_out": 628
+ }
+}

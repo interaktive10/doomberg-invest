@@ -1,0 +1,21 @@
+{
+ "key": "2047052f6a22002595ba3adefb87d2351916274ade658fdbd63f3dff03b41575",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The pack records a context gap of 58.3 and a C2 value of 0.06 built from g_implied 0.12 against g_evidence 0.18, which reads as growth evidence sitting above the growth embedded in the valuation inputs.\nQUOTES: []\nCOMPUTED: [\"c:C2: {\\\"inputs\\\": {\\\"discount_rate\\\": 0.09, \\\"g_evidence\\\": 0.18, \\\"g_implied\\\": 0.12, \\\"terminal_growth\\\": 0.025}, \\\"value\\\": \\\"0.06\\\"}\", \"c:gap: {\\\"value\\\": \\\"58.3\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The numeric claims (gap 58.3, C2 0.06, g_implied 0.12, g_evidence 0.18) match the computed values, but the closing interpretive clause is not stated in any quote (quotes list is empty) and is not itself a computed value; it is an added interpretation of the comparison rather than a recorded claim.",
+   "supported": false,
+   "unsupported_parts": [
+    "which reads as growth evidence sitting above the growth embedded in the valuation inputs"
+   ]
+  },
+  "tokens_in": 547,
+  "tokens_out": 510
+ }
+}

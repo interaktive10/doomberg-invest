@@ -1,0 +1,19 @@
+{
+ "key": "2d0d4332ed1c3f159e8be3b781dfe7de00af771eaf496b9ada45bb826ac336e0",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Operating income was $206,250,000 on $1,250,000,000 of revenue in the year ended 2026-06-30.\nQUOTES: []\nCOMPUTED: [\"m:op_income:2026-06-30: {\\\"name\\\": \\\"op_income\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"206250000\\\"}\", \"m:revenue:2026-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"1250000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence's figures match the computed values exactly: op_income for period_end 2026-06-30 is 206250000 and revenue for period_end 2026-06-30 is 1250000000. The period end date 2026-06-30 corresponds to the stated year ended 2026-06-30, and both amounts are stated in USD as given.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 545,
+  "tokens_out": 449
+ }
+}

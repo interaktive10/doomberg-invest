@@ -1,0 +1,19 @@
+{
+ "key": "6757fee1a48f88399a41f8271ef0fa2b4a729e9d189e5324ec327dc0a3357778",
+ "model": "gemini-3.5-flash-lite",
+ "prompt_id": "P-05",
+ "provider": "gemini",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Diluted shares were 212,000,000 at 2026-06-30.\nQUOTES: []\nCOMPUTED: [\"m:diluted_shares:2026-06-30: {\\\"name\\\": \\\"diluted_shares\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"shares\\\", \\\"value\\\": \\\"212000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value for diluted_shares at 2026-06-30 is 212000000, which matches the sentence 'Diluted shares were 212,000,000 at 2026-06-30.'.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 258,
+  "tokens_out": 90
+ }
+}

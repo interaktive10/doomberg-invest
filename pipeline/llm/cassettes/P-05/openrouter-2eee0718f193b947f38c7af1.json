@@ -1,0 +1,22 @@
+{
+ "key": "2eee0718f193b947f38c7af17b3cecbb8abc24759ee2544baa3165af743a4751",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The pack links that hyperscale cloud provider to the company as a customer, and the only capex category recorded is compute.\nQUOTES: [\"Nimbus received a $600 million multi-year order from a hyperscale cloud provider.\"]\nCOMPUTED: [\"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002: {\\\"as_of\\\": \\\"2026-08-06\\\", \\\"counterparty\\\": \\\"a hyperscale cloud provider\\\", \\\"currency\\\": \\\"USD\\\", \\\"fact_type\\\": \\\"order_win\\\", \\\"subject\\\": \\\"Multi-year hyperscaler order\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"600000000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The quote only states Nimbus received a $600 million multi-year order from a hyperscale cloud provider; the computed value confirms the order amount/counterparty. Nothing in the quotes or computed values mentions capex categories or that compute is the only one recorded, nor any \\\"pack\\\" linking the provider as a customer.",
+   "supported": false,
+   "unsupported_parts": [
+    "the only capex category recorded is compute",
+    "pack links that hyperscale cloud provider to the company as a customer"
+   ]
+  },
+  "tokens_in": 562,
+  "tokens_out": 256
+ }
+}

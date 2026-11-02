@@ -1,0 +1,21 @@
+{
+ "key": "eabfa46924b88e3d8ffde5cec8840804f2039040c1598ac0cca46b088624e0db",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Evidence at 62.5 against a gap of 58.3 says the pack sees a real but only moderately supported discrepancy, not a wide one.\nQUOTES: []\nCOMPUTED: [\"c:evidence: {\\\"inputs\\\": {\\\"families\\\": [\\\"fundamentals\\\", \\\"text\\\"]}, \\\"value\\\": \\\"62.5\\\"}\", \"c:gap: {\\\"value\\\": \\\"58.3\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The numeric values 62.5 (evidence) and 58.3 (gap) match the computed values, but the interpretive claim that this constitutes a \"real but only moderately supported discrepancy, not a wide one\" is not stated in any quote (the quote list is empty) and is not a computed value. The characterization of the discrepancy's magnitude and support level is an added interpretation.",
+   "supported": false,
+   "unsupported_parts": [
+    "says the pack sees a real but only moderately supported discrepancy, not a wide one"
+   ]
+  },
+  "tokens_in": 492,
+  "tokens_out": 241
+ }
+}
