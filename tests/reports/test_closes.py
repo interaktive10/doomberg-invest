@@ -88,3 +88,20 @@ def test_refresh_india_and_the_stored_form_round_trips() -> None:
 def test_the_upcoming_friday() -> None:
     assert cl.upcoming_friday(date(2026, 11, 2)) == date(2026, 11, 6)  # Monday
     assert cl.upcoming_friday(date(2026, 11, 6)) == date(2026, 11, 6)  # Friday itself
+
+
+def test_refresh_us_saves_as_it_goes() -> None:
+    """A run cut off by the job's limit keeps what it fetched: a save every SAVE_EVERY answers."""
+    saves: list[int] = []
+    r, stats = cl.Recent(), cl.Stats()
+    tickers = [f"T{i:03d}" for i in range(2 * cl.SAVE_EVERY + 5)]
+    cl.refresh_us(
+        Asker(stop_after=10_000),
+        tickers,
+        r,
+        budget=len(tickers),
+        minutes=60,
+        stats=stats,
+        save=lambda: saves.append(len(r.us)),
+    )
+    assert saves == [cl.SAVE_EVERY, 2 * cl.SAVE_EVERY]
