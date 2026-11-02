@@ -42,6 +42,7 @@ from pipeline.db import state as db_state
 from pipeline.db.models import Company, FundamentalsRow
 from pipeline.db.pit import as_of
 from pipeline.lab.prices import read_prices
+from pipeline.reports import closes
 from pipeline.settings import Settings
 from pipeline.signals.weekly import last_friday
 
@@ -225,7 +226,8 @@ def us_series(conn: psycopg.Connection[Any], companies: Sequence[Company]) -> di
         path = Path(tmp) / "us_month_prices.csv.gz"
         path.write_bytes(stored.body)
         bars = read_prices(path, [c.ticker for c in companies if c.ticker])
-    return {c.id: [(b.month_end, b.close) for b in bars[c.ticker]]
+    recent = closes.load(conn).us  # the latest daily closes after the month-ends (docs/SPEC_ISSUES.md 75)
+    return {c.id: closes.extend([(b.month_end, b.close) for b in bars[c.ticker]], recent.get(c.ticker or "", []))
             for c in companies if c.id is not None and c.ticker in bars}  # fmt: skip
 
 
@@ -235,6 +237,13 @@ def india_series(
     out: dict[UUID, list[tuple[date, Decimal]]] = {}
     for p in repo.prices(conn, ids, date(2000, 1, 1), today):
         out.setdefault(p.company_id, []).append((p.week_end, p.adj_close if p.adj_close is not None else p.close))
+    # the latest daily closes after the last week-end (docs/SPEC_ISSUES.md 75), by NSE symbol
+    recent = closes.load(conn).india
+    if recent:
+        symbols = {c.id: c.nse_symbol for c in repo.companies(conn, market="in") if c.id in out and c.nse_symbol}
+        for cid, sym in symbols.items():
+            if cid is not None and sym in recent:
+                out[cid] = closes.extend(out[cid], recent[sym])
     return out
 
 
