@@ -126,3 +126,18 @@ def test_each_market_cap_step_has_its_own_lists() -> None:
     assert [x["code"] for x in by[1e11]["leaders"]] == ["BIG"] and by[1e11]["leaders"][0]["cap"] == 1.6e11
     assert [x["code"] for x in by[1e11]["top"]] == ["BIG"] and by[5e11]["leaders"] == []
     assert m["leaders"] == by[1e9]["leaders"] and m["top"] == by[1e9]["top"]  # the floor's, as before
+
+
+def test_market_caps_are_todays_and_the_slider_reads_them() -> None:
+    """Manzoor, 2026-11-02: "the market cap should be the current one". A 2025 winner worth $150B at the end of 2025
+    and $60B today shows $60B and leaves the $100B step; the floor step keeps it (the strategy's own rule)."""
+    fell, held = uuid4(), uuid4()
+    series = {fell: months(2025, linear(10, 15) + [12.0, 9.0, 7.0, 6.0]),
+              held: months(2025, linear(10, 12) + [12.0, 12.5, 13.0, 13.0])}  # fmt: skip
+    versions = {c: [shares(c, 1e10, date(2024, 2, 1))] for c in (fell, held)}
+    companies = {c: Company(id=c, market="us", name=n, ticker=n) for c, n in ((fell, "FELL"), (held, "HELD"))}
+    m = w.market_report("us", companies, series, versions, date(2026, 5, 10), universe=2)
+    by = {b["min_cap"]: b for b in m["bands"]}
+    assert [(x["code"], x["cap"]) for x in by[1e9]["top"]] == [("FELL", 6e10), ("HELD", 1.3e11)]  # today's caps
+    assert [x["code"] for x in by[1e11]["top"]] == ["HELD"]  # FELL was $150B at the end of 2025, $60B now
+    assert m["cap_as_of"] == "2026-04-30"

@@ -65,6 +65,8 @@ export interface MarketWinners {
   leaders?: Leader[];
   /** the slider's steps, the floor first (reports before 2026-11-02 lack them) */
   bands?: CapBand[];
+  /** the date of the closes behind every row's market cap (today's caps; reports before 2026-11-02 lack it) */
+  cap_as_of?: string | null;
   this_year: { through: string | null; picks: number | null; average: number | null; stocks: number };
   backtest: { rows: BacktestRow[]; summary: BacktestSummary | null } | null;
 }
