@@ -376,8 +376,10 @@ test("Undervalued: a market-cap range per market filters the cards and survives 
   await page.goto("/candidates?market=us");
   const from = page.getByRole("slider", { name: "From" });
   await expect(from).toHaveCount(1); // one market shown, one range
-  await from.fill("8"); // above $500B: nothing in the seed is that large
-  await expect(page).toHaveURL(/cap_us=8-9/);
+  await expect(async () => {
+    await from.fill("8"); // above $500B: nothing in the seed is that large (again until the page has hydrated)
+    await expect(page).toHaveURL(/cap_us=8-9/, { timeout: 1000 });
+  }).toPass();
   await expect(page.getByText("Nothing here with these filters.")).toBeVisible();
   await page.getByRole("link", { name: "Clear filters" }).first().click();
   await expect(page).not.toHaveURL(/cap_us/);
@@ -391,8 +393,11 @@ test("Themes: a theme's companies take a market-cap range (2026-11-02)", async (
   await expect(names.getByRole("link", { name: /ECHO/ })).toBeVisible();
   await expect(names.getByRole("link", { name: /SGMA/ })).toBeVisible();
   await expect(names.getByRole("slider", { name: "From" })).toHaveCount(2); // a US and an Indian company: a range each
-  await names.getByRole("slider", { name: "From" }).first().fill("6"); // the US one, from $100B
-  await expect(page).toHaveURL(/cap_us=6-9/);
+  // the US one, from $100B; again until the page has hydrated (a fill before that changes nothing React sees)
+  await expect(async () => {
+    await names.getByRole("slider", { name: "From" }).first().fill("6");
+    await expect(page).toHaveURL(/cap_us=6-9/, { timeout: 1000 });
+  }).toPass();
   await expect(names.getByRole("link", { name: /SGMA/ })).toHaveCount(0);
   await expect(names.getByRole("link", { name: /ECHO/ })).toBeVisible();
 });
