@@ -210,6 +210,7 @@ YEAR_AFTER = frozenset("fiscal financial calendar year years quarter quarters gu
                        "vs was were is will when as compared levels level peak low high first second third fourth full "
                        "half season period gaap ebitda ebit eps".split())  # fmt: skip
 ASSUMED = re.compile(r"^[^.;,]{0,25}?\(assumed\)", re.I)
+SCALE = re.compile(r"\b0\s*(?:-|–|to)\s*(?:1|10|100)\s+(?:scale|range|point scale)\b", re.I)
 
 
 class Strict(BaseModel):
@@ -341,8 +342,14 @@ def _figures(text: str, years: tuple[int, int]) -> tuple[str, list[numbers.Parse
     clean = _clean(text)
     chars = list(clean)
     out = []
+    # a stated scale ("on a 0-100 scale", "0 to 100 range") names the score's bounds, not a figure (docs/SPEC_ISSUES.md
+    # 70: a repaired DeepSeek card failed only on the bounds of the Evidence score's scale)
+    scales = [m.span() for m in SCALE.finditer(clean)]
     for p in _parse(clean):
         written = clean[p.start : p.end]
+        if any(a <= p.start and p.end <= b for a, b in scales):
+            chars[p.start : p.end] = " " * (p.end - p.start)
+            continue
         if not any(ch.isdigit() for ch in written):
             figure = p.unit is not None or p.currency is not None or p.scale_word is not None
         else:
@@ -655,6 +662,33 @@ def _hype(card: Mapping[str, Any], words: Sequence[str]) -> list[str]:
         if re.search(r"(?<!\w)" + re.escape(fw), text) or joined:
             found.append(w)
     return found
+
+
+def card_fields(answer: Mapping[str, Any], pack: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """P-04's answer with only the card's own fields (2026-11-02: DeepSeek added a `card_type` key, which the strict
+    schema rejects). A field outside the schema is never rendered or stored, so dropping it changes nothing the
+    validator checks; every field the card has is still validated. With the pack, every figure in an inference or
+    assumption the model left unmarked is marked "(assumed)" (mark_assumed)."""
+    out = {k: val for k, val in answer.items() if k in Card.model_fields}
+    if pack is not None:
+        year = date.fromisoformat(str(pack["week_end"])).year
+        for section in ("inferences", "assumptions"):
+            items = out.get(section)
+            if isinstance(items, list):
+                out[section] = [mark_assumed(t, (year - 30, year + 15)) if isinstance(t, str) else t for t in items]
+    return out
+
+
+def mark_assumed(text: str, years: tuple[int, int] = (1900, 2100)) -> str:
+    """Every figure in an inference or assumption followed by "(assumed)" where it isn't already (docs/SPEC_ISSUES.md
+    70: DeepSeek, told so in the prompt and the schema, still leaves computed figures like 0.2755 unmarked). The rule
+    is that a reader never takes such a figure for a checked one; marking it is what the rule asks for, and the
+    validator still checks the marked text. Figures in facts and why_mispriced are never marked: those must match the
+    pack."""
+    for p in reversed(sentence_numbers(text, years)):
+        if not ASSUMED.match(text[p.end :]):
+            text = f"{text[: p.end]} (assumed){text[p.end :]}"
+    return text
 
 
 def validate(

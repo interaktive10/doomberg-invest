@@ -33,7 +33,7 @@ export type Task = (typeof TASKS)[number]["key"];
 /** What the config uses before Settings picks anything (config/quotas.yaml openrouter.models / reasoning). */
 export const DEFAULTS: { models: Record<Task, string>; effort: Record<Task, Effort> } = {
   models: { extract: "deepseek/deepseek-v4.1-flash-1017", card: "deepseek/deepseek-v4.1-flash-1017" },
-  effort: { extract: "low", card: "high" },
+  effort: { extract: "medium", card: "high" },
 };
 
 export const EFFORT_LABEL: Record<Effort, string> = {

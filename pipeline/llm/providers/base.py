@@ -32,6 +32,9 @@ class Request:
     tool_name: str
     temperature: float
     reasoning_effort: str | None = None  # config/quotas.yaml providers.<name>.reasoning (docs/SPEC_ISSUES.md 63)
+    # turns after the verbatim prompt: ("assistant", its last answer), ("user", what failed); a card's repair attempt
+    # (docs/SPEC_ISSUES.md 70). Empty for every first attempt, so its request, and its cassette, are unchanged.
+    follow: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
