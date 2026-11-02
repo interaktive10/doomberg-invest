@@ -354,3 +354,16 @@ test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Thesis");
 });
 
+test("Winners: this year's leaders first, and the market-cap slider narrows both lists (2026-11-02)", async ({ page }) => {
+  await page.goto("/winners");
+  const us = page.getByRole("region", { name: "US", exact: true });
+  await expect(us.getByRole("link", { name: /SGMA Sigma Retail Corp\./ }).first()).toBeVisible();
+  const slider = us.getByRole("slider", { name: /Market cap above/ });
+  await expect(us).toContainText("$1B");
+  await slider.fill("6"); // $100B
+  await expect(slider).toHaveAttribute("aria-valuetext", "$100B");
+  await expect(us.getByRole("link", { name: /SGMA/ })).toHaveCount(0);
+  await expect(us.getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toHaveCount(2); // a leader this year and last year's top
+  await expect(us).toContainText("$240B");
+});
+

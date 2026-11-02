@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barScale, capFloor, grewTo, signedPct, verdict, type BacktestSummary } from "@/lib/winners";
+import { bandsOf, barScale, capFloor, capText, grewTo, signedPct, verdict, type BacktestSummary } from "@/lib/winners";
 
 const S: BacktestSummary = { years: 10, first: 2016, last: 2025, growth: 4.2, average_growth: 2.1, cagr: 0.154, average_cagr: 0.077, beat: 7, best: 2020, worst: 2022 };
 
@@ -24,5 +24,14 @@ describe("the Winners screen's words (lib/winners.ts)", () => {
     expect(grewTo(4.2)).toBe("$420");
     expect(barScale([{ year: 2020, picks: [], ret: -0.5, average: 0.2, stocks: 100 }])).toBe(0.5);
     expect(barScale([])).toBe(0.01);
+  });
+});
+
+describe("the market-cap slider's words and steps", () => {
+  it("says caps in each market's words and falls back to one band", () => {
+    expect([capText("us", 5e9), capText("us", 1.6e11), capText("us", 2.4e12)]).toEqual(["$5B", "$160B", "$2.4T"]);
+    expect([capText("in", 5e10), capText("in", 2e12)]).toEqual(["Rs 5,000 crore", "Rs 2 lakh crore"]);
+    const m = { market: "us", min_cap: 1e9, top: [], leaders: [], this_year: { through: null, picks: null, average: null, stocks: 0 } } as never;
+    expect(bandsOf(m)).toHaveLength(1);
   });
 });
