@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import psycopg
@@ -31,6 +32,7 @@ from pipeline.thesis.ingest import ingest_card
 from pipeline.thesis.render import render
 
 ATTEMPTS = 2
+BUDGET_S = 25 * 60  # no card starts after this, so the job ends inside its 30 minutes with its summary printed
 RUN_AT = time(6, 0)  # Monday, UTC (§2.5)
 
 
@@ -91,6 +93,8 @@ def write_cards(
     root: Path = REPO_ROOT,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     hype: Sequence[str] | None = None,
+    budget: float = BUDGET_S,
+    clock: Callable[[], float] = monotonic,
 ) -> FallbackStats:
     stats = FallbackStats(week)
     packs = v.packs_of(week, root)
@@ -104,11 +108,22 @@ def write_cards(
     stats.ran = True
     words = list(hype) if hype is not None else v.hype_words(root)
     known = {str(c.id) for c in repo.companies(conn) if c.id is not None}
-    for key, pack in packs.items():
+    t0 = clock()
+    for n, (key, pack) in enumerate(packs.items(), 1):
         if str(pack["company"]["company_id"]) not in known:
             stats.failed[key] = ["the pack's company is not in the database"]
             continue
+        if clock() - t0 > budget:
+            stats.deferred.append(key)
+            print(f"thesis fallback: card {n}/{len(packs)}: deferred (past {budget / 60:.0f} minutes)", flush=True)
+            continue
+        t = clock()
+        before = (len(stats.written), len(stats.failed), len(stats.deferred))
         write_one(conn, router, key, pack, words, stats)
+        after = (len(stats.written), len(stats.failed), len(stats.deferred))
+        outcome = ("written", "failed", "deferred")[[a > b for a, b in zip(after, before, strict=True)].index(True)]
+        # an outcome and a count only: the public log names no company (aggregates only)
+        print(f"thesis fallback: card {n}/{len(packs)}: {outcome} in {clock() - t:.0f} s", flush=True)
     return stats
 
 

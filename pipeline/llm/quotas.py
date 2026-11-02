@@ -33,7 +33,7 @@ class ProviderQuota:
         return self.requests_per_day is not None
 
     def model(self, task: str) -> str:
-        """The model for a task ('extract' or 'card'); a provider without a card model uses its extract model."""
+        """The model for a task ('extract', 'card' or 'check'); one the provider doesn't name uses its extract model."""
         return self.models.get(task) or self.models["extract"]
 
 

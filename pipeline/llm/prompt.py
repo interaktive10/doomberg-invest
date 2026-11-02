@@ -36,7 +36,9 @@ PROMPTS: dict[str, PromptSpec] = {
     "P-01": PromptSpec("P-01", "tool", "record_facts", 0.0, "extract"),
     "P-02": PromptSpec("P-02", "tool", "record_matches", 0.0, "extract"),
     "P-04": PromptSpec("P-04", "json", "thesis_card", 0.3, "card", route="P-04-fallback"),
-    "P-05": PromptSpec("P-05", "tool", "record_support", 0.0, "card"),
+    # a claim check is a yes/no reading of quotes: its own task, so its effort is its own (config/quotas.yaml
+    # reasoning.check; 2026-11-02: at the card's high effort ten cards ran past the fallback's 30 minutes)
+    "P-05": PromptSpec("P-05", "tool", "record_support", 0.0, "check"),
     "P-07": PromptSpec("P-07", "json", "announcement_triage", 0.0, "extract"),
     "P-08": PromptSpec("P-08", "json", "themes", 0.3, "card"),  # not in the brief: docs/SPEC_ISSUES.md 67
 }
