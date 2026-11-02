@@ -54,6 +54,7 @@ def test_every_pipeline_job_migrates_first() -> None:
         ("india-backfill.yml", ("history",)),
         ("research.yml", ("cards",)),
         ("reports.yml", ("sectors", "reports")),
+        ("closes.yml", ("india", "us", "reports")),
     ):
         for job in jobs:  # the Actions minutes gate reads no table, so it may come first
             runs = [r for r in steps(name, job) if "python -m pipeline" in r and "pipeline.digest.minutes" not in r]
@@ -490,11 +491,14 @@ def test_every_nse_job_is_in_the_nse_group() -> None:
     found = []
     for path in sorted(WF.glob("*.yml")):
         for name, job in load(path.name)["jobs"].items():
-            if any("python -m pipeline.india." in str(s.get("run", "")) for s in job["steps"]):
+            runs = [str(s.get("run", "")) for s in job["steps"]]
+            # an India step, or the closes' bhavcopy (pipeline.reports.closes without --skip-india)
+            if any("python -m pipeline.india." in r or ("pipeline.reports.closes" in r and "--skip-india" not in r)
+                   for r in runs):  # fmt: skip
                 found.append((path.name, name))
                 assert job.get("concurrency") == {"group": "nse", "cancel-in-progress": False}, (path.name, name)
-    assert found == [("daily.yml", "india"), ("india-backfill.yml", "history"), ("reports.yml", "sectors"),
-                     ("weekly.yml", "india")]  # fmt: skip
+    assert found == [("closes.yml", "india"), ("daily.yml", "india"), ("india-backfill.yml", "history"),
+                     ("reports.yml", "sectors"), ("weekly.yml", "india")]  # fmt: skip
 
 
 def test_every_job_runs_on_a_pinned_runner() -> None:
@@ -594,3 +598,15 @@ def test_the_supabase_cli_is_pinned_to_the_version_in_docs() -> None:
     assert re.fullmatch(r"\d+\.\d+\.\d+", version), version
     versions = (WF.parents[1] / "docs" / "VERSIONS.md").read_text(encoding="utf-8")
     assert f"| Supabase CLI (web.yml's local stack) | {version} " in versions
+
+
+def test_closes_run_on_weekday_evenings_india_then_us_then_the_reports() -> None:
+    """docs/SPEC_ISSUES.md 75: the latest closes every weekday, then Winners and Themes on them."""
+    doc = load("closes.yml")
+    assert doc[True]["schedule"] == [{"cron": "37 22 * * 1-5"}]
+    jobs = doc["jobs"]
+    assert jobs["us"]["needs"] == ["india"] and jobs["reports"]["needs"] == ["us"]
+    assert jobs["us"]["env"]["TWELVEDATA_API_KEY"] == "${{ secrets.TWELVEDATA_API_KEY }}"
+    assert jobs["reports"]["concurrency"]["group"] == "pipeline"
+    runs = " ".join(steps("closes.yml", "reports"))
+    assert "pipeline.reports.winners" in runs and "pipeline.reports.themes" in runs and "--rethink" not in runs

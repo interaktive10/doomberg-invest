@@ -31,6 +31,7 @@ TIME_SERIES = "https://api.twelvedata.com/time_series?symbol={symbol}&interval={
 INTERVALS = ("1day", "1week", "1month")  # end-of-day bars only: no intraday data (CLAUDE.md, research tool)
 OUTPUT_SIZE = 530  # ten years of weeks (C1 looks back up to ten years), and a few to spare
 HISTORY_SIZE = 5000  # the most one request answers: about 19 years of days, from 2007 on (the Lab starts in 2010)
+RECENT_SIZE = 10  # the recent closes' days (pipeline/reports/closes.py KEEP)
 MINUTE_WAIT = 61.0  # seconds: a spent minute of credits (another request on the same key) is asked again after it
 MINUTE_RETRIES = 2
 
@@ -156,6 +157,18 @@ class TwelveDataClient:
     def monthly(self, ticker: str) -> list[Close]:
         """Every month's close (the current month's is its latest close so far), oldest first."""
         return self._history(ticker, "1month")
+
+    def recent(self, ticker: str) -> list[Close]:
+        """The latest RECENT_SIZE daily closes, oldest first (one credit; pipeline/reports/closes.py)."""
+        retries = 0
+        while True:
+            try:
+                return self._ask(ticker, "1day", RECENT_SIZE, parse_closes)
+            except TwelveDataMinuteCredits:
+                retries += 1
+                if retries > MINUTE_RETRIES:
+                    raise
+                self.sleep(MINUTE_WAIT)
 
     def _history(self, ticker: str, interval: str) -> list[Close]:
         """The Lab's history: a spent minute of credits is asked again after the minute, at most MINUTE_RETRIES
