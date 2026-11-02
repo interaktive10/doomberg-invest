@@ -1,6 +1,10 @@
 // Last year's winners (pipeline/reports/winners.py writes reports('winners', week); docs/SPEC_ISSUES.md 64): the body's
 // shape and the plain words the Winners screen shows. Pure, so tests/winners.test.ts covers it.
 
+import { capText, clampRange, type CapRange } from "@/lib/caps";
+
+export { capText };
+
 export interface WinnerPick {
   company_id: string;
   code: string | null;
@@ -34,8 +38,19 @@ export interface BacktestSummary {
   worst: number;
 }
 
-export interface CapBand {
+/** One bucket of the market-cap range: companies whose cap today is in [min_cap, max_cap) (the floor's bucket also
+ * holds those with no cap today), each list the bucket's own best, the average stock as a sum and a count. */
+export interface CapBucket {
   min_cap: number;
+  max_cap: number | null;
+  top: WinnerPick[];
+  leaders: Leader[];
+  ytd_sum: number;
+  ytd_n: number;
+}
+
+/** What the screen shows for a range: the best of its buckets merged. */
+export interface CapView {
   top: WinnerPick[];
   leaders: Leader[];
   this_year: MarketWinners["this_year"];
@@ -63,8 +78,8 @@ export interface MarketWinners {
   top: WinnerPick[];
   /** this year's biggest gainers so far (reports before 2026-11-01 lack it) */
   leaders?: Leader[];
-  /** the slider's steps, the floor first (reports before 2026-11-02 lack them) */
-  bands?: CapBand[];
+  /** the range's buckets, the floor first (reports before 2026-11-02 lack them: the screen shows the floor) */
+  buckets?: CapBucket[];
   /** the date of the closes behind every row's market cap (today's caps; reports before 2026-11-02 lack it) */
   cap_as_of?: string | null;
   this_year: { through: string | null; picks: number | null; average: number | null; stocks: number };
@@ -89,18 +104,33 @@ export function capFloor(m: Pick<MarketWinners, "market" | "min_cap">): string {
   return capText(m.market, m.min_cap);
 }
 
-/** A market cap in the market's words: "$1B", "$1.2T", "Rs 5,000 crore", "Rs 2 lakh crore". */
-export function capText(market: "us" | "in", v: number): string {
-  const n = (x: number) => x.toLocaleString("en-US", { maximumFractionDigits: 1 });
-  if (market === "in") return v >= 1e12 ? `Rs ${n(v / 1e12)} lakh crore` : `Rs ${Math.round(v / 1e7).toLocaleString("en-US")} crore`;
-  if (v >= 1e12) return `$${n(v / 1e12)}T`;
-  return v >= 1e9 ? `$${n(v / 1e9)}B` : `$${Math.round(v / 1e6)}M`;
+/** The range's steps: each bucket's minimum (none for an older report: no range to pick). */
+export function stepsOf(m: MarketWinners): number[] {
+  return (m.buckets ?? []).map((b) => b.min_cap);
 }
 
-/** The slider's steps: the report's bands, or one band from an older report's single lists. */
-export function bandsOf(m: MarketWinners): CapBand[] {
-  if (m.bands && m.bands.length > 0) return m.bands;
-  return [{ min_cap: m.min_cap, top: m.top, leaders: m.leaders ?? [], this_year: m.this_year }];
+/** The lists for a range of buckets [lo, hi): last year's five and this year's ten merged best-first (a bucket's own
+ * best five and ten hold the best of any union of buckets), the five's average this year and the average stock's. */
+export function viewOf(m: MarketWinners, r: CapRange): CapView {
+  const buckets = m.buckets ?? [];
+  if (buckets.length === 0) return { top: m.top, leaders: m.leaders ?? [], this_year: m.this_year };
+  const { lo, hi } = clampRange(r, buckets.length);
+  const picked = buckets.slice(lo, hi);
+  const top = picked.flatMap((b) => b.top).sort((a, b) => b.ret - a.ret).slice(0, 5);
+  const leaders = picked.flatMap((b) => b.leaders).sort((a, b) => b.ytd - a.ytd).slice(0, 10);
+  const ytds = top.map((p) => p.ytd).filter((v): v is number => v !== null && Number.isFinite(v));
+  const n = picked.reduce((s, b) => s + b.ytd_n, 0);
+  const sum = picked.reduce((s, b) => s + b.ytd_sum, 0);
+  return {
+    top,
+    leaders,
+    this_year: {
+      through: m.this_year.through,
+      picks: ytds.length ? ytds.reduce((a, b) => a + b, 0) / ytds.length : null,
+      average: n > 0 ? sum / n : null,
+      stocks: n,
+    },
+  };
 }
 
 export type Verdict = { tone: "up" | "down" | "flat"; title: string; line: string };

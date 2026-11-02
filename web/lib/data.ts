@@ -212,6 +212,19 @@ async function byIds<T>(ids: readonly string[], query: (chunk: string[]) => Page
   return out;
 }
 
+/** Each company's market cap as of its latest scored week (company_metrics; dollars for the US, rupees for India):
+ * what the market-cap range filters on. A company without one is missing from the map. */
+export async function marketCaps(ids: readonly string[]): Promise<Map<string, number>> {
+  const data = await byIds<{ company_id: string; market_cap: number | string | null }>(ids, (chunk) => (a, b) =>
+    db().from("company_metrics").select("company_id, market_cap:metrics->market_cap").in("company_id", chunk).order("company_id").range(a, b)); // prettier-ignore
+  const out = new Map<string, number>();
+  for (const r of data) {
+    const v = Number(r.market_cap);
+    if (r.market_cap !== null && Number.isFinite(v)) out.set(r.company_id, v);
+  }
+  return out;
+}
+
 /** The companies' scores rows in [from, before): what the NEW badge and the Evidence change read (lib/candidates.ts). */
 export async function scoreHistory(ids: readonly string[], from: string, before: string): Promise<Map<string, ScorePoint[]>> {
   const data = await byIds<ScorePoint & { company_id: string }>(ids, (chunk) => (a, b) =>

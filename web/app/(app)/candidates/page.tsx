@@ -8,6 +8,7 @@ import { ScoreRing } from "@/components/score-ring";
 import { Segmented } from "@/components/segmented";
 import { SubmitButton } from "@/components/submit-button";
 import { TickerTile } from "@/components/ticker-tile";
+import { CapRangeLink } from "@/components/cap-range";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
@@ -32,8 +33,9 @@ import {
   type ScorePoint,
   type ShownBucket,
 } from "@/lib/candidates";
+import { CAP_STEPS, inCapRange, parseRange, rangeParam, type CapRange } from "@/lib/caps";
 import { BOARD_LABEL } from "@/lib/explain";
-import { dismissals, latestDigest, latestThesisByCompany, scoreHistory, screen, type ScreenerRow, type Thesis } from "@/lib/data";
+import { dismissals, latestDigest, latestThesisByCompany, marketCaps, scoreHistory, screen, type ScreenerRow, type Thesis } from "@/lib/data";
 import { weekEyebrow } from "@/lib/dates";
 import { code } from "@/lib/format";
 import { one, type Query } from "@/lib/forms";
@@ -90,19 +92,31 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const family = FAMILIES.find((f) => f === one(q, "family"));
   const sector = one(q, "sector") || undefined;
   const showDismissed = one(q, "dismissed") === "1";
+  // the market-cap range per market (2026-11-02), each in its own currency: ?cap_us=2-5, ?cap_in=1-3
+  const ranges: Record<Market, CapRange> = {
+    us: parseRange(one(q, "cap_us"), CAP_STEPS.us.length),
+    in: parseRange(one(q, "cap_in"), CAP_STEPS.in.length),
+  };
+  const capParams = {
+    cap_us: rangeParam(ranges.us, CAP_STEPS.us.length) ?? undefined,
+    cap_in: rangeParam(ranges.in, CAP_STEPS.in.length) ?? undefined,
+  };
   const spec: ScreenSpec = { buckets: [bucket], limit: 2000 }; // both markets: the switch counts each
   if (family) spec.families_all = [family];
   const all = await screen(spec);
   const sectors = [...new Set(all.map((r) => r.sector).filter((s): s is string => !!s))].sort();
   const week = all[0]?.week_end;
-  const inSector = all.filter((r) => !sector || r.sector === sector);
-  const ids = inSector.map((r) => r.company_id);
-  const [held, cards, history, digest] = await Promise.all([
+  const inSectorAll = all.filter((r) => !sector || r.sector === sector);
+  const ids = inSectorAll.map((r) => r.company_id);
+  const [caps, held, cards, history, digest] = await Promise.all([
+    capParams.cap_us || capParams.cap_in ? marketCaps(ids) : Promise.resolve(new Map<string, number>()),
     week ? dismissals(ids, week) : Promise.resolve(new Map<string, never>()),
     latestThesisByCompany(ids),
     week ? scoreHistory(ids, windowStart(week), week) : Promise.resolve(new Map<string, never[]>()),
     latestDigest(),
   ]);
+  // a market whose range is the whole range keeps every name, a cap or not (inCapRange)
+  const inSector = inSectorAll.filter((r) => inCapRange(caps.get(r.company_id), CAP_STEPS[r.market], ranges[r.market]));
   // still dismissed: no week since the dismissal (this one included) had a new signal or family or moved Evidence 10
   // (Home's On the board leaves out the same names)
   const dismissed = stillDismissed(inSector, held);
@@ -110,9 +124,10 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const counts = Object.fromEntries(byMarket(everywhere).map(([m, rows]) => [m, rows.length])) as Record<Market, number>;
   const inMarket = inSector.filter((r) => !market || r.market === market);
   const shown = everywhere.filter((r) => !market || r.market === market);
-  const filters = { bucket, market, family, sector, dismissed: showDismissed ? "1" : undefined };
+  const filters = { bucket, market, family, sector, dismissed: showDismissed ? "1" : undefined, ...capParams };
   const back = href(filters);
-  const filtered = family !== undefined || sector !== undefined; // the market is the switch, not a filter
+  // the market is the switch, not a filter; a market-cap range is
+  const filtered = family !== undefined || sector !== undefined || !!capParams.cap_us || !!capParams.cap_in;
   const hidden = showDismissed ? 0 : inMarket.length - shown.length;
   const firstRun = digest === null && week === undefined && !filtered;
   // the digest's lines about names that left this bucket, only when it is the digest of the week shown
@@ -158,7 +173,21 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
               {showDismissed ? "Dismissed ones shown" : ""}
             </p>
           ) : null}
-          <Filters bucket={bucket} market={market} family={family} sector={sector} sectors={sectors} showDismissed={showDismissed} filtered={filtered} />
+          <Filters bucket={bucket} market={market} family={family} sector={sector} sectors={sectors} showDismissed={showDismissed} filtered={filtered} caps={capParams} />
+        </div>
+      )}
+      {firstRun ? null : (
+        <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+          {(market ? [market] : MARKETS).map((m) => (
+            <CapRangeLink
+              key={m}
+              market={m}
+              steps={CAP_STEPS[m]}
+              value={ranges[m]}
+              param={`cap_${m}`}
+              note={market ? "Market cap as of the latest scored week." : `${MARKET_LABEL[m]}: market cap as of the latest scored week.`}
+            />
+          ))}
         </div>
       )}
       {shown.length === 0 ? (
@@ -397,6 +426,7 @@ function Filters({
   sectors,
   showDismissed,
   filtered,
+  caps,
 }: {
   bucket: ShownBucket;
   market: string | undefined;
@@ -405,6 +435,8 @@ function Filters({
   sectors: string[];
   showDismissed: boolean;
   filtered: boolean;
+  /** the market-cap ranges in force, kept when the filters are applied */
+  caps: Record<string, string | undefined>;
 }) {
   return (
     <DetailsMenu className="group/filters relative ml-auto">
@@ -415,6 +447,7 @@ function Filters({
       <form method="get" action="/candidates" className="pop absolute top-full right-0 z-30 mt-2 grid w-[min(22rem,calc(100vw-2rem))] grid-cols-2 gap-3 rounded-tile p-4">
         <input type="hidden" name="bucket" value={bucket} />
         {market ? <input type="hidden" name="market" value={market} /> : null}
+        {Object.entries(caps).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
         <div className="col-span-2 flex min-w-0 flex-col gap-1.5">
           <Label htmlFor="f-family">Family</Label>
           <Select id="f-family" name="family" defaultValue={family ?? ""} className="w-full">

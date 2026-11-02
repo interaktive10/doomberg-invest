@@ -113,19 +113,22 @@ def test_this_years_leaders_use_the_same_rules_through_the_latest_close() -> Non
     assert [x["code"] for x in m["leaders"]] == ["C0", "C1"] and m["this_year"]["through"] == "2026-04-30"
 
 
-def test_each_market_cap_step_has_its_own_lists() -> None:
-    """The slider (2026-11-02): a step's lists hold only companies above it, each with its market cap."""
+def test_each_market_cap_bucket_has_its_own_lists() -> None:
+    """The range (2026-11-02: a min and a max): a bucket per step, [step, next step), the last open-ended; each holds
+    only its companies, each with its market cap, and the average stock as a sum and a count."""
     small, big = uuid4(), uuid4()
     series = {small: months(2025, linear(10, 30) + [40.0] * 4), big: months(2025, linear(10, 15) + [16.0] * 4)}
     versions = {small: [shares(small, 2e8, date(2024, 2, 1))], big: [shares(big, 1e10, date(2024, 2, 1))]}
     companies = {c: Company(id=c, market="us", name=n, ticker=n) for c, n in ((small, "SML"), (big, "BIG"))}
     m = w.market_report("us", companies, series, versions, date(2026, 5, 10), universe=2)
-    by = {b["min_cap"]: b for b in m["bands"]}
-    assert [b["min_cap"] for b in m["bands"]] == [float(x) for x in w.CAP_STEPS["us"]]
-    assert [x["code"] for x in by[1e9]["leaders"]] == ["SML", "BIG"]  # $8B and $160B
-    assert [x["code"] for x in by[1e11]["leaders"]] == ["BIG"] and by[1e11]["leaders"][0]["cap"] == 1.6e11
-    assert [x["code"] for x in by[1e11]["top"]] == ["BIG"] and by[5e11]["leaders"] == []
-    assert m["leaders"] == by[1e9]["leaders"] and m["top"] == by[1e9]["top"]  # the floor's, as before
+    b = m["buckets"]
+    assert [x["min_cap"] for x in b] == [float(x) for x in w.CAP_STEPS["us"]]
+    assert b[0]["max_cap"] == 2e9 and b[-1]["max_cap"] is None
+    held = {i: [x["code"] for x in bk["leaders"]] for i, bk in enumerate(b) if bk["leaders"]}
+    assert held == {2: ["SML"], 6: ["BIG"]}  # $8B in [$5B, $10B), $160B in [$100B, $200B)
+    assert b[6]["leaders"][0]["cap"] == 1.6e11 and [x["code"] for x in b[6]["top"]] == ["BIG"]
+    assert sum(x["ytd_n"] for x in b) == 2 and b[2]["ytd_n"] == 1
+    assert [x["code"] for x in m["leaders"]] == ["SML", "BIG"]  # the floor's lists, as before
 
 
 def test_market_caps_are_todays_and_the_slider_reads_them() -> None:
@@ -137,7 +140,7 @@ def test_market_caps_are_todays_and_the_slider_reads_them() -> None:
     versions = {c: [shares(c, 1e10, date(2024, 2, 1))] for c in (fell, held)}
     companies = {c: Company(id=c, market="us", name=n, ticker=n) for c, n in ((fell, "FELL"), (held, "HELD"))}
     m = w.market_report("us", companies, series, versions, date(2026, 5, 10), universe=2)
-    by = {b["min_cap"]: b for b in m["bands"]}
-    assert [(x["code"], x["cap"]) for x in by[1e9]["top"]] == [("FELL", 6e10), ("HELD", 1.3e11)]  # today's caps
-    assert [x["code"] for x in by[1e11]["top"]] == ["HELD"]  # FELL was $150B at the end of 2025, $60B now
+    assert [(x["code"], x["cap"]) for x in m["top"]] == [("FELL", 6e10), ("HELD", 1.3e11)]  # today's caps
+    b = m["buckets"]  # FELL was $150B at the end of 2025, $60B now: in [$50B, $100B), not above $100B
+    assert [x["code"] for x in b[5]["top"]] == ["FELL"] and [x["code"] for x in b[6]["top"]] == ["HELD"]
     assert m["cap_as_of"] == "2026-04-30"
