@@ -1,8 +1,9 @@
-import { Empty, Page } from "@/components/page";
+import { Empty, Freshness, Page } from "@/components/page";
 import { WinnersMarket } from "@/components/winners-market";
 import { requireUser } from "@/lib/auth";
 import { latestReport } from "@/lib/data";
 import { dayDate } from "@/lib/dates";
+import { nextRunDate } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import {
   barScale,
@@ -20,22 +21,33 @@ export const metadata = { title: "Winners" };
 
 // Winners (docs/SPEC_ISSUES.md 64): per market, a market-cap slider over this year's ten biggest gainers (next January's
 // list) and last year's five with how they are doing this year; then the test of the strategy. One report row, computed
-// every Saturday.
+// every weekday evening on the latest closes (docs/SPEC_ISSUES.md 75).
 export default async function Winners() {
   await requireUser();
   const report = await latestReport<WinnersReport>("winners");
   const markets = report?.body.markets ?? [];
   const tested = markets.find((m) => m.backtest?.summary);
-  const through = markets.map((m) => m.this_year.through).find(Boolean);
+  const at = (m: "us" | "in") => markets.find((x) => x.market === m)?.this_year.through ?? null;
   return (
-    <Page title="Winners" description="This year's biggest gainers to watch for next January, and how last year's are doing.">
+    <Page
+      title="Winners"
+      description="This year's biggest gainers to watch for next January, and how last year's are doing."
+      freshness={
+        markets.length > 0 ? (
+          <Freshness
+            items={[
+              { label: "US prices to", date: at("us") },
+              { label: "India prices to", date: at("in") },
+            ]}
+            next={nextRunDate("closes", new Date())}
+          />
+        ) : null
+      }
+    >
       {markets.length === 0 ? (
         <Empty>The first winners report is computed on Saturday.</Empty>
       ) : (
         <>
-          <p className="-mt-2 text-[14px] text-muted">
-            This year&apos;s moves run to {through ? dayDate(through) : "the latest close"}. Slide a market&apos;s size floor to see only bigger companies.
-          </p>
           {markets.map((m) => (
             <WinnersMarket key={m.market} m={m} />
           ))}
@@ -43,7 +55,7 @@ export default async function Winners() {
           <p className="text-[13px] text-subtle">
             Price change only (no dividends). A name counts only if it was investable: at least $5 / Rs 20 when the year began
             and a market value above the size floor at the end. Today&apos;s companies only: a past winner that later collapsed and
-            delisted is missing, which flatters the test{report ? ` · computed ${dayDate(report.week_end)}` : ""}.
+            delisted is missing, which flatters the test{report ? ` · computed ${dayDate(report.body.as_of)}` : ""}.
           </p>
         </>
       )}

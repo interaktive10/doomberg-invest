@@ -3,7 +3,7 @@ import { LinkPending } from "@/components/link-pending";
 import { Chip, Legend } from "@/components/chip";
 import { DetailsMenu } from "@/components/details-menu";
 import { Icon } from "@/components/icons";
-import { Empty, Flash, Page } from "@/components/page";
+import { Empty, Flash, Freshness, Page } from "@/components/page";
 import { ScoreRing } from "@/components/score-ring";
 import { Segmented } from "@/components/segmented";
 import { SubmitButton } from "@/components/submit-button";
@@ -43,6 +43,7 @@ import { changeItems, homeSections, leftBucket, shownDelta, type ChangeItem } fr
 import { FAMILY_LABEL, SIGNAL_NAME, SIGNAL_PLAIN } from "@/lib/labels";
 import { signalTone } from "@/lib/palette";
 import type { ScreenSpec } from "@/lib/screener";
+import { nextRunDate } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { dismiss, research } from "./actions";
 
@@ -138,6 +139,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       eyebrow={week ? weekEyebrow(week, false) : undefined}
       title="Undervalued"
       description={BUCKET_LINE[bucket]}
+      freshness={week ? <Freshness items={[{ label: "Scores as of", date: week }]} next={nextRunDate("weekly", new Date())} /> : null}
       actions={
         <Segmented
           label="Buckets"

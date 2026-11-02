@@ -1,6 +1,7 @@
 name: research
 # Research cards on demand (pipeline/thesis/on_demand.py; docs/SPEC_ISSUES.md 66): the web app's Research button opens
-# an entry with no card; this writes it within minutes instead of on Sunday. Most runs find nothing and stop at once.
+# an entry with no card; this writes it within minutes instead of on Sunday. It also runs the Themes screen's "Rethink
+# now" (at most once a day). Most runs find nothing and stop at once.
 # The repository is public, so its runs cost no Actions minutes.
 on:
   schedule:
@@ -17,12 +18,13 @@ permissions:
 jobs:
   cards:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30   # a card (or a few), then a requested themes rethink
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
     steps:
       - name: Database secret
         id: db
@@ -44,3 +46,6 @@ jobs:
       - name: Cards for research entries waiting for one
         if: steps.db.outputs.ok == 'true'
         run: uv run --frozen python -m pipeline.thesis.on_demand
+      - name: Themes rethink, when the Themes screen asked (docs/SPEC_ISSUES.md 76; most runs find none and stop)
+        if: steps.db.outputs.ok == 'true'
+        run: uv run --frozen python -m pipeline.reports.themes --if-requested

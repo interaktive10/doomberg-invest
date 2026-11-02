@@ -5,10 +5,15 @@ import { Icon } from "@/components/icons";
 import { CapRangeLink } from "@/components/cap-range";
 import { Disclosure } from "@/components/disclosure";
 import { LinkPending } from "@/components/link-pending";
-import { Empty, Page, Section } from "@/components/page";
+import { Empty, Flash, Freshness, Page, Section } from "@/components/page";
+import { Legend } from "@/components/chip";
+import { SplitBar } from "@/components/meter";
+import { Sparkline } from "@/components/sparkline";
+import { SubmitButton } from "@/components/submit-button";
 import { ThemePicker, type PickerGroup } from "@/components/theme-picker";
 import { requireUser } from "@/lib/auth";
-import { latestReport } from "@/lib/data";
+import { requestRethink } from "./actions";
+import { latestReport, setting } from "@/lib/data";
 import { shortDate } from "@/lib/dates";
 import { one, type Query } from "@/lib/forms";
 import { CAP_STEPS, capText, inCapRange, parseRange, type CapRange } from "@/lib/caps";
@@ -19,6 +24,7 @@ import {
   lagWords,
   pct,
   readingWords,
+  rethinkState,
   basisLines,
   basisShort,
   zWords,
@@ -30,6 +36,7 @@ import {
   type Status,
   type ThemesReport,
 } from "@/lib/themes";
+import { nextRunDate } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { marketName } from "@/lib/winners";
 
@@ -37,12 +44,13 @@ export const metadata = { title: "Themes" };
 
 // Themes v2 (docs/SPEC_ISSUES.md 68): a library of chains from something measurable in the world (car sales, home
 // sales, rates, power, prices, or the companies' own filings) to the companies it should lift. The dropdown opens any
-// theme; with none picked, the library by status. Numbers refresh every Saturday; the library is rethought monthly.
+// theme; with none picked, the library by status. Numbers refresh every weekday evening; the library is rethought monthly or on "Rethink now".
 export default async function Themes({ searchParams }: { searchParams: Promise<Query> }) {
   await requireUser();
   const q = await searchParams;
-  const report = await latestReport<unknown>("themes");
+  const [report, req] = await Promise.all([latestReport<unknown>("themes"), setting<{ at?: string } | null>("themes_rethink_request", null)]);
   const r = report && isLibrary(report.body) ? report.body : null;
+  const rethink = rethinkState(r?.last_rethink ?? null, req?.at ?? null, new Date());
   const pick = typeof q.t === "string" ? q.t : "";
   const theme = r?.library.find((t) => t.slug === pick);
   const gone = theme ? undefined : r?.retired.find((t) => t.slug === pick);
@@ -51,7 +59,19 @@ export default async function Themes({ searchParams }: { searchParams: Promise<Q
       title="Themes"
       description="What is happening in the world, and the companies it should lift before their price does."
       actions={r ? <ThemePicker groups={groups(r)} current={theme || gone ? pick : ""} /> : undefined}
+      freshness={
+        r ? (
+          <Freshness
+            items={[
+              { label: "Numbers as of", date: r.as_of ?? r.week },
+              { label: "Next AI rethink", date: r.next_rethink },
+            ]}
+            next={nextRunDate("closes", new Date())}
+          />
+        ) : null
+      }
     >
+      <Flash error={one(q, "error")} ok={one(q, "ok")} />
       {!r ? (
         <Empty>The first theme library is built on Saturday, after the week&apos;s scores.</Empty>
       ) : theme ? (
@@ -59,12 +79,13 @@ export default async function Themes({ searchParams }: { searchParams: Promise<Q
       ) : gone ? (
         <Retired t={gone} />
       ) : (
-        <Overview r={r} />
+        <Overview r={r} rethink={rethink} />
       )}
       {r ? (
         <p className="text-[13px] text-subtle">
-          Numbers refresh every Saturday. The AI rethinks the library once a month (sooner when a theme&apos;s status
-          changes or its driver jumps): it keeps, edits or retires themes and adds new ones the numbers point to.
+          Numbers refresh every weekday evening on the latest closes. The AI rethinks the library once a month (sooner when
+          a theme&apos;s status changes or its trigger jumps, or when you press Rethink now): it keeps, edits or retires
+          themes and adds new ones the numbers point to.
           {r.last_rethink ? ` Last rethink ${shortDate(r.last_rethink, true)}.` : " No rethink yet."} Next{" "}
           {shortDate(r.next_rethink, true)}. Research, not advice.
         </p>
@@ -129,16 +150,53 @@ function chainLine(t: LibraryTheme, r: ThemesReport): string {
   return `${from} → ${t.keywords.slice(0, 3).join(", ")}`;
 }
 
-function Overview({ r }: { r: ThemesReport }) {
+/** The library at a glance: one bar split by status, each part labelled (the colours are the statuses' own, never
+ * alone: the legend names them with their counts). */
+function StatusBar({ r }: { r: ThemesReport }) {
+  const parts = STATUS_ORDER.map((s) => ({ s, n: r.library.filter((t) => t.status === s).length })).filter((p) => p.n > 0);
+  const total = parts.reduce((a, p) => a + p.n, 0);
+  if (total === 0) return null;
+  const words = parts.map((p) => `${p.n} ${STATUS_SHORT[p.s].toLowerCase()}`).join(", ");
+  return (
+    <div className="sheet flex flex-col gap-3 p-5">
+      <p className="text-[15px] text-fg">
+        <span className="num text-[22px] font-bold tracking-[-0.02em]">{total}</span> themes tracked
+      </p>
+      <SplitBar max={total} size="lg" label={`${total} themes: ${words}`} parts={parts.map((p) => ({ value: p.n, tone: STATUS[p.s].tone, label: STATUS_SHORT[p.s] }))} />
+      <Legend className="num" items={parts.map((p) => ({ tone: STATUS[p.s].tone, label: `${p.n} ${STATUS_SHORT[p.s]}` }))} />
+    </div>
+  );
+}
+
+/** The AI's latest note and "Rethink now" (docs/SPEC_ISSUES.md 76): the request is stored; research.yml runs it. */
+function Rethink({ r, rethink }: { r: ThemesReport; rethink: ReturnType<typeof rethinkState> }) {
+  return (
+    <Callout>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="min-w-0 flex-[1_1_28rem]">
+          <strong className="font-semibold text-fg">The AI&apos;s latest thinking: </strong>
+          {r.note || "No rethink yet."}
+          {r.last_rethink ? <span className="text-subtle"> ({shortDate(r.last_rethink, true)})</span> : null}
+        </p>
+        <form action={requestRethink} className="flex shrink-0 flex-col items-end gap-1">
+          <SubmitButton size="sm" variant="outline" disabled={rethink.kind !== "ready"}>
+            <Icon name="spark" /> Rethink now
+          </SubmitButton>
+          <span className="text-[12px] text-subtle">
+            {rethink.kind === "pending" ? "On its way: within about 15 minutes" : rethink.kind === "done_today" ? "Rethought today; again tomorrow" : "Once a day; costs a few cents"}
+          </span>
+        </form>
+      </div>
+    </Callout>
+  );
+}
+
+function Overview({ r, rethink }: { r: ThemesReport; rethink: ReturnType<typeof rethinkState> }) {
   return (
     <>
+      <StatusBar r={r} />
       <HowToRead />
-      {r.note ? (
-        <Callout>
-          <strong className="font-semibold text-fg">The AI&apos;s latest thinking: </strong>
-          {r.note}
-        </Callout>
-      ) : null}
+      <Rethink r={r} rethink={rethink} />
       {STATUS_ORDER.map((s) => {
         const list = r.library.filter((t) => t.status === s);
         if (list.length === 0) return null;
@@ -159,9 +217,10 @@ function Overview({ r }: { r: ThemesReport }) {
                     <span className="text-[18px] leading-snug font-bold tracking-[-0.01em]">{t.title}</span>
                     <span className="line-clamp-2 text-[13px] text-muted">{chainLine(t, r)}</span>
                     {basisShort(t) ? <span className="num text-[12px] text-subtle">{basisShort(t)}</span> : null}
+                    {t.chart.length > 1 ? <Sparkline values={t.chart.map(([, v]) => v)} /> : null}
                     <span className="mt-auto grid grid-cols-3 gap-2 text-[12px]">
                       <Mini label="Trigger" value={t.signal.replace(" normal", "")} />
-                      <Mini label="Rising demand" value={`${t.with_demand} of ${t.companies}`} />
+                      <Mini label="Demand up" value={`${t.with_demand} of ${t.companies}`} />
                       <Mini label="Price vs mkt" value={pct(t.run)} />
                     </span>
                     <LinkPending />

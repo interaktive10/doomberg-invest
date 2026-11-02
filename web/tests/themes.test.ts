@@ -82,3 +82,13 @@ describe("the data behind a theme (2026-11-02: \"you need to support it with dat
   });
 });
 
+
+describe("Rethink now (docs/SPEC_ISSUES.md 76)", () => {
+  it("is ready once a day and waits while a request is on its way", async () => {
+    const { rethinkState } = await import("@/lib/themes");
+    const now = new Date("2026-11-02T17:00:00Z");
+    expect(rethinkState("2026-10-31", null, now)).toEqual({ kind: "ready" });
+    expect(rethinkState("2026-10-31", "2026-11-02T16:55:00Z", now)).toEqual({ kind: "pending", since: "2026-11-02T16:55:00Z" });
+    expect(rethinkState("2026-11-02", null, now)).toEqual({ kind: "done_today" });
+  });
+});
