@@ -19,7 +19,9 @@ export function Sparkline({ values, className }: { values: readonly number[]; cl
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true" className={cn("h-8 w-full overflow-visible text-accent", className)}>
       <path d={d} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={x(last)} cy={y(pts[last]!)} r="4" fill="currentColor" stroke="var(--panel)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      {/* a zero-length round-capped stroke stays a circle when the viewBox stretches (a <circle> would turn oval) */}
+      <path d={`M${x(last).toFixed(1)},${y(pts[last]!).toFixed(1)}h0`} stroke="var(--panel)" strokeWidth="12" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <path d={`M${x(last).toFixed(1)},${y(pts[last]!).toFixed(1)}h0`} stroke="currentColor" strokeWidth="8" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

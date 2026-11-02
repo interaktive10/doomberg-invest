@@ -44,7 +44,7 @@ export const metadata = { title: "Themes" };
 
 // Themes v2 (docs/SPEC_ISSUES.md 68): a library of chains from something measurable in the world (car sales, home
 // sales, rates, power, prices, or the companies' own filings) to the companies it should lift. The dropdown opens any
-// theme; with none picked, the library by status. Numbers refresh every Saturday; the library is rethought monthly.
+// theme; with none picked, the library by status. Numbers refresh every weekday evening; the library is rethought monthly or on "Rethink now".
 export default async function Themes({ searchParams }: { searchParams: Promise<Query> }) {
   await requireUser();
   const q = await searchParams;
@@ -83,8 +83,9 @@ export default async function Themes({ searchParams }: { searchParams: Promise<Q
       )}
       {r ? (
         <p className="text-[13px] text-subtle">
-          Numbers refresh every Saturday. The AI rethinks the library once a month (sooner when a theme&apos;s status
-          changes or its driver jumps): it keeps, edits or retires themes and adds new ones the numbers point to.
+          Numbers refresh every weekday evening on the latest closes. The AI rethinks the library once a month (sooner when
+          a theme&apos;s status changes or its trigger jumps, or when you press Rethink now): it keeps, edits or retires
+          themes and adds new ones the numbers point to.
           {r.last_rethink ? ` Last rethink ${shortDate(r.last_rethink, true)}.` : " No rethink yet."} Next{" "}
           {shortDate(r.next_rethink, true)}. Research, not advice.
         </p>
@@ -219,7 +220,7 @@ function Overview({ r, rethink }: { r: ThemesReport; rethink: ReturnType<typeof 
                     {t.chart.length > 1 ? <Sparkline values={t.chart.map(([, v]) => v)} /> : null}
                     <span className="mt-auto grid grid-cols-3 gap-2 text-[12px]">
                       <Mini label="Trigger" value={t.signal.replace(" normal", "")} />
-                      <Mini label="Rising demand" value={`${t.with_demand} of ${t.companies}`} />
+                      <Mini label="Demand up" value={`${t.with_demand} of ${t.companies}`} />
                       <Mini label="Price vs mkt" value={pct(t.run)} />
                     </span>
                     <LinkPending />
