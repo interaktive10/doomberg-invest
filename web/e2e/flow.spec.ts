@@ -47,13 +47,17 @@ async function journalEntry(page: Page, action: string, reason: string, override
   await page.getByRole("button", { name: "Add entry" }).click();
 }
 
-test("the nav has five places and More; the Screener's and the Capex Desk's old links redirect", async ({ page }) => {
+test("the nav has five places and More; the Screener's, the Capex Desk's, the Journal's and the Lab's old links redirect", async ({ page }) => {
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Main" });
   for (const name of ["Home", "Undervalued", "Themes", "Winners", "My list"]) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(1);
   await nav.locator("summary", { hasText: "More" }).click();
   for (const name of ["Settings"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
-  await expect(nav.getByRole("link")).toHaveCount(8);
+  await expect(nav.getByRole("link")).toHaveCount(6); // five places and Settings (docs/SPEC_ISSUES.md 69)
+  await page.goto("/journal");
+  await expect(page).toHaveURL(/\/theses$/);
+  await page.goto("/lab");
+  await expect(page).toHaveURL(/\/settings$/);
   await page.goto("/screener");
   await expect(page).toHaveURL(/\/candidates$/);
   await expect(page.getByRole("heading", { level: 1, name: "Undervalued" })).toBeVisible();
