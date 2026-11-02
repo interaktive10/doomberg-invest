@@ -78,3 +78,12 @@ def test_a_repair_input_is_bounded() -> None:
     inp = CardInput(EvidencePack.model_validate(PACK)).repair({"summary": "x"}, [f"e{i} " * 200 for i in range(50)])
     ask = inp.follow()[1][1]
     assert ask.count("\n- ") <= 20 and all(len(e) <= 400 for e in inp.errors)
+
+
+def test_a_repair_reads_the_same_whatever_the_answers_key_order() -> None:
+    """A recorded answer comes back key-sorted; the live one in the model's order. The repair turn must not differ,
+    or its cassette never replays."""
+    inp = CardInput(EvidencePack.model_validate(PACK))
+    a = inp.repair({"summary": "s", "facts": []}, ["e"])
+    b = inp.repair({"facts": [], "summary": "s"}, ["e"])
+    assert a.follow() == b.follow()

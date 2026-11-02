@@ -545,7 +545,9 @@ class CardInput(PromptInput):
 
     def repair(self, card: Mapping[str, Any], errors: Sequence[str]) -> CardInput:
         """The next attempt: this pack, the card that failed and what failed in it."""
-        return CardInput(self.pack, json.dumps(dict(card), ensure_ascii=False), tuple(str(e)[:400] for e in errors))
+        # keys sorted: the same card reads the same however its answer was ordered (a recorded answer is key-sorted)
+        previous = json.dumps(dict(card), ensure_ascii=False, sort_keys=True)
+        return CardInput(self.pack, previous, tuple(str(e)[:400] for e in errors))
 
 
 MAX_REPAIR_ERRORS = 20
