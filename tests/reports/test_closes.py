@@ -96,6 +96,12 @@ def test_refresh_us_saves_as_it_goes() -> None:
     r, stats = cl.Recent(), cl.Stats()
     tickers = [f"T{i:03d}" for i in range(2 * cl.SAVE_EVERY + 5)]
     cl.refresh_us(
-        Asker(), tickers, r, budget=len(tickers), minutes=60, stats=stats, save=lambda: saves.append(len(r.us))
+        Asker(stop_after=10_000),
+        tickers,
+        r,
+        budget=len(tickers),
+        minutes=60,
+        stats=stats,
+        save=lambda: saves.append(len(r.us)),
     )
     assert saves == [cl.SAVE_EVERY, 2 * cl.SAVE_EVERY]
