@@ -127,13 +127,14 @@ def write_one(conn: psycopg.Connection[Any], router: Router, key: str, pack: Map
         if isinstance(answer, Deferred):
             stats.deferred.append(key)
             return
-        res = v.validate(answer.content, pack, words, router)
+        content = v.card_fields(answer.content)
+        res = v.validate(content, pack, words, router)
         if res.ok:
             c = pack["company"]
             code = c.get("ticker") or c.get("nse_symbol")
-            md = render(answer.content, f"{c['name']}{f' ({code})' if code else ''} — {pack['week']}")
+            md = render(content, f"{c['name']}{f' ({code})' if code else ''} — {pack['week']}")
             with conn.transaction():
-                ingest_card(conn, answer.content, pack, md, "fallback", res)
+                ingest_card(conn, content, pack, md, "fallback", res)
             stats.written.append(key)
             return
         errors = res.errors

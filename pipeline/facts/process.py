@@ -90,4 +90,17 @@ def extract_document(meta: DocMeta, norm: Normalized, router: Router, xbrl: Xbrl
                 out.rejected[r.check] += 1
             else:
                 out.facts.append((r, f"{answer.provider}:{answer.model}"))
+    out.facts, merged = one_relationship(out.facts)
+    out.duplicates += merged
     return out
+
+
+def one_relationship(facts: list[tuple[Candidate, str]]) -> tuple[list[tuple[Candidate, str]], int]:
+    """One sentence about one named partner is one fact (2026-11-02, F-SYN on DeepSeek): a value-less customer_win
+    whose quote and counterparty a supply_link already carries is the same relationship read twice, so it is dropped.
+    A customer_win with a value (an order size) stays."""
+    links = {(c.quote, (c.counterparty or "").casefold()) for c, _ in facts if c.fact_type == "supply_link"}
+    kept = [(c, m) for c, m in facts
+            if not (c.fact_type == "customer_win" and c.value_num is None and c.value_low is None
+                    and (c.quote, (c.counterparty or "").casefold()) in links)]  # fmt: skip
+    return kept, len(facts) - len(kept)

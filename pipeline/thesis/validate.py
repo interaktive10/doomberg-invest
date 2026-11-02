@@ -657,6 +657,13 @@ def _hype(card: Mapping[str, Any], words: Sequence[str]) -> list[str]:
     return found
 
 
+def card_fields(answer: Mapping[str, Any]) -> dict[str, Any]:
+    """P-04's answer with only the card's own fields (2026-11-02: DeepSeek added a `card_type` key, which the strict
+    schema rejects). A field outside the schema is never rendered or stored, so dropping it changes nothing the
+    validator checks; every field the card has is still validated."""
+    return {k: val for k, val in answer.items() if k in Card.model_fields}
+
+
 def validate(
     card_doc: Mapping[str, Any],
     pack: Mapping[str, Any],

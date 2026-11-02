@@ -29,7 +29,7 @@ def run(router: Router, pack_path: Path = PACK) -> tuple[Done | Deferred, v.Resu
     answer = router.call(CardInput(EvidencePack.model_validate(doc)))
     if isinstance(answer, Deferred):
         return answer, None
-    return answer, v.validate(answer.content, doc, v.hype_words(), router)
+    return answer, v.validate(v.card_fields(answer.content), doc, v.hype_words(), router)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

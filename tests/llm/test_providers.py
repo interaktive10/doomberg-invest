@@ -143,3 +143,22 @@ def test_openrouter_deepseek_reasoning_effort_and_a_tool_answer_given_as_text(tm
     h.register_mock(url, json.dumps({"choices": [{"message": {"content": ""}}]}).encode())
     with pytest.raises(ProviderError, match="no call to the requested tool"):
         OpenAICompatible(h, "k", "https://openrouter.ai/api/v1", "openrouter").complete(TOOL)
+
+
+def test_openrouter_holds_a_json_answer_to_the_schema(tmp_path: Path) -> None:
+    """2026-11-02 (F-SYN on DeepSeek): with a bare json_object, DeepSeek guessed the card's shape and every P-04 card
+    failed validation. OpenRouter now gets the schema as a strict json_schema response format, and only providers that
+    honour it; Groq keeps json_object; a tool call is unchanged."""
+    from dataclasses import replace
+
+    from pipeline.llm.providers.openai_compat import body
+
+    req = replace(TOOL, mode="json")
+    b = body(req, structured=True)
+    fmt = b["response_format"]
+    assert fmt["type"] == "json_schema" and fmt["json_schema"]["strict"] is True
+    assert fmt["json_schema"]["schema"]["additionalProperties"] is False and b["provider"] == {
+        "require_parameters": True
+    }
+    assert body(req)["response_format"] == {"type": "json_object"} and "provider" not in body(req)
+    assert "response_format" not in body(TOOL, structured=True)
