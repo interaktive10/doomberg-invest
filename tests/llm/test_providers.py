@@ -131,7 +131,7 @@ def test_openrouter_deepseek_reasoning_effort_and_a_tool_answer_given_as_text(tm
     q = Quotas.load()
     rt = q.providers["openrouter"]
     assert rt.model("extract") == rt.model("card") == "deepseek/deepseek-v4.1-flash-1017"
-    assert rt.reasoning == {"card": "high", "extract": "low"} and q.routing["P-01"][0] == "openrouter"
+    assert rt.reasoning == {"card": "high", "extract": "medium"} and q.routing["P-01"][0] == "openrouter"
     assert body(replace(TOOL, reasoning_effort="high"))["reasoning"] == {"effort": "high", "exclude": True}
     assert "reasoning" not in body(TOOL)
     h = http(tmp_path)

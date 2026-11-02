@@ -489,6 +489,13 @@ def units_by_id(pack: Mapping[str, Any]) -> dict[str, str]:
 # ---------------------------------------------------------------- router inputs (public data)
 
 
+# validate.py's rule for inferences and assumptions, stated in the schema too (2026-11-02: DeepSeek wrote computed
+# figures like 4,200,000,000 and 0.2755 there unmarked).
+MARKED = (
+    "Starts with 'Inference:' or 'Assumption:'. Every number in it, computed ones included, is followed "
+    "within a few words by (assumed), e.g. 'about 4.2 billion (assumed)'."
+)
+
 # The counts validate.py's Card enforces, stated in the schema too (2026-11-02: DeepSeek, held to the schema, still
 # wrote 11 facts and a 70-word summary when the counts were only in the prompt).
 CARD_SCHEMA = obj({
@@ -498,8 +505,8 @@ CARD_SCHEMA = obj({
     "why_mispriced": {"type": "array", "minItems": 1, "maxItems": 4,
                       "items": obj({"text": {"type": "string"},
                                     "cites": {"type": "array", "items": {"type": "string"}}})},
-    "inferences": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string"}},
-    "assumptions": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "string"}},
+    "inferences": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string", "description": MARKED}},
+    "assumptions": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "string", "description": MARKED}},
     "risks": {"type": "array", "minItems": 2, "maxItems": 5,
               "items": obj({"text": {"type": "string"}, "cites": {"type": "array", "items": {"type": "string"}}})},
     "kill_criteria": {"type": "array", "minItems": 2, "maxItems": 4, "items": obj({

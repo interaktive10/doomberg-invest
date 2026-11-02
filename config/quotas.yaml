@@ -20,7 +20,7 @@ providers:
     models: {extract: deepseek/deepseek-v4.1-flash-1017, card: deepseek/deepseek-v4.1-flash-1017}
     # high effort where the model reasons (cards, claim checks, themes); low where it looks things up (extraction,
     # triage, links): high on ~400 extraction calls a day would take the daily run past its time limit
-    reasoning: {card: high, extract: low}
+    reasoning: {card: high, extract: medium}
     requests_per_day: 1500      # spend caps: about $1 a day at most; typical use is a third of it
     requests_per_minute: 60
     tokens_per_day: 6000000
