@@ -6,6 +6,7 @@ OpenRouter's base URL comes from config/quotas.yaml (the guard's openai_client_r
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,17 +25,38 @@ from pipeline.net.http import HttpClient
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
-def body(req: Request) -> dict[str, Any]:
+def strict(s: Mapping[str, Any]) -> dict[str, Any]:
+    """A JSON Schema with every object closed (additionalProperties false), as strict structured outputs need."""
+    out: dict[str, Any] = dict(s)
+    if out.get("type") == "object" or "properties" in out:
+        out["additionalProperties"] = False
+        out["properties"] = {k: strict(v) for k, v in (out.get("properties") or {}).items()}
+    if isinstance(out.get("items"), Mapping):
+        out["items"] = strict(out["items"])
+    return out
+
+
+def body(req: Request, structured: bool = False) -> dict[str, Any]:
+    """`structured`: the JSON answer is held to the request's schema (OpenRouter's structured outputs, 2026-11-02:
+    with a bare json_object DeepSeek guessed the card's shape and every P-04 card failed validation)."""
     out: dict[str, Any] = {
         "model": req.model,
         "temperature": req.temperature,
-        "messages": [{"role": "system", "content": req.system}, {"role": "user", "content": req.user}],
+        "messages": [
+            {"role": "system", "content": req.system},
+            {"role": "user", "content": req.user},
+            *({"role": role, "content": text} for role, text in req.follow),
+        ],
     }
     if req.mode == "tool":
         fn = {"name": req.tool_name, "description": f"Record the {req.prompt_id} result.",
               "parameters": to_json_schema(req.schema)}  # fmt: skip
         out["tools"] = [{"type": "function", "function": fn}]
         out["tool_choice"] = {"type": "function", "function": {"name": req.tool_name}}
+    elif structured:
+        out["response_format"] = {"type": "json_schema", "json_schema": {
+            "name": req.tool_name, "strict": True, "schema": strict(to_json_schema(req.schema))}}  # fmt: skip
+        out["provider"] = {"require_parameters": True}  # only a provider that honours the schema
     else:
         out["response_format"] = {"type": "json_object"}
     if req.reasoning_effort:
@@ -69,6 +91,7 @@ class OpenAICompatible:
     key: str | None
     base_url: str
     name: str
+    structured: bool = False  # sends json_schema response formats (OpenRouter)
 
     def available(self) -> bool:
         return bool(self.key)
@@ -77,7 +100,7 @@ class OpenAICompatible:
         try:
             raw = self.http.post_json(
                 f"{self.base_url.rstrip('/')}/chat/completions",
-                body(req),
+                body(req, self.structured),
                 headers={"Authorization": f"Bearer {self.key}", "X-Title": "Doomberg Invest"},
             )
         except httpx.HTTPError as e:

@@ -489,23 +489,34 @@ def units_by_id(pack: Mapping[str, Any]) -> dict[str, str]:
 # ---------------------------------------------------------------- router inputs (public data)
 
 
+# validate.py's rule for inferences and assumptions, stated in the schema too (2026-11-02: DeepSeek wrote computed
+# figures like 4,200,000,000 and 0.2755 there unmarked).
+MARKED = (
+    "Starts with 'Inference:' or 'Assumption:'. Every number in it, computed ones included, is followed "
+    "within a few words by (assumed), e.g. 'about 4.2 billion (assumed)'."
+)
+
+# The counts validate.py's Card enforces, stated in the schema too (2026-11-02: DeepSeek, held to the schema, still
+# wrote 11 facts and a 70-word summary when the counts were only in the prompt).
 CARD_SCHEMA = obj({
-    "summary": {"type": "string"},
-    "facts": {"type": "array", "items": obj({"text": {"type": "string"},
-                                              "cites": {"type": "array", "items": {"type": "string"}}})},
-    "why_mispriced": {"type": "array", "items": obj({"text": {"type": "string"},
-                                                      "cites": {"type": "array", "items": {"type": "string"}}})},
-    "inferences": {"type": "array", "items": {"type": "string"}},
-    "assumptions": {"type": "array", "items": {"type": "string"}},
-    "risks": {"type": "array", "items": obj({"text": {"type": "string"},
-                                              "cites": {"type": "array", "items": {"type": "string"}}})},
-    "kill_criteria": {"type": "array", "items": obj({
+    "summary": {"type": "string", "description": "At most 60 words."},
+    "facts": {"type": "array", "minItems": 3, "maxItems": 8,
+              "items": obj({"text": {"type": "string"}, "cites": {"type": "array", "items": {"type": "string"}}})},
+    "why_mispriced": {"type": "array", "minItems": 1, "maxItems": 4,
+                      "items": obj({"text": {"type": "string"},
+                                    "cites": {"type": "array", "items": {"type": "string"}}})},
+    "inferences": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string", "description": MARKED}},
+    "assumptions": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "string", "description": MARKED}},
+    "risks": {"type": "array", "minItems": 2, "maxItems": 5,
+              "items": obj({"text": {"type": "string"}, "cites": {"type": "array", "items": {"type": "string"}}})},
+    "kill_criteria": {"type": "array", "minItems": 2, "maxItems": 4, "items": obj({
         "metric_id": {"type": "string"},
         "operator": {"type": "string", "enum": ["<", "<=", ">", ">=", "==", "changes"]},
         "threshold": {"type": "number", "nullable": True},
         "check_after": {"type": "string"},
         "why": {"type": "string"}})},
-    "read_next": {"type": "array", "items": obj({"title": {"type": "string"}, "url": {"type": "string"}})},
+    "read_next": {"type": "array", "minItems": 1, "maxItems": 3,
+                  "items": obj({"title": {"type": "string"}, "url": {"type": "string"}})},
 })  # fmt: skip
 
 
@@ -516,12 +527,37 @@ class CardInput(PromptInput):
 
     prompt_id: ClassVar[str] = "P-04"
     pack: EvidencePack
+    # a repair attempt (docs/SPEC_ISSUES.md 70): the card that failed, as JSON, and validate.py's errors on it
+    previous_json: str = ""
+    errors: tuple[str, ...] = ()
 
     def variables(self) -> dict[str, str]:
         return {"pack_json": json.dumps(to_json(self.pack), indent=1, ensure_ascii=False)}
 
     def schema(self) -> dict[str, Any]:
         return CARD_SCHEMA
+
+    def follow(self) -> tuple[tuple[str, str], ...]:
+        if not self.previous_json:
+            return ()
+        listed = "\n".join(f"- {e}" for e in self.errors[:MAX_REPAIR_ERRORS])
+        return (("assistant", self.previous_json), ("user", REPAIR.format(errors=listed)))
+
+    def repair(self, card: Mapping[str, Any], errors: Sequence[str]) -> CardInput:
+        """The next attempt: this pack, the card that failed and what failed in it."""
+        # keys sorted: the same card reads the same however its answer was ordered (a recorded answer is key-sorted)
+        previous = json.dumps(dict(card), ensure_ascii=False, sort_keys=True)
+        return CardInput(self.pack, previous, tuple(str(e)[:400] for e in errors))
+
+
+MAX_REPAIR_ERRORS = 20
+REPAIR = (
+    "That card failed these checks:\n{errors}\n\nReturn the whole card again with each of them fixed and "
+    "everything else kept to the same rules. A number in facts or why_mispriced must be a value or delta of the "
+    "pack ids that sentence cites; every number in inferences and assumptions is followed by (assumed); a "
+    "claim says only what its cited quotes and values say; a kill criterion's check_after is a date after the "
+    "next filing window."
+)
 
 
 SUPPORT_SCHEMA = obj({"supported": {"type": "boolean"},

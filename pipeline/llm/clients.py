@@ -17,5 +17,7 @@ def providers(http: HttpClient, settings: Settings, quotas: Quotas) -> dict[str,
     }
     openrouter = quotas.providers.get("openrouter")
     if openrouter is not None and openrouter.base_url:
-        out["openrouter"] = OpenAICompatible(http, settings.openrouter_api_key, openrouter.base_url, "openrouter")
+        out["openrouter"] = OpenAICompatible(
+            http, settings.openrouter_api_key, openrouter.base_url, "openrouter", structured=True
+        )
     return out

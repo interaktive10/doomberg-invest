@@ -179,8 +179,9 @@ class Router:
         variables = data.variables()
         system = render(template(spec.id, "system"), variables)
         user = render(template(spec.id, "user"), variables)
+        follow = data.follow()  # turns after the verbatim prompt, from the checked input (a card's repair attempt)
         schema = data.schema()
-        estimate = (len(system) + len(user)) // CHARS_PER_TOKEN
+        estimate = (len(system) + len(user) + sum(len(t) for _, t in follow)) // CHARS_PER_TOKEN
         names = self.quotas.routing.get(route(spec.id), ())
         reasons: list[str] = []
         for round_ in (1, 2):
@@ -195,7 +196,7 @@ class Router:
                 model = q.model(spec.task)
                 self._pace(name)
                 req = Request(spec.id, model, system, user, schema, spec.mode, spec.tool_name, spec.temperature,
-                              q.reasoning.get(spec.task))  # fmt: skip
+                              q.reasoning.get(spec.task), follow)  # fmt: skip
                 t0 = time.monotonic()
                 u.requests += 1
                 u.minute.append(self.clock.now())
