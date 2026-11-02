@@ -210,6 +210,7 @@ YEAR_AFTER = frozenset("fiscal financial calendar year years quarter quarters gu
                        "vs was were is will when as compared levels level peak low high first second third fourth full "
                        "half season period gaap ebitda ebit eps".split())  # fmt: skip
 ASSUMED = re.compile(r"^[^.;,]{0,25}?\(assumed\)", re.I)
+SCALE = re.compile(r"\b0\s*(?:-|–|to)\s*(?:1|10|100)\s+(?:scale|range|point scale)\b", re.I)
 
 
 class Strict(BaseModel):
@@ -341,8 +342,14 @@ def _figures(text: str, years: tuple[int, int]) -> tuple[str, list[numbers.Parse
     clean = _clean(text)
     chars = list(clean)
     out = []
+    # a stated scale ("on a 0-100 scale", "0 to 100 range") names the score's bounds, not a figure (docs/SPEC_ISSUES.md
+    # 70: a repaired DeepSeek card failed only on the bounds of the Evidence score's scale)
+    scales = [m.span() for m in SCALE.finditer(clean)]
     for p in _parse(clean):
         written = clean[p.start : p.end]
+        if any(a <= p.start and p.end <= b for a, b in scales):
+            chars[p.start : p.end] = " " * (p.end - p.start)
+            continue
         if not any(ch.isdigit() for ch in written):
             figure = p.unit is not None or p.currency is not None or p.scale_word is not None
         else:
