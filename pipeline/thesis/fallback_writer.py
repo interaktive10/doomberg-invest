@@ -10,6 +10,7 @@ database as weekly.yml builds them, for a week that has scores (pipeline/thesis/
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -32,6 +33,17 @@ from pipeline.thesis.ingest import ingest_card
 from pipeline.thesis.render import render
 
 ATTEMPTS = 2
+# why cards fail, in words that name no company (the public log prints counts only)
+REASONS = (
+    ("a claim P-05 found unsupported", re.compile(r"P-05 finds it unsupported")),
+    ("a number no cited pack value matches", re.compile(r"matches no cited pack value")),
+    ("a figure not marked (assumed)", re.compile(r"not marked \(assumed\)")),
+    ("a kill criterion's date or metric", re.compile(r"check_after|kill_criteria|metric_id")),
+    ("a citation", re.compile(r"cites ids not in the pack|cites no pack id")),
+    ("a direction or multiple", re.compile(r"direction|multiplier|times")),
+    ("a hype word", re.compile(r"hype word")),
+    ("the card's shape", re.compile(r"^schema:|does not start with")),
+)
 BUDGET_S = 25 * 60  # no card starts after this, so the job ends inside its 30 minutes with its summary printed
 RUN_AT = time(6, 0)  # Monday, UTC (§2.5)
 
@@ -171,6 +183,23 @@ def attempts(router: Router, model: EvidencePack, pack: Mapping[str, Any],
     return answer, content, res
 
 
+def reason_counts(failed: Mapping[str, Sequence[str]]) -> dict[str, int]:
+    """How often each kind of validator error stopped a card, over every card's last errors (a card counts once per
+    kind); "other" for the rest. Counts only: the public log names no company."""
+    out: dict[str, int] = {}
+    for errors in failed.values():
+        kinds = {next((name for name, rx in REASONS if rx.search(e)), "other") for e in errors}
+        for k in kinds:
+            out[k] = out.get(k, 0) + 1
+    return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def print_reasons(counts: Mapping[str, int]) -> None:
+    if counts:
+        print("thesis fallback: why cards failed (cards per reason): "
+              + ", ".join(f"{k} {n}" for k, n in counts.items()))  # fmt: skip
+
+
 def main(argv: list[str] | None = None) -> int:
     from pipeline.llm.clients import providers
     from pipeline.llm.quotas import Quotas
@@ -178,7 +207,17 @@ def main(argv: list[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--week", default=None, help="ISO week (default: the week of the last Friday)")
+    ap.add_argument("--reasons", action="store_true", help="print why the latest run's cards failed, and stop")
     a = ap.parse_args(argv)
+    if a.reasons:
+        with psycopg.connect(Settings.from_env().database_url) as conn:
+            last = repo.latest_run_stats(conn, "thesis_fallback", "errors") or {}
+        failed = {str(i): [p.strip() for p in str(e).split(";")] for i, e in enumerate(last.get("errors") or [])}
+        print(
+            f"thesis fallback {last.get('week', '?')}: {len(last.get('written') or [])} written, {len(failed)} failed"
+        )
+        print_reasons(last.get("reasons") or reason_counts(failed))
+        return 0
     now = datetime.now(UTC)
     week = a.week or week_label(last_friday(now.date()))
     settings = Settings.from_env()
@@ -197,10 +236,12 @@ def main(argv: list[str] | None = None) -> int:
         stats = write_cards(conn, router, week) if source else FallbackStats(week, reason=reason)
         tracked.update({"week": week, "packs": source, "ran": stats.ran, "reason": stats.reason,
                         "written": stats.written, "deferred": stats.deferred,
-                        "errors": [f"{k}: {'; '.join(e)}"[:300] for k, e in stats.failed.items()]})  # fmt: skip
+                        "errors": [f"{k}: {'; '.join(e)}"[:300] for k, e in stats.failed.items()],
+                        "reasons": reason_counts(stats.failed)})  # fmt: skip
     print(f"thesis fallback {week}: {'ran' if stats.ran else 'skipped'} ({stats.reason}"
           f"{f'; packs from {source}' if source else ''}); {len(stats.written)} written, {len(stats.failed)} failed, "
           f"{len(stats.deferred)} deferred")  # fmt: skip
+    print_reasons(reason_counts(stats.failed))
     return 0
 
 

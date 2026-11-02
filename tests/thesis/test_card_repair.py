@@ -87,3 +87,19 @@ def test_a_repair_reads_the_same_whatever_the_answers_key_order() -> None:
     a = inp.repair({"summary": "s", "facts": []}, ["e"])
     b = inp.repair({"facts": [], "summary": "s"}, ["e"])
     assert a.follow() == b.follow()
+
+
+def test_why_cards_failed_is_counted_by_kind_without_names() -> None:
+    """2026-11-02: nine of ten fallback cards failed and the public log said only "failed". Each card counts once
+    per kind of error; the kinds name no company."""
+    from pipeline.thesis.fallback_writer import reason_counts
+
+    failed = {
+        "us-nmbs": ["why_mispriced[0]: P-05 finds it unsupported: ['x']", "facts[1]: P-05 finds it unsupported: ['y']"],
+        "us-echo": ["why_mispriced[1]: number '58.3%' matches no cited pack value or delta",
+                    "kill_criteria[0]: check_after 2026-11-14 is not after the next filing window"],
+        "in-tara": ["something new"],
+    }  # fmt: skip
+    assert reason_counts(failed) == {"a claim P-05 found unsupported": 1, "a kill criterion's date or metric": 1,
+                                     "a number no cited pack value matches": 1, "other": 1}  # fmt: skip
+    assert not any("nmbs" in k or "echo" in k for k in reason_counts(failed))
