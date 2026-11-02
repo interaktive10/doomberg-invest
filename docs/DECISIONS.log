@@ -391,4 +391,5 @@
 2026-11-02 Themes names: up to 30 kept with market caps; the page lists 12 within the range.
 2026-11-02 Theme basis: the reading's own months and averages, the highest full year of the last 20; shown as an info disclosure on the theme page and a short line on its card.
 2026-11-02 Fallback: P-05 on a 'check' task at low effort; no card starts after 25 minutes; one log line per card (outcome, seconds).
+2026-11-02 Recent closes: 10 per name; US 700 a run stalest first, only names with a month-end history; India one bhavcopy; Winners and Themes recomputed after.
 2026-11-02 Freshness: dates in IST; next update from the crons; Rethink now once a UTC day; sparkline, status bar and gain bars only.

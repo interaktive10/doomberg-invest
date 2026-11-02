@@ -1,0 +1,78 @@
+name: closes
+# Every weekday evening: the latest daily closes (pipeline/reports/closes.py; docs/SPEC_ISSUES.md 75), then Winners and
+# Themes again on them, so "this year's moves" reach the last trading day instead of a month-end. India: one bhavcopy
+# file for every stock. US: Twelve Data's free plan, about 700 tickers a run, stalest first. No LLM call unless the
+# themes rethink is due (at most weekly). The repository is public, so its runs cost no Actions minutes.
+on:
+  schedule:
+    - cron: "37 22 * * 1-5"   # off the hour; after the US close, with India's file long out
+  workflow_dispatch:
+
+concurrency:
+  group: closes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  india:
+    # the bhavcopy is an NSE request: it waits for the other NSE jobs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: nse
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - run: uv run --frozen python -m pipeline.reports.closes --skip-us
+  us:
+    needs: [india]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110   # 700 tickers at 8 a minute, and the setup
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - run: uv run --frozen python -m pipeline.reports.closes --skip-india --us-budget 700 --minutes 95
+  reports:
+    needs: [us]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: pipeline
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --frozen python -m pipeline.db.migrate
+      - name: Winners on the latest closes
+        run: uv run --frozen python -m pipeline.reports.winners
+      - name: Themes on the latest closes
+        run: uv run --frozen python -m pipeline.reports.themes
