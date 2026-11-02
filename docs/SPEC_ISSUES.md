@@ -339,4 +339,4 @@
     - Two sliders, From and To, over the same steps everywhere (US $1B to $500B, India Rs 5,000 crore to Rs 5 lakh crore; To's last position is no maximum); web/lib/caps.ts mirrors pipeline/reports/winners.py CAP_STEPS (tests/test_web_parity.py).
     - Winners: the report stores a bucket per step ([step, next step), the last open-ended) with its own best five and ten and the average stock's sum and count, so the screen merges any range of buckets in the browser. A company with no market cap today stays in the floor's bucket, as the floor step kept it.
     - Undervalued: a range per market (?cap_us=, ?cap_in=) on each company's market cap as of its latest scored week (company_metrics); under Both, one per market. The range counts as a filter (Clear filters resets it).
-    - Themes' company lists follow in a later change.
+    - Themes: a theme keeps up to 30 companies with each one's market cap (company_metrics); its page lists the first 12 within a range per market.

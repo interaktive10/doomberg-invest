@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Callout } from "@/components/callout";
 import { LineChartCard } from "@/components/charts";
 import { Icon } from "@/components/icons";
+import { CapRangeLink } from "@/components/cap-range";
 import { Disclosure } from "@/components/disclosure";
 import { LinkPending } from "@/components/link-pending";
 import { Empty, Page, Section } from "@/components/page";
@@ -9,7 +10,8 @@ import { ThemePicker, type PickerGroup } from "@/components/theme-picker";
 import { requireUser } from "@/lib/auth";
 import { latestReport } from "@/lib/data";
 import { shortDate } from "@/lib/dates";
-import type { Query } from "@/lib/forms";
+import { one, type Query } from "@/lib/forms";
+import { CAP_STEPS, capText, inCapRange, parseRange, type CapRange } from "@/lib/caps";
 import {
   byCategory,
   historyLine,
@@ -51,7 +53,7 @@ export default async function Themes({ searchParams }: { searchParams: Promise<Q
       {!r ? (
         <Empty>The first theme library is built on Saturday, after the week&apos;s scores.</Empty>
       ) : theme ? (
-        <Detail t={theme} r={r} />
+        <Detail t={theme} r={r} ranges={{ us: parseRange(one(q, "cap_us"), CAP_STEPS.us.length), in: parseRange(one(q, "cap_in"), CAP_STEPS.in.length) }} />
       ) : gone ? (
         <Retired t={gone} />
       ) : (
@@ -180,7 +182,14 @@ function Mini({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Detail({ t, r }: { t: LibraryTheme; r: ThemesReport }) {
+/** How many of a theme's companies the page lists (the report keeps up to 30 so the market-cap range has some to pick
+ * from). */
+const SHOWN_NAMES = 12;
+
+function Detail({ t, r, ranges }: { t: LibraryTheme; r: ThemesReport; ranges: Record<"us" | "in", CapRange> }) {
+  const markets = (["us", "in"] as const).filter((m) => t.names.some((n) => n.market === m));
+  const names = t.names.filter((n) => inCapRange(n.cap, CAP_STEPS[n.market], ranges[n.market])).slice(0, SHOWN_NAMES);
+  const capped = t.names.some((n) => n.cap !== undefined);
   const from = t.driver === "filings" ? "Company filings" : (r.drivers[t.driver] ?? t.driver);
   const big = t.chart.some(([, v]) => Math.abs(v) >= 10000);
   const history = historyLine(t.history);
@@ -222,11 +231,27 @@ function Detail({ t, r }: { t: LibraryTheme; r: ThemesReport }) {
       </section>
       <div className="grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
         <Section id="names" title="The companies" description="Undervalued names first, then by Evidence.">
+          {capped && markets.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-x-8 gap-y-4">
+              {markets.map((m) => (
+                <CapRangeLink
+                  key={m}
+                  market={m}
+                  steps={CAP_STEPS[m]}
+                  value={ranges[m]}
+                  param={`cap_${m}`}
+                  note={markets.length > 1 ? `${marketName(m)}: market cap as of the latest scored week.` : "Market cap as of the latest scored week."}
+                />
+              ))}
+            </div>
+          ) : null}
           {t.names.length === 0 ? (
             <Empty>No company in the universe matches this theme yet.</Empty>
+          ) : names.length === 0 ? (
+            <Empty>None of this theme&apos;s companies is in that market-cap range.</Empty>
           ) : (
             <ul className="flex flex-col gap-1.5">
-              {t.names.map((n) => (
+              {names.map((n) => (
                 <li key={n.company_id}>
                   <Link
                     href={`/company/${n.company_id}`}
@@ -238,6 +263,7 @@ function Detail({ t, r }: { t: LibraryTheme; r: ThemesReport }) {
                       </span>
                       <span className="truncate text-[12px] text-subtle">
                         {marketName(n.market)} · {n.industry}
+                        {n.cap ? ` · ${capText(n.market, n.cap)}` : ""}
                         {n.demand ? " · reports demand" : ""}
                       </span>
                     </span>

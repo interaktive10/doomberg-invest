@@ -387,3 +387,4 @@
 2026-11-02 Winners caps: today's (latest close within 45 days x latest filed shares); slider steps above the floor filter on today's cap.
 2026-11-02 Settings models: two tasks (extract, card), the choices no dearer than the default; the discipline form goes, its stored value stays.
 2026-11-02 Cap range: buckets in the Winners report (merge in the browser); Undervalued filters on company_metrics market_cap from ?cap_us / ?cap_in.
+2026-11-02 Themes names: up to 30 kept with market caps; the page lists 12 within the range.

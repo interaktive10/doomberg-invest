@@ -71,7 +71,7 @@ MIN_MEMBERS = 3  # a theme's keywords must match at least this many companies
 RUN_UP = 0.10
 TAILWIND = 0.5
 MAX_ACTIVE = 24
-MAX_NAMES = 8
+MAX_NAMES = 30  # the screen shows the first eight and filters these by market cap (2026-11-02)
 MAX_NOTES = 12
 MAX_RETIRED = 30
 WORDS = {"title": 8, "why": 45, "wrong_if": 25, "note": 60, "review": 35}
@@ -92,6 +92,7 @@ class Firm:
     evidence: float | None = None
     bucket: str | None = None
     series: Sequence[tuple[date, Decimal]] = ()
+    cap: Decimal | None = None  # as of the latest scored week (company_metrics), for the screen's market-cap range
 
     @property
     def demand(self) -> bool:
@@ -235,7 +236,8 @@ def numbers(theme: Mapping[str, Any], firms: Sequence[Firm], points: Mapping[str
     names = [{"company_id": str(f.company.id), "code": f.company.ticker or f.company.nse_symbol,
               "name": f.company.name, "market": f.company.market, "industry": f.industry,
               "evidence": f.evidence, "bucket": f.bucket, "move": round(f.move, 3) if f.move is not None else None,
-              "demand": f.demand} for f in ranked[:MAX_NAMES]]  # fmt: skip
+              "demand": f.demand, "cap": float(f.cap) if f.cap is not None else None}
+             for f in ranked[:MAX_NAMES]]  # fmt: skip
     return {"z": z, "signal": dv.words(z), "chart": chart, "companies": len(fs), "priced": len(priced),
             "with_demand": shown, "share": share, "move": move, "market_move": market_move, "run": run,
             "markets": markets, "status": status_of(z, run), "history": history, "names": names,
@@ -444,6 +446,7 @@ def prompt_input(drivers_summary: Sequence[Mapping[str, Any]], rows: Sequence[Ma
 def gather(conn: psycopg.Connection[Any], week: date, today: date) -> list[Firm]:
     firms: dict[UUID, Firm] = {}
     scores = repo.scores_for_week(conn, week)
+    caps = repo.market_caps(conn)
     for market in ("us", "in"):
         cs = [c for c in repo.companies(conn, market=market, in_universe=True) if c.id is not None]
         ids = [c.id for c in cs if c.id is not None]
@@ -453,6 +456,7 @@ def gather(conn: psycopg.Connection[Any], week: date, today: date) -> list[Firm]
             s = series.get(c.id, [])
             f = Firm(c, industry_of(c) or "Unclassified", series=s if market == "us" else ())
             f.move, f.price = move_12m(s, today)
+            f.cap = caps.get(c.id)
             sc = scores.get(c.id)
             if sc is not None:
                 f.evidence, f.bucket = float(sc.evidence), sc.bucket

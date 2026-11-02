@@ -826,6 +826,15 @@ def recent_reports(conn: Conn, name: str, before: date, limit: int) -> list[tupl
     return [(r[0], r[1]) for r in rows]
 
 
+def market_caps(conn: Conn) -> dict[UUID, Decimal]:
+    """Each company's market cap as of its latest scored week (company_metrics; dollars for the US, rupees for
+    India): what the stock lists' market-cap range reads."""
+    rows = conn.execute(
+        _q("select company_id, (metrics->>'market_cap')::numeric from company_metrics where metrics ? 'market_cap'")
+    ).fetchall()
+    return {r[0]: r[1] for r in rows if r[1] is not None}
+
+
 def fired_companies(conn: Conn, week: date, signal_id: str) -> set[UUID]:
     rows = conn.execute(
         _q("select company_id from signal_values where week_end = %s and signal_id = %s and fired"), (week, signal_id)
