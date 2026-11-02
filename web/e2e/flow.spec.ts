@@ -354,17 +354,36 @@ test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Thesis");
 });
 
-test("Winners: this year's leaders first, and the market-cap slider narrows both lists (2026-11-02)", async ({ page }) => {
+test("Winners: this year's leaders first, and the market-cap range (from and to) narrows both lists (2026-11-02)", async ({ page }) => {
   await page.goto("/winners");
   const us = page.getByRole("region", { name: "US", exact: true });
   await expect(us.getByRole("link", { name: /SGMA Sigma Retail Corp\./ }).first()).toBeVisible();
-  const slider = us.getByRole("slider", { name: /Market cap above/ });
-  await expect(us).toContainText("$1B");
-  await slider.fill("6"); // $100B
-  await expect(slider).toHaveAttribute("aria-valuetext", "$100B");
+  const from = us.getByRole("slider", { name: "From" });
+  const to = us.getByRole("slider", { name: "To" });
+  await expect(us).toContainText("Above $1B");
+  await from.fill("6"); // from $100B
+  await expect(from).toHaveAttribute("aria-valuetext", "$100B");
   await expect(us.getByRole("link", { name: /SGMA/ })).toHaveCount(0);
   await expect(us.getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toHaveCount(2); // a leader this year and last year's top
   await expect(us).toContainText("$240B");
   await expect(us).toContainText("Market caps as of Sep 18, 2026");
+  await from.fill("0");
+  await to.fill("2"); // $1B to $5B: SGMA ($3B) and DLTP ($1.5B), not ECHO
+  await expect(us).toContainText("$1B to $5B");
+  await expect(us.getByRole("link", { name: /ECHO/ })).toHaveCount(0);
+  await expect(us.getByRole("link", { name: /SGMA/ }).first()).toBeVisible();
+});
+
+test("Undervalued: a market-cap range per market filters the cards and survives the filters (2026-11-02)", async ({ page }) => {
+  await page.goto("/candidates?market=us");
+  const from = page.getByRole("slider", { name: "From" });
+  await expect(from).toHaveCount(1); // one market shown, one range
+  await from.fill("8"); // above $500B: nothing in the seed is that large
+  await expect(page).toHaveURL(/cap_us=8-9/);
+  await expect(page.getByText("Nothing here with these filters.")).toBeVisible();
+  await page.getByRole("link", { name: "Clear filters" }).first().click();
+  await expect(page).not.toHaveURL(/cap_us/);
+  await page.goto("/candidates");
+  await expect(page.getByRole("slider", { name: "From" })).toHaveCount(2); // Both: a range per market
 });
 

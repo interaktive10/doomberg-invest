@@ -369,7 +369,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
                      lead(KAPPA, "KAPPA", "Kappa Cables Ltd", "Capital Goods", -0.02)],
          "this_year": {"through": "2026-09-18", "picks": 0.15, "average": 0.06, "stocks": 900}, "backtest": None},
     ]}  # fmt: skip
-    # market caps and the slider's steps (pipeline/reports/winners.py CAP_STEPS): each step keeps the names above it
+    # market caps and the range's buckets (pipeline/reports/winners.py CAP_STEPS): [step, next step), the last open
     caps = {"SGMA": 3e9, "ECHO": 2.4e11, "LMNW": 8e9, "OMGA": 6e10, "DLTP": 1.5e9, "TARAPUMP": 7e10, "KAPPA": 2.2e12}
     steps = {
         "us": [1e9, 2e9, 5e9, 1e10, 2e10, 5e10, 1e11, 2e11, 5e11],
@@ -379,9 +379,15 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         m["cap_as_of"] = "2026-09-18"
         for row in [*m["top"], *m["leaders"]]:
             row["cap"] = caps[row["code"]]
-        m["bands"] = [{"min_cap": f, "top": [r for r in m["top"] if r["cap"] >= f],
-                       "leaders": [r for r in m["leaders"] if r["cap"] >= f], "this_year": m["this_year"]}
-                      for f in steps[m["market"]]]  # fmt: skip
+        st = steps[m["market"]]
+
+        def bucket(cap: float, st: list[float] = st) -> int:
+            return max(i for i, f in enumerate(st) if i == 0 or cap >= f)
+
+        m["buckets"] = [{"min_cap": f, "max_cap": st[i + 1] if i + 1 < len(st) else None,
+                         "top": [r for r in m["top"] if bucket(r["cap"]) == i],
+                         "leaders": [r for r in m["leaders"] if bucket(r["cap"]) == i],
+                         "ytd_sum": 0.06 * 100, "ytd_n": 100} for i, f in enumerate(st)]  # fmt: skip
     x("insert into reports (name, week_end, body) values ('winners', %s, %s)", (W, json.dumps(winners)))
 
     # the theme library (pipeline/reports/themes.py's v2 body; docs/SPEC_ISSUES.md 68): the Themes screen
