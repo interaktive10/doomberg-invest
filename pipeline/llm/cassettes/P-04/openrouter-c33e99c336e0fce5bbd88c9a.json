@@ -1,0 +1,109 @@
+{
+ "key": "c33e99c336e0fce5bbd88c9a605a354ac05b606b2ed38e90a91058982d75e017",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-04",
+ "provider": "openrouter",
+ "request": {
+  "system": "You write a long-term investment research card from an evidence pack. The pack is the only source of facts.\nSeparate what is known from what is assumed. Every sentence in \"facts\" and \"why_mispriced\" must cite pack ids like\n[f:…], [m:…], [s:…], [c:…], and every number must match the pack exactly. Put your reasoning in \"inferences\"\n(each starting with \"Inference:\") and the things that must hold for the thesis in \"assumptions\" (each starting\nwith \"Assumption:\"; mark any number you choose with \"(assumed)\"). Kill criteria must be observable: a metric id from\nthe pack, an operator, a threshold, and a check-after date after the next filing window. Write plainly. No hype,\nno certainty words, no price targets.",
+  "user": "EVIDENCE PACK:\n{\n \"version\": 1,\n \"week\": \"2026-W38\",\n \"week_end\": \"2026-09-18\",\n \"company\": {\n  \"company_id\": \"00000000-0000-4000-8000-00000000c0de\",\n  \"key\": \"us-nmbs\",\n  \"name\": \"Nimbus Compute Corp.\",\n  \"market\": \"us\",\n  \"ticker\": \"NMBS\",\n  \"nse_symbol\": null,\n  \"cik\": \"0000999001\",\n  \"isin\": null,\n  \"sector\": \"Information Technology\",\n  \"industry\": \"Computer hardware\",\n  \"capex_desk\": true,\n  \"fiscal_year_end\": \"0630\"\n },\n \"bucket\": \"candidate\",\n \"families\": [\n  \"fundamentals\",\n  \"text\"\n ],\n \"metrics\": [\n  {\n   \"id\": \"m:revenue:2025-06-30\",\n   \"name\": \"revenue\",\n   \"period_end\": \"2025-06-30\",\n   \"value\": \"980000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:revenue:2026-06-30\",\n   \"name\": \"revenue\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"1250000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:op_income:2026-06-30\",\n   \"name\": \"op_income\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"206250000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:rpo:2025-06-30\",\n   \"name\": \"rpo\",\n   \"period_end\": \"2025-06-30\",\n   \"value\": \"2900000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:rpo:2026-06-30\",\n   \"name\": \"rpo\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"4200000000\",\n   \"unit\": \"usd\",\n   \"source\": \"fundamentals\"\n  },\n  {\n   \"id\": \"m:diluted_shares:2026-06-30\",\n   \"name\": \"diluted_shares\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"212000000\",\n   \"unit\": \"shares\",\n   \"source\": \"fundamentals\"\n  }\n ],\n \"signals\": [\n  {\n   \"id\": \"s:S1\",\n   \"kind\": \"signal\",\n   \"fired\": true,\n   \"strength\": \"0.82\",\n   \"hard\": null,\n   \"status\": null,\n   \"inputs\": {\n    \"g_ob\": 0.4483,\n    \"g_rev\": 0.2755,\n    \"gap\": 0.1728,\n    \"consecutive\": 2\n   }\n  },\n  {\n   \"id\": \"s:R2\",\n   \"kind\": \"red_flag\",\n   \"fired\": false,\n   \"strength\": null,\n   \"hard\": false,\n   \"status\": \"unknown\",\n   \"inputs\": {\n    \"missing\": [\n     \"receivables_growth\"\n    ]\n   }\n  }\n ],\n \"context\": [\n  {\n   \"id\": \"c:C2\",\n   \"value\": \"0.06\",\n   \"pct\": null,\n   \"inputs\": {\n    \"g_implied\": 0.12,\n    \"g_evidence\": 0.18,\n    \"discount_rate\": 0.09,\n    \"terminal_growth\": 0.025\n   }\n  },\n  {\n   \"id\": \"c:evidence\",\n   \"value\": \"62.5\",\n   \"pct\": null,\n   \"inputs\": {\n    \"families\": [\n     \"fundamentals\",\n     \"text\"\n    ]\n   }\n  },\n  {\n   \"id\": \"c:gap\",\n   \"value\": \"58.3\",\n   \"pct\": null,\n   \"inputs\": {}\n  }\n ],\n \"facts\": [\n  {\n   \"id\": \"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001\",\n   \"fact_type\": \"capex_guidance\",\n   \"subject\": \"Fiscal 2027 capital expenditures\",\n   \"subject_key\": \"capex_guidance:FY2027\",\n   \"value\": \"1800000000\",\n   \"value_low\": null,\n   \"value_high\": null,\n   \"unit\": \"usd\",\n   \"currency\": \"USD\",\n   \"period_label\": \"FY2027\",\n   \"period_end\": \"2027-06-30\",\n   \"as_of\": \"2026-08-06\",\n   \"counterparty\": null,\n   \"quote\": \"We expect fiscal 2027 capital expenditures of approximately $1.8 billion.\",\n   \"url\": \"https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm\",\n   \"document_kind\": \"EX-99.1\",\n   \"published_at\": \"2026-08-06T20:05:00Z\"\n  },\n  {\n   \"id\": \"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002\",\n   \"fact_type\": \"order_win\",\n   \"subject\": \"Multi-year hyperscaler order\",\n   \"subject_key\": \"order_win:hyperscaler\",\n   \"value\": \"600000000\",\n   \"value_low\": null,\n   \"value_high\": null,\n   \"unit\": \"usd\",\n   \"currency\": \"USD\",\n   \"period_label\": null,\n   \"period_end\": null,\n   \"as_of\": \"2026-08-06\",\n   \"counterparty\": \"a hyperscale cloud provider\",\n   \"quote\": \"Nimbus received a $600 million multi-year order from a hyperscale cloud provider.\",\n   \"url\": \"https://www.sec.gov/Archives/edgar/data/999001/000099900126000102/ex991.htm\",\n   \"document_kind\": \"EX-99.1\",\n   \"published_at\": \"2026-08-06T20:05:00Z\"\n  }\n ],\n \"ownership\": [\n  {\n   \"id\": \"m:inst_holders:2026-06-30\",\n   \"name\": \"inst_holders\",\n   \"period_end\": \"2026-06-30\",\n   \"value\": \"412\",\n   \"unit\": \"count\",\n   \"source\": \"sec_13f\"\n  }\n ],\n \"insiders\": [],\n \"capex_categories\": [\n  \"compute\"\n ],\n \"capex_links\": [\n  {\n   \"entity\": \"a hyperscale cloud provider\",\n   \"entity_kind\": \"company\",\n   \"relation\": \"customer\",\n   \"fact_id\": \"f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002\"\n  }\n ],\n \"kill_metrics\": [\n  {\n   \"id\": \"m:revenue_ttm_yoy\",\n   \"description\": \"TTM revenue vs the TTM a year earlier\",\n   \"value\": \"0.2410\",\n   \"unit\": \"ratio\"\n  },\n  {\n   \"id\": \"m:rpo_yoy\",\n   \"description\": \"RPO vs a year earlier\",\n   \"value\": \"0.4483\",\n   \"unit\": \"ratio\"\n  },\n  {\n   \"id\": \"m:op_margin_ttm\",\n   \"description\": \"TTM operating income / TTM revenue\",\n   \"value\": \"0.1650\",\n   \"unit\": \"ratio\"\n  },\n  {\n   \"id\": \"m:evidence\",\n   \"description\": \"Evidence score, latest scored week (0-100)\",\n   \"value\": \"62.5\",\n   \"unit\": \"score\"\n  },\n  {\n   \"id\": \"m:signal:S1\",\n   \"description\": \"S1 strength, latest scored week (0-1)\",\n   \"value\": \"0.82\",\n   \"unit\": \"score\"\n  }\n ],\n \"next_filing\": {\n  \"period_end\": \"2026-09-30\",\n  \"form\": \"10-Q\",\n  \"opens\": \"2026-10-01\",\n  \"closes\": \"2026-11-14\"\n }\n}"
+ },
+ "response": {
+  "content": {
+   "assumptions": [
+    "Assumption: the $600,000,000 hyperscaler order [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002] is included in RPO and converts to revenue within the fiscal 2027–2028 window (assumed).",
+    "Assumption: fiscal 2027 capex of $1,800,000,000 [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001] is funded from operating cash flow and existing facilities without material dilution beyond 212,000,000 diluted shares [m:diluted_shares:2026-06-30] (assumed).",
+    "Assumption: TTM operating margin holds at or above 0.1650 [m:op_margin_ttm] while capex ramps (assumed).",
+    "Assumption: the 0.12 implied growth in C2 [c:C2] reflects market expectations rather than a stale or partial input (assumed).",
+    "Assumption: the kill thresholds below are chosen by the analyst, not values from the pack (assumed)."
+   ],
+   "bucket": "candidate",
+   "card_type": "long_term_investment_research",
+   "company": "Nimbus Compute Corp. (NMBS)",
+   "facts": [
+    "FY2026 revenue was $1,250,000,000 against $980,000,000 in FY2025 [m:revenue:2026-06-30][m:revenue:2025-06-30].",
+    "FY2026 operating income was $206,250,000 [m:op_income:2026-06-30], and the pack records TTM operating margin at 0.1650 [m:op_margin_ttm].",
+    "Remaining performance obligations were $4,200,000,000 at FY2026 year-end versus $2,900,000,000 a year earlier [m:rpo:2026-06-30][m:rpo:2025-06-30], with a recorded RPO YoY rate of 0.4483 [m:rpo_yoy].",
+    "TTM revenue YoY is recorded at 0.2410 [m:revenue_ttm_yoy].",
+    "Diluted shares were 212,000,000 at 2026-06-30 [m:diluted_shares:2026-06-30].",
+    "On 2026-08-06 the company guided fiscal 2027 capital expenditures to approximately $1,800,000,000 [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001].",
+    "The same release disclosed a $600,000,000 multi-year order from a hyperscale cloud provider [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002], and the pack links that counterparty to the order as a customer [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002].",
+    "Signal S1 fired with strength 0.82, a gap of 0.1728, and 2 consecutive periods [s:S1]; the recorded S1 strength is 0.82 [m:signal:S1].",
+    "Red flag R2 did not fire, but its status is unknown because receivables_growth is missing from the inputs [s:R2].",
+    "The evidence score is 62.5 [c:evidence][m:evidence], and the pack records a context gap of 58.3 [c:gap].",
+    "Context item C2 is 0.06, built from implied growth 0.12, evidence growth 0.18, a discount rate of 0.09, and terminal growth of 0.025 [c:C2].",
+    "Institutional holders numbered 412 as of 2026-06-30 [m:inst_holders:2026-06-30]."
+   ],
+   "filing_calendar": {
+    "next_filing": "10-Q, period end 2026-09-30, window 2026-10-01 to 2026-11-14 [next_filing]",
+    "note": "All kill-criteria check dates below fall after the window closes."
+   },
+   "inferences": [
+    "Inference: the spread between RPO growth of 0.4483 [m:rpo_yoy] and revenue growth of 0.2410 [m:revenue_ttm_yoy] is consistent with backlog accumulating ahead of revenue recognition, so reported revenue growth may understate contracted demand.",
+    "Inference: capex guidance of $1,800,000,000 [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001] against FY2026 revenue of $1,250,000,000 [m:revenue:2026-06-30] is a step-up in capital intensity; the pack carries no cash flow or balance sheet metrics, so how it is funded is unverified.",
+    "Inference: the $600,000,000 order [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002] is large relative to FY2026 revenue [m:revenue:2026-06-30], which makes customer concentration a live question the pack does not answer.",
+    "Inference: S1 strength of 0.82 [m:signal:S1] sits above the overall evidence score of 62.5 [m:evidence], suggesting the fundamental signal is stronger than the broader evidence base, with the text family contributing less.",
+    "Inference: because R2 is unresolved [s:R2], the receivables channel has not been checked, so the possibility that revenue growth is being carried on the balance sheet remains open.",
+    "Inference: with 412 institutional holders [m:inst_holders:2026-06-30] and no insider records in the pack, ownership-based conviction cannot be assessed from this evidence."
+   ],
+   "kill_criteria": [
+    {
+     "check_after": "2026-11-20",
+     "metric": "m:rpo_yoy",
+     "operator": "<",
+     "rationale": "Backlog growth decelerating toward revenue growth would remove the main support for the thesis [m:rpo_yoy][m:revenue_ttm_yoy].",
+     "threshold": "0.25 (assumed)"
+    },
+    {
+     "check_after": "2026-11-20",
+     "metric": "m:revenue_ttm_yoy",
+     "operator": "<",
+     "rationale": "Revenue growth below this level would indicate backlog is not converting [m:revenue_ttm_yoy].",
+     "threshold": "0.15 (assumed)"
+    },
+    {
+     "check_after": "2026-11-20",
+     "metric": "m:op_margin_ttm",
+     "operator": "<",
+     "rationale": "Margin compression during the capex build would undercut the operating leverage case [m:op_margin_ttm].",
+     "threshold": "0.13 (assumed)"
+    },
+    {
+     "check_after": "2026-11-20",
+     "metric": "m:evidence",
+     "operator": "<",
+     "rationale": "A falling evidence score would signal the supporting data is thinning [m:evidence].",
+     "threshold": "50 (assumed)"
+    },
+    {
+     "check_after": "2026-11-20",
+     "metric": "m:signal:S1",
+     "operator": "<",
+     "rationale": "S1 strength dropping below this level would mean the order-versus-revenue gap has closed or reversed [m:signal:S1].",
+     "threshold": "0.50 (assumed)"
+    },
+    {
+     "check_after": "2026-11-20",
+     "metric": "s:R2",
+     "operator": "status remains",
+     "rationale": "An unresolved red-flag check leaves the receivables channel unverified for another cycle [s:R2].",
+     "threshold": "\"unknown\" (receivables_growth still missing)"
+    }
+   ],
+   "open_items": [
+    "No receivables_growth input, so R2 cannot be resolved [s:R2].",
+    "No cash flow, balance sheet, or capex-to-revenue history in the pack; funding of the $1,800,000,000 fiscal 2027 capex plan is unverified [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001].",
+    "No insider transaction records in the pack.",
+    "Customer concentration behind the $600,000,000 order is not disclosed in the pack [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002]."
+   ],
+   "week": "2026-W38",
+   "why_mispriced": [
+    "Contracted demand is growing faster than reported revenue: RPO YoY is 0.4483 [m:rpo_yoy] against TTM revenue YoY of 0.2410 [m:revenue_ttm_yoy], and S1 has fired for 2 consecutive periods with a gap of 0.1728 [s:S1].",
+    "The pack's context records implied growth of 0.12 against evidence growth of 0.18 at a discount rate of 0.09 and terminal growth of 0.025 [c:C2], alongside a recorded gap of 58.3 [c:gap].",
+    "The company is sizing supply to that demand, with fiscal 2027 capex guided to approximately $1,800,000,000 [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0001] and a $600,000,000 multi-year hyperscaler order disclosed [f:6f1c2a52-3b1e-4c43-9e59-3d1b1f0a0002].",
+    "The discount is not clean: the evidence score is 62.5 [c:evidence][m:evidence], and R2 is unresolved with receivables_growth missing [s:R2]."
+   ]
+  },
+  "tokens_in": 2139,
+  "tokens_out": 5479
+ }
+}
