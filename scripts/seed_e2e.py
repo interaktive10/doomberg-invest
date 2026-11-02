@@ -112,6 +112,11 @@ The holding company trades at a wide discount to the value of its listed stakes 
 """
 
 
+def cap_bucket(cap: float, steps: list[float]) -> int:
+    """Which market-cap bucket a cap is in: [step, next step), the last open-ended (pipeline/reports/winners.py)."""
+    return max(i for i, f in enumerate(steps) if i == 0 or cap >= f)
+
+
 def quarters() -> list[tuple[date, float]]:
     ends = [date(2024, 9, 30), date(2024, 12, 31), date(2025, 3, 31), date(2025, 6, 30), date(2025, 9, 30),
             date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]  # fmt: skip
@@ -380,13 +385,9 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         for row in [*m["top"], *m["leaders"]]:
             row["cap"] = caps[row["code"]]
         st = steps[m["market"]]
-
-        def bucket(cap: float, st: list[float] = st) -> int:
-            return max(i for i, f in enumerate(st) if i == 0 or cap >= f)
-
         m["buckets"] = [{"min_cap": f, "max_cap": st[i + 1] if i + 1 < len(st) else None,
-                         "top": [r for r in m["top"] if bucket(r["cap"]) == i],
-                         "leaders": [r for r in m["leaders"] if bucket(r["cap"]) == i],
+                         "top": [r for r in m["top"] if cap_bucket(r["cap"], st) == i],
+                         "leaders": [r for r in m["leaders"] if cap_bucket(r["cap"], st) == i],
                          "ytd_sum": 0.06 * 100, "ytd_n": 100} for i, f in enumerate(st)]  # fmt: skip
     x("insert into reports (name, week_end, body) values ('winners', %s, %s)", (W, json.dumps(winners)))
 
