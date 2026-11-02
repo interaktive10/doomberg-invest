@@ -21,7 +21,7 @@ import psycopg
 from pydantic import ValidationError
 
 from pipeline.db import facts_repo, repo, thesis_repo
-from pipeline.llm.router import Deferred, Router
+from pipeline.llm.router import Deferred, Done, Router
 from pipeline.settings import REPO_ROOT, Settings
 from pipeline.signals.weekly import last_friday
 from pipeline.thesis import queue, vault
@@ -121,24 +121,39 @@ def write_one(conn: psycopg.Connection[Any], router: Router, key: str, pack: Map
     except ValidationError as e:
         stats.failed[key] = [f"pack: not a valid evidence pack: {e}"[:500]]
         return
-    errors: list[str] = []
+    answer, content, res = attempts(router, model, pack, words)
+    if res is None:
+        stats.deferred.append(key)
+    elif not res.ok:
+        stats.failed[key] = res.errors
+    else:
+        c = pack["company"]
+        code = c.get("ticker") or c.get("nse_symbol")
+        md = render(content, f"{c['name']}{f' ({code})' if code else ''} — {pack['week']}")
+        with conn.transaction():
+            ingest_card(conn, content, pack, md, "fallback", res)
+        stats.written.append(key)
+
+
+def attempts(router: Router, model: EvidencePack, pack: Mapping[str, Any],
+             words: Sequence[str]) -> tuple[Done | Deferred, dict[str, Any], v.Result | None]:  # fmt: skip
+    """P-04 on one pack, validated, at most ATTEMPTS tries; a retry is a repair: the model sees its failed card and
+    the validator's errors (docs/SPEC_ISSUES.md 70: a blind second try repeated the first one's mistakes). Returns
+    the last answer, its card fields and its result; no result when the router deferred."""
+    inp = CardInput(model)
+    content: dict[str, Any] = {}
+    res: v.Result | None = None
+    answer: Done | Deferred = Deferred("not called")
     for _ in range(ATTEMPTS):
-        answer = router.call(CardInput(model))
+        answer = router.call(inp)
         if isinstance(answer, Deferred):
-            stats.deferred.append(key)
-            return
+            return answer, content, None
         content = v.card_fields(answer.content, pack)
         res = v.validate(content, pack, words, router)
         if res.ok:
-            c = pack["company"]
-            code = c.get("ticker") or c.get("nse_symbol")
-            md = render(content, f"{c['name']}{f' ({code})' if code else ''} — {pack['week']}")
-            with conn.transaction():
-                ingest_card(conn, content, pack, md, "fallback", res)
-            stats.written.append(key)
-            return
-        errors = res.errors
-    stats.failed[key] = errors
+            break
+        inp = inp.repair(content, res.errors)
+    return answer, content, res
 
 
 def main(argv: list[str] | None = None) -> int:

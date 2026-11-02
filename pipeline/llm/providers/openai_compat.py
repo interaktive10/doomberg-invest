@@ -42,7 +42,11 @@ def body(req: Request, structured: bool = False) -> dict[str, Any]:
     out: dict[str, Any] = {
         "model": req.model,
         "temperature": req.temperature,
-        "messages": [{"role": "system", "content": req.system}, {"role": "user", "content": req.user}],
+        "messages": [
+            {"role": "system", "content": req.system},
+            {"role": "user", "content": req.user},
+            *({"role": role, "content": text} for role, text in req.follow),
+        ],
     }
     if req.mode == "tool":
         fn = {"name": req.tool_name, "description": f"Record the {req.prompt_id} result.",

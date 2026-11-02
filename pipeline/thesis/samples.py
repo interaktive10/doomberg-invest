@@ -18,7 +18,8 @@ from typing import Any
 from pipeline.llm.router import Deferred, Done, Router
 from pipeline.settings import REPO_ROOT
 from pipeline.thesis import validate as v
-from pipeline.thesis.evidence_pack import CardInput, EvidencePack
+from pipeline.thesis.evidence_pack import EvidencePack
+from pipeline.thesis.fallback_writer import attempts
 
 PACK = REPO_ROOT / "fixtures" / "card" / "pack.json"
 
@@ -26,10 +27,8 @@ PACK = REPO_ROOT / "fixtures" / "card" / "pack.json"
 def run(router: Router, pack_path: Path = PACK) -> tuple[Done | Deferred, v.Result | None]:
     """P-04 on the pack, then the card through validate.py (its P-05 calls go through the same router)."""
     doc: dict[str, Any] = json.loads(pack_path.read_text(encoding="utf-8"))
-    answer = router.call(CardInput(EvidencePack.model_validate(doc)))
-    if isinstance(answer, Deferred):
-        return answer, None
-    return answer, v.validate(v.card_fields(answer.content, doc), doc, v.hype_words(), router)
+    answer, _, result = attempts(router, EvidencePack.model_validate(doc), doc, v.hype_words())
+    return answer, result
 
 
 def main(argv: Sequence[str] | None = None) -> int:

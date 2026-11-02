@@ -72,6 +72,11 @@ class PromptInput(PublicData):
     def schema(self) -> dict[str, Any]:
         raise NotImplementedError
 
+    def follow(self) -> tuple[tuple[str, str], ...]:
+        """Turns after the verbatim prompt, built from this input's own fields: ("assistant", ...), ("user", ...).
+        None by default; a card's repair attempt has two (pipeline/thesis/evidence_pack.py CardInput)."""
+        return ()
+
 
 def nullable(t: str, **kw: Any) -> dict[str, Any]:
     return {"type": t, "nullable": True, **kw}

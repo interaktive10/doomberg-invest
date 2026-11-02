@@ -31,7 +31,13 @@ def body(req: Request) -> dict[str, Any]:
     schema = to_gemini_schema(req.schema)
     out: dict[str, Any] = {
         "systemInstruction": {"parts": [{"text": req.system}]},
-        "contents": [{"role": "user", "parts": [{"text": req.user}]}],
+        "contents": [
+            {"role": "user", "parts": [{"text": req.user}]},
+            *(
+                {"role": "model" if role == "assistant" else "user", "parts": [{"text": text}]}
+                for role, text in req.follow
+            ),
+        ],
         "generationConfig": {"temperature": req.temperature},
     }
     if req.mode == "tool":

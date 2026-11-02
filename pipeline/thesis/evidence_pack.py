@@ -527,12 +527,35 @@ class CardInput(PromptInput):
 
     prompt_id: ClassVar[str] = "P-04"
     pack: EvidencePack
+    # a repair attempt (docs/SPEC_ISSUES.md 70): the card that failed, as JSON, and validate.py's errors on it
+    previous_json: str = ""
+    errors: tuple[str, ...] = ()
 
     def variables(self) -> dict[str, str]:
         return {"pack_json": json.dumps(to_json(self.pack), indent=1, ensure_ascii=False)}
 
     def schema(self) -> dict[str, Any]:
         return CARD_SCHEMA
+
+    def follow(self) -> tuple[tuple[str, str], ...]:
+        if not self.previous_json:
+            return ()
+        listed = "\n".join(f"- {e}" for e in self.errors[:MAX_REPAIR_ERRORS])
+        return (("assistant", self.previous_json), ("user", REPAIR.format(errors=listed)))
+
+    def repair(self, card: Mapping[str, Any], errors: Sequence[str]) -> CardInput:
+        """The next attempt: this pack, the card that failed and what failed in it."""
+        return CardInput(self.pack, json.dumps(dict(card), ensure_ascii=False), tuple(str(e)[:400] for e in errors))
+
+
+MAX_REPAIR_ERRORS = 20
+REPAIR = (
+    "That card failed these checks:\n{errors}\n\nReturn the whole card again with each of them fixed and "
+    "everything else kept to the same rules. A number in facts or why_mispriced must be a value or delta of the "
+    "pack ids that sentence cites; every number in inferences and assumptions is followed by (assumed); a "
+    "claim says only what its cited quotes and values say; a kill criterion's check_after is a date after the "
+    "next filing window."
+)
 
 
 SUPPORT_SCHEMA = obj({"supported": {"type": "boolean"},

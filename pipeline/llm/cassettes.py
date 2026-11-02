@@ -29,6 +29,8 @@ def request_key(provider: str, req: Request) -> str:
     doc = {"provider": provider, "model": req.model, "prompt_id": req.prompt_id, "system": req.system,
            "user": req.user, "schema": req.schema, "mode": req.mode, "tool_name": req.tool_name,
            "temperature": req.temperature}  # fmt: skip
+    if req.follow:  # only a repair attempt carries it: every earlier key stays as recorded
+        doc["follow"] = [list(t) for t in req.follow]
     return hashlib.sha256(json.dumps(doc, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
@@ -54,8 +56,11 @@ class Recorder:
         c = self.inner.complete(req)
         p = path_for(self.root, self.name, req)
         p.parent.mkdir(parents=True, exist_ok=True)
+        request: dict[str, Any] = {"system": req.system, "user": req.user}
+        if req.follow:
+            request["follow"] = [list(t) for t in req.follow]
         doc = {"key": request_key(self.name, req), "provider": self.name, "prompt_id": req.prompt_id,
-               "model": req.model, "request": {"system": req.system, "user": req.user},
+               "model": req.model, "request": request,
                "response": {"content": c.content, "tokens_in": c.tokens_in, "tokens_out": c.tokens_out}}  # fmt: skip
         p.write_text(json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
         return c
