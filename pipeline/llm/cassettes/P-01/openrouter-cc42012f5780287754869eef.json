@@ -39,7 +39,7 @@
      "quote": "Current lead times for medium-voltage switchgear are 41 weeks.",
      "scale_word": null,
      "subject": "Lead time for medium-voltage switchgear",
-     "subject_key": "lead_time:medium_voltage_switchgear",
+     "subject_key": "lead_time:medium-voltage_switchgear",
      "unit": "weeks",
      "value": 41,
      "value_high": null,
@@ -48,7 +48,7 @@
     }
    ]
   },
-  "tokens_in": 2029,
-  "tokens_out": 447
+  "tokens_in": 2034,
+  "tokens_out": 443
  }
 }

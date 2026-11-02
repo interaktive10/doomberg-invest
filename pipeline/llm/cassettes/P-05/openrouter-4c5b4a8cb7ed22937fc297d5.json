@@ -1,0 +1,19 @@
+{
+ "key": "4c5b4a8cb7ed22937fc297d5a539e82dd09e919ce03f2d59ead633aafb50aa5c",
+ "model": "anthropic/claude-haiku-5.5",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Operating income for the period ending 2026-06-30 was reported at $206,250,000.\nQUOTES: []\nCOMPUTED: [\"m:op_income:2026-06-30: {\\\"name\\\": \\\"op_income\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"206250000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value op_income for period_end 2026-06-30 in USD is 206250000, which matches the sentence's claim of operating income of $206,250,000 for the period ending 2026-06-30. The sentence's \"reported\" wording is a neutral framing of the computed figure and adds no extra claim.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 785,
+  "tokens_out": 178
+ }
+}

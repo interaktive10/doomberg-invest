@@ -35,7 +35,7 @@
      "currency": null,
      "fact_type": "export_exposure",
      "location": null,
-     "period_label": "first half of fiscal 2027",
+     "period_label": "the first half of fiscal 2027",
      "quote": "Exports accounted for 32% of revenue in the first half of fiscal 2027.",
      "scale_word": null,
      "subject": "Exports as share of revenue",
@@ -49,6 +49,6 @@
    ]
   },
   "tokens_in": 2018,
-  "tokens_out": 531
+  "tokens_out": 564
  }
 }

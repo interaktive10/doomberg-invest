@@ -1,0 +1,19 @@
+{
+ "key": "8d4856e2785085a6ed7c8cbbba44124a1030621937bb0d1e99b769df866b71a4",
+ "model": "anthropic/claude-haiku-5.5",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Revenue for Nimbus Compute Corp. reached $1,250,000,000 for the period ending 2026-06-30, up from $980,000,000 for the period ending 2025-06-30.\nQUOTES: []\nCOMPUTED: [\"m:revenue:2025-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2025-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"980000000\\\"}\", \"m:revenue:2026-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"1250000000\\\"}\", \"revenue from 2025-06-30 to 2026-06-30: difference 270000000, change 0.2755, ratio 1.2755\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence's claims are all supported by the computed values: revenue of 1,250,000,000 USD for the period ending 2026-06-30 and 980,000,000 USD for the period ending 2025-06-30 are given directly. The \"up from\" direction matches the positive difference of 270,000,000 (change 0.2755). The company name \"Nimbus Compute Corp.\" is not present in the computed values, but it is the entity the sentence is about and no quotes are provided to contradict it; the financial figures themselves are fully supported.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 936,
+  "tokens_out": 250
+ }
+}

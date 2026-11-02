@@ -30,7 +30,7 @@
     },
     {
      "as_of": "2026-06-30",
-     "confidence": 0.95,
+     "confidence": 0.93,
      "counterparty": null,
      "currency": "USD",
      "fact_type": "backlog",
@@ -48,7 +48,7 @@
     },
     {
      "as_of": "2026-06-30",
-     "confidence": 0.95,
+     "confidence": 0.93,
      "counterparty": null,
      "currency": null,
      "fact_type": "lead_time",
@@ -66,7 +66,7 @@
     },
     {
      "as_of": "2026-06-30",
-     "confidence": 0.95,
+     "confidence": 0.93,
      "counterparty": "hyperscale data center operator",
      "currency": null,
      "fact_type": "customer_concentration",
@@ -87,12 +87,30 @@
      "confidence": 0.9,
      "counterparty": "Nimbus Compute",
      "currency": null,
-     "fact_type": "supply_link",
+     "fact_type": "order_win",
      "location": null,
      "period_label": null,
      "quote": "We entered into a multi-year agreement to supply power transformers and switchgear to Nimbus Compute for its AI data center campuses.",
      "scale_word": null,
      "subject": "Multi-year supply agreement with Nimbus Compute for AI data center campuses",
+     "subject_key": "order_win:nimbus_compute",
+     "unit": "other",
+     "value": null,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
+    },
+    {
+     "as_of": null,
+     "confidence": 0.88,
+     "counterparty": "Nimbus Compute",
+     "currency": null,
+     "fact_type": "supply_link",
+     "location": null,
+     "period_label": null,
+     "quote": "We entered into a multi-year agreement to supply power transformers and switchgear to Nimbus Compute for its AI data center campuses.",
+     "scale_word": null,
+     "subject": "Nimbus Compute AI data center supply relationship",
      "subject_key": "link:nimbus_compute",
      "unit": "other",
      "value": null,
@@ -103,6 +121,6 @@
    ]
   },
   "tokens_in": 2073,
-  "tokens_out": 1357
+  "tokens_out": 1547
  }
 }

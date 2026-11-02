@@ -11,8 +11,8 @@
   "content": {
    "facts": [
     {
-     "as_of": "2027-01-27",
-     "confidence": 0.97,
+     "as_of": null,
+     "confidence": 0.95,
      "counterparty": null,
      "currency": "USD",
      "fact_type": "capex_guidance",
@@ -20,8 +20,8 @@
      "period_label": "fiscal 2027",
      "quote": "We now expect capital expenditures of approximately $84 billion in fiscal 2027, an increase from our prior outlook due to accelerating AI demand.",
      "scale_word": "billion",
-     "subject": "capital expenditures",
-     "subject_key": "capex_guidance:fiscal 2027",
+     "subject": "capital expenditures expectation",
+     "subject_key": "capex_guidance:fiscal_2027",
      "unit": "usd",
      "value": 84,
      "value_high": null,
@@ -29,8 +29,8 @@
      "withdrawn": false
     },
     {
-     "as_of": "2027-01-27",
-     "confidence": 0.95,
+     "as_of": null,
+     "confidence": 0.93,
      "counterparty": null,
      "currency": null,
      "fact_type": "capacity_addition",
@@ -39,7 +39,7 @@
      "quote": "We plan to add 800 MW of data center capacity at our Ohio campus by the end of calendar 2027.",
      "scale_word": null,
      "subject": "data center capacity at Ohio campus",
-     "subject_key": "capacity:mw:site_ohio",
+     "subject_key": "capacity:mw:ohio_campus",
      "unit": "mw",
      "value": 800,
      "value_high": null,
@@ -49,6 +49,6 @@
    ]
   },
   "tokens_in": 2019,
-  "tokens_out": 369
+  "tokens_out": 398
  }
 }

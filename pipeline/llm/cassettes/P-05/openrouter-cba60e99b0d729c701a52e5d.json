@@ -1,0 +1,19 @@
+{
+ "key": "cba60e99b0d729c701a52e5d959425e35363b681b3c466388138724afd5639f7",
+ "model": "anthropic/claude-haiku-5.5",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Remaining performance obligations (RPO) grew to $4,200,000,000 as of 2026-06-30 compared to $2,900,000,000 as of 2025-06-30.\nQUOTES: []\nCOMPUTED: [\"m:rpo:2025-06-30: {\\\"name\\\": \\\"rpo\\\", \\\"period_end\\\": \\\"2025-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"2900000000\\\"}\", \"m:rpo:2026-06-30: {\\\"name\\\": \\\"rpo\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"4200000000\\\"}\", \"rpo from 2025-06-30 to 2026-06-30: difference 1300000000, change 0.4483, ratio 1.4483\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence's claims are all supported by the computed values: RPO was $4,200,000,000 as of 2026-06-30 (m:rpo:2026-06-30) and $2,900,000,000 as of 2025-06-30 (m:rpo:2025-06-30). The word \"grew\" is consistent with the increase shown (difference 1300000000, change 0.4483). No quotes were provided, and no extra or stronger claims are made.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 933,
+  "tokens_out": 223
+ }
+}

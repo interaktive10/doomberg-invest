@@ -12,28 +12,61 @@
    "facts": [
     {
      "as_of": "2026-09-15",
-     "confidence": 1,
+     "confidence": 0.95,
+     "counterparty": "Nimbus Compute",
+     "currency": "USD",
      "fact_type": "order_win",
+     "location": null,
+     "period_label": null,
      "quote": "Coolstream Thermal received an order valued at $255 million from Nimbus Compute for liquid cooling systems for AI data centers.",
      "scale_word": "million",
-     "subject": "Nimbus Compute",
+     "subject": "Order for liquid cooling systems for AI data centers from Nimbus Compute",
      "subject_key": "order_win:nimbus_compute",
      "unit": "usd",
-     "value": 255
+     "value": 255,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
     },
     {
      "as_of": "2026-09-15",
-     "confidence": 1,
+     "confidence": 0.9,
+     "counterparty": "Nimbus Compute",
+     "currency": null,
+     "fact_type": "customer_win",
+     "location": null,
+     "period_label": null,
+     "quote": "Coolstream Thermal received an order valued at $255 million from Nimbus Compute for liquid cooling systems for AI data centers.",
+     "scale_word": null,
+     "subject": "Nimbus Compute as new named customer for liquid cooling systems",
+     "subject_key": "customer_win:nimbus_compute",
+     "unit": "other",
+     "value": null,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
+    },
+    {
+     "as_of": "2026-09-15",
+     "confidence": 0.9,
+     "counterparty": null,
+     "currency": null,
      "fact_type": "price_increase",
+     "location": null,
+     "period_label": null,
      "quote": "Effective January 1, the company will raise list prices on data center cooling units by 11%.",
-     "subject": "data center cooling units",
+     "scale_word": null,
+     "subject": "List price increase on data center cooling units",
      "subject_key": "price_increase:data_center_cooling_units",
      "unit": "percent",
-     "value": 11
+     "value": 11,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
     }
    ]
   },
-  "tokens_in": 2027,
-  "tokens_out": 1379
+  "tokens_in": 2028,
+  "tokens_out": 679
  }
 }

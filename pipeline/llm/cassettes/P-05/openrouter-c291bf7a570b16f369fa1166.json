@@ -1,0 +1,23 @@
+{
+ "key": "c291bf7a570b16f369fa116650703e545f491d193b86a5e326f65024a1b14e5a",
+ "model": "anthropic/claude-haiku-5.5",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The market underestimates forward growth potential because implied growth of 12.0% (assumed) sits below the evidence-backed growth rate of 18.0% (assumed).\nQUOTES: []\nCOMPUTED: [\"c:C2: {\\\"inputs\\\": {\\\"discount_rate\\\": 0.09, \\\"g_evidence\\\": 0.18, \\\"g_implied\\\": 0.12, \\\"terminal_growth\\\": 0.025}, \\\"value\\\": \\\"0.06\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence is not supported. No quotes are provided, and the computed value only reflects inputs (g_implied 0.12, g_evidence 0.18, discount rate 0.09, terminal growth 0.025) with a result of 0.06. Those inputs are labeled as assumed in the sentence, but the computed value does not establish that the market underestimates growth or that the evidence-backed rate is correct. The \"underestimates\" conclusion is interpretive and not stated in any source or computed value.",
+   "supported": false,
+   "unsupported_parts": [
+    "The market underestimates forward growth potential",
+    "implied growth of 12.0% (assumed)",
+    "evidence-backed growth rate of 18.0% (assumed)"
+   ]
+  },
+  "tokens_in": 826,
+  "tokens_out": 292
+ }
+}
