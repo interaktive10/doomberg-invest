@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { hashId, inMore, isCurrent, MAIN, MORE } from "@/lib/nav";
 
 describe("the app's places (lib/nav.ts)", () => {
-  it("has five main places and three under More (e2e/flow.spec.ts counts the eight links)", () => {
+  it("has five main places and Settings under More (docs/SPEC_ISSUES.md 69: no Journal or Signal Lab page)", () => {
     expect(MAIN.map((p) => p.label)).toEqual(["Home", "Undervalued", "Themes", "Winners", "My list"]);
-    expect(MORE.map((p) => p.label)).toEqual(["Journal", "Signal Lab", "Settings"]);
-    expect([...MAIN, ...MORE].map((p) => p.href)).toEqual(["/", "/candidates", "/themes", "/winners", "/theses", "/journal", "/lab", "/settings"]);
+    expect(MORE.map((p) => p.label)).toEqual(["Settings"]);
+    expect([...MAIN, ...MORE].map((p) => p.href)).toEqual(["/", "/candidates", "/themes", "/winners", "/theses", "/settings"]);
   });
 
   it("marks a place current on its own page and the pages under it, This week on the home page only", () => {
@@ -16,8 +16,8 @@ describe("the app's places (lib/nav.ts)", () => {
     expect(isCurrent("/company/1", "/candidates")).toBe(false);
   });
 
-  it("shows More as current on Journal, Signal Lab and Settings", () => {
-    expect(["/journal", "/lab", "/settings", "/settings/x"].map(inMore)).toEqual([true, true, true, true]);
+  it("shows More as current on Settings", () => {
+    expect(["/settings", "/settings/x"].map(inMore)).toEqual([true, true]);
     expect(["/", "/candidates", "/theses/1", "/search"].map(inMore)).toEqual([false, false, false, false]);
   });
 });

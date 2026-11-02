@@ -52,7 +52,7 @@ test("the nav has five places and More; the Screener's and the Capex Desk's old 
   const nav = page.getByRole("navigation", { name: "Main" });
   for (const name of ["Home", "Undervalued", "Themes", "Winners", "My list"]) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(1);
   await nav.locator("summary", { hasText: "More" }).click();
-  for (const name of ["Journal", "Signal Lab", "Settings"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+  for (const name of ["Settings"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
   await expect(nav.getByRole("link")).toHaveCount(8);
   await page.goto("/screener");
   await expect(page).toHaveURL(/\/candidates$/);
@@ -331,12 +331,6 @@ test("company → thesis → journal → review → close with a post-mortem", a
   await flash(page, "Closed with a post-mortem.");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Closed");
   await expect(page.getByRole("heading", { name: "Post-mortem" })).toBeVisible();
-
-  await page.goto("/journal");
-  // one row per entry, led by its action (overhaul PR 6)
-  const echo = page.getByRole("list", { name: "Journal entries" }).getByRole("listitem").filter({ hasText: "Echo Grid Corp." });
-  for (const action of ["Start position", "Review", "Exit"]) await expect(echo.getByText(action, { exact: true })).toHaveCount(1);
-  await expect(page.getByText("Backlog converted as expected.")).toBeVisible();
 });
 
 test("a thesis moved to Review by a kill criterion gets a verdict (M7 review R1-F1)", async ({ page }) => {

@@ -21,7 +21,7 @@ const ITEM = "flex h-11 w-full items-center gap-3 rounded-xl px-3 text-[14px] fo
 const ITEM_ON = "bg-hover text-fg hover:text-fg";
 const ITEM_OFF = "text-muted hover:bg-hover hover:text-fg";
 
-/** More: Journal, Signal Lab, Settings and Sign out, in a native disclosure (works without script). With script it
+/** More: Settings and Sign out, in a native disclosure (works without script). With script it
  * also closes on a click outside, on Escape and when the page changes. In the dock it opens upwards. On Journal, Signal
  * Lab and Settings it is the current tab, for screen readers too (aria-current on its summary). */
 function MoreMenu({ path, email, dock = false }: { path: string; email: string; dock?: boolean }) {
