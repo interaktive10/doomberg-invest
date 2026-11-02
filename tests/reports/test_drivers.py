@@ -94,3 +94,26 @@ def test_the_committed_snapshot_parses() -> None:
     drv = dv.load(ROOT)
     assert len(files) >= 10 and all(f.stem in drv for f in files)
     assert all(len(fred.parse(f.read_text())) > 200 for f in files)
+
+
+@pytest.mark.parametrize(("transform", "lag"), [("yoy", 0), ("level", 0), ("cohort", 48)])
+def test_the_basis_is_the_readings_own_months(transform: str, lag: int) -> None:
+    """2026-11-02 ("you need to support it with data"): the screen's numbers are the very months the reading compares,
+    so now / then - 1 is the reading; the peak is the highest full calendar year of the last 20."""
+    real = fred.parse((ROOT / "fixtures" / "fred" / "TOTALSA.csv").read_text())
+    values = [v for _, v in real]
+    b = dv.basis(real, transform, lag)
+    assert b is not None
+    r = dv.reading(values, len(values) - 1, transform, lag)
+    assert r is not None and b["change"] == pytest.approx(r, abs=1e-3)
+    assert b["through"] == real[-1][0].isoformat()[:7]
+    full = {y for y in {m.year for m, _ in real} if sum(1 for m, _ in real if m.year == y) == 12}
+    assert b["peak"]["year"] in full and b["peak"]["year"] > real[-1][0].year - 21
+    if transform == "cohort":  # the wave: the 12 months that ended 48 months before the latest
+        assert (
+            b["now"]["to"] == real[-1 - 48][0].isoformat()[:7] and b["now"]["from"] == real[-12 - 48][0].isoformat()[:7]
+        )
+
+
+def test_no_basis_without_enough_months() -> None:
+    assert dv.basis(monthly([1.0] * 10), "yoy") is None and dv.basis(monthly([1.0] * 140), "cohort", 48) is None

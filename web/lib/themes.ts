@@ -34,7 +34,21 @@ export interface HistoryCheck {
   other_excess: number | null;
 }
 
+/** The months a reading compares and their averages (pipeline/reports/drivers.py basis), or a filings theme's share. */
+export type Basis =
+  | {
+      transform: "yoy" | "level" | "cohort";
+      now: { from: string; to: string; value: number };
+      then: { from: string; to: string; value: number };
+      change: number | null;
+      peak: { year: number; value: number } | null;
+      through: string;
+    }
+  | { transform: "filings"; share: number; typical: number | null };
+
 export interface LibraryTheme {
+  /** the numbers behind the reading (reports before 2026-11-02 lack it) */
+  basis?: Basis | null;
   slug: string;
   title: string;
   category: string;
@@ -79,6 +93,8 @@ export interface ThemesReport {
   library: LibraryTheme[];
   retired: RetiredTheme[];
   drivers: Record<string, string>;
+  /** each driver's unit (reports before 2026-11-02 lack them) */
+  units?: Record<string, string>;
   note: string;
   last_rethink: string | null;
   next_rethink: string;
@@ -97,7 +113,7 @@ export const STATUS: Record<Status, { label: string; tone: "up" | "warn" | "mute
   building: { label: "Early: demand up, price not yet", tone: "up", hint: "the trigger is running above normal and these stocks haven't run ahead of the market yet. This is the list to read" },
   priced_in: { label: "Late: price already up", tone: "warn", hint: "the trigger is running above normal, but these stocks already beat the market by more than 10 points over the past 12 months" },
   watching: { label: "Nothing unusual yet", tone: "muted", hint: "the trigger is close to its normal level. Kept in case it moves" },
-  fading: { label: "Demand cooling", tone: "down", hint: "the trigger is running below normal: a headwind for these companies" },
+  fading: { label: "Trigger cooling", tone: "down", hint: "the trigger is running below normal: a headwind for these companies" },
 };
 
 /** A short chip for each status where the long label doesn't fit. */
@@ -163,3 +179,72 @@ export function byCategory(lib: readonly LibraryTheme[]): [string, LibraryTheme[
   for (const t of lib) out.set(t.category, [...(out.get(t.category) ?? []), t]);
   return [...out];
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2021-10" -> "Oct 2021". */
+export function monthText(ym: string): string {
+  const [y, m] = ym.split("-");
+  return `${MONTHS[Number(m) - 1] ?? m} ${y}`;
+}
+
+/** "Oct 2021–Sep 2022", "Jul–Sep 2026". */
+export function spanText(from: string, to: string): string {
+  if (from === to) return monthText(from);
+  return from.slice(0, 4) === to.slice(0, 4) ? `${MONTHS[Number(from.slice(5)) - 1]}–${monthText(to)}` : `${monthText(from)}–${monthText(to)}`;
+}
+
+/** A driver's value in its unit's words: "13.9 million a year", "$124.3 billion", "6.85%", "112.4 on its index". */
+export function valueText(v: number, unit: string): string {
+  const n = (x: number) => x.toLocaleString("en-US", { maximumFractionDigits: Math.abs(x) >= 100 ? 0 : 1 });
+  const perYear = unit.endsWith(" a year") ? " a year" : "";
+  if (unit.startsWith("million dollars")) {
+    if (v >= 1e6) return `$${n(v / 1e6)} trillion${perYear}`;
+    return v >= 1000 ? `$${n(v / 1000)} billion${perYear}` : `$${n(v)} million${perYear}`;
+  }
+  if (unit === "percent") return `${v.toFixed(2)}%`;
+  if (unit === "index") return `${n(v)} on its index`;
+  if (unit.startsWith("dollars ")) return `$${n(v)} ${unit.slice("dollars ".length)}`;
+  return unit ? `${n(v)} ${unit}` : n(v);
+}
+
+/** "16% below", "3% above" (a change as words). */
+function changeWords(c: number | null): string {
+  if (c === null || !Number.isFinite(c)) return "about the same as";
+  const p = Math.round(Math.abs(c) * 100);
+  return p === 0 ? "about the same as" : `${p}% ${c > 0 ? "above" : "below"}`;
+}
+
+/** The data behind a theme in a line or two (2026-11-02: "you need to support it with data ... which year had the
+ * highest sales"): the months its reading compares, their averages, the change, and the highest year of the last 20.
+ * Empty for a report without it. */
+export function basisLines(t: Pick<LibraryTheme, "basis" | "driver" | "with_demand" | "companies" | "lag_months">, r: Pick<ThemesReport, "drivers" | "units">): string[] {
+  const b = t.basis;
+  if (!b) return [];
+  if (b.transform === "filings") {
+    const own = `${t.with_demand} of ${t.companies} companies (${Math.round(b.share * 100)}%) report rising demand in their filings`;
+    return [b.typical === null ? `${own}.` : `${own}; in the typical industry it is ${Math.round(b.typical * 100)}%.`];
+  }
+  const name = r.drivers[t.driver] ?? t.driver;
+  const unit = r.units?.[t.driver] ?? "";
+  const now = `${valueText(b.now.value, unit)}`;
+  const then = valueText(b.then.value, unit);
+  const lines =
+    b.transform === "cohort"
+      ? [`The wave it counts: ${spanText(b.now.from, b.now.to)}, when ${name} averaged ${now}: ${changeWords(b.change)} the 10 years before it (${then}).`]
+      : b.transform === "yoy"
+        ? [`${spanText(b.now.from, b.now.to)}: ${name} averaged ${now}, ${changeWords(b.change)} the same months a year before (${then}).`]
+        : [`${spanText(b.now.from, b.now.to)}: ${name} averaged ${now}, ${changeWords(b.change)} its average of the 10 years before (${then}).`];
+  if (b.peak) lines.push(`Highest year of the last 20: ${b.peak.year} (${valueText(b.peak.value, unit)}). Data through ${monthText(b.through)}, from FRED.`);
+  return lines;
+}
+
+/** The basis in a few words for a theme's card: "Oct 2021–Sep 2022: 16% below the decade before". */
+export function basisShort(t: Pick<LibraryTheme, "basis">): string | null {
+  const b = t.basis;
+  if (!b) return null;
+  if (b.transform === "filings") return b.typical === null ? null : `${Math.round(b.share * 100)}% report rising demand vs ${Math.round(b.typical * 100)}% typical`;
+  const vs = b.transform === "yoy" ? "a year before" : "the decade before";
+  return `${spanText(b.now.from, b.now.to)}: ${changeWords(b.change)} ${vs}`;
+}
+

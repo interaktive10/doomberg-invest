@@ -19,6 +19,8 @@ import {
   lagWords,
   pct,
   readingWords,
+  basisLines,
+  basisShort,
   zWords,
   STATUS,
   STATUS_ORDER,
@@ -156,9 +158,10 @@ function Overview({ r }: { r: ThemesReport }) {
                     </span>
                     <span className="text-[18px] leading-snug font-bold tracking-[-0.01em]">{t.title}</span>
                     <span className="line-clamp-2 text-[13px] text-muted">{chainLine(t, r)}</span>
+                    {basisShort(t) ? <span className="num text-[12px] text-subtle">{basisShort(t)}</span> : null}
                     <span className="mt-auto grid grid-cols-3 gap-2 text-[12px]">
                       <Mini label="Trigger" value={t.signal.replace(" normal", "")} />
-                      <Mini label="Demand" value={`${t.with_demand} of ${t.companies}`} />
+                      <Mini label="Rising demand" value={`${t.with_demand} of ${t.companies}`} />
                       <Mini label="Price vs mkt" value={pct(t.run)} />
                     </span>
                     <LinkPending />
@@ -214,6 +217,15 @@ function Detail({ t, r, ranges }: { t: LibraryTheme; r: ThemesReport; ranges: Re
           <Arrow text={lagWords(t)} />
           <Step tone="bg-tint-sage" head="Who it lifts" body={t.keywords.join(", ")} sub={`${t.companies} companies${t.markets.length ? ` · ${t.markets.map(marketName).join(" and ")}` : ""}`} />
         </ol>
+        {basisLines(t, r).length > 0 ? (
+          <Disclosure summary={<><Icon name="info" /> The data behind it</>} className="rounded-tile bg-raised px-4 py-2">
+            <div className="flex flex-col gap-1.5 pb-1 text-[14px] text-fg">
+              {basisLines(t, r).map((l) => (
+                <p key={l}>{l}</p>
+              ))}
+            </div>
+          </Disclosure>
+        ) : null}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="The trigger now" value={t.signal} sub={zWords(t.z)} />
           <Stat label="Demand evidence" value={`${t.with_demand} of ${t.companies}`} sub="companies report it" />

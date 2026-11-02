@@ -389,3 +389,4 @@
 2026-11-02 Card repair: up to 20 validator errors, each cut at 400 characters, as one user turn after the failed card.
 2026-11-02 Cap range: buckets in the Winners report (merge in the browser); Undervalued filters on company_metrics market_cap from ?cap_us / ?cap_in.
 2026-11-02 Themes names: up to 30 kept with market caps; the page lists 12 within the range.
+2026-11-02 Theme basis: the reading's own months and averages, the highest full year of the last 20; shown as an info disclosure on the theme page and a short line on its card.

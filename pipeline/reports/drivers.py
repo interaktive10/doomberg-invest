@@ -127,6 +127,40 @@ def summary(points: Points, d: Driver) -> dict[str, Any]:
     return out
 
 
+def _span(points: Points, a: int, b: int) -> dict[str, Any]:
+    """Months a..b (inclusive) as {from, to, value}: the first and last month and their average."""
+    return {"from": points[a][0].isoformat()[:7], "to": points[b][0].isoformat()[:7],
+            "value": round(statistics.fmean(v for _, v in points[a : b + 1]), 3)}  # fmt: skip
+
+
+def basis(points: Points, transform: str, lag: int = 0) -> dict[str, Any] | None:
+    """The numbers behind a theme's reading, for the screen to say (2026-11-02: "you need to support it with data ...
+    which year had the highest sales"): the months it compares now (`now`) and against (`then`), their averages and
+    the change (the same months `reading` uses), the busiest calendar year of the last 20 and the latest month."""
+    n = len(points)
+    i = n - 1
+    if transform == "yoy" and i >= 14:
+        now, then = _span(points, i - 2, i), _span(points, i - 14, i - 12)
+    elif transform == "level" and i >= 122:
+        now, then = _span(points, i - 2, i), _span(points, i - 122, i - 3)
+    elif transform == "cohort" and i - lag >= 131:
+        end = i - lag
+        now, then = _span(points, end - 11, end), _span(points, end - 131, end - 12)
+    else:
+        return None
+    years: dict[int, list[float]] = {}
+    for m, v in points:
+        years.setdefault(m.year, []).append(v)
+    last_year = points[-1][0].year
+    full = {y: statistics.fmean(vs) for y, vs in years.items() if len(vs) == 12 and y > last_year - 21}
+    peak = max(full.items(), key=lambda kv: kv[1]) if full else None
+    change = now["value"] / then["value"] - 1 if then["value"] else None
+    return {"transform": transform, "now": now, "then": then,
+            "change": round(change, 4) if change is not None else None,
+            "peak": {"year": peak[0], "value": round(peak[1], 3)} if peak else None,
+            "through": points[-1][0].isoformat()[:7]}  # fmt: skip
+
+
 def chart(points: Points, months: int = 120) -> list[list[Any]]:
     """The last `months` months as [month, value] pairs (the Themes screen's driver chart)."""
     return [[m.isoformat()[:7], round(v, 3)] for m, v in points[-months:]]
