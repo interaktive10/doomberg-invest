@@ -104,10 +104,14 @@ class Stats:
     notes: list[str] = field(default_factory=list)
 
 
+SAVE_EVERY = 100  # tickers between saves, so a run cut off by the job's limit keeps what it fetched
+
+
 def refresh_us(ask: Callable[[str], Sequence[tuple[date, Decimal]]], tickers: Sequence[str], recent: Recent,
-               budget: int, minutes: float, stats: Stats,
-               clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
-    """Ask the stalest `budget` tickers for their latest daily closes, until the time or the day's credits run out."""
+               budget: int, minutes: float, stats: Stats, clock: Callable[[], float] = time.monotonic,
+               save: Callable[[], None] | None = None) -> None:  # fmt: skip
+    """Ask the stalest `budget` tickers for their latest daily closes, until the time or the day's credits run out;
+    `save` every SAVE_EVERY answers."""
     from pipeline.net.twelvedata import TwelveDataDayCredits, TwelveDataUnavailable
 
     t0 = clock()
@@ -127,6 +131,8 @@ def refresh_us(ask: Callable[[str], Sequence[tuple[date, Decimal]]], tickers: Se
         if closes:
             recent.us[t] = merge(recent.us.get(t, []), closes)
             stats.us_ok += 1
+            if save is not None and stats.us_ok % SAVE_EVERY == 0:
+                save()
 
 
 def refresh_india(rows: Sequence[Any], day: date | None, recent: Recent, stats: Stats) -> None:
@@ -184,7 +190,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             from pipeline.net.twelvedata import TwelveDataClient
 
             client = TwelveDataClient(HttpClient(settings))
-            refresh_us(client.recent, us_tickers(conn), recent, a.us_budget, a.minutes, stats)
+
+            def checkpoint() -> None:
+                save(conn, recent)
+                conn.commit()
+
+            refresh_us(client.recent, us_tickers(conn), recent, a.us_budget, a.minutes, stats, save=checkpoint)
             save(conn, recent)
             conn.commit()
         elif not a.skip_us:
