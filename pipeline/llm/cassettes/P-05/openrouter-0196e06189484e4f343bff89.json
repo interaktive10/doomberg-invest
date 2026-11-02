@@ -1,0 +1,19 @@
+{
+ "key": "0196e06189484e4f343bff897c57fe7597a4b281e7fe3d69b36ee80157fec6e5",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Red flag R2 did not fire and its status is unknown because receivables_growth is missing from the data.\nQUOTES: []\nCOMPUTED: [\"s:R2: {\\\"fired\\\": false, \\\"hard\\\": false, \\\"inputs\\\": {\\\"missing\\\": [\\\"receivables_growth\\\"]}, \\\"kind\\\": \\\"red_flag\\\", \\\"status\\\": \\\"unknown\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "Computed value for R2 shows fired=false, status=unknown, and inputs.missing includes receivables_growth, matching every claim in the sentence.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 487,
+  "tokens_out": 147
+ }
+}

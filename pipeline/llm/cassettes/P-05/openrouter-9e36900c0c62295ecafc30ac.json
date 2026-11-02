@@ -1,0 +1,19 @@
+{
+ "key": "9e36900c0c62295ecafc30ac72a4e72b3eb772b0365c8cab7977fe8c4a8d18da",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The context model records implied growth of 0.12 against evidence growth of 0.18, at a discount rate of 0.09 and terminal growth of 0.025, with an output value of 0.06.\nQUOTES: []\nCOMPUTED: [\"c:C2: {\\\"inputs\\\": {\\\"discount_rate\\\": 0.09, \\\"g_evidence\\\": 0.18, \\\"g_implied\\\": 0.12, \\\"terminal_growth\\\": 0.025}, \\\"value\\\": \\\"0.06\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "Every claim in the sentence matches the provided computed value: g_implied 0.12, g_evidence 0.18, discount_rate 0.09, terminal_growth 0.025, and value 0.06.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 520,
+  "tokens_out": 205
+ }
+}

@@ -20,8 +20,8 @@
      "period_label": null,
      "quote": "We signed a 15-year power purchase agreement with Nimbus Compute for 400 MW to serve its Ohio data center campus.",
      "scale_word": null,
-     "subject": "15-year PPA with Nimbus Compute for 400 MW to serve its Ohio data center campus",
-     "subject_key": "ppa:nimbus_compute:ohio_data_center_campus",
+     "subject": "15-year power purchase agreement with Nimbus Compute for 400 MW to serve its Ohio data center campus",
+     "subject_key": "ppa:nimbus_compute:ohio",
      "unit": "mw",
      "value": 400,
      "value_high": null,
@@ -31,6 +31,6 @@
    ]
   },
   "tokens_in": 1976,
-  "tokens_out": 266
+  "tokens_out": 276
  }
 }

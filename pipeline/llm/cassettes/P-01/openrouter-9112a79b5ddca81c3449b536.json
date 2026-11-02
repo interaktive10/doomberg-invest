@@ -20,7 +20,7 @@
      "period_label": "fiscal 2028",
      "quote": "For fiscal 2028, Nimbus expects capital expenditures of $71 billion to $76 billion.",
      "scale_word": "billion",
-     "subject": "Fiscal 2028 capital expenditures guidance",
+     "subject": "Fiscal 2028 capital expenditures",
      "subject_key": "capex_guidance:fiscal 2028",
      "unit": "usd",
      "value": null,
@@ -40,7 +40,7 @@
      "scale_word": null,
      "subject": "AI Infrastructure Services reportable segment",
      "subject_key": "new_segment:ai_infrastructure_services",
-     "unit": "count",
+     "unit": "other",
      "value": null,
      "value_high": null,
      "value_low": null,
@@ -49,6 +49,6 @@
    ]
   },
   "tokens_in": 2053,
-  "tokens_out": 446
+  "tokens_out": 371
  }
 }

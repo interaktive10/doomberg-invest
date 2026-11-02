@@ -92,7 +92,7 @@
      "period_label": null,
      "quote": "We entered into a multi-year agreement to supply power transformers and switchgear to Nimbus Compute for its AI data center campuses.",
      "scale_word": null,
-     "subject": "Multi-year supply agreement with Nimbus Compute for AI data center campuses",
+     "subject": "Multi-year agreement to supply power transformers and switchgear to Nimbus Compute",
      "subject_key": "link:nimbus_compute",
      "unit": "other",
      "value": null,
@@ -103,6 +103,6 @@
    ]
   },
   "tokens_in": 2073,
-  "tokens_out": 1357
+  "tokens_out": 1192
  }
 }

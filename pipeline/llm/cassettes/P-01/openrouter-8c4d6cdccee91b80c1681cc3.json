@@ -12,7 +12,7 @@
    "facts": [
     {
      "as_of": "2026-09-30",
-     "confidence": 0.97,
+     "confidence": 0.95,
      "counterparty": null,
      "currency": "USD",
      "fact_type": "rpo",
@@ -31,6 +31,6 @@
    ]
   },
   "tokens_in": 1974,
-  "tokens_out": 239
+  "tokens_out": 270
  }
 }

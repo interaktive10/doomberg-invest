@@ -1,0 +1,19 @@
+{
+ "key": "e6dcbc71570668cae34269dfc05828efb6aa23b44985579406029d0597b0ba7c",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Operating income was $206,250,000 for the fiscal year ended 2026-06-30, and the trailing operating margin is 0.1650.\nQUOTES: []\nCOMPUTED: [\"m:op_income:2026-06-30: {\\\"name\\\": \\\"op_income\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"206250000\\\"}\", \"m:op_margin_ttm: {\\\"description\\\": \\\"TTM operating income / TTM revenue\\\", \\\"unit\\\": \\\"ratio\\\", \\\"value\\\": \\\"0.1650\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value m:op_income:2026-06-30 gives op_income of 206250000 usd for period ending 2026-06-30, matching the stated operating income and fiscal year end. The computed value m:op_margin_ttm gives a ratio of 0.1650, matching the stated trailing operating margin. Every claim in the sentence equals a provided computed value.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 542,
+  "tokens_out": 208
+ }
+}

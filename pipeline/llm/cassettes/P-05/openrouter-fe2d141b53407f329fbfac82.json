@@ -1,0 +1,22 @@
+{
+ "key": "fe2d141b53407f329fbfac8295c55615f826a6af172e733bc76608fe1bdd6b8b",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The evidence score is 62.5 with a gap of 58.3, so coverage is thin and the backlog and order disclosures appear under-followed relative to their size.\nQUOTES: []\nCOMPUTED: [\"c:evidence: {\\\"inputs\\\": {\\\"families\\\": [\\\"fundamentals\\\", \\\"text\\\"]}, \\\"value\\\": \\\"62.5\\\"}\", \"c:gap: {\\\"value\\\": \\\"58.3\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The numeric claims (evidence score 62.5, gap 58.3) match the computed values, but the inference that coverage is thin and that backlog/order disclosures are under-followed relative to their size is interpretive and appears in no quote (the quote list is empty).",
+   "supported": false,
+   "unsupported_parts": [
+    "so coverage is thin",
+    "the backlog and order disclosures appear under-followed relative to their size"
+   ]
+  },
+  "tokens_in": 498,
+  "tokens_out": 243
+ }
+}

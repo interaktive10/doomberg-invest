@@ -21,7 +21,7 @@
      "quote": "We expect capital expenditures of approximately $80 billion in fiscal 2027, driven by data center capacity for AI workloads.",
      "scale_word": "billion",
      "subject": "Expected capital expenditures for fiscal 2027",
-     "subject_key": "capex_guidance:fiscal_2027",
+     "subject_key": "capex_guidance:fiscal 2027",
      "unit": "usd",
      "value": 80,
      "value_high": null,
@@ -39,7 +39,7 @@
      "quote": "Capital expenditures were $20 billion in the first quarter of fiscal 2027, primarily for servers, network equipment and data center construction.",
      "scale_word": "billion",
      "subject": "Capital expenditures in the first quarter of fiscal 2027",
-     "subject_key": "capex_reported:Q1_fiscal_2027",
+     "subject_key": "capex_reported:Q1 fiscal 2027",
      "unit": "usd",
      "value": 20,
      "value_high": null,
@@ -49,6 +49,6 @@
    ]
   },
   "tokens_in": 2036,
-  "tokens_out": 565
+  "tokens_out": 471
  }
 }

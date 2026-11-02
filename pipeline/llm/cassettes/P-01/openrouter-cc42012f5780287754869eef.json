@@ -20,7 +20,7 @@
      "period_label": null,
      "quote": "Voltara will build a 600,000 square foot transformer factory in Texas to expand capacity for grid and data center customers.",
      "scale_word": null,
-     "subject": "New 600,000 square foot transformer factory in Texas",
+     "subject": "600,000 square foot transformer factory in Texas",
      "subject_key": "capacity:sq_ft:texas_transformer_factory",
      "unit": "sq_ft",
      "value": 600000,
@@ -39,7 +39,7 @@
      "quote": "Current lead times for medium-voltage switchgear are 41 weeks.",
      "scale_word": null,
      "subject": "Lead time for medium-voltage switchgear",
-     "subject_key": "lead_time:medium_voltage_switchgear",
+     "subject_key": "lead_time:medium-voltage_switchgear",
      "unit": "weeks",
      "value": 41,
      "value_high": null,
@@ -48,7 +48,7 @@
     }
    ]
   },
-  "tokens_in": 2029,
-  "tokens_out": 447
+  "tokens_in": 2034,
+  "tokens_out": 429
  }
 }

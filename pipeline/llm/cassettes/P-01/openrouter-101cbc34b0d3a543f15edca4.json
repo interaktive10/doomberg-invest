@@ -21,16 +21,34 @@
      "quote": "Customers now face lead times of 30 to 36 months for large gas turbines.",
      "scale_word": null,
      "subject": "Lead time for large gas turbines",
-     "subject_key": "lead_time:large_gas_turbines",
+     "subject_key": "lead_time:large_gas_turbine",
      "unit": "months",
      "value": null,
      "value_high": 36,
      "value_low": 30,
      "withdrawn": false
+    },
+    {
+     "as_of": null,
+     "confidence": 0.6,
+     "counterparty": null,
+     "currency": null,
+     "fact_type": "capacity_addition",
+     "location": null,
+     "period_label": null,
+     "quote": "Transformer, turbine and switchgear capacity is sold out through 2027 across the industry.",
+     "scale_word": null,
+     "subject": "Industry transformer, turbine and switchgear capacity sold out through 2027",
+     "subject_key": "other:industry_capacity_sold_out_2027",
+     "unit": "other",
+     "value": null,
+     "value_high": null,
+     "value_low": null,
+     "withdrawn": false
     }
    ]
   },
   "tokens_in": 1967,
-  "tokens_out": 322
+  "tokens_out": 706
  }
 }

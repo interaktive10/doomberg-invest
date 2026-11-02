@@ -1,0 +1,19 @@
+{
+ "key": "0ce6a363fd79d39c0f5a6b5bf842166233ea2be180ad5af2edfce36eb5000638",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Revenue rose from $980,000,000 in the fiscal year ended 2025-06-30 to $1,250,000,000 in the fiscal year ended 2026-06-30.\nQUOTES: []\nCOMPUTED: [\"m:revenue:2025-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2025-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"980000000\\\"}\", \"m:revenue:2026-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"1250000000\\\"}\", \"revenue from 2025-06-30 to 2026-06-30: difference 270000000, change 0.2755, ratio 1.2755\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The sentence's two figures match the computed values exactly: revenue of 980,000,000 for period_end 2025-06-30 and 1,250,000,000 for period_end 2026-06-30, both in USD. The computed change (difference 270,000,000, ratio 1.2755) confirms the direction of movement is upward, so \"rose from ... to ...\" is supported.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 568,
+  "tokens_out": 231
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "key": "e57bf05f7f0363f6f04b60579c6030c9d1f7ce2ef5a7a410999909f57fbccd3f",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: Operating income was $206,250,000 for the fiscal year ended 2026-06-30, which is a 16.5% operating margin on that year's revenue.\nQUOTES: []\nCOMPUTED: [\"m:op_income:2026-06-30: {\\\"name\\\": \\\"op_income\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"206250000\\\"}\", \"m:revenue:2026-06-30: {\\\"name\\\": \\\"revenue\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"1250000000\\\"}\", \"m:op_margin_ttm: {\\\"description\\\": \\\"TTM operating income / TTM revenue\\\", \\\"unit\\\": \\\"ratio\\\", \\\"value\\\": \\\"0.1650\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "Operating income of $206,250,000 for period end 2026-06-30 is given directly in the computed values, and revenue for the same period is $1,250,000,000. Dividing these (206,250,000 / 1,250,000,000) yields exactly 0.165, matching the provided computed operating margin of 0.1650 (16.5%). Thus every claim in the sentence — the operating income figure, the fiscal period, and the 16.5% margin on that year's revenue — is stated in or directly derivable from the provided computed values.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 591,
+  "tokens_out": 918
+ }
+}
