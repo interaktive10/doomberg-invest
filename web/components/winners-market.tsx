@@ -5,16 +5,22 @@ import { useId, useState } from "react";
 import { LinkPending } from "@/components/link-pending";
 import { shortDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { bandsOf, capText, gainTone, marketName, signedPct, type CapBand, type MarketWinners } from "@/lib/winners";
+import { CapRangeControl } from "@/components/cap-range";
+import { fullRange, rangeText, type CapRange } from "@/lib/caps";
+import { capText, gainTone, marketName, signedPct, stepsOf, viewOf, type CapView, type MarketWinners } from "@/lib/winners";
 
 const NUMBER: Record<number, string> = { 2: "two", 3: "three", 4: "four", 5: "five" };
 
-/** One market on the Winners screen: a market-cap slider (the report's steps: $1B to $500B, Rs 5,000 crore to Rs 5
- * lakh crore) over this year's ten biggest gainers and last year's five, both computed for that floor. */
+/** One market on the Winners screen: a market-cap range, from and to (the report's steps: $1B to $500B, Rs 5,000
+ * crore to Rs 5 lakh crore, no maximum) over this year's ten biggest gainers and last year's five, merged from the
+ * report's buckets in that range. */
 export function WinnersMarket({ m }: { m: MarketWinners }) {
-  const bands = bandsOf(m);
-  const [i, setI] = useState(0);
-  const band = bands[Math.min(i, bands.length - 1)]!;
+  const steps = stepsOf(m);
+  const [range, setRange] = useState<CapRange>(fullRange(steps));
+  const band = viewOf(m, range);
+  // "above $5B" or "from $5B to $50B", for the empty lists' words
+  const text = steps.length > 0 ? rangeText(m.market, steps, range) : `Above ${capText(m.market, m.min_cap)}`;
+  const words = text.startsWith("Above") ? text.replace("Above", "above") : `from ${text}`;
   const id = useId();
   return (
     <section aria-labelledby={`${id}-h`} className="flex flex-col gap-4">
@@ -22,34 +28,17 @@ export function WinnersMarket({ m }: { m: MarketWinners }) {
         <h2 id={`${id}-h`} className="text-[24px] font-bold tracking-[-0.02em] text-fg">
           {marketName(m.market)}
         </h2>
-        {bands.length > 1 ? (
-          <div className="flex w-full max-w-md min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-[20rem]">
-            <label htmlFor={`${id}-cap`} className="flex items-baseline justify-between gap-3 text-[14px] text-muted">
-              <span>Market cap above</span>
-              <span className="num text-[16px] font-bold text-fg">{capText(m.market, band.min_cap)}</span>
-            </label>
-            <input
-              id={`${id}-cap`}
-              type="range"
-              min={0}
-              max={bands.length - 1}
-              step={1}
-              value={i}
-              onChange={(e) => setI(Number(e.target.value))}
-              aria-valuetext={capText(m.market, band.min_cap)}
-              className="w-full accent-accent"
-            />
-            <div aria-hidden="true" className="flex justify-between text-[11px] text-subtle">
-              <span>{capText(m.market, bands[0]!.min_cap)}</span>
-              <span>{capText(m.market, bands.at(-1)!.min_cap)}</span>
-            </div>
-            {m.cap_as_of ? <p className="text-[12px] text-subtle">Market caps as of {shortDate(m.cap_as_of, true)}: the latest close.</p> : null}
-          </div>
-        ) : null}
+        <CapRangeControl
+          market={m.market}
+          steps={steps}
+          value={range}
+          onChange={setRange}
+          note={m.cap_as_of ? `Market caps as of ${shortDate(m.cap_as_of, true)}: the latest close.` : undefined}
+        />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
-        <Leaders m={m} band={band} />
-        <LastYear m={m} band={band} />
+        <Leaders m={m} band={band} words={words} />
+        <LastYear m={m} band={band} words={words} />
       </div>
     </section>
   );
@@ -59,7 +48,7 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-tile border border-dashed border-line-strong px-4 py-6 text-center text-[14px] text-muted">{children}</p>;
 }
 
-function Leaders({ m, band }: { m: MarketWinners; band: CapBand }) {
+function Leaders({ m, band, words }: { m: MarketWinners; band: CapView; words: string }) {
   return (
     <div className="sheet flex min-w-0 flex-col gap-4 p-5 md:p-6">
       <div className="flex flex-col gap-0.5">
@@ -67,7 +56,7 @@ function Leaders({ m, band }: { m: MarketWinners; band: CapBand }) {
         <p className="text-[13px] text-muted">The biggest gainers this year: next January&apos;s list if the pattern holds.</p>
       </div>
       {band.leaders.length === 0 ? (
-        <Empty>No company above {capText(m.market, band.min_cap)} has a price for this year yet.</Empty>
+        <Empty>No company {words} has a price for this year yet.</Empty>
       ) : (
         <ol className="flex flex-col gap-1.5">
           {band.leaders.map((p, n) => (
@@ -99,7 +88,7 @@ function Leaders({ m, band }: { m: MarketWinners; band: CapBand }) {
   );
 }
 
-function LastYear({ m, band }: { m: MarketWinners; band: CapBand }) {
+function LastYear({ m, band, words }: { m: MarketWinners; band: CapView; words: string }) {
   const ty = band.this_year;
   const n = band.top.length;
   return (
@@ -121,7 +110,7 @@ function LastYear({ m, band }: { m: MarketWinners; band: CapBand }) {
         </div>
       ) : null}
       {n === 0 ? (
-        <Empty>No company above {capText(m.market, band.min_cap)} cleared the bar for {m.year}.</Empty>
+        <Empty>No company {words} cleared the bar for {m.year}.</Empty>
       ) : (
         <div className="flex flex-col gap-1.5">
           <div aria-hidden="true" className="flex items-center gap-3 px-3 text-[11px] font-semibold tracking-[0.06em] text-subtle uppercase">

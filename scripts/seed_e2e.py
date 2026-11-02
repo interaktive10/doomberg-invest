@@ -112,6 +112,11 @@ The holding company trades at a wide discount to the value of its listed stakes 
 """
 
 
+def cap_bucket(cap: float, steps: list[float]) -> int:
+    """Which market-cap bucket a cap is in: [step, next step), the last open-ended (pipeline/reports/winners.py)."""
+    return max(i for i, f in enumerate(steps) if i == 0 or cap >= f)
+
+
 def quarters() -> list[tuple[date, float]]:
     ends = [date(2024, 9, 30), date(2024, 12, 31), date(2025, 3, 31), date(2025, 6, 30), date(2025, 9, 30),
             date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]  # fmt: skip
@@ -369,7 +374,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
                      lead(KAPPA, "KAPPA", "Kappa Cables Ltd", "Capital Goods", -0.02)],
          "this_year": {"through": "2026-09-18", "picks": 0.15, "average": 0.06, "stocks": 900}, "backtest": None},
     ]}  # fmt: skip
-    # market caps and the slider's steps (pipeline/reports/winners.py CAP_STEPS): each step keeps the names above it
+    # market caps and the range's buckets (pipeline/reports/winners.py CAP_STEPS): [step, next step), the last open
     caps = {"SGMA": 3e9, "ECHO": 2.4e11, "LMNW": 8e9, "OMGA": 6e10, "DLTP": 1.5e9, "TARAPUMP": 7e10, "KAPPA": 2.2e12}
     steps = {
         "us": [1e9, 2e9, 5e9, 1e10, 2e10, 5e10, 1e11, 2e11, 5e11],
@@ -379,13 +384,17 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         m["cap_as_of"] = "2026-09-18"
         for row in [*m["top"], *m["leaders"]]:
             row["cap"] = caps[row["code"]]
-        m["bands"] = [{"min_cap": f, "top": [r for r in m["top"] if r["cap"] >= f],
-                       "leaders": [r for r in m["leaders"] if r["cap"] >= f], "this_year": m["this_year"]}
-                      for f in steps[m["market"]]]  # fmt: skip
+        st = steps[m["market"]]
+        m["buckets"] = [{"min_cap": f, "max_cap": st[i + 1] if i + 1 < len(st) else None,
+                         "top": [r for r in m["top"] if cap_bucket(r["cap"], st) == i],
+                         "leaders": [r for r in m["leaders"] if cap_bucket(r["cap"], st) == i],
+                         "ytd_sum": 0.06 * 100, "ytd_n": 100} for i, f in enumerate(st)]  # fmt: skip
     x("insert into reports (name, week_end, body) values ('winners', %s, %s)", (W, json.dumps(winners)))
 
     # the theme library (pipeline/reports/themes.py's v2 body; docs/SPEC_ISSUES.md 68): the Themes screen
     chart = [[f"{2016 + i // 12}-{i % 12 + 1:02d}", 16.0 + (i % 24) / 10] for i in range(120)]
+
+    NAME_CAPS = {"ECHO": 2.4e11, "SGMA": 3e9, "TARAPUMP": 7e10}
 
     def name(
         cid: str, code: str, nm: str, market: str, ind: str, ev: float, bucket: str, move: float
@@ -400,6 +409,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
             "bucket": bucket,
             "move": move,
             "demand": True,
+            "cap": NAME_CAPS.get(code),  # the company list's market-cap range (2026-11-02)
         }
 
     def theme(
@@ -471,6 +481,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
             },
             names=[
                 name(ECHO, "ECHO", "Echo Grid Corp.", "us", "Motor Vehicle Parts", 73, "candidate", 0.31),
+                name(SIGMA, "SGMA", "Sigma Holdings Inc.", "us", "Motor Vehicle Parts", 40, "watch", 0.04),
                 name(TARA, "TARAPUMP", "Tara Pumps Ltd", "in", "Automobile and Auto Components", 50, "watch", 0.02),
             ],
             notes=[{"week": "2026-09-04", "decision": "keep", "text": "The 2022 cohort is due and parts makers lag."}],

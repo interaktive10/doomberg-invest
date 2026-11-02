@@ -133,3 +133,14 @@ def test_the_settings_model_list_is_the_configs() -> None:
         assert re.search(rf'effort: \{{[^}}]*{task}: "{doc["reasoning"][task]}"', ts)
     default = next(c for c in doc["choices"] if c["id"] == doc["models"]["card"])
     assert all(c["in"] <= default["in"] and c["out"] <= default["out"] for c in doc["choices"])  # never dearer
+
+
+def test_the_market_cap_steps_are_the_winners_reports() -> None:
+    """2026-11-02: every stock list's market-cap range (web/lib/caps.ts) uses pipeline/reports/winners.py's steps."""
+    from pipeline.reports.winners import CAP_STEPS
+
+    ts = (WEB / "lib" / "caps.ts").read_text(encoding="utf-8")
+    for market, unit in (("us", 1e9), ("in", 1e10)):
+        m = re.search(rf"{market}: \[([\d, ]+)\]\.map\(\(x\) => x \* (1e\d+)\)", ts)
+        assert m and float(m.group(2)) == unit
+        assert [float(x) * unit for x in m.group(1).split(",")] == [float(x) for x in CAP_STEPS[market]]

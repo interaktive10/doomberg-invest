@@ -53,7 +53,7 @@ MAX_STEP_IN = Decimal(1)  # a week up 100%: an unadjusted consolidation or a bad
 TOLERANCE_DAYS = {"us": 0, "in": 10}  # month-ends are exact; a week-end within 10 days of the year's end
 LAB_ASSET = "lab_us_month_prices"
 CAP_DAYS = 45  # a market cap "today" needs a close this recent (the US closes are month-ends)
-# the Winners screen's market-cap slider (2026-11-02): each step's own lists, the floor first
+# the Winners screen's market-cap range (2026-11-02): a bucket between each step and the next, the last open-ended
 CAP_STEPS = {
     "us": [Decimal(x) * 10**9 for x in (1, 2, 5, 10, 20, 50, 100, 200, 500)],  # $1B .. $500B
     "in": [Decimal(x) * 10**10 for x in (5, 10, 20, 50, 100, 200, 500)],  # Rs 5,000 crore .. Rs 5 lakh crore
@@ -278,6 +278,14 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
         """The floor step keeps the report's own rules; a higher step needs a market cap today above it."""
         return floor == MIN_CAP[market] or caps.get(cid, Decimal(0)) >= floor
 
+    steps = CAP_STEPS[market]
+
+    def bucket_of(cid: UUID) -> int:
+        """Which step's bucket a company's market cap today falls in: [step i, step i+1), the last open-ended; one
+        with no cap today (or under the second step) is in the floor's bucket, as the floor step keeps it."""
+        cap = caps.get(cid)
+        return 0 if cap is None else max(i for i, s in enumerate(steps) if i == 0 or cap >= s)
+
     def row(p: Pick, key: str) -> dict[str, Any]:
         c = companies[p.company_id]
         cap = caps.get(p.company_id)
@@ -299,11 +307,22 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
                               "picks": fmean(picks_ytd) if picks_ytd else None,
                               "average": fmean(pool_ytd) if pool_ytd else None, "stocks": len(pool_ytd)}}  # fmt: skip
 
-    bands = [band(f) for f in CAP_STEPS[market]]
+    def bucket(i: int) -> dict[str, Any]:
+        """One bucket's own lists, so the screen can merge any range of buckets (2026-11-02: a min and a max): each
+        bucket's best five and ten hold the best of any union of buckets; the average stock is a sum and a count."""
+        mine = [p for p in picks if bucket_of(p.company_id) == i][:TOP]
+        ytds = [r for cid in pool if bucket_of(cid) == i and (r := ytd(cid)) is not None]
+        return {"min_cap": float(steps[i]), "max_cap": float(steps[i + 1]) if i + 1 < len(steps) else None,
+                "top": [row(p, "ret") for p in mine],
+                "leaders": [row(p, "ytd") for p in [p for p in leaders_all if bucket_of(p.company_id) == i][:LEADERS]],
+                "ytd_sum": sum(ytds), "ytd_n": len(ytds)}  # fmt: skip
+
+    floor = band(steps[0])
+    buckets = [bucket(i) for i in range(len(steps))]
     rows = backtest(series, versions, market, 2012, year) if market == "us" else []
     return {"market": market, "year": year, "currency": CURRENCY[market], "priced": len(series), "universe": universe,
             "min_price": float(MIN_PRICE[market]), "min_cap": float(MIN_CAP[market]), "skipped": skipped,
-            "top": bands[0]["top"], "leaders": bands[0]["leaders"], "this_year": bands[0]["this_year"], "bands": bands,
+            "top": floor["top"], "leaders": floor["leaders"], "this_year": floor["this_year"], "buckets": buckets,
             "cap_as_of": max((latest(series[c]) or (date.min, 0))[0] for c in caps).isoformat() if caps else None,
             "backtest": {"rows": rows, "summary": summary(rows)} if rows else None}  # fmt: skip
 

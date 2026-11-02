@@ -14,6 +14,8 @@ export interface ThemeName {
   bucket: string | null;
   move: number | null;
   demand: boolean;
+  /** market cap as of the latest scored week (reports before 2026-11-02 lack it) */
+  cap?: number | null;
 }
 
 export interface ThemeNote {
