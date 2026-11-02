@@ -90,6 +90,8 @@ export interface RetiredTheme {
 export interface ThemesReport {
   version: 2;
   week: string;
+  /** the day the numbers were computed */
+  as_of?: string;
   library: LibraryTheme[];
   retired: RetiredTheme[];
   drivers: Record<string, string>;
@@ -246,5 +248,14 @@ export function basisShort(t: Pick<LibraryTheme, "basis">): string | null {
   if (b.transform === "filings") return b.typical === null ? null : `${Math.round(b.share * 100)}% report rising demand vs ${Math.round(b.typical * 100)}% typical`;
   const vs = b.transform === "yoy" ? "a year before" : "the decade before";
   return `${spanText(b.now.from, b.now.to)}: ${changeWords(b.change)} ${vs}`;
+}
+
+/** The "Rethink now" button's state (docs/SPEC_ISSUES.md 76): once a day (UTC, the pipeline's day), and not while a
+ * request waits. */
+export function rethinkState(lastRethink: string | null, requestedAt: string | null, now: Date): { kind: "ready" | "pending" | "done_today"; since?: string } {
+  const today = now.toISOString().slice(0, 10);
+  if (lastRethink === today) return { kind: "done_today" };
+  if (requestedAt) return { kind: "pending", since: requestedAt };
+  return { kind: "ready" };
 }
 

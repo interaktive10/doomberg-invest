@@ -826,6 +826,16 @@ def recent_reports(conn: Conn, name: str, before: date, limit: int) -> list[tupl
     return [(r[0], r[1]) for r in rows]
 
 
+def app_setting(conn: Conn, key: str) -> Any:
+    """An app_settings value (JSON), or None."""
+    row = conn.execute(_q("select value from app_settings where key = %s"), (key,)).fetchone()
+    return row[0] if row else None
+
+
+def clear_app_setting(conn: Conn, key: str) -> None:
+    conn.execute(_q("delete from app_settings where key = %s"), (key,))
+
+
 def market_caps(conn: Conn) -> dict[UUID, Decimal]:
     """Each company's market cap as of its latest scored week (company_metrics; dollars for the US, rupees for
     India): what the stock lists' market-cap range reads."""

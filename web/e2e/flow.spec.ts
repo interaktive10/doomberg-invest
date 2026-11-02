@@ -411,3 +411,17 @@ test("Themes: the data behind a theme opens from its info button (2026-11-02)", 
   await expect(page.getByText(/Highest year of the last 20: 2016 \(17\.9 million a year\)/)).toBeVisible();
 });
 
+test("every screen shows today's date and how fresh its data is; Themes can ask for a rethink (2026-11-02)", async ({ page }) => {
+  for (const path of ["/", "/candidates", "/winners", "/themes"]) {
+    await page.goto(path);
+    await expect(page.getByText(/^Today (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{4}$/)).toBeVisible();
+    await expect(page.getByText(/Next update (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}/)).toBeVisible();
+  }
+  await page.goto("/themes");
+  await expect(page.getByText(/themes tracked/)).toBeVisible();
+  await page.getByRole("button", { name: "Rethink now" }).click();
+  await expect(page.getByText("Rethink requested: the AI rethinks the themes within about 15 minutes.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rethink now" })).toBeDisabled();
+  await expect(page.getByText("On its way: within about 15 minutes")).toBeVisible();
+});
+

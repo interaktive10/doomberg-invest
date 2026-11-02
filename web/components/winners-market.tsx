@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 import { LinkPending } from "@/components/link-pending";
+import { Meter } from "@/components/meter";
 import { shortDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { CapRangeControl } from "@/components/cap-range";
@@ -49,6 +50,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 function Leaders({ m, band, words }: { m: MarketWinners; band: CapView; words: string }) {
+  const top = Math.max(1e-9, ...band.leaders.map((p) => Math.abs(p.ytd)));
   return (
     <div className="sheet flex min-w-0 flex-col gap-4 p-5 md:p-6">
       <div className="flex flex-col gap-0.5">
@@ -76,6 +78,8 @@ function Leaders({ m, band, words }: { m: MarketWinners; band: CapView; words: s
                     {p.sector ?? "No sector"}
                     {p.cap ? ` · ${capText(m.market, p.cap)}` : ""}
                   </span>
+                  {/* the gain as a bar against the list's biggest: decoration beside the number printed on the right */}
+                  <Meter value={Math.abs(p.ytd)} max={top} tone={p.ytd >= 0 ? "up" : "down"} className="mt-1.5 max-w-56" />
                 </span>
                 <span className={cn("num shrink-0 text-[20px] font-bold tracking-[-0.02em]", gainTone(p.ytd))}>{signedPct(p.ytd)}</span>
                 <LinkPending />
