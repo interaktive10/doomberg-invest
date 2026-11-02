@@ -144,3 +144,12 @@ def test_the_market_cap_steps_are_the_winners_reports() -> None:
         m = re.search(rf"{market}: \[([\d, ]+)\]\.map\(\(x\) => x \* (1e\d+)\)", ts)
         assert m and float(m.group(2)) == unit
         assert [float(x) * unit for x in m.group(1).split(",")] == [float(x) for x in CAP_STEPS[market]]
+
+
+def test_the_screens_next_update_reads_the_workflows_crons() -> None:
+    """docs/SPEC_ISSUES.md 76: web/lib/schedule.ts names the next update from the crons the workflows run."""
+    ts = (WEB / "lib" / "schedule.ts").read_text(encoding="utf-8")
+    for key, wf in (("weekly", "weekly.yml"), ("closes", "closes.yml"), ("daily", "daily.yml")):
+        doc = yaml.safe_load((ROOT / ".github" / "workflows" / wf).read_text(encoding="utf-8"))
+        cron = doc[True]["schedule"][0]["cron"]
+        assert re.search(rf'{key}: "{re.escape(cron)}"', ts), (key, cron)

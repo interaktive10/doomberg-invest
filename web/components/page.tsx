@@ -1,33 +1,43 @@
 import type { ReactNode } from "react";
 import { Callout } from "@/components/callout";
 import { cn } from "@/lib/utils";
+import { dayDate } from "@/lib/dates";
+import { istDate } from "@/lib/discipline";
 import { countPillTone } from "@/lib/visual";
 
 /** The width every screen, the header and the footer share: 1160 px, with a 16 px gutter on a phone. */
 export const FRAME = "mx-auto w-full max-w-[1160px] px-4 md:px-8";
 
-/** A screen: an eyebrow ("Week 42"), the h1, one line under it that leads with the answer, actions on the right; then
- * its sheets, 24 px apart. */
+/** A screen: today's date and an eyebrow ("Week 42"), the h1, one line under it that leads with the answer, how fresh
+ * its data is, actions on the right; then its sheets, 24 px apart. */
 export function Page({
   title,
   children,
   actions,
   description,
   eyebrow,
+  freshness,
 }: {
   title: ReactNode;
   children: ReactNode;
   actions?: ReactNode;
   description?: ReactNode;
   eyebrow?: ReactNode;
+  /** a <Freshness> line: what the data runs to and when it updates next */
+  freshness?: ReactNode;
 }) {
   return (
     <main id="main" className={cn(FRAME, "flex flex-col gap-6 pt-3 pb-8 md:pt-4")}>
       <div className="rise flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="flex min-w-0 flex-col gap-1.5">
-          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            {eyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
+            {eyebrow ? <span aria-hidden="true" className="text-subtle">·</span> : null}
+            <span className="num text-[12px] font-semibold tracking-[0.04em] text-subtle uppercase">Today {todayText(new Date())}</span>
+          </p>
           <h1 className="text-[32px] leading-[1.1] font-bold tracking-[-0.03em] text-fg md:text-[40px]">{title}</h1>
           {description ? <div className="text-[15px] text-muted md:text-[17px]">{description}</div> : null}
+          {freshness ?? null}
         </div>
         {/* min-w-0 and max-w-full: a switch wider than a phone (Candidates' four buckets) scrolls inside it */}
         {actions ? <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">{actions}</div> : null}
@@ -136,3 +146,34 @@ export function Flash({ error, ok }: { error?: string | undefined; ok?: string |
     </>
   );
 }
+
+/** "Mon, Nov 2, 2026": today in Manzoor's calendar (IST). */
+export function todayText(now: Date): string {
+  const d = istDate(now);
+  return `${dayDate(d)}, ${d.slice(0, 4)}`;
+}
+
+/** How fresh a screen's data is, in one quiet line: "Prices to Fri, Oct 30 · Scores as of Fri, Oct 30 · Next update
+ * Tue, Nov 3". An item without a date is left out. */
+export function Freshness({ items, next }: { items: readonly { label: string; date: string | null | undefined }[]; next?: string | null }) {
+  const shown = items.filter((i): i is { label: string; date: string } => !!i.date);
+  if (shown.length === 0 && !next) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-subtle">
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-up" />
+      {shown.map((i, n) => (
+        <span key={i.label} className="num">
+          {n > 0 ? <span aria-hidden="true" className="pr-2">·</span> : null}
+          {i.label} {dayDate(i.date)}
+        </span>
+      ))}
+      {next ? (
+        <span className="num">
+          {shown.length > 0 ? <span aria-hidden="true" className="pr-2">·</span> : null}
+          Next update {dayDate(next)}
+        </span>
+      ) : null}
+    </p>
+  );
+}
+

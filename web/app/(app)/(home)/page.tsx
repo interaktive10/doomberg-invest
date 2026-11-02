@@ -5,7 +5,7 @@ import { Chip, DotRow } from "@/components/chip";
 import { Disclosure } from "@/components/disclosure";
 import { Icon, type IconName } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
-import { Empty, Page, Section } from "@/components/page";
+import { Empty, Freshness, Page, Section } from "@/components/page";
 import { ScoreRing } from "@/components/score-ring";
 import { TickerTile } from "@/components/ticker-tile";
 import { buttonVariants } from "@/components/ui/button";
@@ -34,6 +34,7 @@ import {
 import { familyTone } from "@/lib/palette";
 import { lateSources } from "@/lib/staleness";
 import { group, markMoved } from "@/lib/theses";
+import { nextRunDate } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { signedPct, topWinner, type WinnersReport } from "@/lib/winners";
 
@@ -81,6 +82,7 @@ export default async function Home() {
       title="This week"
       description={headline({ digest: digest !== null, totals, funnel, legacy })}
       actions={digest ? <AsOf week={digest.week_end} late={late} /> : undefined}
+      freshness={digest ? <Freshness items={[{ label: "Scores as of", date: digest.week_end }]} next={nextRunDate("weekly", new Date())} /> : null}
     >
       <nav aria-label="Shortcuts" className="grid grid-cols-3 gap-3 md:gap-4">
         <Shortcut href="/candidates" icon="tag" tone="value" value={board.length} label="undervalued" sub={watching.length > 0 ? `+${watching.length} on Watch` : "on the board"} i={0} />

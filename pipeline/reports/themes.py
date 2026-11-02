@@ -599,6 +599,22 @@ def build(conn: psycopg.Connection[Any], router: Router | None, http: HttpClient
     return body
 
 
+REQUEST = "themes_rethink_request"  # app_settings: the Themes screen's "Rethink now" ({"at": ...}), once a day
+
+
+def rethink_requested(conn: psycopg.Connection[Any], today: date) -> tuple[bool, str]:
+    """Whether the screen's request should run now: there is one, and the library wasn't already rethought today
+    (then the request is dropped)."""
+    req = repo.app_setting(conn, REQUEST)
+    if not isinstance(req, dict) or not req.get("at"):
+        return False, "no rethink requested"
+    prev = next((b for _, b in repo.recent_reports(conn, "themes", today + timedelta(days=1), 1)), {})
+    if prev.get("last_rethink") == today.isoformat():
+        repo.clear_app_setting(conn, REQUEST)
+        return False, "already rethought today: the request is dropped"
+    return True, "requested on the Themes screen"
+
+
 def main(argv: list[str] | None = None) -> int:
     from pipeline.db import facts_repo
     from pipeline.llm.clients import providers
@@ -607,10 +623,20 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--week", type=date.fromisoformat, default=None, help="the scored week (default: the last Friday)")
     ap.add_argument("--rethink", action="store_true", help="rethink the library now, whatever the calendar says")
+    ap.add_argument("--if-requested", action="store_true",
+                    help="only if the Themes screen asked (research.yml checks every 10 minutes)")  # fmt: skip
     a = ap.parse_args(argv)
     today = datetime.now(UTC).date()
     week = a.week or last_friday(today)
     settings = Settings.from_env()
+    if a.if_requested:
+        with psycopg.connect(settings.database_url) as conn:
+            go, why = rethink_requested(conn, today)
+            if not go:
+                print(f"themes: {why}")
+                return 0
+            repo.clear_app_setting(conn, REQUEST)  # one request, one run, even if this run fails
+        a.rethink = True
     quotas = Quotas.load()
     http = HttpClient(settings)
     with psycopg.connect(settings.database_url) as conn:
