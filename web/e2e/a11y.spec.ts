@@ -22,6 +22,8 @@ for (const scheme of ["light", "dark"] as const) {
       test(`axe and 390 px, ${scheme}: ${path}`, async ({ page }) => {
         await page.goto(path);
         await expect(page.locator("main h1").first()).toBeVisible();
+        // the error screen has an h1 too: a page that crashed must fail here, not pass axe (2026-11-02, /winners)
+        await expect(page.getByText("This screen couldn't load")).toHaveCount(0);
         await page.waitForLoadState("networkidle");
         await check(page);
       });

@@ -348,7 +348,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         (2024, 0.36, 0.15),
         (2025, 0.29, 0.14),
     ]
-    winners = {"as_of": "2026-09-19", "markets": [
+    winners: dict[str, Any] = {"as_of": "2026-09-19", "markets": [
         {"market": "us", "year": 2025, "currency": "USD", "priced": 2649, "universe": 4606, "min_price": 5.0,
          "min_cap": 1e9, "top": [pick(ECHO, "ECHO", "Echo Grid Corp.", "Industrials", 3.12, 0.18),
                                  pick(OMEGA, "OMGA", "Omega Systems Inc.", "Technology", 2.41, -0.07),
@@ -369,6 +369,18 @@ def seed(conn: psycopg.Connection[Any]) -> None:
                      lead(KAPPA, "KAPPA", "Kappa Cables Ltd", "Capital Goods", -0.02)],
          "this_year": {"through": "2026-09-18", "picks": 0.15, "average": 0.06, "stocks": 900}, "backtest": None},
     ]}  # fmt: skip
+    # market caps and the slider's steps (pipeline/reports/winners.py CAP_STEPS): each step keeps the names above it
+    caps = {"SGMA": 3e9, "ECHO": 2.4e11, "LMNW": 8e9, "OMGA": 6e10, "DLTP": 1.5e9, "TARAPUMP": 7e10, "KAPPA": 2.2e12}
+    steps = {
+        "us": [1e9, 2e9, 5e9, 1e10, 2e10, 5e10, 1e11, 2e11, 5e11],
+        "in": [5e10, 1e11, 2e11, 5e11, 1e12, 2e12, 5e12],
+    }
+    for m in winners["markets"]:
+        for row in [*m["top"], *m["leaders"]]:
+            row["cap"] = caps[row["code"]]
+        m["bands"] = [{"min_cap": f, "top": [r for r in m["top"] if r["cap"] >= f],
+                       "leaders": [r for r in m["leaders"] if r["cap"] >= f], "this_year": m["this_year"]}
+                      for f in steps[m["market"]]]  # fmt: skip
     x("insert into reports (name, week_end, body) values ('winners', %s, %s)", (W, json.dumps(winners)))
 
     # the theme library (pipeline/reports/themes.py's v2 body; docs/SPEC_ISSUES.md 68): the Themes screen

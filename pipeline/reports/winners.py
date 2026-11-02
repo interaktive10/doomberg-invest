@@ -52,6 +52,11 @@ MAX_STEP_US = Decimal(3)  # a month up 300%: a bad print
 MAX_STEP_IN = Decimal(1)  # a week up 100%: an unadjusted consolidation or a bad print
 TOLERANCE_DAYS = {"us": 0, "in": 10}  # month-ends are exact; a week-end within 10 days of the year's end
 LAB_ASSET = "lab_us_month_prices"
+# the Winners screen's market-cap slider (2026-11-02): each step's own lists, the floor first
+CAP_STEPS = {
+    "us": [Decimal(x) * 10**9 for x in (1, 2, 5, 10, 20, 50, 100, 200, 500)],  # $1B .. $500B
+    "in": [Decimal(x) * 10**10 for x in (5, 10, 20, 50, 100, 200, 500)],  # Rs 5,000 crore .. Rs 5 lakh crore
+}
 CURRENCY = {"us": "USD", "in": "INR"}
 
 Series = Mapping[UUID, Sequence[tuple[date, Decimal]]]
@@ -63,6 +68,7 @@ class Pick:
     ret: float
     start: Decimal
     end: Decimal
+    cap: Decimal | None = None
 
 
 def close_at(series: Sequence[tuple[date, Decimal]], day: date, tolerance: int) -> Decimal | None:
@@ -112,25 +118,27 @@ def _cutoff(d: date) -> datetime:
 
 
 def year_winners(series: Series, versions: Mapping[UUID, Sequence[FundamentalsRow]], market: str, year: int,
-                 top: int = TOP, skipped: dict[str, int] | None = None) -> list[Pick]:  # fmt: skip
+                 top: int = TOP, skipped: dict[str, int] | None = None,
+                 min_cap: Decimal | None = None) -> list[Pick]:  # fmt: skip
     """The year's `top` gainers among the names investable that year (MIN_PRICE at its start, MIN_CAP at its end);
     `skipped` counts why the others were left out."""
     start, end = date(year - 1, 12, 31), date(year, 12, 31)
     shares = shares_at(versions, _cutoff(end))
     step = MAX_STEP_US if market == "us" else MAX_STEP_IN
+    floor = MIN_CAP[market] if min_cap is None else min_cap
     why = skipped if skipped is not None else {}
     out = []
     for cid, s in series.items():
         a, b = close_at(s, start, TOLERANCE_DAYS[market]), close_at(s, end, TOLERANCE_DAYS[market])
         reason = ("no price at the start" if a is None else "no price at the end" if b is None
                   else "under the price floor" if a < MIN_PRICE[market] else "no share count" if cid not in shares
-                  else "under the size floor" if b * shares[cid] < MIN_CAP[market]
+                  else "under the size floor" if b * shares[cid] < floor
                   else "a jump read as a bad print" if jumpy(s, start, end, step) else None)  # fmt: skip
         if reason is not None:
             why[reason] = why.get(reason, 0) + 1
             continue
         assert a is not None and b is not None
-        out.append(Pick(cid, float(b / a - 1), a, b))
+        out.append(Pick(cid, float(b / a - 1), a, b, b * shares[cid]))
     return sorted(out, key=lambda p: p.ret, reverse=True)[:top]
 
 
@@ -138,7 +146,7 @@ LEADERS = 10
 
 
 def ytd_leaders(series: Series, versions: Mapping[UUID, Sequence[FundamentalsRow]], market: str, year: int,
-                through: date, top: int = LEADERS) -> list[Pick]:  # fmt: skip
+                through: date, top: int = LEADERS, min_cap: Decimal | None = None) -> list[Pick]:  # fmt: skip
     """This year's biggest gainers so far, by the same rules as a year's winners (MIN_PRICE when the year began,
     MIN_CAP at `through` from the shares filed by then, no bad print), through the date most names have a close."""
     start = date(year - 1, 12, 31)
@@ -149,9 +157,9 @@ def ytd_leaders(series: Series, versions: Mapping[UUID, Sequence[FundamentalsRow
         a, b = close_at(s, start, TOLERANCE_DAYS[market]), close_at(s, through, TOLERANCE_DAYS[market])
         if a is None or b is None or a < MIN_PRICE[market] or cid not in shares:
             continue
-        if b * shares[cid] < MIN_CAP[market] or jumpy(s, start, through, step):
+        if b * shares[cid] < (MIN_CAP[market] if min_cap is None else min_cap) or jumpy(s, start, through, step):
             continue
-        out.append(Pick(cid, float(b / a - 1), a, b))
+        out.append(Pick(cid, float(b / a - 1), a, b, b * shares[cid]))
     return sorted(out, key=lambda p: p.ret, reverse=True)[:top]
 
 
@@ -162,13 +170,14 @@ def year_return(s: Sequence[tuple[date, Decimal]], year: int, market: str, throu
 
 
 def investable_at_start(series: Series, versions: Mapping[UUID, Sequence[FundamentalsRow]], market: str,
-                        year: int) -> list[UUID]:  # fmt: skip
+                        year: int, min_cap: Decimal | None = None) -> list[UUID]:  # fmt: skip
     start = date(year - 1, 12, 31)
     shares = shares_at(versions, _cutoff(start))
+    floor = MIN_CAP[market] if min_cap is None else min_cap
     out = []
     for cid, s in series.items():
         a = close_at(s, start, TOLERANCE_DAYS[market])
-        if a is not None and a >= MIN_PRICE[market] and cid in shares and a * shares[cid] >= MIN_CAP[market]:
+        if a is not None and a >= MIN_PRICE[market] and cid in shares and a * shares[cid] >= floor:
             out.append(cid)
     return out
 
@@ -254,26 +263,35 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
     def ytd(cid: UUID) -> float | None:
         return None if through is None else year_return(series[cid], today.year, market, through)
 
-    pool_ytd = [r for cid in pool if (r := ytd(cid)) is not None]
-    top: list[dict[str, Any]] = []
-    for p in picks:
+    def row(p: Pick, key: str) -> dict[str, Any]:
         c = companies[p.company_id]
-        top.append({"company_id": str(p.company_id), "code": c.ticker or c.nse_symbol, "name": c.name,
-                    "sector": c.sector, "ret": p.ret, "start": float(p.start), "end": float(p.end),
-                    "ytd": ytd(p.company_id)})  # fmt: skip
-    picks_ytd = [float(t["ytd"]) for t in top if t["ytd"] is not None]
-    leaders = []
-    for p in ytd_leaders(series, versions, market, today.year, through) if through else []:
-        c = companies[p.company_id]
-        leaders.append({"company_id": str(p.company_id), "code": c.ticker or c.nse_symbol, "name": c.name,
-                        "sector": c.sector, "ytd": p.ret, "start": float(p.start), "end": float(p.end)})  # fmt: skip
+        out = {"company_id": str(p.company_id), "code": c.ticker or c.nse_symbol, "name": c.name, "sector": c.sector,
+               key: p.ret, "start": float(p.start), "end": float(p.end),
+               "cap": float(p.cap) if p.cap is not None else None}  # fmt: skip
+        if key == "ret":
+            out["ytd"] = ytd(p.company_id)
+        return out
+
+    def band(floor: Decimal) -> dict[str, Any]:
+        """Last year's five, this year's ten and the average stock, among companies above `floor`."""
+        top = [row(p, "ret") for p in (picks if floor == MIN_CAP[market]
+                                         else year_winners(series, versions, market, year, min_cap=floor))]  # fmt: skip
+        picks_ytd = [float(t["ytd"]) for t in top if t["ytd"] is not None]
+        pool_ytd = [r for cid in (pool if floor == MIN_CAP[market]
+                                  else investable_at_start(series, versions, market, today.year, min_cap=floor))
+                    if (r := ytd(cid)) is not None]  # fmt: skip
+        leaders = ([row(p, "ytd") for p in ytd_leaders(series, versions, market, today.year, through, min_cap=floor)]
+                   if through else [])  # fmt: skip
+        return {"min_cap": float(floor), "top": top, "leaders": leaders,
+                "this_year": {"through": through.isoformat() if through else None,
+                              "picks": fmean(picks_ytd) if picks_ytd else None,
+                              "average": fmean(pool_ytd) if pool_ytd else None, "stocks": len(pool_ytd)}}  # fmt: skip
+
+    bands = [band(f) for f in CAP_STEPS[market]]
     rows = backtest(series, versions, market, 2012, year) if market == "us" else []
     return {"market": market, "year": year, "currency": CURRENCY[market], "priced": len(series), "universe": universe,
-            "min_price": float(MIN_PRICE[market]), "min_cap": float(MIN_CAP[market]), "top": top, "skipped": skipped,
-            "leaders": leaders,
-            "this_year": {"through": through.isoformat() if through else None,
-                          "picks": fmean(picks_ytd) if picks_ytd else None,
-                          "average": fmean(pool_ytd) if pool_ytd else None, "stocks": len(pool_ytd)},
+            "min_price": float(MIN_PRICE[market]), "min_cap": float(MIN_CAP[market]), "skipped": skipped,
+            "top": bands[0]["top"], "leaders": bands[0]["leaders"], "this_year": bands[0]["this_year"], "bands": bands,
             "backtest": {"rows": rows, "summary": summary(rows)} if rows else None}  # fmt: skip
 
 

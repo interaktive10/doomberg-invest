@@ -10,6 +10,7 @@ export interface WinnerPick {
   start: number;
   end: number;
   ytd: number | null;
+  cap?: number | null;
 }
 
 export interface BacktestRow {
@@ -33,6 +34,13 @@ export interface BacktestSummary {
   worst: number;
 }
 
+export interface CapBand {
+  min_cap: number;
+  top: WinnerPick[];
+  leaders: Leader[];
+  this_year: MarketWinners["this_year"];
+}
+
 export interface Leader {
   company_id: string;
   code: string | null;
@@ -41,6 +49,7 @@ export interface Leader {
   ytd: number;
   start: number;
   end: number;
+  cap?: number | null;
 }
 
 export interface MarketWinners {
@@ -54,6 +63,8 @@ export interface MarketWinners {
   top: WinnerPick[];
   /** this year's biggest gainers so far (reports before 2026-11-01 lack it) */
   leaders?: Leader[];
+  /** the slider's steps, the floor first (reports before 2026-11-02 lack them) */
+  bands?: CapBand[];
   this_year: { through: string | null; picks: number | null; average: number | null; stocks: number };
   backtest: { rows: BacktestRow[]; summary: BacktestSummary | null } | null;
 }
@@ -73,8 +84,21 @@ export function signedPct(v: number | null | undefined): string {
 
 /** "$1.2B" / "Rs 5,000 crore": the size floor in the market's own words. */
 export function capFloor(m: Pick<MarketWinners, "market" | "min_cap">): string {
-  if (m.market === "in") return `Rs ${Math.round(m.min_cap / 1e7).toLocaleString("en-US")} crore`;
-  return m.min_cap >= 1e9 ? `$${(m.min_cap / 1e9).toLocaleString("en-US", { maximumFractionDigits: 1 })}B` : `$${Math.round(m.min_cap / 1e6)}M`;
+  return capText(m.market, m.min_cap);
+}
+
+/** A market cap in the market's words: "$1B", "$1.2T", "Rs 5,000 crore", "Rs 2 lakh crore". */
+export function capText(market: "us" | "in", v: number): string {
+  const n = (x: number) => x.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  if (market === "in") return v >= 1e12 ? `Rs ${n(v / 1e12)} lakh crore` : `Rs ${Math.round(v / 1e7).toLocaleString("en-US")} crore`;
+  if (v >= 1e12) return `$${n(v / 1e12)}T`;
+  return v >= 1e9 ? `$${n(v / 1e9)}B` : `$${Math.round(v / 1e6)}M`;
+}
+
+/** The slider's steps: the report's bands, or one band from an older report's single lists. */
+export function bandsOf(m: MarketWinners): CapBand[] {
+  if (m.bands && m.bands.length > 0) return m.bands;
+  return [{ min_cap: m.min_cap, top: m.top, leaders: m.leaders ?? [], this_year: m.this_year }];
 }
 
 export type Verdict = { tone: "up" | "down" | "flat"; title: string; line: string };
@@ -89,6 +113,12 @@ export function verdict(s: BacktestSummary): Verdict {
   if (edge >= 0.02 && s.beat * 2 > s.years) return { tone: "up", title: "It worked", line: `${rates}; ahead in ${years}.` };
   if (edge <= -0.02) return { tone: "down", title: "It didn't work", line: `${rates}; ahead in only ${years}.` };
   return { tone: "flat", title: "A wash", line: `${rates}; ahead in ${years}.` };
+}
+
+/** Gains green, losses red: the one meaning colour carries on the Winners screen. A pure helper, so the server page
+ * and the client slider can both call it (a function exported from a "use client" file can't run on the server). */
+export function gainTone(v: number | null | undefined): string {
+  return v === null || v === undefined ? "text-subtle" : v >= 0 ? "text-up" : "text-down";
 }
 
 /** What $100 became: "$100 -> $412". */
