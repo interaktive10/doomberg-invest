@@ -657,11 +657,31 @@ def _hype(card: Mapping[str, Any], words: Sequence[str]) -> list[str]:
     return found
 
 
-def card_fields(answer: Mapping[str, Any]) -> dict[str, Any]:
+def card_fields(answer: Mapping[str, Any], pack: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """P-04's answer with only the card's own fields (2026-11-02: DeepSeek added a `card_type` key, which the strict
     schema rejects). A field outside the schema is never rendered or stored, so dropping it changes nothing the
-    validator checks; every field the card has is still validated."""
-    return {k: val for k, val in answer.items() if k in Card.model_fields}
+    validator checks; every field the card has is still validated. With the pack, every figure in an inference or
+    assumption the model left unmarked is marked "(assumed)" (mark_assumed)."""
+    out = {k: val for k, val in answer.items() if k in Card.model_fields}
+    if pack is not None:
+        year = date.fromisoformat(str(pack["week_end"])).year
+        for section in ("inferences", "assumptions"):
+            items = out.get(section)
+            if isinstance(items, list):
+                out[section] = [mark_assumed(t, (year - 30, year + 15)) if isinstance(t, str) else t for t in items]
+    return out
+
+
+def mark_assumed(text: str, years: tuple[int, int] = (1900, 2100)) -> str:
+    """Every figure in an inference or assumption followed by "(assumed)" where it isn't already (docs/SPEC_ISSUES.md
+    70: DeepSeek, told so in the prompt and the schema, still leaves computed figures like 0.2755 unmarked). The rule
+    is that a reader never takes such a figure for a checked one; marking it is what the rule asks for, and the
+    validator still checks the marked text. Figures in facts and why_mispriced are never marked: those must match the
+    pack."""
+    for p in reversed(sentence_numbers(text, years)):
+        if not ASSUMED.match(text[p.end :]):
+            text = f"{text[: p.end]} (assumed){text[p.end :]}"
+    return text
 
 
 def validate(

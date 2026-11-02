@@ -127,7 +127,7 @@ def write_one(conn: psycopg.Connection[Any], router: Router, key: str, pack: Map
         if isinstance(answer, Deferred):
             stats.deferred.append(key)
             return
-        content = v.card_fields(answer.content)
+        content = v.card_fields(answer.content, pack)
         res = v.validate(content, pack, words, router)
         if res.ok:
             c = pack["company"]

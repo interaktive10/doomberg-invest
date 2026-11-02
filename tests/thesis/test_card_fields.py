@@ -19,3 +19,27 @@ def test_an_extra_key_is_dropped_and_the_card_still_validates_strictly() -> None
     assert not v.validate(noisy, pack, []).ok  # the schema stays strict
     clean = card_fields(noisy)
     assert clean == good and v.validate(clean, pack, []).ok
+
+
+def test_unmarked_figures_in_inferences_and_assumptions_are_marked_assumed() -> None:
+    """docs/SPEC_ISSUES.md 70: a figure the model left unmarked gets "(assumed)"; a marked one is left alone; facts and
+    why_mispriced are untouched (those figures must match the pack)."""
+    from pipeline.thesis.validate import ASSUMED, card_fields, mark_assumed, sentence_numbers
+
+    text = (
+        "Inference: margins reach 0.2755, and the $600 million order converts over the years at 12% (assumed) a year."
+    )
+    out = mark_assumed(text)
+    assert out == ("Inference: margins reach 0.2755 (assumed), and the $600 million (assumed) order converts over the "
+                   "years at 12% (assumed) a year.")  # fmt: skip
+    assert all(ASSUMED.match(out[p.end :]) for p in sentence_numbers(out))
+    assert mark_assumed(out) == out  # idempotent
+    doc = {
+        "inferences": [text],
+        "assumptions": ["Assumption: 3 plants by 2028."],
+        "why_mispriced": [{"text": "Up 5%."}],
+    }
+    got = card_fields(doc, {"week_end": "2026-10-30"})
+    assert got["inferences"] == [out]
+    assert got["assumptions"] == ["Assumption: 3 (assumed) plants by 2028."]  # 2028 reads as a year, not a figure
+    assert got["why_mispriced"] == [{"text": "Up 5%."}]
