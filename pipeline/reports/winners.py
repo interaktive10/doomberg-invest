@@ -52,6 +52,7 @@ MAX_STEP_US = Decimal(3)  # a month up 300%: a bad print
 MAX_STEP_IN = Decimal(1)  # a week up 100%: an unadjusted consolidation or a bad print
 TOLERANCE_DAYS = {"us": 0, "in": 10}  # month-ends are exact; a week-end within 10 days of the year's end
 LAB_ASSET = "lab_us_month_prices"
+CAP_DAYS = 45  # a market cap "today" needs a close this recent (the US closes are month-ends)
 # the Winners screen's market-cap slider (2026-11-02): each step's own lists, the floor first
 CAP_STEPS = {
     "us": [Decimal(x) * 10**9 for x in (1, 2, 5, 10, 20, 50, 100, 200, 500)],  # $1B .. $500B
@@ -253,7 +254,8 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
                   universe: int) -> dict[str, Any]:  # fmt: skip
     year = today.year - 1
     skipped: dict[str, int] = {}
-    picks = year_winners(series, versions, market, year, skipped=skipped)
+    # every qualifier at the floor, best first: a slider step keeps those whose market cap today clears it
+    picks = year_winners(series, versions, market, year, top=len(series), skipped=skipped)
     # this year so far: through the latest close most of the investable names have (month-ends for the US)
     pool = investable_at_start(series, versions, market, today.year)
     ends = sorted((last[0] for cid in pool if (last := latest(series[cid])) is not None and last[0].year == today.year),
@@ -263,25 +265,35 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
     def ytd(cid: UUID) -> float | None:
         return None if through is None else year_return(series[cid], today.year, market, through)
 
+    # market caps today: the latest close (within CAP_DAYS) times the shares of the latest quarter filed by today
+    now_shares = shares_at(versions, _cutoff(today))
+    caps: dict[UUID, Decimal] = {}
+    for cid, s in series.items():
+        last = latest(s)
+        if last is not None and (today - last[0]).days <= CAP_DAYS and cid in now_shares:
+            caps[cid] = last[1] * now_shares[cid]
+    leaders_all = ytd_leaders(series, versions, market, today.year, through, top=len(series)) if through else []
+
+    def above(cid: UUID, floor: Decimal) -> bool:
+        """The floor step keeps the report's own rules; a higher step needs a market cap today above it."""
+        return floor == MIN_CAP[market] or caps.get(cid, Decimal(0)) >= floor
+
     def row(p: Pick, key: str) -> dict[str, Any]:
         c = companies[p.company_id]
+        cap = caps.get(p.company_id)
         out = {"company_id": str(p.company_id), "code": c.ticker or c.nse_symbol, "name": c.name, "sector": c.sector,
                key: p.ret, "start": float(p.start), "end": float(p.end),
-               "cap": float(p.cap) if p.cap is not None else None}  # fmt: skip
+               "cap": float(cap) if cap is not None else None}  # fmt: skip
         if key == "ret":
             out["ytd"] = ytd(p.company_id)
         return out
 
     def band(floor: Decimal) -> dict[str, Any]:
         """Last year's five, this year's ten and the average stock, among companies above `floor`."""
-        top = [row(p, "ret") for p in (picks if floor == MIN_CAP[market]
-                                         else year_winners(series, versions, market, year, min_cap=floor))]  # fmt: skip
+        top = [row(p, "ret") for p in [p for p in picks if above(p.company_id, floor)][:TOP]]
         picks_ytd = [float(t["ytd"]) for t in top if t["ytd"] is not None]
-        pool_ytd = [r for cid in (pool if floor == MIN_CAP[market]
-                                  else investable_at_start(series, versions, market, today.year, min_cap=floor))
-                    if (r := ytd(cid)) is not None]  # fmt: skip
-        leaders = ([row(p, "ytd") for p in ytd_leaders(series, versions, market, today.year, through, min_cap=floor)]
-                   if through else [])  # fmt: skip
+        pool_ytd = [r for cid in pool if above(cid, floor) and (r := ytd(cid)) is not None]
+        leaders = [row(p, "ytd") for p in [p for p in leaders_all if above(p.company_id, floor)][:LEADERS]]
         return {"min_cap": float(floor), "top": top, "leaders": leaders,
                 "this_year": {"through": through.isoformat() if through else None,
                               "picks": fmean(picks_ytd) if picks_ytd else None,
@@ -292,6 +304,7 @@ def market_report(market: str, companies: Mapping[UUID, Company], series: Series
     return {"market": market, "year": year, "currency": CURRENCY[market], "priced": len(series), "universe": universe,
             "min_price": float(MIN_PRICE[market]), "min_cap": float(MIN_CAP[market]), "skipped": skipped,
             "top": bands[0]["top"], "leaders": bands[0]["leaders"], "this_year": bands[0]["this_year"], "bands": bands,
+            "cap_as_of": max((latest(series[c]) or (date.min, 0))[0] for c in caps).isoformat() if caps else None,
             "backtest": {"rows": rows, "summary": summary(rows)} if rows else None}  # fmt: skip
 
 

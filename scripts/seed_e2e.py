@@ -376,6 +376,7 @@ def seed(conn: psycopg.Connection[Any]) -> None:
         "in": [5e10, 1e11, 2e11, 5e11, 1e12, 2e12, 5e12],
     }
     for m in winners["markets"]:
+        m["cap_as_of"] = "2026-09-18"
         for row in [*m["top"], *m["leaders"]]:
             row["cap"] = caps[row["code"]]
         m["bands"] = [{"min_cap": f, "top": [r for r in m["top"] if r["cap"] >= f],

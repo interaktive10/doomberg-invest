@@ -365,5 +365,6 @@ test("Winners: this year's leaders first, and the market-cap slider narrows both
   await expect(us.getByRole("link", { name: /SGMA/ })).toHaveCount(0);
   await expect(us.getByRole("link", { name: /ECHO Echo Grid Corp\./ })).toHaveCount(2); // a leader this year and last year's top
   await expect(us).toContainText("$240B");
+  await expect(us).toContainText("Market caps as of Sep 18, 2026");
 });
 

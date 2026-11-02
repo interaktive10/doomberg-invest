@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 import { LinkPending } from "@/components/link-pending";
+import { shortDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { bandsOf, capText, gainTone, marketName, signedPct, type CapBand, type MarketWinners } from "@/lib/winners";
 
@@ -42,6 +43,7 @@ export function WinnersMarket({ m }: { m: MarketWinners }) {
               <span>{capText(m.market, bands[0]!.min_cap)}</span>
               <span>{capText(m.market, bands.at(-1)!.min_cap)}</span>
             </div>
+            {m.cap_as_of ? <p className="text-[12px] text-subtle">Market caps as of {shortDate(m.cap_as_of, true)}: the latest close.</p> : null}
           </div>
         ) : null}
       </div>
