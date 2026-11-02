@@ -17,7 +17,7 @@ providers:
   openrouter:
     base_url: https://openrouter.ai/api/v1       # the ONLY base_url an OpenAI(...) client may use (guard)
     # DeepSeek V4.1 Flash 1017, paid ($0.15/M in, $0.60/M out on 2026-11-01; Manzoor's choice: docs/SPEC_ISSUES.md 63)
-    models: {extract: deepseek/deepseek-v4.1-flash-1017, card: deepseek/deepseek-v4.1-flash-1017}
+    models: {extract: deepseek/deepseek-v4.1-flash-1017, card: anthropic/claude-haiku-5.5}
     # high effort where the model reasons (cards, claim checks, themes); low where it looks things up (extraction,
     # triage, links): high on ~400 extraction calls a day would take the daily run past its time limit
     reasoning: {card: high, extract: medium}
