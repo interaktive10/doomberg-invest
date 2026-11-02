@@ -33,3 +33,15 @@ def test_a_customer_win_with_a_value_or_another_partner_or_sentence_stays() -> N
             replace(fact("customer_win"), quote="Nimbus Compute signed on as a customer.")]  # fmt: skip
     kept, merged = one_relationship([(link, "m"), *[(k, "m") for k in keep]])
     assert merged == 0 and len(kept) == 4
+
+
+def test_capacity_that_is_sold_out_is_demand_not_capacity_added() -> None:
+    from pipeline.facts.verify1 import kind_problem
+
+    sold = "Transformer, turbine and switchgear capacity is sold out through 2027 across the industry."
+    assert kind_problem("capacity_addition", "capacity_addition:x", sold) == (
+        True, "capacity that is sold out or full is demand, not capacity added")  # fmt: skip
+    assert (
+        kind_problem("capacity_addition", "capacity_addition:x", "We are adding a plant as capacity is sold out.")
+        is None
+    )

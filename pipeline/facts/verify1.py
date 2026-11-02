@@ -182,6 +182,12 @@ CUSTOMER = re.compile(
     r"|\bselected\b|\bchose\b|\bawards?\b|\bawarded\b|\bcontracts?\b|\bwins?\b|\bwon\b|\bonboard\w*",
     re.I,
 )
+# capacity that is full is demand, not capacity added (2026-11-02, F-SYN on DeepSeek: "Transformer, turbine and
+# switchgear capacity is sold out through 2027 across the industry")
+SOLD_OUT = re.compile(
+    r"\bsold\s+out\b|\bfully\s+(?:booked|utili[sz]ed|allocated)\b|\bat\s+(?:full\s+)?capacity\b|\bbooked\s+(?:out|through)\b",
+    re.I,
+)
 FINANCING = re.compile(
     r"\bborrow\w*|\bcredit\s+(?:agreements?|facilit(?:y|ies)|lines?)\b|\brevolv(?:er|ers|ing)\b|\bterm\s+loans?\b"
     r"|\bloans?\b|\bdebt\b",
@@ -229,6 +235,8 @@ def kind_problem(fact_type: str, subject_key: str, quote: str, unit: str | None 
             return True, "a credit facility's borrowing capacity is financing, not capacity"
         if unit == "usd":
             return False, "capacity is MW, square feet, plants or sites, not money"
+        if SOLD_OUT.search(quote) and not ADDED.search(quote):
+            return True, "capacity that is sold out or full is demand, not capacity added"
         if not ADDED.search(quote):
             return False, "the quote doesn't say capacity is added"
     elif fact_type == "lead_time" and not LEAD_TIME.search(quote):

@@ -489,23 +489,27 @@ def units_by_id(pack: Mapping[str, Any]) -> dict[str, str]:
 # ---------------------------------------------------------------- router inputs (public data)
 
 
+# The counts validate.py's Card enforces, stated in the schema too (2026-11-02: DeepSeek, held to the schema, still
+# wrote 11 facts and a 70-word summary when the counts were only in the prompt).
 CARD_SCHEMA = obj({
-    "summary": {"type": "string"},
-    "facts": {"type": "array", "items": obj({"text": {"type": "string"},
-                                              "cites": {"type": "array", "items": {"type": "string"}}})},
-    "why_mispriced": {"type": "array", "items": obj({"text": {"type": "string"},
-                                                      "cites": {"type": "array", "items": {"type": "string"}}})},
-    "inferences": {"type": "array", "items": {"type": "string"}},
-    "assumptions": {"type": "array", "items": {"type": "string"}},
-    "risks": {"type": "array", "items": obj({"text": {"type": "string"},
-                                              "cites": {"type": "array", "items": {"type": "string"}}})},
-    "kill_criteria": {"type": "array", "items": obj({
+    "summary": {"type": "string", "description": "At most 60 words."},
+    "facts": {"type": "array", "minItems": 3, "maxItems": 8,
+              "items": obj({"text": {"type": "string"}, "cites": {"type": "array", "items": {"type": "string"}}})},
+    "why_mispriced": {"type": "array", "minItems": 1, "maxItems": 4,
+                      "items": obj({"text": {"type": "string"},
+                                    "cites": {"type": "array", "items": {"type": "string"}}})},
+    "inferences": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string"}},
+    "assumptions": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "string"}},
+    "risks": {"type": "array", "minItems": 2, "maxItems": 5,
+              "items": obj({"text": {"type": "string"}, "cites": {"type": "array", "items": {"type": "string"}}})},
+    "kill_criteria": {"type": "array", "minItems": 2, "maxItems": 4, "items": obj({
         "metric_id": {"type": "string"},
         "operator": {"type": "string", "enum": ["<", "<=", ">", ">=", "==", "changes"]},
         "threshold": {"type": "number", "nullable": True},
         "check_after": {"type": "string"},
         "why": {"type": "string"}})},
-    "read_next": {"type": "array", "items": obj({"title": {"type": "string"}, "url": {"type": "string"}})},
+    "read_next": {"type": "array", "minItems": 1, "maxItems": 3,
+                  "items": obj({"title": {"type": "string"}, "url": {"type": "string"}})},
 })  # fmt: skip
 
 
