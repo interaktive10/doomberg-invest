@@ -96,11 +96,21 @@ def extract_document(meta: DocMeta, norm: Normalized, router: Router, xbrl: Xbrl
 
 
 def one_relationship(facts: list[tuple[Candidate, str]]) -> tuple[list[tuple[Candidate, str]], int]:
-    """One sentence about one named partner is one fact (2026-11-02, F-SYN on DeepSeek): a value-less customer_win
-    whose quote and counterparty a supply_link already carries is the same relationship read twice, so it is dropped.
-    A customer_win with a value (an order size) stays."""
-    links = {(c.quote, (c.counterparty or "").casefold()) for c, _ in facts if c.fact_type == "supply_link"}
+    """One sentence about one named partner is one fact (docs/SPEC_ISSUES.md 70, 77; F-SYN on DeepSeek):
+    - a value-less customer_win whose quote and counterparty a supply_link already carries is the same relationship
+      read twice, so it is dropped (a customer_win with a value, an order size, stays);
+    - a supply_link whose quote and counterparty a fact with a value already carries (a PPA's MW, an order's size) is
+      that fact read twice, so the link is dropped: the richer fact keeps the counterparty."""
+
+    def key(c: Candidate) -> tuple[str, str]:
+        return c.quote, (c.counterparty or "").casefold()
+
+    def valued(c: Candidate) -> bool:
+        return c.value_num is not None or c.value_low is not None
+
+    links = {key(c) for c, _ in facts if c.fact_type == "supply_link"}
+    richer = {key(c) for c, _ in facts if c.fact_type != "supply_link" and c.counterparty and valued(c)}
     kept = [(c, m) for c, m in facts
-            if not (c.fact_type == "customer_win" and c.value_num is None and c.value_low is None
-                    and (c.quote, (c.counterparty or "").casefold()) in links)]  # fmt: skip
+            if not (c.fact_type == "customer_win" and not valued(c) and key(c) in links)
+            and not (c.fact_type == "supply_link" and not valued(c) and key(c) in richer)]  # fmt: skip
     return kept, len(facts) - len(kept)
