@@ -27,12 +27,27 @@ def test_a_customer_win_read_from_a_supply_link_sentence_is_dropped() -> None:
     assert kept == [(link, "m")] and merged == 1
 
 
-def test_a_customer_win_with_a_value_or_another_partner_or_sentence_stays() -> None:
+def test_a_customer_win_with_another_partner_or_sentence_stays() -> None:
     link = fact("supply_link")
-    keep = [fact("customer_win", value=Decimal(40_000_000)), fact("customer_win", partner="Orbit Labs"),
+    keep = [fact("customer_win", partner="Orbit Labs"),
             replace(fact("customer_win"), quote="Nimbus Compute signed on as a customer.")]  # fmt: skip
     kept, merged = one_relationship([(link, "m"), *[(k, "m") for k in keep]])
-    assert merged == 0 and len(kept) == 4
+    assert merged == 0 and len(kept) == 3
+
+
+def test_a_supply_link_read_from_a_valued_fact_is_dropped() -> None:
+    """docs/SPEC_ISSUES.md 77 (F-SYN on plain DeepSeek V4.1 Flash): "a 15-year power purchase agreement with Nimbus
+    Compute for 400 MW" came back as the PPA and a supply_link; the PPA carries the counterparty and the size."""
+    ppa_q = "We signed a 15-year power purchase agreement with Nimbus Compute for 400 MW to serve its Ohio campus."
+    ppa, link = fact("commitment_ppa", value=Decimal(400), quote=ppa_q), fact("supply_link", quote=ppa_q)
+    kept, merged = one_relationship([(ppa, "m"), (link, "m")])
+    assert kept == [(ppa, "m")] and merged == 1
+    order = fact("customer_win", value=Decimal(40_000_000))  # an order with its size: the link it repeats goes
+    kept, merged = one_relationship([(fact("supply_link"), "m"), (order, "m")])
+    assert kept == [(order, "m")] and merged == 1
+    other = fact("supply_link", partner="Orbit Labs", quote=ppa_q)  # another partner in the sentence stays
+    kept, merged = one_relationship([(ppa, "m"), (other, "m")])
+    assert merged == 0 and len(kept) == 2
 
 
 def test_capacity_that_is_sold_out_is_demand_not_capacity_added() -> None:

@@ -13,7 +13,7 @@ import { providerLabel, sourceLabel } from "@/lib/labels";
 import type { Tone } from "@/lib/palette";
 import { llmLine, llmParts, sourcesLine, statusChip, tokens, type ChipTone } from "@/lib/settings";
 import { sourceStatus, watched } from "@/lib/staleness";
-import { CHOICES, EFFORT_LABEL, EFFORTS, picked, priceText, TASKS } from "@/lib/models";
+import { CHOICES, EFFORT_LABEL, EFFORTS, picked, PRICE_CEILING, priceText, TASKS, usd } from "@/lib/models";
 import { saveModels } from "./actions";
 import { requireUser } from "@/lib/auth";
 
@@ -133,7 +133,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         </div>
 
         <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-6">
-          <Section title="Models" id="models" description="OpenRouter, per task. Every model here costs no more than the default, and the daily caps hold whatever you pick.">
+          <Section title="Models" id="models" description={`OpenRouter, per task. None costs more than ${usd(PRICE_CEILING.in)} in / ${usd(PRICE_CEILING.out)} out per million tokens, and the daily caps hold whatever you pick.`}>
             <form action={saveModels} className="flex flex-col gap-5">
               {TASKS.map((t) => (
                 <fieldset key={t.key} className="flex flex-col gap-2.5">
@@ -144,7 +144,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
                     <Select id={`model_${t.key}`} name={`model_${t.key}`} defaultValue={pick.models[t.key]} className="w-full">
                       {CHOICES.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.label} — ${c.in.toFixed(2)} / ${c.out.toFixed(2)}
+                          {c.label} — {usd(c.in)} / {usd(c.out)}
                         </option>
                       ))}
                     </Select>
