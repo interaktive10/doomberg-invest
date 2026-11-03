@@ -1,0 +1,19 @@
+{
+ "key": "121a3dccb254700010ee0b61d5a23600b5ae529407f7287bd2d1e119c5889124",
+ "model": "deepseek/deepseek-v4.1-flash",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The pack's c:evidence is 62.5.\nQUOTES: []\nCOMPUTED: [\"c:evidence: {\\\"inputs\\\": {\\\"families\\\": [\\\"fundamentals\\\", \\\"text\\\"]}, \\\"value\\\": \\\"62.5\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value states c:evidence has value \"62.5\", which matches the sentence's claim that the pack's c:evidence is 62.5.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 458,
+  "tokens_out": 136
+ }
+}

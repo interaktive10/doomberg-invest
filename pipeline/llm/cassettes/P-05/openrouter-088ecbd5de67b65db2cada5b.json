@@ -1,0 +1,19 @@
+{
+ "key": "088ecbd5de67b65db2cada5b18495a509e6c4df15634c9f7407a54dd367ad508",
+ "model": "deepseek/deepseek-v4.1-flash",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The pack shows s:R2 red flag not fired with hard false, status unknown, and missing receivables_growth.\nQUOTES: []\nCOMPUTED: [\"s:R2: {\\\"fired\\\": false, \\\"hard\\\": false, \\\"inputs\\\": {\\\"missing\\\": [\\\"receivables_growth\\\"]}, \\\"kind\\\": \\\"red_flag\\\", \\\"status\\\": \\\"unknown\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value for s:R2 states fired=false, hard=false, status=\"unknown\", kind=\"red_flag\", and inputs.missing=[\"receivables_growth\"]. Every claim in the sentence (red flag not fired, hard false, status unknown, missing receivables_growth) matches these computed values.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 488,
+  "tokens_out": 189
+ }
+}
