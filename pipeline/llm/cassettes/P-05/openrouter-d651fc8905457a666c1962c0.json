@@ -1,0 +1,19 @@
+{
+ "key": "d651fc8905457a666c1962c07ff4cc83ea8d33a3002314372d8787bffd71e870",
+ "model": "deepseek/deepseek-v4.1-flash",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The pack's c:C2 shows g_evidence 0.18 above g_implied 0.12.\nQUOTES: []\nCOMPUTED: [\"c:C2: {\\\"inputs\\\": {\\\"discount_rate\\\": 0.09, \\\"g_evidence\\\": 0.18, \\\"g_implied\\\": 0.12, \\\"terminal_growth\\\": 0.025}, \\\"value\\\": \\\"0.06\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value for c:C2 lists g_evidence as 0.18 and g_implied as 0.12, so the claim that g_evidence (0.18) is above g_implied (0.12) is directly supported.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 501,
+  "tokens_out": 175
+ }
+}

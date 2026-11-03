@@ -1,0 +1,24 @@
+{
+ "key": "546472ccd220f85851e5740595ff3be051f9deaad0b3fd540ef59baa4581e41c",
+ "model": "deepseek/deepseek-v4.1-flash",
+ "prompt_id": "P-02",
+ "provider": "openrouter",
+ "request": {
+  "system": "Match each counterparty name to at most one candidate from the list, or to none. Use only the names given; never\ninvent an entity. Treat subsidiaries as the parent only if the name makes that explicit. Return only the tool call.",
+  "user": "NAMES: [\"Nimbus Compute\"]\nCANDIDATES: [{\"id\": \"c:NMBS\", \"name\": \"Nimbus Compute Corp.\"}]"
+ },
+ "response": {
+  "content": {
+   "matches": [
+    {
+     "candidate_id": "c:NMBS",
+     "confidence": 0.95,
+     "kind": "company",
+     "name": "Nimbus Compute"
+    }
+   ]
+  },
+  "tokens_in": 481,
+  "tokens_out": 349
+ }
+}

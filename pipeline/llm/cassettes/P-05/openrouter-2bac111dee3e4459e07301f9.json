@@ -1,0 +1,19 @@
+{
+ "key": "2bac111dee3e4459e07301f9c2a94ff26fd4330e7513fa14327d18d0923ad34f",
+ "model": "deepseek/deepseek-v4.1-flash",
+ "prompt_id": "P-05",
+ "provider": "openrouter",
+ "request": {
+  "system": "Decide whether a sentence is fully supported by the quoted source texts and computed values given. Supported means\nevery claim in the sentence is stated in a quote or equals a provided computed value. Wording can differ; meaning\ncannot. Anything extra, stronger, or interpretive is unsupported. Return only the tool call.",
+  "user": "SENTENCE: The pack shows m:op_income:2026-06-30 at 206250000 usd.\nQUOTES: []\nCOMPUTED: [\"m:op_income:2026-06-30: {\\\"name\\\": \\\"op_income\\\", \\\"period_end\\\": \\\"2026-06-30\\\", \\\"unit\\\": \\\"usd\\\", \\\"value\\\": \\\"206250000\\\"}\"]"
+ },
+ "response": {
+  "content": {
+   "reason": "The computed value m:op_income:2026-06-30 has value \"206250000\" with unit \"usd\", which exactly matches the sentence's claim that the pack shows m:op_income:2026-06-30 at 206250000 usd.",
+   "supported": true,
+   "unsupported_parts": []
+  },
+  "tokens_in": 486,
+  "tokens_out": 166
+ }
+}
