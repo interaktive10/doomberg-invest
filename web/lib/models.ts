@@ -12,14 +12,17 @@ export interface ModelChoice {
 }
 
 export const CHOICES: readonly ModelChoice[] = [
+  { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", in: 0.045, out: 0.5 },
   { id: "deepseek/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash 1017", in: 0.3, out: 1.2 },
-  { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", in: 0.04, out: 0.5 },
   { id: "z-ai/glm-5.3-flash", label: "GLM 5.3 Flash", in: 0.03, out: 0.09 },
   { id: "qwen/qwen3.5-flash-02-23", label: "Qwen 3.5 Flash", in: 0.07, out: 0.26 },
   { id: "openai/gpt-6-luna", label: "GPT-6 Luna", in: 0.1, out: 0.5 },
   { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", in: 0.1, out: 0.5 },
   { id: "openai/gpt-oss-120b", label: "gpt-oss 120B", in: 0.15, out: 0.6 },
 ];
+
+/** No choice costs more per million tokens (config/quotas.yaml price_ceiling: what the 1017 snapshot cost). */
+export const PRICE_CEILING = { in: 0.3, out: 1.2 };
 
 export const EFFORTS = ["none", "low", "medium", "high"] as const;
 export type Effort = (typeof EFFORTS)[number];
@@ -32,7 +35,7 @@ export type Task = (typeof TASKS)[number]["key"];
 
 /** What the config uses before Settings picks anything (config/quotas.yaml openrouter.models / reasoning). */
 export const DEFAULTS: { models: Record<Task, string>; effort: Record<Task, Effort> } = {
-  models: { extract: "deepseek/deepseek-v4.1-flash-1017", card: "deepseek/deepseek-v4.1-flash-1017" },
+  models: { extract: "deepseek/deepseek-v4.1-flash", card: "deepseek/deepseek-v4.1-flash" },
   effort: { extract: "medium", card: "high" },
 };
 
@@ -43,9 +46,15 @@ export const EFFORT_LABEL: Record<Effort, string> = {
   high: "High (slower, more tokens)",
 };
 
-/** "$0.30 in · $1.20 out per million tokens". */
+/** "$0.30", "$0.045": cents, or a tenth of a cent when the price has one. */
+export function usd(v: number): string {
+  const cents = v * 100;
+  return `$${v.toFixed(Math.abs(cents - Math.round(cents)) < 1e-9 ? 2 : 3)}`;
+}
+
+/** "$0.045 in · $0.50 out per million tokens". */
 export function priceText(m: ModelChoice): string {
-  return `$${m.in.toFixed(2)} in · $${m.out.toFixed(2)} out per million tokens`;
+  return `${usd(m.in)} in · ${usd(m.out)} out per million tokens`;
 }
 
 /** The stored pick, read safely: a listed model and effort per task, else the default. */

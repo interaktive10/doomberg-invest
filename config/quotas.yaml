@@ -16,8 +16,9 @@ providers:
     tokens_per_day: null
   openrouter:
     base_url: https://openrouter.ai/api/v1       # the ONLY base_url an OpenAI(...) client may use (guard)
-    # DeepSeek V4.1 Flash 1017, paid ($0.15/M in, $0.60/M out on 2026-11-01; Manzoor's choice: docs/SPEC_ISSUES.md 63)
-    models: {extract: deepseek/deepseek-v4.1-flash-1017, card: deepseek/deepseek-v4.1-flash-1017}
+    # DeepSeek V4.1 Flash, paid ($0.045/M in, $0.50/M out on 2026-11-03; Manzoor's choice: docs/SPEC_ISSUES.md 63, 77).
+    # The dated 1017 snapshot used until 2026-11-03 had doubled to $0.30/$1.20.
+    models: {extract: deepseek/deepseek-v4.1-flash, card: deepseek/deepseek-v4.1-flash}
     # high effort where the model reasons (cards, claim checks, themes); low where it looks things up (extraction,
     # triage, links: medium since 2026-11-02 for recall, docs/SPEC_ISSUES.md 70): high on ~400 extraction calls a day
     # would take the daily run past its time limit
@@ -28,17 +29,19 @@ providers:
     requests_per_minute: 60
     tokens_per_day: 6000000
     # what Settings may pick instead (app_settings llm_models / llm_effort; docs/SPEC_ISSUES.md 69): models with
-    # structured outputs, tools and reasoning on OpenRouter, $ per million tokens in/out as listed on 2026-11-02.
-    # web/lib/models.ts mirrors this list (tests/test_web_parity.py). The caps above hold whatever is picked.
+    # structured outputs, tools and reasoning on OpenRouter, $ per million tokens in/out as listed on 2026-11-03.
+    # web/lib/models.ts mirrors this list (tests/test_web_parity.py). None costs more than price_ceiling (what the 1017
+    # snapshot cost), and the caps above hold whatever is picked.
     choices:
+      - {id: deepseek/deepseek-v4.1-flash, label: "DeepSeek V4.1 Flash", in: 0.045, out: 0.50}
       - {id: deepseek/deepseek-v4.1-flash-1017, label: "DeepSeek V4.1 Flash 1017", in: 0.30, out: 1.20}
-      - {id: deepseek/deepseek-v4.1-flash, label: "DeepSeek V4.1 Flash", in: 0.04, out: 0.50}
       - {id: z-ai/glm-5.3-flash, label: "GLM 5.3 Flash", in: 0.03, out: 0.09}
       - {id: qwen/qwen3.5-flash-02-23, label: "Qwen 3.5 Flash", in: 0.07, out: 0.26}
       - {id: openai/gpt-6-luna, label: "GPT-6 Luna", in: 0.10, out: 0.50}
       - {id: anthropic/claude-haiku-5.5, label: "Claude Haiku 5.5", in: 0.10, out: 0.50}
       - {id: openai/gpt-oss-120b, label: "gpt-oss 120B", in: 0.15, out: 0.60}
     efforts: [none, low, medium, high]
+    price_ceiling: {in: 0.30, out: 1.20}   # no choice costs more per token (docs/SPEC_ISSUES.md 77)
 routing:  # OpenRouter first, Gemini's free tier when it is out or fails (docs/SPEC_ISSUES.md 63)
   P-01: [openrouter, gemini, groq]
   P-02: [openrouter, gemini, groq]

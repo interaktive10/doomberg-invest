@@ -131,8 +131,9 @@ def test_the_settings_model_list_is_the_configs() -> None:
     for task in ("extract", "card"):
         assert re.search(rf'models: \{{[^}}]*{task}: "{re.escape(doc["models"][task])}"', ts)
         assert re.search(rf'effort: \{{[^}}]*{task}: "{doc["reasoning"][task]}"', ts)
-    default = next(c for c in doc["choices"] if c["id"] == doc["models"]["card"])
-    assert all(c["in"] <= default["in"] and c["out"] <= default["out"] for c in doc["choices"])  # never dearer
+    cap = doc["price_ceiling"]
+    assert all(c["in"] <= cap["in"] and c["out"] <= cap["out"] for c in doc["choices"])  # never above the ceiling
+    assert re.search(rf"PRICE_CEILING = \{{ in: {cap['in']:g}, out: {cap['out']:g} \}}", ts)
 
 
 def test_the_market_cap_steps_are_the_winners_reports() -> None:
